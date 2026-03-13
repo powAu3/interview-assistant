@@ -11,7 +11,13 @@ import PracticeMode from '@/components/PracticeMode'
 
 declare global {
   interface Window {
-    pywebview?: { api: { hide_window: () => void; show_window: () => void } }
+    electronAPI?: {
+      hideWindow: () => Promise<void>
+      showWindow: () => Promise<void>
+      toggleAlwaysOnTop: () => Promise<boolean>
+      toggleContentProtection: () => Promise<boolean>
+      getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
+    }
   }
 }
 
@@ -25,13 +31,12 @@ export default function App() {
   const handleBossKey = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
       e.preventDefault()
-      if (window.pywebview?.api) {
-        window.pywebview.api.hide_window()
-      }
+      window.electronAPI?.hideWindow()
     }
   }, [])
 
   useEffect(() => {
+    if (!window.electronAPI) return
     document.addEventListener('keydown', handleBossKey)
     return () => document.removeEventListener('keydown', handleBossKey)
   }, [handleBossKey])

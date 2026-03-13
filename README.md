@@ -23,10 +23,12 @@
 | 📷 截图识题 | Ctrl+V 粘贴截图，发送给支持视觉的 LLM 分析 |
 | 🔄 多模型切换 | 配置文件定义多个 LLM，界面一键切换 |
 | 🧠 Think 模式 | 支持 DeepSeek 等模型的深度思考模式 |
-| 🖥️ 桌面模式 | 原生 GUI 窗口（pywebview），独立运行 |
+| 🖥️ 桌面模式 | Electron 原生窗口，屏幕共享隐身（Content Protection） |
 | 🌐 网络模式 | 局域网共享，手机/平板扫码访问 |
 | 📱 移动端适配 | 响应式布局，多端舒适使用 |
-| 👻 Boss Key | Ctrl+B 一键隐藏窗口（含任务栏/Dock），系统托盘恢复 |
+| 👻 Boss Key | Ctrl+B 全局快捷键隐藏/显示窗口（任何时候都生效） |
+| 🔒 屏幕共享隐身 | 窗口在屏幕共享和录屏中完全不可见 |
+| 📌 窗口置顶 | 悬浮在其他窗口上方，随时可看 |
 
 ## 📐 架构
 
@@ -106,7 +108,7 @@ cp backend/config.example.json backend/config.json
 ### 第五步：启动
 
 ```bash
-# 桌面模式（默认）— 原生 GUI 窗口
+# 桌面模式（默认）— Electron 窗口，屏幕共享隐身
 python start.py
 
 # 网络模式 — 局域网设备可通过浏览器访问
@@ -273,10 +275,11 @@ API Key 获取: https://dashscope.console.aliyun.com/apiKey
 
 ### 桌面模式（默认）
 
-- 使用 **pywebview** 打开独立窗口（非浏览器）
-- 服务绑定 `127.0.0.1`，仅本机可用
-- **Boss Key**: `Ctrl+B`（macOS: `Cmd+B`）一键隐藏窗口，从任务栏/Dock 消失
-- **系统托盘**: 隐藏后通过菜单栏/系统托盘图标"显示窗口"恢复
+- 使用 **Electron** 原生窗口，支持屏幕共享隐身
+- **屏幕共享隐身（Content Protection）**: 窗口在屏幕共享/录屏中完全不可见，对方看到的是黑色
+- **Boss Key**: `Ctrl+B`（macOS: `Cmd+B`）全局快捷键，**即使窗口不在前台也能触发**隐藏/显示
+- **系统托盘**: 右键菜单可切换 显示/隐藏、窗口置顶、屏幕共享隐身 等选项
+- **窗口置顶**: 悬浮在其他窗口上方，随时可看答案
 
 ### 网络模式
 
@@ -395,16 +398,28 @@ interview-assistant/
 ├── .gitignore
 ├── docs/
 │   └── skm.png               # 赞赏码
+├── desktop/                  # Electron 桌面端
+│   ├── main.js               # 主进程（窗口管理/托盘/全局快捷键）
+│   ├── preload.js            # IPC 桥接
+│   ├── icon.png              # 应用图标
+│   └── package.json          # Electron 依赖
 ├── backend/
-│   ├── main.py               # FastAPI 主入口 + WebSocket
-│   ├── config.py             # 配置管理 (Pydantic)
+│   ├── main.py               # FastAPI 主入口（路由注册）
+│   ├── core/                 # 核心层
+│   │   ├── config.py         # 配置管理 (Pydantic)
+│   │   └── session.py        # 会话管理 + 多轮对话
+│   ├── services/             # 服务层
+│   │   ├── audio.py          # 跨平台音频捕获 + VAD
+│   │   ├── stt.py            # Whisper 语音识别引擎
+│   │   ├── llm.py            # LLM API 调用 + 多模态处理
+│   │   ├── practice.py       # 模拟练习（出题/评价/报告）
+│   │   └── resume.py         # 简历解析（PDF/TXT/MD）
+│   ├── routes/               # 路由层
+│   │   ├── ws.py             # WebSocket + 广播
+│   │   ├── common.py         # 配置/设备/简历接口
+│   │   ├── interview.py      # 面试辅助接口
+│   │   └── practice.py       # 练习模式接口
 │   ├── config.example.json   # 配置模板（提交到 Git）
-│   ├── audio_capture.py      # 跨平台音频捕获 + VAD
-│   ├── stt_engine.py         # Whisper 语音识别引擎
-│   ├── llm_service.py        # LLM API 调用 + 多模态处理
-│   ├── practice_manager.py   # 模拟练习模式（出题/评价/报告）
-│   ├── resume_parser.py      # 简历解析（PDF/TXT/MD）
-│   ├── session_manager.py    # 会话管理 + 多轮对话
 │   └── requirements.txt      # Python 依赖
 └── frontend/
     ├── src/
@@ -436,7 +451,7 @@ interview-assistant/
 | 音频捕获 | sounddevice (PortAudio) |
 | LLM | OpenAI 兼容 API (GPT, DeepSeek, Qwen, Claude 等) |
 | 通信 | WebSocket (实时推送) |
-| 桌面 GUI | pywebview (原生窗口) + pystray (系统托盘) |
+| 桌面 GUI | Electron (Content Protection, 全局快捷键, 系统托盘) |
 | 状态管理 | Zustand |
 
 ## 🔨 开发指南

@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""One-click startup script for AI Interview Assistant."""
+"""Unified launcher for the study assistant."""
 
 import argparse
 import os
 import platform
+import shutil
 import socket
 import subprocess
 import sys
 import time
-import threading
 import urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(ROOT, "backend")
 FRONTEND_DIR = os.path.join(ROOT, "frontend")
 FRONTEND_DIST = os.path.join(FRONTEND_DIR, "dist")
+DESKTOP_DIR = os.path.join(ROOT, "desktop")
 
 
 def get_local_ip() -> str:
@@ -58,15 +59,13 @@ def build_frontend():
     return True
 
 
-def wait_for_server(port: int, timeout: float = 30) -> bool:
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/options", timeout=1)
-            return True
-        except Exception:
-            time.sleep(0.3)
-    return False
+def ensure_electron():
+    """Make sure desktop/node_modules/electron exists."""
+    if os.path.isdir(os.path.join(DESKTOP_DIR, "node_modules", "electron")):
+        return True
+    print("[...] 安装 Electron 依赖...")
+    r = subprocess.run(["npm", "install"], cwd=DESKTOP_DIR)
+    return r.returncode == 0
 
 
 def start_server(host: str, port: int):
@@ -77,127 +76,31 @@ def start_server(host: str, port: int):
     uvicorn.run("main:app", host=host, port=port, log_level="info", reload=False)
 
 
-def create_tray_icon_image():
-    """Create a small PIL Image for the system tray icon."""
-    try:
-        from PIL import Image, ImageDraw
-        size = 64
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle([4, 4, size - 4, size - 4], radius=12, fill="#6366f1")
-        cx, cy = size // 2, size // 2
-        draw.rounded_rectangle([cx - 6, cy - 18, cx + 6, cy + 2], radius=5, fill="white")
-        draw.arc([cx - 12, cy - 18, cx + 12, cy + 6], start=0, end=180, fill="white", width=2)
-        draw.line([cx, cy + 6, cx, cy + 14], fill="white", width=2)
-        draw.line([cx - 8, cy + 14, cx + 8, cy + 14], fill="white", width=2)
-        return img
-    except Exception:
-        from PIL import Image
-        return Image.new("RGBA", (64, 64), "#6366f1")
-
-
 def run_desktop_mode(port: int):
-    """Desktop mode: native GUI window with Boss Key hide support."""
-    try:
-        import webview
-    except ImportError:
-        print("[ERROR] 桌面 GUI 模式需要 pywebview")
-        print("  安装: pip install pywebview")
+    """Desktop mode: Electron window with content protection and global hotkeys."""
+    npx = shutil.which("npx")
+    if npx is None:
+        print("[ERROR] 未找到 npx，请安装 Node.js")
         print("  或使用网络模式: python start.py --mode network")
         sys.exit(1)
 
-    server_thread = threading.Thread(
-        target=start_server, args=("127.0.0.1", port), daemon=True
-    )
-    server_thread.start()
-
-    print("  等待服务启动...")
-    if not wait_for_server(port):
-        print("[ERROR] 服务启动超时")
+    if not ensure_electron():
+        print("[ERROR] Electron 安装失败")
         sys.exit(1)
 
-    print("  服务就绪，启动 GUI 窗口...")
-    print("  快捷键: Ctrl+B 隐藏窗口，通过系统托盘恢复")
+    print("  启动 Electron 桌面模式...")
+    print("  屏幕共享隐身: 已开启")
+    print("  全局快捷键: Ctrl+B 显示/隐藏（任何时候都生效）")
+    print("  系统托盘: 右键可切换置顶、隐身等选项")
+    print()
 
-    url = f"http://127.0.0.1:{port}"
-    _visible = {"value": True}
-
-    class BossKeyApi:
-        def hide_window(self):
-            if not _visible["value"]:
-                return
-            _visible["value"] = False
-            window.hide()
-            if platform.system() == "Darwin":
-                try:
-                    from AppKit import NSApp, NSApplicationActivationPolicyAccessory
-                    NSApp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-                except Exception:
-                    pass
-
-        def show_window(self):
-            if _visible["value"]:
-                return
-            if platform.system() == "Darwin":
-                try:
-                    from AppKit import NSApp, NSApplicationActivationPolicyRegular
-                    NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
-                    NSApp.activateIgnoringOtherApps_(True)
-                except Exception:
-                    pass
-            _visible["value"] = True
-            window.show()
-            window.restore()
-
-    boss_api = BossKeyApi()
-
-    window = webview.create_window(
-        "学习助手",
-        url,
-        width=1200,
-        height=800,
-        resizable=True,
-        min_size=(800, 500),
-        text_select=True,
-        js_api=boss_api,
+    env = {**os.environ, "PORT": str(port)}
+    proc = subprocess.run(
+        [npx, "electron", "."],
+        cwd=DESKTOP_DIR,
+        env=env,
     )
-
-    def start_tray():
-        try:
-            import pystray
-            icon_image = create_tray_icon_image()
-
-            def on_show(icon, item):
-                boss_api.show_window()
-
-            def on_hide(icon, item):
-                boss_api.hide_window()
-
-            def on_quit(icon, item):
-                icon.stop()
-                window.destroy()
-
-            tray = pystray.Icon(
-                "interview-assistant",
-                icon_image,
-                "学习助手",
-                menu=pystray.Menu(
-                    pystray.MenuItem("显示窗口", on_show, default=True),
-                    pystray.MenuItem("隐藏窗口 (Ctrl+B)", on_hide),
-                    pystray.Menu.SEPARATOR,
-                    pystray.MenuItem("退出", on_quit),
-                ),
-            )
-            tray.run()
-        except ImportError:
-            print("  [提示] 安装 pystray 可启用系统托盘: pip install pystray")
-        except Exception as e:
-            print(f"  [提示] 系统托盘启动失败: {e}")
-
-    def on_loaded():
-        threading.Thread(target=start_tray, daemon=True).start()
-
-    webview.start(func=on_loaded)
+    sys.exit(proc.returncode)
 
 
 def run_network_mode(port: int):
@@ -219,7 +122,7 @@ def run_network_mode(port: int):
 def main():
     parser = argparse.ArgumentParser(description="学习助手启动器")
     parser.add_argument("--mode", choices=["desktop", "network"], default="desktop",
-                        help="运行模式: desktop (原生 GUI 窗口) 或 network (局域网浏览器访问)")
+                        help="运行模式: desktop (Electron 桌面窗口) 或 network (局域网浏览器访问)")
     parser.add_argument("--port", type=int, default=18080, help="服务端口 (默认 18080)")
     parser.add_argument("--no-build", action="store_true", help="跳过前端构建")
     args = parser.parse_args()
@@ -234,7 +137,7 @@ def main():
             print("\n前端构建失败，可以用 --no-build 跳过（需要先手动构建）")
             sys.exit(1)
 
-    mode_label = "桌面 GUI 窗口" if args.mode == "desktop" else "局域网浏览器"
+    mode_label = "Electron 桌面窗口" if args.mode == "desktop" else "局域网浏览器"
     print()
     print(f"  平台: {platform.system()} {platform.machine()}")
     print(f"  模式: {mode_label}")
