@@ -10,6 +10,7 @@ venv/
 # Node
 node_modules/
 frontend/dist/
+*.tsbuildinfo
 
 # Config (contains API keys)
 backend/config.json
