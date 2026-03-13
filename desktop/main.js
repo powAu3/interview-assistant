@@ -59,7 +59,13 @@ function startPythonBackend() {
   pythonProcess.on('close', (code) => {
     console.log(`[py] exited with code ${code}`);
     pythonProcess = null;
-    if (!isQuitting) app.quit();
+    if (!isQuitting) {
+      if (mainWindow) {
+        const { dialog } = require('electron');
+        dialog.showErrorBox('后端已退出', `Python 后端进程异常退出 (code ${code})。\n可能原因：端口 ${PORT} 被占用。\n请关闭占用该端口的进程后重试。`);
+      }
+      app.quit();
+    }
   });
 }
 
@@ -86,11 +92,8 @@ function createWindow() {
     mainWindow.show();
   });
 
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
+  mainWindow.on('close', () => {
+    isQuitting = true;
   });
 }
 
@@ -170,7 +173,39 @@ ipcMain.handle('get-window-state', () => ({
   visible: mainWindow?.isVisible() ?? false,
 }));
 
+function createAppMenu() {
+  if (process.platform !== 'darwin') return;
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about', label: `关于 ${app.name}` },
+        { type: 'separator' },
+        { label: '隐藏窗口', accelerator: 'CommandOrControl+B', click: () => mainWindow?.hide() },
+        { type: 'separator' },
+        { role: 'hide', label: '隐藏应用' },
+        { role: 'unhide', label: '显示应用' },
+        { type: 'separator' },
+        { label: '退出', accelerator: 'CommandOrControl+Q', click: () => { isQuitting = true; app.quit(); } },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.whenReady().then(async () => {
+  createAppMenu();
   console.log('Starting Python backend...');
   startPythonBackend();
 
@@ -189,7 +224,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
 
 app.on('activate', () => {
