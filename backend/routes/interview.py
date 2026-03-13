@@ -131,7 +131,8 @@ def _interview_worker():
         if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
             broadcast({"type": "transcribing", "value": True})
             try:
-                text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE)
+                text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
+                                        position=cfg.position, language=cfg.language)
                 if text.strip():
                     session.add_transcription(text)
                     broadcast({"type": "transcription", "text": text})
@@ -145,7 +146,8 @@ def _interview_worker():
     remaining = vad.flush()
     if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
         try:
-            text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE)
+            text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
+                                     position=cfg.position, language=cfg.language)
             if text.strip():
                 session.add_transcription(text)
                 broadcast({"type": "transcription", "text": text})

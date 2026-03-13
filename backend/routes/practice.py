@@ -194,7 +194,8 @@ def _practice_record_worker():
         speech_audio = vad.feed(chunk)
         if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
             try:
-                text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE)
+                text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
+                                        position=cfg.position, language=cfg.language)
                 if text.strip():
                     _practice_answer_buf.append(text.strip())
                     broadcast({"type": "practice_transcription", "text": text.strip()})
@@ -204,7 +205,8 @@ def _practice_record_worker():
     remaining = vad.flush()
     if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
         try:
-            text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE)
+            text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
+                                     position=cfg.position, language=cfg.language)
             if text.strip():
                 _practice_answer_buf.append(text.strip())
                 broadcast({"type": "practice_transcription", "text": text.strip()})
