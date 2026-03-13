@@ -1,0 +1,39 @@
+{
+  "models": [
+    {
+      "name": "GPT-4o",
+      "api_base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-api-key-here",
+      "model": "gpt-4o",
+      "supports_think": false,
+      "supports_vision": true
+    },
+    {
+      "name": "GPT-4o-mini",
+      "api_base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-api-key-here",
+      "model": "gpt-4o-mini",
+      "supports_think": false,
+      "supports_vision": false
+    },
+    {
+      "name": "DeepSeek-V3",
+      "api_base_url": "https://api.deepseek.com",
+      "api_key": "sk-your-deepseek-key",
+      "model": "deepseek-chat",
+      "supports_think": true,
+      "supports_vision": false
+    }
+  ],
+  "active_model": 0,
+  "temperature": 0.7,
+  "max_tokens": 4096,
+  "think_mode": false,
+  "whisper_model": "base",
+  "whisper_language": "zh",
+  "position": "后端开发",
+  "language": "Python",
+  "auto_detect": true,
+  "silence_threshold": 0.01,
+  "silence_duration": 2.0
+}
