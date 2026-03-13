@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from core.config import get_config
 from services.stt import get_stt_engine
-from routes import ws, common, interview, practice
+from routes import ws, common, interview, practice, knowledge, resume_opt
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
@@ -49,6 +49,8 @@ app.include_router(ws.router)
 app.include_router(common.router, prefix="/api")
 app.include_router(interview.router, prefix="/api")
 app.include_router(practice.router, prefix="/api")
+app.include_router(knowledge.router, prefix="/api")
+app.include_router(resume_opt.router, prefix="/api")
 
 
 if os.path.isdir(FRONTEND_DIR):

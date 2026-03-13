@@ -8,6 +8,8 @@ import AnswerPanel from '@/components/AnswerPanel'
 import ControlBar from '@/components/ControlBar'
 import SettingsDrawer from '@/components/SettingsDrawer'
 import PracticeMode from '@/components/PracticeMode'
+import KnowledgeMap from '@/components/KnowledgeMap'
+import ResumeOptimizer from '@/components/ResumeOptimizer'
 
 declare global {
   interface Window {
@@ -26,7 +28,7 @@ export default function App() {
   const { config, setConfig, setDevices, setOptions, toggleSettings, sttLoaded, sttLoading } = useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
-  const [appMode, setAppMode] = useState<'assist' | 'practice'>('assist')
+  const [appMode, setAppMode] = useState<'assist' | 'practice' | 'knowledge' | 'resume-opt'>('assist')
 
   const handleBossKey = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
@@ -83,6 +85,20 @@ export default function App() {
   const options = useInterviewStore((s) => s.options)
   const activeModel = config?.models?.[config.active_model]
   const modelHealth = useInterviewStore((s) => s.modelHealth)
+  const tokenUsage = useInterviewStore((s) => s.tokenUsage)
+  const fallbackToast = useInterviewStore((s) => s.fallbackToast)
+
+  const formatTokens = (n: number) => {
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+    return String(n)
+  }
+
+  useEffect(() => {
+    if (!fallbackToast) return
+    const timer = setTimeout(() => useInterviewStore.getState().setFallbackToast(null), 4000)
+    return () => clearTimeout(timer)
+  }, [fallbackToast])
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -114,14 +130,17 @@ export default function App() {
 
           {/* Mode tabs */}
           <div className="flex bg-bg-tertiary rounded-lg p-0.5 ml-1">
-            <button onClick={() => setAppMode('assist')}
-              className={`px-2.5 py-1 text-xs rounded-md transition-colors ${appMode === 'assist' ? 'bg-accent-blue text-white' : 'text-text-muted hover:text-text-primary'}`}>
-              实时辅助
-            </button>
-            <button onClick={() => setAppMode('practice')}
-              className={`px-2.5 py-1 text-xs rounded-md transition-colors ${appMode === 'practice' ? 'bg-accent-blue text-white' : 'text-text-muted hover:text-text-primary'}`}>
-              模拟练习
-            </button>
+            {([
+              ['assist', '实时辅助'],
+              ['practice', '模拟练习'],
+              ['knowledge', '能力分析'],
+              ['resume-opt', '简历优化'],
+            ] as const).map(([key, label]) => (
+              <button key={key} onClick={() => setAppMode(key)}
+                className={`px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap ${appMode === key ? 'bg-accent-blue text-white' : 'text-text-muted hover:text-text-primary'}`}>
+                {label}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-1 ml-1">
@@ -130,6 +149,13 @@ export default function App() {
               {sttLoaded ? 'STT就绪' : sttLoading ? 'STT加载中' : 'STT未加载'}
             </span>
           </div>
+
+          {tokenUsage.total > 0 && (
+            <div className="flex items-center gap-1 ml-1" title={`Prompt: ${tokenUsage.prompt} | Completion: ${tokenUsage.completion}`}>
+              <span className="text-[10px] text-text-muted">Token:</span>
+              <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -216,6 +242,21 @@ export default function App() {
 
       {/* ── Practice Mode ── */}
       {appMode === 'practice' && <PracticeMode />}
+
+      {/* ── Knowledge Map ── */}
+      {appMode === 'knowledge' && <KnowledgeMap />}
+
+      {/* ── Resume Optimizer ── */}
+      {appMode === 'resume-opt' && <ResumeOptimizer />}
+
+      {/* Fallback toast */}
+      {fallbackToast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2">
+          <div className="bg-accent-amber/90 text-black text-xs px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm">
+            ⚠️ {fallbackToast.from} 不可用，已自动切换到 {fallbackToast.to}
+          </div>
+        </div>
+      )}
 
       <SettingsDrawer />
     </div>

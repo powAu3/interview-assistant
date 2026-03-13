@@ -16,6 +16,11 @@ frontend/dist/
 backend/config.json
 backend/user_config.json
 
+# SQLite database
+backend/knowledge.db
+backend/knowledge.db-shm
+backend/knowledge.db-wal
+
 # Whisper models cache
 *.bin
 *.pt
