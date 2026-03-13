@@ -169,7 +169,7 @@ export default function ControlBar() {
           </button>
         )}
 
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md" onChange={handleResumeUpload} className="hidden" />
+        <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
         {resumeFile || config?.has_resume ? (
           <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs">
             <FileText className="w-3.5 h-3.5 text-accent-green" />

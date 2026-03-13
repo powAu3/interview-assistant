@@ -1,41 +1,88 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
-import { FileSearch, Upload } from 'lucide-react'
+import { FileSearch, Upload, FileText, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
 export default function ResumeOptimizer() {
   const [jdText, setJdText] = useState('')
-  const { config, resumeOptStreaming, resumeOptResult, resumeOptLoading } = useInterviewStore()
+  const { config, setConfig, resumeOptStreaming, resumeOptResult, resumeOptLoading } = useInterviewStore()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const displayText = resumeOptResult || resumeOptStreaming
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      await api.uploadResume(file)
+      setConfig(await api.getConfig())
+    } catch (err: any) {
+      setUploadError(err.message || '上传失败')
+    }
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const handleRemoveResume = async () => {
+    await api.deleteResume()
+    setConfig(await api.getConfig())
+  }
 
   const handleAnalyze = async () => {
     if (!jdText.trim()) return
     if (!config?.has_resume) {
-      alert('请先在设置中上传简历')
+      setUploadError('请先上传简历')
       return
     }
     try {
       await api.resumeOptimize(jdText.trim())
     } catch (e: any) {
-      alert(e.message || '分析失败')
+      setUploadError(e.message || '分析失败')
     }
   }
 
   return (
     <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-      {/* Left: JD input */}
+      {/* Left: input area */}
       <div className="md:w-[35%] md:min-w-[280px] border-b md:border-b-0 md:border-r border-bg-tertiary flex flex-col p-4 gap-3 flex-shrink-0">
         <div className="flex items-center gap-2">
           <FileSearch className="w-4 h-4 text-accent-blue" />
           <h3 className="text-sm font-semibold text-text-primary">简历优化</h3>
         </div>
 
-        {!config?.has_resume && (
-          <div className="flex items-center gap-2 bg-accent-amber/10 text-accent-amber text-xs px-3 py-2 rounded-lg">
-            <Upload className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>请先上传简历（在设置或实时辅助底部操作栏）</span>
+        {/* Resume upload area */}
+        <div className="space-y-2">
+          <label className="text-xs text-text-muted">简历</label>
+          <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleUpload} className="hidden" />
+          {config?.has_resume ? (
+            <div className="flex items-center gap-2 bg-accent-green/10 text-accent-green text-xs px-3 py-2 rounded-lg">
+              <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="flex-1">简历已上传</span>
+              <button onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline">
+                更换
+              </button>
+              <button onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-dashed border-bg-hover disabled:opacity-50">
+              <Upload className="w-4 h-4" />
+              <span>{uploading ? '上传中...' : '上传简历（PDF / DOCX / TXT / MD）'}</span>
+            </button>
+          )}
+        </div>
+
+        {uploadError && (
+          <div className="flex items-center gap-2 bg-accent-red/10 text-accent-red text-xs px-3 py-2 rounded-lg">
+            <span className="flex-1">{uploadError}</span>
+            <button onClick={() => setUploadError(null)}><X className="w-3 h-3" /></button>
           </div>
         )}
 
@@ -64,7 +111,7 @@ export default function ResumeOptimizer() {
           <div className="h-full flex items-center justify-center text-text-muted text-xs">
             <div className="text-center space-y-2">
               <FileSearch className="w-8 h-8 mx-auto opacity-30" />
-              <p>输入 JD 后点击"开始分析"</p>
+              <p>上传简历 → 粘贴 JD → 点击"开始分析"</p>
               <p className="text-[10px]">将对比简历与 JD，给出匹配度评分和修改建议</p>
             </div>
           </div>
