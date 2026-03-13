@@ -29,7 +29,15 @@
       "api_base_url": "https://ark.cn-beijing.volces.com/api/v3",
       "api_key": "your-volcengine-api-key",
       "model": "ep-your-endpoint-id",
-      "supports_think": false,
+      "supports_think": true,
+      "supports_vision": false
+    },
+    {
+      "name": "GLM-4.7-Flash (智谱)",
+      "api_base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key": "your-zhipu-api-key",
+      "model": "GLM-4.7-Flash",
+      "supports_think": true,
       "supports_vision": false
     }
   ],
