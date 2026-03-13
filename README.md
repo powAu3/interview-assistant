@@ -101,7 +101,7 @@
 ### 第一步：克隆项目
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/powAu3/interview-assistant.git
 cd interview-assistant
 ```
 
