@@ -29,6 +29,9 @@ export default function App() {
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
   const [appMode, setAppMode] = useState<'assist' | 'practice' | 'knowledge' | 'resume-opt'>('assist')
+  const [editingPos, setEditingPos] = useState(false)
+  const [editingLang, setEditingLang] = useState(false)
+  const [customInput, setCustomInput] = useState('')
 
   const handleBossKey = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
@@ -53,13 +56,19 @@ export default function App() {
     }).catch((e) => setInitError(e.message))
   }, [])
 
-  const handlePositionChange = async (position: string) => {
-    await api.updateConfig({ position })
-    setConfig(await api.getConfig())
+  const handlePositionChange = async (val: string) => {
+    const v = val.trim()
+    if (v && v !== config?.position) {
+      await api.updateConfig({ position: v })
+      setConfig(await api.getConfig())
+    }
   }
-  const handleLanguageChange = async (language: string) => {
-    await api.updateConfig({ language })
-    setConfig(await api.getConfig())
+  const handleLanguageChange = async (val: string) => {
+    const v = val.trim()
+    if (v && v !== config?.language) {
+      await api.updateConfig({ language: v })
+      setConfig(await api.getConfig())
+    }
   }
   const handleModelChange = async (active_model: number) => {
     await api.updateConfig({ active_model })
@@ -171,7 +180,7 @@ export default function App() {
                 <div className="absolute right-0 top-full mt-1 bg-bg-secondary border border-bg-hover rounded-lg shadow-lg z-50 min-w-[180px] py-1">
                   {config.models.map((m, i) => (
                     <button key={i}
-                      onClick={() => { handleModelChange(i); setModelDropdownOpen(false) }}
+                      onClick={async () => { setModelDropdownOpen(false); await handleModelChange(i) }}
                       className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-bg-tertiary transition-colors ${i === config.active_model ? 'text-accent-blue' : 'text-text-primary'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(i)}`} />
                       <span className="truncate">{m.name}{m.supports_vision ? ' 👁' : ''}</span>
@@ -190,18 +199,45 @@ export default function App() {
           )}
           {activeModel?.supports_think && (
             <button onClick={handleThinkToggle}
-              className={`text-xs px-2 py-1.5 rounded-lg border transition-colors ${config?.think_mode ? 'bg-accent-blue/20 border-accent-blue text-accent-blue' : 'bg-bg-tertiary border-bg-hover text-text-muted'}`}>
-              Think {config?.think_mode ? 'ON' : 'OFF'}
+              className={`text-xs px-2 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${config?.think_mode ? 'bg-accent-green/15 border-accent-green/50 text-accent-green' : 'bg-bg-tertiary border-bg-hover text-text-muted'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full transition-colors ${config?.think_mode ? 'bg-accent-green shadow-[0_0_4px_rgba(34,197,94,0.6)]' : 'bg-text-muted/30'}`} />
+              Think
             </button>
           )}
-          <select value={config?.position ?? ''} onChange={(e) => handlePositionChange(e.target.value)}
-            className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[100px]">
-            {(options?.positions ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select value={config?.language ?? ''} onChange={(e) => handleLanguageChange(e.target.value)}
-            className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[90px]">
-            {(options?.languages ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
-          </select>
+          {editingPos ? (
+            <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
+              onBlur={() => { if (customInput.trim()) handlePositionChange(customInput.trim()); setEditingPos(false) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingPos(false) }}
+              placeholder="输入岗位" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[100px]" />
+          ) : (
+            <select value={config?.position ?? ''} onChange={(e) => {
+              if (e.target.value === '__custom__') { setCustomInput(''); setEditingPos(true) }
+              else handlePositionChange(e.target.value)
+            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[120px]">
+              {(options?.positions ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
+              {config?.position && !(options?.positions ?? []).includes(config.position) && (
+                <option value={config.position}>{config.position}</option>
+              )}
+              <option value="__custom__">自定义...</option>
+            </select>
+          )}
+          {editingLang ? (
+            <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
+              onBlur={() => { if (customInput.trim()) handleLanguageChange(customInput.trim()); setEditingLang(false) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingLang(false) }}
+              placeholder="输入语言" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[90px]" />
+          ) : (
+            <select value={config?.language ?? ''} onChange={(e) => {
+              if (e.target.value === '__custom__') { setCustomInput(''); setEditingLang(true) }
+              else handleLanguageChange(e.target.value)
+            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[100px]">
+              {(options?.languages ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
+              {config?.language && !(options?.languages ?? []).includes(config.language) && (
+                <option value={config.language}>{config.language}</option>
+              )}
+              <option value="__custom__">自定义...</option>
+            </select>
+          )}
           <button onClick={toggleSettings} className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors">
             <Settings className="w-4 h-4" />
           </button>

@@ -13,6 +13,7 @@ export default function ControlBar() {
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const isComposingRef = useRef(false)
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const hasLoopback = devices.some((d) => d.is_loopback)
@@ -72,6 +73,7 @@ export default function ControlBar() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isComposingRef.current) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk() }
   }
 
@@ -197,6 +199,8 @@ export default function ControlBar() {
             <input ref={inputRef} type="text" value={manualQuestion}
               onChange={(e) => setManualQuestion(e.target.value)}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => { isComposingRef.current = true }}
+              onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
               onPaste={handlePaste}
               placeholder={pastedImage ? "可添加文字说明（可选）..." : "输入问题 / Ctrl+V 粘贴截图..."}
               className="w-full bg-bg-tertiary text-text-primary text-xs rounded-lg px-3 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue placeholder:text-text-muted pr-8" />
