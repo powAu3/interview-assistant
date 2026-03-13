@@ -28,6 +28,8 @@ export interface QAPair {
   id: string
   question: string
   answer: string
+  thinkContent: string
+  isThinking: boolean
   timestamp: number
 }
 
@@ -88,8 +90,9 @@ interface InterviewState {
   setTranscribing: (v: boolean) => void
   addTranscription: (text: string) => void
   startAnswer: (id: string, question: string) => void
+  appendThinkChunk: (id: string, chunk: string) => void
   appendAnswerChunk: (id: string, chunk: string) => void
-  finalizeAnswer: (id: string, question: string, answer: string) => void
+  finalizeAnswer: (id: string, question: string, answer: string, thinkContent?: string) => void
   setInitData: (data: any) => void
   setSttStatus: (loaded: boolean, loading: boolean) => void
   toggleSettings: () => void
@@ -156,16 +159,20 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   startAnswer: (id, question) =>
     set((s) => ({
       currentStreamingId: id,
-      qaPairs: [...s.qaPairs, { id, question, answer: '', timestamp: Date.now() / 1000 }],
+      qaPairs: [...s.qaPairs, { id, question, answer: '', thinkContent: '', isThinking: false, timestamp: Date.now() / 1000 }],
+    })),
+  appendThinkChunk: (id, chunk) =>
+    set((s) => ({
+      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, thinkContent: qa.thinkContent + chunk, isThinking: true } : qa)),
     })),
   appendAnswerChunk: (id, chunk) =>
     set((s) => ({
-      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, answer: qa.answer + chunk } : qa)),
+      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, answer: qa.answer + chunk, isThinking: false } : qa)),
     })),
-  finalizeAnswer: (id, question, answer) =>
+  finalizeAnswer: (id, question, answer, thinkContent) =>
     set((s) => ({
       currentStreamingId: null,
-      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, question, answer } : qa)),
+      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, question, answer, thinkContent: thinkContent ?? qa.thinkContent, isThinking: false } : qa)),
     })),
   setInitData: (data) =>
     set({

@@ -49,11 +49,14 @@ export function useInterviewWS() {
       case 'answer_start':
         s.startAnswer(msg.id, msg.question)
         break
+      case 'answer_think_chunk':
+        s.appendThinkChunk(msg.id, msg.chunk)
+        break
       case 'answer_chunk':
         s.appendAnswerChunk(msg.id, msg.chunk)
         break
       case 'answer_done':
-        s.finalizeAnswer(msg.id, msg.question, msg.answer)
+        s.finalizeAnswer(msg.id, msg.question, msg.answer, msg.think)
         break
       case 'stt_status':
         s.setSttStatus(msg.loaded ?? false, msg.loading ?? false)

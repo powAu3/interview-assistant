@@ -1,10 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Bot, Loader2, Copy, Check } from 'lucide-react'
-import { useInterviewStore } from '@/stores/configStore'
-import { useState } from 'react'
+import { Bot, Loader2, Copy, Check, ChevronRight, Brain } from 'lucide-react'
+import { useInterviewStore, QAPair } from '@/stores/configStore'
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -17,6 +16,57 @@ function CopyButton({ text }: { text: string }) {
     <button onClick={handleCopy} className="absolute top-2 right-2 p-1 rounded bg-bg-hover/80 text-text-muted hover:text-text-primary transition-colors opacity-0 group-hover:opacity-100">
       {copied ? <Check className="w-3.5 h-3.5 text-accent-green" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
+  )
+}
+
+function ThinkBlock({ content, isThinking }: { content: string; isThinking: boolean }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isThinking && content) setCollapsed(true)
+  }, [isThinking])
+
+  useEffect(() => {
+    if (isThinking && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight
+    }
+  }, [content, isThinking])
+
+  if (!content) return null
+
+  return (
+    <div className="mb-3 rounded-lg border border-bg-hover/60 bg-bg-tertiary/30 overflow-hidden">
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-1.5 w-full px-3 py-2 text-xs hover:bg-bg-tertiary/50 transition-colors"
+      >
+        {isThinking ? (
+          <>
+            <Brain className="w-3.5 h-3.5 text-accent-amber animate-pulse" />
+            <span className="text-accent-amber font-medium">思考中...</span>
+          </>
+        ) : (
+          <>
+            <ChevronRight className={`w-3 h-3 text-text-muted transition-transform duration-200 ${!collapsed ? 'rotate-90' : ''}`} />
+            <Brain className="w-3.5 h-3.5 text-text-muted" />
+            <span className="text-text-muted">思考过程</span>
+            <span className="text-text-muted/50 text-[10px] ml-1">{content.length} 字</span>
+          </>
+        )}
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0' : 'max-h-[200px]'}`}
+      >
+        <div
+          ref={contentRef}
+          className="px-3 pb-2.5 text-xs text-text-muted/80 leading-relaxed overflow-y-auto max-h-[200px] whitespace-pre-wrap select-text"
+        >
+          {content}
+          {isThinking && <span className="inline-block w-1.5 h-3 bg-accent-amber/60 ml-0.5 animate-pulse" />}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -58,6 +108,9 @@ export default function AnswerPanel() {
                 <span className="text-accent-green text-xs font-bold">A</span>
               </div>
               <div className="flex-1 min-w-0">
+                {qa.thinkContent && (
+                  <ThinkBlock content={qa.thinkContent} isThinking={qa.isThinking} />
+                )}
                 {qa.answer ? (
                   <div className="markdown-body text-sm text-text-primary leading-relaxed">
                     <ReactMarkdown
@@ -87,13 +140,13 @@ export default function AnswerPanel() {
                       {qa.answer}
                     </ReactMarkdown>
                   </div>
-                ) : isStreaming ? (
+                ) : isStreaming && !qa.isThinking ? (
                   <div className="flex items-center gap-2 text-text-muted text-sm">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     生成中...
                   </div>
                 ) : null}
-                {isStreaming && qa.answer && (
+                {isStreaming && qa.answer && !qa.isThinking && (
                   <span className="inline-block w-2 h-4 bg-accent-green ml-0.5 animate-pulse-dot" />
                 )}
               </div>

@@ -172,10 +172,15 @@ def _process_question(question_text: str, image: Optional[str] = None):
     broadcast({"type": "answer_start", "id": qa_id, "question": display_question})
 
     full_answer = ""
+    full_think = ""
     try:
-        for chunk in chat_stream(messages, system_prompt=system_prompt):
-            full_answer += chunk
-            broadcast({"type": "answer_chunk", "id": qa_id, "chunk": chunk})
+        for chunk_type, chunk_text in chat_stream(messages, system_prompt=system_prompt):
+            if chunk_type == "think":
+                full_think += chunk_text
+                broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": chunk_text})
+            else:
+                full_answer += chunk_text
+                broadcast({"type": "answer_chunk", "id": qa_id, "chunk": chunk_text})
     except Exception as e:
         error_msg = f"\n\n[生成答案出错: {e}]"
         full_answer += error_msg
@@ -183,7 +188,7 @@ def _process_question(question_text: str, image: Optional[str] = None):
 
     session.add_assistant_message(full_answer)
     session.add_qa(display_question, full_answer)
-    broadcast({"type": "answer_done", "id": qa_id, "question": display_question, "answer": full_answer})
+    broadcast({"type": "answer_done", "id": qa_id, "question": display_question, "answer": full_answer, "think": full_think})
     broadcast({
         "type": "token_update",
         "prompt": _token_stats["prompt"],
