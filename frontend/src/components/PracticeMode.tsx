@@ -136,10 +136,17 @@ export default function PracticeMode() {
           <div className="space-y-3">
             <div className="flex items-center justify-center gap-3 text-xs">
               <label className="text-text-muted">出题数量:</label>
-              <select value={questionCount} onChange={(e) => setQuestionCount(Number(e.target.value))}
-                className="bg-bg-tertiary text-text-primary rounded-lg px-2 py-1.5 border border-bg-hover text-xs">
-                {[4, 6, 8, 10].map((n) => <option key={n} value={n}>{n} 题</option>)}
-              </select>
+              <div className="flex items-center gap-1">
+                {[5, 8, 10, 15].map((n) => (
+                  <button key={n} onClick={() => setQuestionCount(n)}
+                    className={`px-2 py-1 rounded-md transition-colors ${questionCount === n ? 'bg-accent-blue text-white' : 'bg-bg-tertiary text-text-muted hover:text-text-primary border border-bg-hover'}`}>
+                    {n}
+                  </button>
+                ))}
+                <input type="number" min={1} max={30} value={questionCount}
+                  onChange={(e) => { const v = parseInt(e.target.value); if (v > 0 && v <= 30) setQuestionCount(v) }}
+                  className="w-12 bg-bg-tertiary text-text-primary text-center rounded-lg px-1 py-1 border border-bg-hover text-xs ml-1" />
+              </div>
             </div>
             <div className="flex items-center justify-center gap-3 text-xs">
               <label className="text-text-muted">岗位:</label>
