@@ -123,12 +123,24 @@ def _sanitize_messages(messages: list[dict], supports_vision: bool) -> list[dict
     return sanitized
 
 
+def _build_think_params(model_cfg, cfg) -> dict:
+    """Build provider-specific thinking parameters."""
+    if not model_cfg.supports_think:
+        return {}
+    api_url = (model_cfg.api_base_url or "").lower()
+    if "volces.com" in api_url or "volcengine" in api_url:
+        think_type = "enabled" if cfg.think_mode else "disabled"
+        return {"thinking": {"type": think_type}}
+    return {"think_mode": bool(cfg.think_mode)}
+
+
 def _try_stream_with_model(model_cfg, full_messages, cfg):
     """Attempt streaming with a specific model. Returns response iterator."""
     client = get_client_for_model(model_cfg)
     extra_kwargs: dict = {}
-    if model_cfg.supports_think:
-        extra_kwargs["extra_body"] = {"think_mode": bool(cfg.think_mode)}
+    think_params = _build_think_params(model_cfg, cfg)
+    if think_params:
+        extra_kwargs["extra_body"] = think_params
 
     extra_kwargs["stream_options"] = {"include_usage": True}
 
@@ -186,7 +198,7 @@ def chat_stream(
                 if chunk.choices:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
-                    if reasoning and cfg.think_mode:
+                    if reasoning:
                         yield ("think", reasoning)
                     if delta.content:
                         yield ("text", delta.content)

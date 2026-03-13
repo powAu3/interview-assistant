@@ -198,10 +198,11 @@ export default function App() {
             </div>
           )}
           {activeModel?.supports_think && (
-            <button onClick={handleThinkToggle}
-              className={`text-xs px-2 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 ${config?.think_mode ? 'bg-accent-green/15 border-accent-green/50 text-accent-green' : 'bg-bg-tertiary border-bg-hover text-text-muted'}`}>
-              <div className={`w-1.5 h-1.5 rounded-full transition-colors ${config?.think_mode ? 'bg-accent-green shadow-[0_0_4px_rgba(34,197,94,0.6)]' : 'bg-text-muted/30'}`} />
-              Think
+            <button type="button" onClick={handleThinkToggle} className="flex items-center gap-1.5 select-none bg-transparent border-none p-0 cursor-pointer" aria-label={`Think ${config?.think_mode ? 'ON' : 'OFF'}`}>
+              <span className={`text-xs font-medium transition-colors ${config?.think_mode ? 'text-accent-green' : 'text-text-muted'}`}>Think</span>
+              <span className={`relative inline-block w-9 h-5 rounded-full transition-colors duration-200 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-200 ${config?.think_mode ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+              </span>
             </button>
           )}
           {editingPos ? (
