@@ -5,7 +5,7 @@ import threading
 from typing import Optional, Generator
 from dataclasses import dataclass, field
 from core.config import get_config
-from services.llm import get_client
+from services.llm import get_client, _add_tokens, _token_stats
 
 
 @dataclass
@@ -235,10 +235,16 @@ def evaluate_answer_stream(question: str, answer: str) -> Generator[str, None, N
             temperature=0.6,
             max_tokens=1500,
             stream=True,
+            stream_options={"include_usage": True},
         )
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+            if hasattr(chunk, "usage") and chunk.usage:
+                _add_tokens(
+                    chunk.usage.prompt_tokens or 0,
+                    chunk.usage.completion_tokens or 0,
+                )
     except Exception as e:
         yield f"\n\n[评价生成错误: {e}]"
 
@@ -264,10 +270,16 @@ def generate_report_stream(evaluations: list[PracticeEvaluation]) -> Generator[s
             temperature=0.6,
             max_tokens=2000,
             stream=True,
+            stream_options={"include_usage": True},
         )
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+            if hasattr(chunk, "usage") and chunk.usage:
+                _add_tokens(
+                    chunk.usage.prompt_tokens or 0,
+                    chunk.usage.completion_tokens or 0,
+                )
     except Exception as e:
         yield f"\n\n[报告生成错误: {e}]"
 

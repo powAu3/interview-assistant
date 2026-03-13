@@ -161,3 +161,9 @@ async def api_check_models_health():
 @router.get("/models/health")
 async def api_get_models_health():
     return {"health": _model_health}
+
+
+@router.get("/token/stats")
+async def api_token_stats():
+    from services.llm import get_token_stats
+    return get_token_stats()

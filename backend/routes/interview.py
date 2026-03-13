@@ -9,7 +9,7 @@ from core.config import get_config
 from core.session import get_session, reset_session
 from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import get_stt_engine
-from services.llm import build_system_prompt, chat_stream
+from services.llm import build_system_prompt, chat_stream, _token_stats
 from routes.ws import broadcast
 
 router = APIRouter()
@@ -184,3 +184,23 @@ def _process_question(question_text: str, image: Optional[str] = None):
     session.add_assistant_message(full_answer)
     session.add_qa(display_question, full_answer)
     broadcast({"type": "answer_done", "id": qa_id, "question": display_question, "answer": full_answer})
+    broadcast({
+        "type": "token_update",
+        "prompt": _token_stats["prompt"],
+        "completion": _token_stats["completion"],
+        "total": _token_stats["total"],
+    })
+
+    threading.Thread(
+        target=_save_knowledge_record,
+        args=(question_text, full_answer),
+        daemon=True,
+    ).start()
+
+
+def _save_knowledge_record(question: str, answer: str):
+    try:
+        from services.knowledge import save_record
+        save_record("assist", question, answer)
+    except Exception:
+        pass

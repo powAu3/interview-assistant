@@ -99,6 +99,24 @@ export function useInterviewWS() {
       case 'model_health':
         s.setModelHealth(msg.index, msg.status)
         break
+      case 'token_update':
+        s.setTokenUsage({ prompt: msg.prompt, completion: msg.completion, total: msg.total })
+        break
+      case 'model_fallback':
+        s.setFallbackToast({ from: msg.from, to: msg.to, reason: msg.reason })
+        break
+      case 'resume_opt_start':
+        s.setResumeOptLoading(true)
+        s.resetResumeOpt()
+        s.setResumeOptLoading(true)
+        break
+      case 'resume_opt_chunk':
+        s.appendResumeOptChunk(msg.chunk)
+        break
+      case 'resume_opt_done':
+        s.setResumeOptResult(msg.text)
+        s.setResumeOptLoading(false)
+        break
       case 'error':
         console.error('[WS]', msg.message)
         break

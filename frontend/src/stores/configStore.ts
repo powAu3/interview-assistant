@@ -62,6 +62,13 @@ interface InterviewState {
 
   settingsOpen: boolean
   modelHealth: Record<number, 'checking' | 'ok' | 'error'>
+  tokenUsage: { prompt: number; completion: number; total: number }
+  fallbackToast: { from: string; to: string; reason: string } | null
+
+  // Resume optimizer
+  resumeOptStreaming: string
+  resumeOptResult: string
+  resumeOptLoading: boolean
 
   // Practice mode
   practiceStatus: 'idle' | 'generating' | 'questioning' | 'evaluating' | 'report' | 'finished'
@@ -88,6 +95,14 @@ interface InterviewState {
   toggleSettings: () => void
   clearSession: () => void
   setModelHealth: (index: number, status: 'checking' | 'ok' | 'error') => void
+  setTokenUsage: (usage: { prompt: number; completion: number; total: number }) => void
+  setFallbackToast: (toast: { from: string; to: string; reason: string } | null) => void
+
+  // Resume optimizer actions
+  appendResumeOptChunk: (chunk: string) => void
+  setResumeOptResult: (text: string) => void
+  setResumeOptLoading: (v: boolean) => void
+  resetResumeOpt: () => void
 
   // Practice actions
   setPracticeStatus: (s: InterviewState['practiceStatus']) => void
@@ -116,6 +131,11 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   sttLoading: true,
   settingsOpen: false,
   modelHealth: {},
+  tokenUsage: { prompt: 0, completion: 0, total: 0 },
+  fallbackToast: null,
+  resumeOptStreaming: '',
+  resumeOptResult: '',
+  resumeOptLoading: false,
 
   practiceStatus: 'idle',
   practiceQuestions: [],
@@ -158,6 +178,13 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
   clearSession: () => set({ transcriptions: [], qaPairs: [], currentStreamingId: null }),
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
+  setTokenUsage: (usage) => set({ tokenUsage: usage }),
+  setFallbackToast: (toast) => set({ fallbackToast: toast }),
+
+  appendResumeOptChunk: (chunk) => set((s) => ({ resumeOptStreaming: s.resumeOptStreaming + chunk })),
+  setResumeOptResult: (text) => set({ resumeOptResult: text, resumeOptStreaming: '' }),
+  setResumeOptLoading: (v) => set({ resumeOptLoading: v }),
+  resetResumeOpt: () => set({ resumeOptStreaming: '', resumeOptResult: '', resumeOptLoading: false }),
 
   setPracticeStatus: (s) => set({ practiceStatus: s }),
   setPracticeQuestions: (qs) => set({ practiceQuestions: qs, practiceIndex: 0 }),

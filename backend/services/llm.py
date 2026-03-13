@@ -1,4 +1,6 @@
+import threading
 from openai import OpenAI
+import openai
 from typing import Generator, Optional
 from core.config import get_config
 
@@ -80,6 +82,33 @@ def get_client() -> OpenAI:
     return OpenAI(api_key=m.api_key, base_url=m.api_base_url)
 
 
+def get_client_for_model(model_cfg) -> OpenAI:
+    return OpenAI(api_key=model_cfg.api_key, base_url=model_cfg.api_base_url)
+
+
+_RETRYABLE_ERRORS = (
+    openai.RateLimitError,
+    openai.APIConnectionError,
+    openai.APITimeoutError,
+    openai.InternalServerError,
+)
+
+_token_stats = {"prompt": 0, "completion": 0, "total": 0}
+_token_lock = threading.Lock()
+
+
+def get_token_stats() -> dict:
+    with _token_lock:
+        return dict(_token_stats)
+
+
+def _add_tokens(prompt: int, completion: int):
+    with _token_lock:
+        _token_stats["prompt"] += prompt
+        _token_stats["completion"] += completion
+        _token_stats["total"] += prompt + completion
+
+
 def _sanitize_messages(messages: list[dict], supports_vision: bool) -> list[dict]:
     """Strip image content from messages if model doesn't support vision."""
     if supports_vision:
@@ -104,36 +133,88 @@ def _sanitize_messages(messages: list[dict], supports_vision: bool) -> list[dict
     return sanitized
 
 
+def _try_stream_with_model(model_cfg, full_messages, cfg):
+    """Attempt streaming with a specific model. Returns (generator, model_name) or raises."""
+    client = get_client_for_model(model_cfg)
+    extra_kwargs: dict = {}
+    if cfg.think_mode and model_cfg.supports_think:
+        extra_kwargs["extra_body"] = {"think_mode": True}
+
+    try:
+        extra_kwargs["stream_options"] = {"include_usage": True}
+    except Exception:
+        pass
+
+    response = client.chat.completions.create(
+        model=model_cfg.model,
+        messages=full_messages,
+        temperature=cfg.temperature,
+        max_tokens=cfg.max_tokens,
+        stream=True,
+        **extra_kwargs,
+    )
+    return response
+
+
 def chat_stream(
     messages: list[dict],
     system_prompt: Optional[str] = None,
 ) -> Generator[str, None, None]:
-    cfg = get_config()
-    m = cfg.get_active_model()
-    client = get_client()
+    from routes.ws import broadcast
 
-    clean_messages = _sanitize_messages(messages, m.supports_vision)
+    cfg = get_config()
+    active_model = cfg.get_active_model()
+    clean_messages = _sanitize_messages(messages, active_model.supports_vision)
 
     full_messages = []
     if system_prompt:
         full_messages.append({"role": "system", "content": system_prompt})
     full_messages.extend(clean_messages)
 
-    extra_kwargs: dict = {}
-    if cfg.think_mode and m.supports_think:
-        extra_kwargs["extra_body"] = {"think_mode": True}
+    models_to_try = [active_model]
+    for i, m in enumerate(cfg.models):
+        if i != cfg.active_model and m.api_key and m.api_key not in ("", "sk-your-api-key-here"):
+            models_to_try.append(m)
 
-    try:
-        response = client.chat.completions.create(
-            model=m.model,
-            messages=full_messages,
-            temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
-            stream=True,
-            **extra_kwargs,
-        )
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-    except Exception as e:
-        yield f"\n\n[LLM 错误: {str(e)}]"
+    last_error = None
+    for idx, model in enumerate(models_to_try):
+        try:
+            if idx > 0:
+                full_messages_adj = _sanitize_messages(
+                    full_messages, model.supports_vision
+                )
+                broadcast({
+                    "type": "model_fallback",
+                    "from": models_to_try[idx - 1].name,
+                    "to": model.name,
+                    "reason": str(last_error)[:80],
+                })
+            else:
+                full_messages_adj = full_messages
+
+            response = _try_stream_with_model(model, full_messages_adj, cfg)
+
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                if hasattr(chunk, "usage") and chunk.usage:
+                    _add_tokens(
+                        chunk.usage.prompt_tokens or 0,
+                        chunk.usage.completion_tokens or 0,
+                    )
+                    broadcast({
+                        "type": "token_update",
+                        "prompt": _token_stats["prompt"],
+                        "completion": _token_stats["completion"],
+                        "total": _token_stats["total"],
+                    })
+            return
+
+        except _RETRYABLE_ERRORS as e:
+            last_error = e
+            continue
+        except Exception as e:
+            yield f"\n\n[LLM 错误: {str(e)}]"
+            return
+
+    yield f"\n\n[所有模型均不可用: {str(last_error)}]"

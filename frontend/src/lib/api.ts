@@ -38,6 +38,19 @@ export const api = {
   getSttStatus: () => request('/api/stt/status'),
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
 
+  // Knowledge
+  knowledgeSummary: () => request('/api/knowledge/summary'),
+  knowledgeHistory: (page: number = 1, pageSize: number = 20) =>
+    request(`/api/knowledge/history?page=${page}&page_size=${pageSize}`),
+  knowledgeReset: () => request('/api/knowledge/reset', { method: 'DELETE' }),
+
+  // Resume optimizer
+  resumeOptimize: (jd: string) =>
+    request('/api/resume/optimize', { method: 'POST', body: JSON.stringify({ jd }) }),
+
+  // Token
+  tokenStats: () => request('/api/token/stats'),
+
   // Practice
   practiceGenerate: (count?: number) =>
     request('/api/practice/generate', { method: 'POST', body: JSON.stringify({ count: count ?? 6 }) }),

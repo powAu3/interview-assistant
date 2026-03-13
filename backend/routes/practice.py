@@ -13,6 +13,7 @@ from services.practice import (
     generate_questions, evaluate_answer_stream, generate_report_stream,
     parse_score_from_feedback, PracticeEvaluation,
 )
+from services.llm import _token_stats
 from routes.ws import broadcast
 
 router = APIRouter()
@@ -84,6 +85,17 @@ async def api_practice_submit(body: PracticeSubmitBody):
         practice.status = "questioning"
         broadcast({"type": "practice_eval_done", "question_id": q.id, "score": score, "feedback": full})
         broadcast({"type": "practice_status", "status": "questioning"})
+        broadcast({
+            "type": "token_update",
+            "prompt": _token_stats["prompt"],
+            "completion": _token_stats["completion"],
+            "total": _token_stats["total"],
+        })
+        try:
+            from services.knowledge import save_record
+            save_record("practice", q.question, body.answer.strip(), score)
+        except Exception:
+            pass
 
     threading.Thread(target=_eval, daemon=True).start()
     return {"ok": True}
@@ -117,6 +129,12 @@ async def api_practice_finish():
         practice.status = "finished"
         broadcast({"type": "practice_report_done", "report": full})
         broadcast({"type": "practice_status", "status": "finished"})
+        broadcast({
+            "type": "token_update",
+            "prompt": _token_stats["prompt"],
+            "completion": _token_stats["completion"],
+            "total": _token_stats["total"],
+        })
 
     threading.Thread(target=_report, daemon=True).start()
     return {"ok": True}
