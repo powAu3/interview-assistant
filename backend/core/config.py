@@ -93,6 +93,12 @@ def _save_config(cfg: AppConfig):
         pass
 
 
-POSITION_OPTIONS = ["前端开发", "后端开发", "算法工程师", "测试开发"]
-LANGUAGE_OPTIONS = ["Python", "Java", "C++", "JavaScript"]
+POSITION_OPTIONS = [
+    "前端开发", "后端开发", "全栈开发", "算法工程师", "测试开发",
+    "机器学习工程师", "数据开发", "DBA", "产品经理", "项目经理",
+]
+LANGUAGE_OPTIONS = [
+    "Python", "Java", "C++", "JavaScript", "TypeScript",
+    "Go", "SQL",
+]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium"]

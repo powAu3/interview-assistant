@@ -23,6 +23,14 @@
       "model": "deepseek-chat",
       "supports_think": true,
       "supports_vision": false
+    },
+    {
+      "name": "豆包 (火山引擎)",
+      "api_base_url": "https://ark.cn-beijing.volces.com/api/v3",
+      "api_key": "your-volcengine-api-key",
+      "model": "ep-your-endpoint-id",
+      "supports_think": false,
+      "supports_vision": false
     }
   ],
   "active_model": 0,
