@@ -394,7 +394,7 @@ interview-assistant/
 ├── LICENSE                   # CC BY-NC 4.0
 ├── .gitignore
 ├── docs/
-│   └── skm.jpg               # 赞赏码
+│   └── skm.png               # 赞赏码
 ├── backend/
 │   ├── main.py               # FastAPI 主入口 + WebSocket
 │   ├── config.py             # 配置管理 (Pydantic)
@@ -555,5 +555,5 @@ python start.py --no-build   # 不会再次构建，直接用 dist/
 如果这个项目对你有帮助，欢迎请作者喝杯咖啡：
 
 <p align="center">
-  <img src="docs/skm.jpg" width="260" alt="赞赏码" />
+  <img src="docs/skm.png" width="260" alt="赞赏码" />
 </p>
