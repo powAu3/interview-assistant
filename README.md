@@ -13,6 +13,7 @@
 
 ## 📑 目录
 
+- [界面预览](#-界面预览)
 - [功能特性](#-功能特性)
 - [架构](#-架构)
 - [快速开始](#-快速开始)
@@ -28,6 +29,18 @@
 - [开源协议](#-开源协议)
 - [免责声明](#️-免责声明)
 - [赞赏](#-赞赏)
+
+---
+
+## 📸 界面预览
+
+| 实时辅助 | 模拟练习 |
+|:---:|:---:|
+| ![实时辅助](docs/screenshots/assist-mode.png) | ![模拟练习](docs/screenshots/practice-mode.png) |
+
+| 能力分析 | 简历优化 |
+|:---:|:---:|
+| ![能力分析](docs/screenshots/knowledge-map.png) | ![简历优化](docs/screenshots/resume-optimizer.png) |
 
 ---
 
@@ -49,6 +62,10 @@
 | 👻 Boss Key | Ctrl+B 全局快捷键隐藏/显示窗口（任何时候都生效） |
 | 🔒 屏幕共享隐身 | 窗口在屏幕共享和录屏中完全不可见 |
 | 📌 窗口置顶 | 悬浮在其他窗口上方，随时可看 |
+| 📊 能力分析 | 知识图谱追踪薄弱点，雷达图可视化，针对性复习出题 |
+| 📝 简历优化 | 对比 JD 与简历，匹配度评分 + 修改建议 + 面试重点 |
+| 📈 Token 统计 | 实时显示 LLM token 用量，掌握费用消耗 |
+| 🔄 模型降级 | 主模型不可用时自动切换备用模型，保证流畅使用 |
 
 ## 📐 架构
 
@@ -255,6 +272,24 @@ API Key 获取: https://dashscope.console.aliyun.com/apiKey
 </details>
 
 <details>
+<summary><b>智谱 GLM (GLM-4-Flash / GLM-4V-Flash)</b></summary>
+
+```json
+{
+  "name": "GLM-4.7-Flash",
+  "api_base_url": "https://open.bigmodel.cn/api/paas/v4",
+  "api_key": "your-zhipu-api-key",
+  "model": "GLM-4.7-Flash",
+  "supports_think": false,
+  "supports_vision": false
+}
+```
+API Key 获取: [智谱 AI 开放平台](https://www.bigmodel.cn/invite?icode=5a%2Fd%2FBU%2FqTgh%2Bj4UEb6OnX3uFJ1nZ0jLLgipQkYjpcA%3D)（免费注册即送 token），也能直接用免费模型 x
+
+智谱还提供多模态模型 `GLM-4.6V-Flash`（设置 `"supports_vision": true`）。
+</details>
+
+<details>
 <summary><b>Claude (通过第三方兼容 API)</b></summary>
 
 ```json
@@ -378,9 +413,10 @@ Windows 原生支持系统音频录制：
 
 ### 简历上传
 
-- 支持 PDF、TXT、Markdown 格式（最大 10MB）
+- 支持 **PDF、DOCX、DOC、TXT、Markdown** 格式（最大 10MB）
 - 上传后 AI 会参考简历中的项目经历生成更贴合个人背景的内容
-- 在实时辅助模式底部控制栏点击「简历」按钮上传
+- 在实时辅助模式底部控制栏点击「简历」按钮上传，或在「简历优化」Tab 中直接上传
+- **注意**: 纯图片格式的 PDF（如扫描件）无法提取文字，建议使用文字版 PDF 或 DOCX
 
 ### Whisper 语音识别
 
@@ -417,7 +453,8 @@ interview-assistant/
 ├── LICENSE                   # CC BY-NC 4.0
 ├── .gitignore
 ├── docs/
-│   └── skm.png               # 赞赏码
+│   ├── skm.png               # 赞赏码
+│   └── screenshots/           # 界面截图
 ├── desktop/                  # Electron 桌面端
 │   ├── main.js               # 主进程（窗口管理/托盘/全局快捷键）
 │   ├── preload.js            # IPC 桥接
@@ -431,14 +468,18 @@ interview-assistant/
 │   ├── services/             # 服务层
 │   │   ├── audio.py          # 跨平台音频捕获 + VAD
 │   │   ├── stt.py            # Whisper 语音识别引擎
-│   │   ├── llm.py            # LLM API 调用 + 多模态处理
+│   │   ├── llm.py            # LLM API 调用 + 降级策略 + Token 统计
 │   │   ├── practice.py       # 模拟练习（出题/评价/报告）
-│   │   └── resume.py         # 简历解析（PDF/TXT/MD）
+│   │   ├── resume.py         # 简历解析（PDF/DOCX/TXT/MD）
+│   │   ├── knowledge.py      # 知识图谱服务（SQLite）
+│   │   └── resume_optimizer.py # 简历优化 LLM 服务
 │   ├── routes/               # 路由层
 │   │   ├── ws.py             # WebSocket + 广播
 │   │   ├── common.py         # 配置/设备/简历接口
 │   │   ├── interview.py      # 面试辅助接口
-│   │   └── practice.py       # 练习模式接口
+│   │   ├── practice.py       # 练习模式接口
+│   │   ├── knowledge.py      # 能力分析接口
+│   │   └── resume_opt.py     # 简历优化接口
 │   ├── config.example.json   # 配置模板（提交到 Git）
 │   └── requirements.txt      # Python 依赖
 └── frontend/
@@ -447,11 +488,13 @@ interview-assistant/
     │   ├── stores/            # Zustand 全局状态管理
     │   ├── hooks/             # WebSocket 连接 Hook
     │   ├── components/        # UI 组件
-    │   │   ├── PracticeMode.tsx    # 模拟练习
-    │   │   ├── TranscriptionPanel.tsx  # 实时转录
-    │   │   ├── AnswerPanel.tsx     # AI 答案
-    │   │   ├── ControlBar.tsx      # 底部控制栏
-    │   │   └── SettingsDrawer.tsx  # 设置面板
+│   │   ├── PracticeMode.tsx    # 模拟练习
+│   │   ├── KnowledgeMap.tsx    # 能力分析（雷达图）
+│   │   ├── ResumeOptimizer.tsx # 简历优化
+│   │   ├── TranscriptionPanel.tsx  # 实时转录
+│   │   ├── AnswerPanel.tsx     # AI 答案
+│   │   ├── ControlBar.tsx      # 底部控制栏
+│   │   └── SettingsDrawer.tsx  # 设置面板
     │   └── lib/               # API 封装
     ├── index.html             # 入口 HTML
     ├── package.json           # 前端依赖
@@ -564,6 +607,7 @@ python start.py --no-build   # 不会再次构建，直接用 dist/
 - OpenAI (GPT-4o, GPT-4o-mini)
 - DeepSeek (V3, R1)
 - 通义千问 (Qwen)
+- 智谱 GLM ([免费注册](https://www.bigmodel.cn/invite?icode=5a%2Fd%2FBU%2FqTgh%2Bj4UEb6OnX3uFJ1nZ0jLLgipQkYjpcA%3D))
 - Claude (需通过兼容 API 代理)
 - 本地部署 (Ollama, vLLM, LM Studio)
 
