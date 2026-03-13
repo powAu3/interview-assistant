@@ -36,6 +36,7 @@ export const api = {
   ask: (text: string, image?: string) =>
     request('/api/ask', { method: 'POST', body: JSON.stringify({ text, image }) }),
   getSttStatus: () => request('/api/stt/status'),
+  checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
 
   // Practice
   practiceGenerate: (count?: number) =>

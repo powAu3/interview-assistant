@@ -61,6 +61,7 @@ interface InterviewState {
   sttLoading: boolean
 
   settingsOpen: boolean
+  modelHealth: Record<number, 'checking' | 'ok' | 'error'>
 
   // Practice mode
   practiceStatus: 'idle' | 'generating' | 'questioning' | 'evaluating' | 'report' | 'finished'
@@ -86,6 +87,7 @@ interface InterviewState {
   setSttStatus: (loaded: boolean, loading: boolean) => void
   toggleSettings: () => void
   clearSession: () => void
+  setModelHealth: (index: number, status: 'checking' | 'ok' | 'error') => void
 
   // Practice actions
   setPracticeStatus: (s: InterviewState['practiceStatus']) => void
@@ -113,6 +115,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   sttLoaded: false,
   sttLoading: true,
   settingsOpen: false,
+  modelHealth: {},
 
   practiceStatus: 'idle',
   practiceQuestions: [],
@@ -154,6 +157,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setSttStatus: (loaded, loading) => set({ sttLoaded: loaded, sttLoading: loading }),
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
   clearSession: () => set({ transcriptions: [], qaPairs: [], currentStreamingId: null }),
+  setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
 
   setPracticeStatus: (s) => set({ practiceStatus: s }),
   setPracticeQuestions: (qs) => set({ practiceQuestions: qs, practiceIndex: 0 }),

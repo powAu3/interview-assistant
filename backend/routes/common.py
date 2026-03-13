@@ -1,8 +1,10 @@
 import threading
+import time
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
+from openai import OpenAI
 
 from core.config import (
     get_config, update_config,
@@ -13,6 +15,8 @@ from services.stt import get_stt_engine
 from services.resume import parse_resume_bytes, summarize_resume
 
 router = APIRouter()
+
+_model_health: dict[int, str] = {}
 
 
 class ConfigUpdate(BaseModel):
@@ -105,3 +109,55 @@ async def api_delete_resume():
 async def api_stt_status():
     engine = get_stt_engine()
     return {"loaded": engine.is_loaded, "loading": engine.is_loading, "model": engine.model_size}
+
+
+def _check_single_model(index: int):
+    from routes.ws import broadcast
+    cfg = get_config()
+    if index >= len(cfg.models):
+        return
+    m = cfg.models[index]
+    _model_health[index] = "checking"
+    broadcast({"type": "model_health", "index": index, "status": "checking"})
+
+    if not m.api_key or m.api_key in ("", "sk-your-api-key-here"):
+        _model_health[index] = "error"
+        broadcast({"type": "model_health", "index": index, "status": "error", "detail": "未配置 API Key"})
+        return
+
+    try:
+        client = OpenAI(api_key=m.api_key, base_url=m.api_base_url, timeout=10)
+        resp = client.chat.completions.create(
+            model=m.model,
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=1,
+            stream=False,
+        )
+        _model_health[index] = "ok"
+        broadcast({"type": "model_health", "index": index, "status": "ok"})
+    except Exception as e:
+        _model_health[index] = "error"
+        detail = str(e)[:120]
+        broadcast({"type": "model_health", "index": index, "status": "error", "detail": detail})
+
+
+def _check_all_models():
+    cfg = get_config()
+    threads = []
+    for i in range(len(cfg.models)):
+        t = threading.Thread(target=_check_single_model, args=(i,), daemon=True)
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=15)
+
+
+@router.post("/models/health")
+async def api_check_models_health():
+    threading.Thread(target=_check_all_models, daemon=True).start()
+    return {"ok": True}
+
+
+@router.get("/models/health")
+async def api_get_models_health():
+    return {"health": _model_health}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Settings } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
@@ -46,7 +46,9 @@ export default function App() {
       api.getConfig().then(setConfig),
       api.getDevices().then((d) => setDevices(d.devices, d.platform)),
       api.getOptions().then(setOptions),
-    ]).catch((e) => setInitError(e.message))
+    ]).then(() => {
+      api.checkModelsHealth().catch(() => {})
+    }).catch((e) => setInitError(e.message))
   }, [])
 
   const handlePositionChange = async (position: string) => {
@@ -80,6 +82,27 @@ export default function App() {
 
   const options = useInterviewStore((s) => s.options)
   const activeModel = config?.models?.[config.active_model]
+  const modelHealth = useInterviewStore((s) => s.modelHealth)
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const modelDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const healthDot = (idx: number) => {
+    const status = modelHealth[idx]
+    if (status === 'ok') return 'bg-accent-green'
+    if (status === 'checking') return 'bg-accent-amber animate-pulse'
+    if (status === 'error') return 'bg-accent-red'
+    return 'bg-text-muted/30'
+  }
 
   return (
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden">
@@ -110,14 +133,34 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {config?.models && config.models.length > 1 && (
-            <select value={config.active_model}
-              onChange={(e) => handleModelChange(Number(e.target.value))}
-              className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[120px]">
-              {config.models.map((m, i) => (
-                <option key={i} value={i}>{m.name}{m.supports_vision ? ' 👁' : ''}</option>
-              ))}
-            </select>
+          {config?.models && config.models.length > 0 && (
+            <div className="relative" ref={modelDropdownRef}>
+              <button onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+                className="flex items-center gap-1.5 bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover hover:border-accent-blue transition-colors max-w-[160px]">
+                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`} />
+                <span className="truncate">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
+                <svg className="w-3 h-3 flex-shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {modelDropdownOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-bg-secondary border border-bg-hover rounded-lg shadow-lg z-50 min-w-[180px] py-1">
+                  {config.models.map((m, i) => (
+                    <button key={i}
+                      onClick={() => { handleModelChange(i); setModelDropdownOpen(false) }}
+                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-bg-tertiary transition-colors ${i === config.active_model ? 'text-accent-blue' : 'text-text-primary'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(i)}`} />
+                      <span className="truncate">{m.name}{m.supports_vision ? ' 👁' : ''}</span>
+                      {i === config.active_model && <span className="ml-auto text-accent-blue">✓</span>}
+                    </button>
+                  ))}
+                  <div className="border-t border-bg-hover mt-1 pt-1 px-3 py-1">
+                    <button onClick={() => { api.checkModelsHealth().catch(() => {}); }}
+                      className="text-[10px] text-text-muted hover:text-accent-blue transition-colors">
+                      🔄 重新检查
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {activeModel?.supports_think && (
             <button onClick={handleThinkToggle}

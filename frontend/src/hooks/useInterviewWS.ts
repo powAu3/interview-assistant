@@ -96,6 +96,9 @@ export function useInterviewWS() {
       case 'practice_transcription':
         // handled directly in PracticeMode component via store
         break
+      case 'model_health':
+        s.setModelHealth(msg.index, msg.status)
+        break
       case 'error':
         console.error('[WS]', msg.message)
         break
