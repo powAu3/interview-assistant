@@ -42,6 +42,8 @@
 |:---:|:---:|
 | ![能力分析](docs/screenshots/knowledge-map.png) | ![简历优化](docs/screenshots/resume-optimizer.png) |
 
+> 实时辅助模式下，输入框上方有快捷提示词标签，设置面板中可自定义；手机扫码需在设置面板底部查看二维码。
+
 ---
 
 ## ✨ 功能特性
@@ -67,6 +69,7 @@
 | 📝 简历优化 | 对比 JD 与简历，匹配度评分 + 修改建议 + 面试重点 |
 | 📈 Token 统计 | 实时显示 LLM token 用量，掌握费用消耗 |
 | 🔄 模型降级 | 主模型不可用时自动切换备用模型，保证流畅使用 |
+| ⚡ 快捷提示词 | 输入框上方预设常用提示（写代码、给SQL、时间复杂度等），点击即填入，可在设置中自定义 |
 
 ## 📐 架构
 
@@ -152,6 +155,9 @@ cp backend/config.example.json backend/config.json
 ```bash
 # 桌面模式（默认）— Electron 窗口，屏幕共享隐身
 python start.py
+
+# 快捷启动桌面模式（等价于 python start.py --mode desktop --no-build）
+python quick-start.py
 
 # 网络模式 — 局域网设备可通过浏览器访问
 python start.py --mode network
@@ -384,7 +390,7 @@ python start.py --no-build
 python start.py --mode network
 ```
 
-- 终端显示局域网 IP 和二维码，手机/平板扫码即可使用
+- 终端显示局域网 IP；手机/平板打开页面后，在右上角设置面板中可扫描二维码访问
 - 音频来源始终是运行服务端的主机（手机只负责查看结果）
 - 无屏幕共享隐身等 Electron 专属功能
 
@@ -473,6 +479,10 @@ pip install soundcard
 
 > **区别**：暂停 ≠ 停止。停止后需要重新开始面试，历史对话也会清空（除非先清空再开始）。
 
+### 快捷提示词
+
+输入框上方有一排常用提示词标签（如「写代码实现」「给SQL」「时间复杂度」「举个例子」等），点击即可填入输入框，支持追加到已有内容后。在设置面板中可自定义列表、增删顺序、恢复默认。
+
 ### 截图识题
 
 在实时辅助模式下的输入框中 `Ctrl+V`（macOS: `Cmd+V`）粘贴剪贴板中的截图：
@@ -519,6 +529,9 @@ export HF_ENDPOINT=https://hf-mirror.com
 ```
 interview-assistant/
 ├── start.py                  # 一键启动脚本（桌面/网络模式）
+├── quick-start.py            # 快捷启动桌面模式（等价于 start.py --mode desktop --no-build）
+├── scripts/
+│   └── e2e_test.py           # 端到端自测脚本（后端 API + 前端构建）
 ├── README.md
 ├── LICENSE                   # CC BY-NC 4.0
 ├── .gitignore
@@ -614,6 +627,14 @@ npm run build     # 输出到 frontend/dist/
 ```
 
 构建产物会被后端 FastAPI 以静态文件形式托管，无需单独部署前端。
+
+### 端到端自测
+
+```bash
+python scripts/e2e_test.py
+```
+
+会依次执行：前端构建（若 dist 不存在）、启动后端、验证 API 接口、访问前端页面。全部通过即表示核心流程正常。
 
 ### 目录约定
 
