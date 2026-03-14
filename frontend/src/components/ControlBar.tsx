@@ -161,11 +161,7 @@ export default function ControlBar() {
           onChange={async (e) => {
             const newId = Number(e.target.value)
             setSelectedDevice(newId)
-            // 暂停中切换设备 → 自动用新设备恢复
-            if (isPaused) {
-              setLoading(true)
-              try { await api.resume(newId) } catch (err: any) { setError(err.message) } finally { setLoading(false) }
-            }
+            // 暂停中切换设备：只更新选中的设备，不自动恢复，让用户手动点"继续"
           }}
           className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue flex-1 min-w-0 max-w-[180px] md:max-w-[200px]"
           disabled={isRecording && !isPaused}
