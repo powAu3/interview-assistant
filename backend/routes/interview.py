@@ -214,11 +214,9 @@ def _process_question(
     system_prompt = build_system_prompt()
     if manual_input:
         system_prompt += (
-            "\n\n[手动输入框应急模式]\n"
-            "本轮问题来自用户手动输入框，默认按应急场景处理。"
-            "若是经典算法题或SQL题，可直接给可运行代码（算法题默认语言遵循配置；SQL题用sql），"
-            "并在代码前后各补1-2句关键思路/复杂度说明。"
-        )
+            "\n\n[应急模式] 本题来自用户手动输入，请直接给出可运行代码"
+            "（算法题用 {language}，SQL 题用 sql），代码前后各一句思路/复杂度说明。"
+        ).format(language=get_config().language)
 
     if image:
         content: list = [{"type": "text", "text": question_text}]
