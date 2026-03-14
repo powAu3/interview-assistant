@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon } from 'lucide-react'
+import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 
 export default function ControlBar() {
-  const { isRecording, devices, config, platformInfo, clearSession } = useInterviewStore()
+  const { isRecording, isPaused, devices, config, platformInfo, clearSession } = useInterviewStore()
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
@@ -60,6 +60,14 @@ export default function ControlBar() {
   const handleStop = async () => {
     setLoading(true)
     try { await api.stop() } catch {} finally { setLoading(false) }
+  }
+  const handlePause = async () => {
+    setLoading(true)
+    try { await api.pause() } catch (e: any) { setError(e.message) } finally { setLoading(false) }
+  }
+  const handleResume = async () => {
+    setLoading(true)
+    try { await api.resume() } catch (e: any) { setError(e.message) } finally { setLoading(false) }
   }
   const handleClear = async () => { await api.clear(); clearSession() }
 
@@ -136,11 +144,22 @@ export default function ControlBar() {
         )
       })()}
 
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* 移动端：录制中时显示状态指示条 */}
+      {isRecording && (
+        <div className={`flex md:hidden items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium ${isPaused ? 'bg-accent-amber/15 text-accent-amber' : 'bg-accent-green/15 text-accent-green'}`}>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-accent-amber' : 'bg-accent-green animate-pulse'}`} />
+            <span>{isPaused ? '已暂停' : '录制中'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 主控制行 */}
+      <div className="flex items-center gap-2">
         <select
           value={selectedDevice ?? ''}
           onChange={(e) => setSelectedDevice(Number(e.target.value))}
-          className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[200px]"
+          className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue flex-1 min-w-0 max-w-[180px] md:max-w-[200px]"
           disabled={isRecording}
         >
           {devices.some((d) => d.is_loopback) && (
@@ -158,61 +177,74 @@ export default function ControlBar() {
         </select>
 
         {isRecording ? (
-          <button onClick={handleStop} disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-accent-red hover:bg-accent-red/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
-            <Square className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">停止</span>
-          </button>
+          <>
+            {isPaused ? (
+              <button onClick={handleResume} disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-accent-green hover:bg-accent-green/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+                <PlayCircle className="w-3.5 h-3.5" />
+                <span>继续</span>
+              </button>
+            ) : (
+              <button onClick={handlePause} disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-accent-amber hover:bg-accent-amber/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+                <Pause className="w-3.5 h-3.5" />
+                <span>暂停</span>
+              </button>
+            )}
+            <button onClick={handleStop} disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-2 bg-accent-red hover:bg-accent-red/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+              <Square className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">停止</span>
+            </button>
+          </>
         ) : (
           <button onClick={handleStart} disabled={loading || selectedDevice === null}
-            className="flex items-center gap-1.5 px-3 py-2 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
+            className="flex items-center gap-1.5 px-3 py-2 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
             <Play className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">开始面试</span>
+            <span>开始</span>
           </button>
         )}
 
         <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
         {resumeFile || config?.has_resume ? (
-          <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs">
+          <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs flex-shrink-0">
             <FileText className="w-3.5 h-3.5 text-accent-green" />
-            <span className="text-text-secondary max-w-[80px] truncate hidden sm:inline">{resumeFile || '简历'}</span>
+            <span className="text-text-secondary max-w-[60px] truncate hidden sm:inline">{resumeFile || '简历'}</span>
             <button onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red"><X className="w-3 h-3" /></button>
           </div>
         ) : (
           <button onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-dashed border-bg-hover">
+            className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-dashed border-bg-hover flex-shrink-0">
             <Upload className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">简历</span>
           </button>
         )}
 
         <button onClick={handleClear}
-          className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors">
+          className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
+      </div>
 
-        <div className="flex-1" />
-
-        {/* Manual input with paste support */}
-        <div className="flex items-center gap-1.5 flex-1 max-w-lg min-w-[150px]">
-          <div className="relative flex-1">
-            <input ref={inputRef} type="text" value={manualQuestion}
-              onChange={(e) => setManualQuestion(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onCompositionStart={() => { isComposingRef.current = true }}
-              onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
-              onPaste={handlePaste}
-              placeholder={pastedImage ? "可添加文字说明（可选）..." : "输入问题 / Ctrl+V 粘贴截图..."}
-              className="w-full bg-bg-tertiary text-text-primary text-xs rounded-lg px-3 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue placeholder:text-text-muted pr-8" />
-            {pastedImage && (
-              <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
-            )}
-          </div>
-          <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
-            className="px-2.5 py-2 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs rounded-lg transition-colors disabled:opacity-30">
-            <Send className="w-3.5 h-3.5" />
-          </button>
+      {/* 手动提问输入行 */}
+      <div className="flex items-center gap-1.5">
+        <div className="relative flex-1">
+          <input ref={inputRef} type="text" value={manualQuestion}
+            onChange={(e) => setManualQuestion(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => { isComposingRef.current = true }}
+            onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
+            onPaste={handlePaste}
+            placeholder={pastedImage ? "可添加文字说明（可选）..." : "输入问题 / Ctrl+V 粘贴截图..."}
+            className="w-full bg-bg-tertiary text-text-primary text-xs rounded-lg px-3 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue placeholder:text-text-muted pr-8" />
+          {pastedImage && (
+            <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
+          )}
         </div>
+        <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
+          className="px-2.5 py-2 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs rounded-lg transition-colors disabled:opacity-30 flex-shrink-0">
+          <Send className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   )

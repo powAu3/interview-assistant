@@ -37,6 +37,9 @@ export function useInterviewWS() {
       case 'recording':
         s.setRecording(msg.value)
         break
+      case 'paused':
+        s.setPaused(msg.value)
+        break
       case 'audio_level':
         s.setAudioLevel(msg.value)
         break

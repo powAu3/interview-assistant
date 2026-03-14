@@ -133,11 +133,11 @@ export default function App() {
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden">
       {/* Header */}
       <header className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-bg-tertiary bg-bg-secondary flex-shrink-0 gap-2">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-base">🎙️</span>
-          <h1 className="text-sm font-semibold hidden sm:block">学习助手</h1>
+        <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+          <span className="text-base flex-shrink-0">🎙️</span>
+          <h1 className="text-sm font-semibold hidden sm:block flex-shrink-0">学习助手</h1>
 
-          {/* Mode tabs */}
+          {/* Mode tabs — 移动端仅显示实时辅助，其余模式在 sm: 以上才显示 */}
           <div className="flex bg-bg-tertiary rounded-lg p-0.5 ml-1">
             {([
               ['assist', '实时辅助'],
@@ -146,32 +146,34 @@ export default function App() {
               ['resume-opt', '简历优化'],
             ] as const).map(([key, label]) => (
               <button key={key} onClick={() => setAppMode(key)}
-                className={`px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap ${appMode === key ? 'bg-accent-blue text-white' : 'text-text-muted hover:text-text-primary'}`}>
+                className={`px-2 md:px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0
+                  ${key !== 'assist' ? 'hidden sm:block' : ''}
+                  ${appMode === key ? 'bg-accent-blue text-white' : 'text-text-muted hover:text-text-primary'}`}>
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-1 ml-1">
-            <div className={`w-1.5 h-1.5 rounded-full ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
+          <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
             <span className="text-[10px] text-text-muted hidden sm:inline">
               {sttLoaded ? 'STT就绪' : sttLoading ? 'STT加载中' : 'STT未加载'}
             </span>
           </div>
 
           {tokenUsage.total > 0 && (
-            <div className="flex items-center gap-1 ml-1" title={`Prompt: ${tokenUsage.prompt} | Completion: ${tokenUsage.completion}`}>
+            <div className="hidden sm:flex items-center gap-1 ml-1" title={`Prompt: ${tokenUsage.prompt} | Completion: ${tokenUsage.completion}`}>
               <span className="text-[10px] text-text-muted">Token:</span>
               <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
           {config?.models && config.models.length > 0 && (
             <div className="relative" ref={modelDropdownRef}>
               <button onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                className="flex items-center gap-1.5 bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover hover:border-accent-blue transition-colors max-w-[160px]">
+                className="flex items-center gap-1.5 bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover hover:border-accent-blue transition-colors max-w-[130px] md:max-w-[160px]">
                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`} />
                 <span className="truncate">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
                 <svg className="w-3 h-3 flex-shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -209,12 +211,12 @@ export default function App() {
             <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
               onBlur={() => { if (customInput.trim()) handlePositionChange(customInput.trim()); setEditingPos(false) }}
               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingPos(false) }}
-              placeholder="输入岗位" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[100px]" />
+              placeholder="输入岗位" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[100px] hidden sm:block" />
           ) : (
             <select value={config?.position ?? ''} onChange={(e) => {
               if (e.target.value === '__custom__') { setCustomInput(''); setEditingPos(true) }
               else handlePositionChange(e.target.value)
-            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[120px]">
+            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[90px] md:max-w-[120px] hidden sm:block">
               {(options?.positions ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
               {config?.position && !(options?.positions ?? []).includes(config.position) && (
                 <option value={config.position}>{config.position}</option>
@@ -226,12 +228,12 @@ export default function App() {
             <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
               onBlur={() => { if (customInput.trim()) handleLanguageChange(customInput.trim()); setEditingLang(false) }}
               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingLang(false) }}
-              placeholder="输入语言" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[90px]" />
+              placeholder="输入语言" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[90px] hidden sm:block" />
           ) : (
             <select value={config?.language ?? ''} onChange={(e) => {
               if (e.target.value === '__custom__') { setCustomInput(''); setEditingLang(true) }
               else handleLanguageChange(e.target.value)
-            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[100px]">
+            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[80px] md:max-w-[100px] hidden sm:block">
               {(options?.languages ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
               {config?.language && !(options?.languages ?? []).includes(config.language) && (
                 <option value={config.language}>{config.language}</option>

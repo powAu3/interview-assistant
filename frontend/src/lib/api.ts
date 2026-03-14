@@ -32,6 +32,8 @@ export const api = {
   start: (device_id: number) =>
     request('/api/start', { method: 'POST', body: JSON.stringify({ device_id }) }),
   stop: () => request('/api/stop', { method: 'POST' }),
+  pause: () => request('/api/pause', { method: 'POST' }),
+  resume: () => request('/api/unpause', { method: 'POST' }),
   clear: () => request('/api/clear', { method: 'POST' }),
   ask: (text: string, image?: string) =>
     request('/api/ask', { method: 'POST', body: JSON.stringify({ text, image }) }),

@@ -54,6 +54,7 @@ interface InterviewState {
   options: { positions: string[]; languages: string[]; whisper_models: string[] } | null
 
   isRecording: boolean
+  isPaused: boolean
   audioLevel: number
   isTranscribing: boolean
   transcriptions: string[]
@@ -86,6 +87,7 @@ interface InterviewState {
   setDevices: (devices: any[], platformInfo: any) => void
   setOptions: (options: any) => void
   setRecording: (v: boolean) => void
+  setPaused: (v: boolean) => void
   setAudioLevel: (v: number) => void
   setTranscribing: (v: boolean) => void
   addTranscription: (text: string) => void
@@ -125,6 +127,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   platformInfo: null,
   options: null,
   isRecording: false,
+  isPaused: false,
   audioLevel: 0,
   isTranscribing: false,
   transcriptions: [],
@@ -153,6 +156,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setDevices: (devices, platformInfo) => set({ devices, platformInfo }),
   setOptions: (options) => set({ options }),
   setRecording: (v) => set({ isRecording: v }),
+  setPaused: (v) => set({ isPaused: v }),
   setAudioLevel: (v) => set({ audioLevel: v }),
   setTranscribing: (v) => set({ isTranscribing: v }),
   addTranscription: (text) => set((s) => ({ transcriptions: [...s.transcriptions, text] })),
@@ -179,11 +183,12 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       transcriptions: data.transcriptions ?? [],
       qaPairs: data.qa_pairs ?? [],
       isRecording: data.is_recording ?? false,
+      isPaused: data.is_paused ?? false,
       sttLoaded: data.stt_loaded ?? false,
     }),
   setSttStatus: (loaded, loading) => set({ sttLoaded: loaded, sttLoading: loading }),
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
-  clearSession: () => set({ transcriptions: [], qaPairs: [], currentStreamingId: null }),
+  clearSession: () => set({ transcriptions: [], qaPairs: [], currentStreamingId: null, isPaused: false }),
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
   setTokenUsage: (usage) => set({ tokenUsage: usage }),
   setFallbackToast: (toast) => set({ fallbackToast: toast }),

@@ -126,17 +126,18 @@ def _sanitize_messages(messages: list[dict], supports_vision: bool) -> list[dict
 def _build_think_params(model_cfg, cfg) -> dict:
     """Build provider-specific thinking parameters.
 
-    thinking.type is the standard format used by most providers
-    (Volcengine/Doubao, DeepSeek, Zhipu/GLM). Fall back to think_mode
-    only for providers known to use that legacy parameter.
+    Send both formats simultaneously: most providers (Volcengine/Doubao,
+    DeepSeek, Zhipu/GLM) use thinking.type, while some internal providers
+    (shopee/compass) use think_mode. Unknown providers silently ignore
+    parameters they don't recognise, so sending both is safe.
     """
     if not model_cfg.supports_think:
         return {}
-    api_url = (model_cfg.api_base_url or "").lower()
-    if "shopee" in api_url or "compass" in api_url:
-        return {"think_mode": bool(cfg.think_mode)}
     think_type = "enabled" if cfg.think_mode else "disabled"
-    return {"thinking": {"type": think_type}}
+    return {
+        "thinking": {"type": think_type},
+        "think_mode": bool(cfg.think_mode),
+    }
 
 
 def _try_stream_with_model(model_cfg, full_messages, cfg):

@@ -19,6 +19,8 @@ class Session:
     qa_pairs: list[QAPair] = field(default_factory=list)
     current_transcription: str = ""
     is_recording: bool = False
+    is_paused: bool = False
+    last_device_id: int = 0
     created_at: float = field(default_factory=time.time)
 
     MAX_HISTORY = 20
@@ -62,6 +64,7 @@ class Session:
         self.qa_pairs.clear()
         self.current_transcription = ""
         self.is_recording = False
+        self.is_paused = False
 
 
 _session: Optional[Session] = None

@@ -50,6 +50,7 @@
 |------|------|
 | 🎤 实时语音转录 | 捕获系统/麦克风音频，本地 Whisper 模型实时转文字 |
 | 🤖 AI 答案生成 | 对接 OpenAI 兼容 API，流式输出 Markdown 格式答案 |
+| ⏸️ 暂停/继续 | 面试中随时暂停录音，不结束会话，继续时无缝衔接 |
 | 🏋️ 模拟练习模式 | AI 出题 → 你回答 → 即时评价 → 综合报告，完整自测闭环 |
 | 📄 简历感知 | 上传简历 PDF，AI 结合经历生成个性化内容 |
 | 💬 多轮对话 | 保持上下文，支持追问和深入讨论 |
@@ -58,7 +59,7 @@
 | 🧠 Think 模式 | 支持 DeepSeek 等模型的深度思考模式 |
 | 🖥️ 桌面模式 | Electron 原生窗口，屏幕共享隐身（Content Protection） |
 | 🌐 网络模式 | 局域网共享，手机/平板扫码访问 |
-| 📱 移动端适配 | 响应式布局，多端舒适使用 |
+| 📱 移动端适配 | 响应式布局，手机端专注实时辅助 |
 | 👻 Boss Key | Ctrl+B 全局快捷键隐藏/显示窗口（任何时候都生效） |
 | 🔒 屏幕共享隐身 | 窗口在屏幕共享和录屏中完全不可见 |
 | 📌 窗口置顶 | 悬浮在其他窗口上方，随时可看 |
@@ -120,7 +121,11 @@ pip install -r backend/requirements.txt
 
 > **macOS 提示**: 如果 `sounddevice` 安装失败，先 `brew install portaudio`
 >
-> **Windows 提示**: 如果 `faster-whisper` 安装慢，可先装 CUDA 版 PyTorch 再安装
+> **Windows 提示**: 如果 `faster-whisper` 安装慢，可先装 CUDA 版 PyTorch 再安装。
+> 另外强烈建议额外安装 `soundcard`，用于 WASAPI 原生系统音频采集（音质更好，不需要启用"立体声混音"）：
+> ```bash
+> pip install soundcard
+> ```
 
 ### 第三步：安装前端依赖并构建
 
@@ -330,17 +335,58 @@ API Key 获取: [智谱 AI 开放平台](https://www.bigmodel.cn/invite?icode=5a
 
 ### 桌面模式（默认）
 
-- 使用 **Electron** 原生窗口，支持屏幕共享隐身
+使用 **Electron** 原生窗口，推荐日常使用。
+
+```bash
+python start.py
+```
+
+**功能特性：**
 - **屏幕共享隐身（Content Protection）**: 窗口在屏幕共享/录屏中完全不可见，对方看到的是黑色
 - **Boss Key**: `Ctrl+B`（macOS: `Cmd+B`）全局快捷键，**即使窗口不在前台也能触发**隐藏/显示
 - **系统托盘**: 右键菜单可切换 显示/隐藏、窗口置顶、屏幕共享隐身 等选项
 - **窗口置顶**: 悬浮在其他窗口上方，随时可看答案
 
+**关于 Electron 依赖：**
+
+`start.py` 会在首次运行时**自动安装** Electron（`desktop/node_modules/electron`），无需手动操作。
+
+如果自动安装失败（国内网络常见），可手动安装：
+
+```bash
+cd desktop
+npm install
+cd ..
+python start.py --no-build
+```
+
+> **国内网络加速**：Electron 包体较大（约 100-200MB），国内下载可能很慢。可设置镜像：
+> ```bash
+> # Windows PowerShell
+> $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+> npm install   # 在 desktop/ 目录下执行
+>
+> # macOS / Linux
+> ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm install
+> ```
+> 或者在 `desktop/` 目录下创建 `.npmrc` 文件：
+> ```
+> electron_mirror=https://npmmirror.com/mirrors/electron/
+> ```
+
+> **Windows 补充**: 如果遇到 `Error: EPERM` 权限错误，尝试以管理员身份运行终端。
+
 ### 网络模式
 
-- 绑定 `0.0.0.0`，同一局域网设备均可访问
+绑定 `0.0.0.0`，同一局域网设备均可通过浏览器访问，适合手机/平板使用或不想装 Electron 的场景。
+
+```bash
+python start.py --mode network
+```
+
 - 终端显示局域网 IP 和二维码，手机/平板扫码即可使用
-- 音频来源始终是运行服务端的主机
+- 音频来源始终是运行服务端的主机（手机只负责查看结果）
+- 无屏幕共享隐身等 Electron 专属功能
 
 ## 🏋️ 模拟练习模式
 
@@ -393,15 +439,39 @@ brew install blackhole-2ch
 
 ### Windows — WASAPI Loopback
 
-Windows 原生支持系统音频录制：
+Windows 支持两种系统音频采集方式：
 
-1. 在设备列表中选择带有 **WASAPI** 或 **Loopback / Stereo Mix** 标记的设备
-2. 如果没看到：
-   - 右键系统托盘 🔊 音量图标 → **声音设置**
-   - 找到 **录制** 选项卡 → 右键空白处 → **显示已禁用的设备**
-   - 找到 **立体声混音（Stereo Mix）** → 右键 → **启用**
+**方式一（推荐）：soundcard WASAPI 原生采集**
+
+安装 `soundcard` 库后，设备列表会自动出现带 **★ (系统音频)** 标记的 WASAPI 设备，音质更好，无需额外配置：
+
+```bash
+pip install soundcard
+```
+
+启动后在设备下拉框中选择带 ★ 标记的设备即可。
+
+**方式二：Stereo Mix（立体声混音）**
+
+若无法安装 `soundcard`，可启用 Windows 内置的"立体声混音"：
+
+1. 右键系统托盘 🔊 音量图标 → **声音设置** → **更多声音设置**
+2. 切换到 **录制** 选项卡 → 右键空白处 → **显示已禁用的设备**
+3. 找到 **立体声混音（Stereo Mix）** → 右键 → **启用**
+4. 在工具设备列表中选择它
 
 ## 🔧 其他功能说明
+
+### 暂停 / 继续录音
+
+面试进行中可以随时**暂停**录音（不结束面试），方便应对突发情况（如需要思考、接听电话等）。
+
+- 录制中：底部控制栏显示 **暂停**（黄色）和 **停止**（红色）两个按钮
+- 点击暂停后：变为 **继续**（绿色），音频采集停止，但面试会话、转录历史、AI 对话上下文全部保留
+- 点击继续：无缝恢复录音，之前的上下文不丢失
+- 点击停止：结束整个面试会话
+
+> **区别**：暂停 ≠ 停止。停止后需要重新开始面试，历史对话也会清空（除非先清空再开始）。
 
 ### 截图识题
 
@@ -511,7 +581,7 @@ interview-assistant/
 | 后端 | Python 3.10+, FastAPI, uvicorn |
 | 前端 | React 18, TypeScript, Vite, Tailwind CSS |
 | 语音识别 | faster-whisper (本地, CTranslate2) |
-| 音频捕获 | sounddevice (PortAudio) |
+| 音频捕获 | sounddevice (PortAudio) + soundcard (Windows WASAPI loopback) |
 | LLM | OpenAI 兼容 API (GPT, DeepSeek, Qwen, Claude 等) |
 | 通信 | WebSocket (实时推送) |
 | 桌面 GUI | Electron (Content Protection, 全局快捷键, 系统托盘) |
@@ -565,6 +635,50 @@ npm run build     # 输出到 frontend/dist/
 nvm install 18
 nvm use 18
 ```
+
+### Q: 桌面模式首次启动很慢/卡在"安装 Electron 依赖"？
+
+`start.py` 首次运行需要下载 Electron（约 100-200MB）。国内网络可能很慢，建议手动安装并设置镜像：
+
+```bash
+cd desktop
+
+# Windows PowerShell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+npm install
+
+# macOS / Linux
+ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm install
+
+cd ..
+python start.py --no-build
+```
+
+### Q: 桌面模式报错 `Error: cannot find module 'electron'`？
+
+Electron 依赖未安装成功，手动安装：
+
+```bash
+cd desktop && npm install && cd ..
+```
+
+### Q: 桌面模式打开后是空白/黑屏？
+
+通常是前端未构建。确认 `frontend/dist/` 目录存在：
+
+```bash
+cd frontend && npm run build && cd ..
+python start.py --no-build
+```
+
+### Q: 网络模式和桌面模式有什么区别，选哪个？
+
+| 场景 | 推荐模式 |
+|------|---------|
+| 日常使用，需要屏幕共享隐身 | 桌面模式 |
+| 想在手机/平板查看 AI 答案 | 网络模式 |
+| 不想装 Electron / 嫌麻烦 | 网络模式 |
+| 需要 Boss Key 快捷键 | 桌面模式 |
 
 ### Q: `sounddevice` 安装失败？
 

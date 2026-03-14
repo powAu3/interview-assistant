@@ -49,6 +49,7 @@ async def websocket_endpoint(ws: WebSocket):
         await ws.send_json({
             "type": "init",
             "is_recording": session.is_recording,
+            "is_paused": session.is_paused,
             "stt_loaded": engine.is_loaded,
             "transcriptions": session.transcription_history[-50:],
             "qa_pairs": [

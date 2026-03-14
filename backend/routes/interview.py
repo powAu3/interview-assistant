@@ -16,6 +16,7 @@ router = APIRouter()
 
 _interview_thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
+_pause_event = threading.Event()  # set = paused, clear = running
 
 
 class ManualQuestion(BaseModel):
@@ -41,6 +42,34 @@ async def api_stop():
     return {"ok": True}
 
 
+@router.post("/pause")
+async def api_pause():
+    session = get_session()
+    if not session.is_recording:
+        raise HTTPException(400, "面试未在进行中")
+    if _pause_event.is_set():
+        raise HTTPException(400, "已经处于暂停状态")
+    _pause_event.set()
+    audio_capture.stop()
+    session.is_paused = True
+    broadcast({"type": "paused", "value": True})
+    return {"ok": True}
+
+
+@router.post("/unpause")
+async def api_resume_interview():
+    session = get_session()
+    if not session.is_recording:
+        raise HTTPException(400, "面试未在进行中")
+    if not _pause_event.is_set():
+        raise HTTPException(400, "面试未处于暂停状态")
+    audio_capture.start(session.last_device_id)
+    _pause_event.clear()
+    session.is_paused = False
+    broadcast({"type": "paused", "value": False})
+    return {"ok": True}
+
+
 @router.post("/clear")
 async def api_clear():
     reset_session()
@@ -61,6 +90,7 @@ async def api_session():
     session = get_session()
     return {
         "is_recording": session.is_recording,
+        "is_paused": session.is_paused,
         "transcriptions": session.transcription_history[-50:],
         "qa_pairs": [
             {"id": qa.id, "question": qa.question, "answer": qa.answer, "timestamp": qa.timestamp}
@@ -73,12 +103,16 @@ def _start_nonblocking(device_id: int):
     global _interview_thread
     stop_interview_loop()
     _stop_event.clear()
+    _pause_event.clear()
 
     session = get_session()
     session.is_recording = True
+    session.is_paused = False
+    session.last_device_id = device_id
 
     audio_capture.start(device_id)
     broadcast({"type": "recording", "value": True})
+    broadcast({"type": "paused", "value": False})
 
     _interview_thread = threading.Thread(target=_interview_worker, daemon=True)
     _interview_thread.start()
@@ -87,10 +121,13 @@ def _start_nonblocking(device_id: int):
 def stop_interview_loop():
     global _interview_thread
     _stop_event.set()
+    _pause_event.clear()
     audio_capture.stop()
     session = get_session()
     session.is_recording = False
+    session.is_paused = False
     broadcast({"type": "recording", "value": False})
+    broadcast({"type": "paused", "value": False})
     if _interview_thread and _interview_thread.is_alive():
         _interview_thread.join(timeout=3)
     _interview_thread = None
@@ -119,6 +156,11 @@ def _interview_worker():
     session = get_session()
 
     while not _stop_event.is_set():
+        # 暂停时等待恢复
+        if _pause_event.is_set():
+            time.sleep(0.1)
+            continue
+
         chunk = audio_capture.get_audio_chunk(timeout=0.1)
         if chunk is None:
             time.sleep(0.05)
