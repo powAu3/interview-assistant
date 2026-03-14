@@ -13,8 +13,13 @@ function CopyButton({ text }: { text: string }) {
     setTimeout(() => setCopied(false), 2000)
   }
   return (
-    <button onClick={handleCopy} className="absolute top-2 right-2 p-1 rounded bg-bg-hover/80 text-text-muted hover:text-text-primary transition-colors opacity-0 group-hover:opacity-100">
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-bg-hover text-text-muted hover:text-text-primary transition-colors text-[11px]"
+      title="复制代码"
+    >
       {copied ? <Check className="w-3.5 h-3.5 text-accent-green" /> : <Copy className="w-3.5 h-3.5" />}
+      <span>{copied ? '已复制' : '复制'}</span>
     </button>
   )
 }
@@ -119,21 +124,41 @@ export default function AnswerPanel() {
                           const match = /language-(\w+)/.exec(className || '')
                           const codeStr = String(children).replace(/\n$/, '')
                           if (match) {
+                            const lang = match[1].toLowerCase()
                             return (
-                              <div className="relative group my-2">
-                                <CopyButton text={codeStr} />
+                              <div className="my-3 rounded-xl border border-accent-blue/35 bg-[#0b1220] shadow-[0_0_0_1px_rgba(59,130,246,0.08)] overflow-hidden">
+                                <div className="flex items-center justify-between px-3 py-2 bg-[#111a2e] border-b border-accent-blue/20">
+                                  <span className="text-[11px] uppercase tracking-wide text-accent-blue/90 font-semibold">{lang}</span>
+                                  <CopyButton text={codeStr} />
+                                </div>
                                 <SyntaxHighlighter
                                   style={oneDark}
-                                  language={match[1]}
+                                  language={lang}
                                   PreTag="div"
-                                  customStyle={{ margin: 0, borderRadius: '0.5rem', fontSize: '0.8rem' }}
+                                  customStyle={{
+                                    margin: 0,
+                                    borderRadius: 0,
+                                    fontSize: '0.82rem',
+                                    lineHeight: 1.55,
+                                    background: '#0b1220',
+                                    padding: '0.9rem 1rem',
+                                  }}
+                                  codeTagProps={{ style: { fontFamily: 'JetBrains Mono, Consolas, monospace' } }}
+                                  wrapLongLines={false}
                                 >
                                   {codeStr}
                                 </SyntaxHighlighter>
                               </div>
                             )
                           }
-                          return <code className={className} {...props}>{children}</code>
+                          return (
+                            <code
+                              className="px-1.5 py-0.5 rounded-md bg-[#1b2438] border border-accent-blue/25 text-[#dbeafe]"
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          )
                         },
                       }}
                     >
