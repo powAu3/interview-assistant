@@ -300,6 +300,11 @@ def run_desktop_mode(port: int):
         print(f"    python start.py --mode network")
         sys.exit(1)
 
+    # Pre-clean the port BEFORE Electron launches (Electron spawns
+    # start.py --mode network internally, but if a zombie process holds
+    # the port, it would fail deep inside that chain with a confusing error).
+    kill_port(port)
+
     print("  Electron 桌面模式")
     print("  - 屏幕共享隐身: 已开启")
     print("  - 全局快捷键: Ctrl+B 显示/隐藏")
@@ -377,4 +382,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n  已停止。")
+        sys.exit(0)
