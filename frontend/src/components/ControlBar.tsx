@@ -1,7 +1,38 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle } from 'lucide-react'
+import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle, Zap } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
+
+const DEFAULT_QUICK_PROMPTS = [
+  '写代码实现',
+  '给SQL',
+  '时间复杂度',
+  '举个例子',
+  '更详细',
+  '对比区别',
+  '优缺点',
+  '应用场景',
+  '简短回答',
+]
+
+const STORAGE_KEY = 'quick_prompts'
+
+function getQuickPrompts(): string[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {}
+  return DEFAULT_QUICK_PROMPTS
+}
+
+export function saveQuickPrompts(prompts: string[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(prompts))
+}
+
+export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
 
 export default function ControlBar() {
   const { isRecording, isPaused, devices, config, platformInfo, clearSession } = useInterviewStore()
@@ -14,6 +45,17 @@ export default function ControlBar() {
   const fileRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
+  const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
+
+  useEffect(() => {
+    const onStorage = () => setQuickPrompts(getQuickPrompts())
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('quick-prompts-updated', onStorage)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('quick-prompts-updated', onStorage)
+    }
+  }, [])
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const hasLoopback = devices.some((d) => d.is_loopback)
@@ -229,6 +271,23 @@ export default function ControlBar() {
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* 快捷提示词 */}
+      {quickPrompts.length > 0 && (
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
+          <Zap className="w-3 h-3 text-accent-amber flex-shrink-0" />
+          {quickPrompts.map((prompt) => (
+            <button key={prompt}
+              onClick={() => {
+                setManualQuestion((prev) => prev ? `${prev} ${prompt}` : prompt)
+                inputRef.current?.focus()
+              }}
+              className="px-2 py-0.5 text-[11px] rounded-full border border-accent-blue/30 text-accent-blue bg-accent-blue/5 hover:bg-accent-blue/15 hover:border-accent-blue/50 transition-colors whitespace-nowrap flex-shrink-0">
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 手动提问输入行 */}
       <div className="flex items-center gap-1.5">
