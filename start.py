@@ -35,7 +35,10 @@ def print_qrcode(url: str):
         qr = qrcode.QRCode(box_size=1, border=1)
         qr.add_data(url)
         qr.make(fit=True)
-        qr.print_ascii(invert=True)
+        try:
+            qr.print_ascii(invert=True)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            print(f"  (二维码无法在当前终端显示，请直接访问上方链接)")
     except ImportError:
         print(f"  (安装 qrcode 库可显示二维码: pip install qrcode)")
 
