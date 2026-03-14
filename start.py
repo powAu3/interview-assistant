@@ -48,17 +48,44 @@ def get_local_ip() -> str:
 
 
 def print_qrcode(url: str):
+    """Generate a real PNG QR code and open it, so it's always scannable."""
     try:
-        import qrcode
-        qr = qrcode.QRCode(box_size=1, border=1)
+        import qrcode as _qrcode
+    except ImportError:
+        print("  (安装 qrcode[pil] 可生成二维码图片: pip install 'qrcode[pil]')")
+        return
+
+    try:
+        import PIL  # noqa: F401 – needed for image output
+        import tempfile, os as _os
+
+        qr = _qrcode.QRCode(
+            error_correction=_qrcode.constants.ERROR_CORRECT_M,
+            box_size=8,
+            border=2,
+        )
         qr.add_data(url)
         qr.make(fit=True)
-        try:
-            qr.print_ascii(invert=True)
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            print("  (二维码无法在当前终端显示，请直接访问上方链接)")
-    except ImportError:
-        print("  (安装 qrcode 库可显示二维码: pip install qrcode)")
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        # Save to a temp file and open with the system viewer
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".png", prefix="interview_qr_", delete=False
+        )
+        img.save(tmp.name)
+        tmp.close()
+
+        print(f"  [二维码已生成，正在打开图片...]  {tmp.name}")
+        if platform.system() == "Windows":
+            _os.startfile(tmp.name)
+        elif platform.system() == "Darwin":
+            subprocess.Popen(["open", tmp.name])
+        else:
+            subprocess.Popen(["xdg-open", tmp.name])
+
+    except Exception as e:
+        # PIL not available or any other error — silent fallback, URL is already printed above
+        print(f"  (二维码生成失败: {e}，请直接访问上方链接)")
 
 
 # ---------------------------------------------------------------------------
