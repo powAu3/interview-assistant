@@ -34,7 +34,8 @@ class AppConfig(BaseModel):
     think_mode: bool = False
 
     whisper_model: str = "base"
-    whisper_language: str = "zh"
+    # "auto" is more robust for Chinese interview speech mixed with English terms.
+    whisper_language: str = "auto"
 
     position: str = "后端开发"
     language: str = "Python"
@@ -42,7 +43,8 @@ class AppConfig(BaseModel):
 
     auto_detect: bool = True
     silence_threshold: float = 0.01
-    silence_duration: float = 1.5
+    # Lower default reduces turn latency after interviewer finishes speaking.
+    silence_duration: float = 1.2
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))

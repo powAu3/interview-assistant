@@ -4,8 +4,8 @@ Key improvements over naïve usage:
 - language="auto"  → passes language=None to Whisper so it auto-detects
   Chinese + English mixed speech.  This is the most impactful fix for English
   technical term recognition.
-- temperature fallback  → [0, 0.2, 0.4] lets Whisper retry with higher
-  entropy when greedy decoding fails on accented / unclear speech.
+- temperature fallback  → [0, 0.2] lets Whisper retry with slightly higher
+  entropy when greedy decoding is uncertain.
 - initial_prompt demonstrates the target output style with English terms
   written out verbatim, biasing the decoder toward correct spellings.
 - hotwords  → bonus boost for critical tech terms (faster-whisper ≥ 1.1).
@@ -106,6 +106,17 @@ TERM_CORRECTIONS = {
     r"(?i)zookeeper": "Zookeeper",
     r"(?i)click\s*house": "ClickHouse",
     r"(?i)kafka": "Kafka",
+    # Common interview-term misrecognitions (accent / unclear enunciation)
+    r"(?i)(?<![a-zA-Z])z\s*set(?![a-zA-Z])": "ZSET",
+    r"(?i)sort(?:ed)?\s*set": "Sorted Set",
+    r"(?i)spring\s*cloud": "Spring Cloud",
+    r"(?i)concurrent\s*hash\s*map": "ConcurrentHashMap",
+    r"(?i)hash\s*map": "HashMap",
+    r"(?i)thread\s*pool": "ThreadPool",
+    r"(?i)dead\s*lock": "deadlock",
+    r"(?i)k\s*eight\s*s|kates|k8s": "Kubernetes",
+    r"(?i)(?<![a-zA-Z])mq(?![a-zA-Z])": "MQ",
+    r"(?i)my\s*sql": "MySQL",
 }
 
 # ---------------------------------------------------------------------------
@@ -133,7 +144,10 @@ def _build_initial_prompt(position: str, language: str) -> str:
     "hallucinate" words from the prompt instead of transcribing actual audio.
     The bulk of vocabulary guidance goes into hotwords (no hallucination risk).
     """
-    return "这是一段中文技术面试对话，术语保留英文，如Redis、MySQL、Docker、API。"
+    return (
+        "这是一段技术面试语音，可能中英混说且口音不标准。"
+        "请优先识别技术术语英文原词，如 Redis、ZSET、Sorted Set、MySQL、Docker、Kubernetes、API。"
+    )
 
 
 def _postprocess(text: str) -> str:
@@ -222,7 +236,9 @@ class STTEngine:
                 for w in v.split():
                     if w and any(c.isascii() and c.isalpha() for c in w):
                         hotwords_list.append(w)
-        hotwords_str = " ".join(dict.fromkeys(hotwords_list))[:500]
+        # Keep hotwords long enough to cover interview vocab,
+        # but cap to avoid excessive decoding overhead.
+        hotwords_str = " ".join(dict.fromkeys(hotwords_list))[:900]
 
         kwargs = dict(
             language=whisper_lang,

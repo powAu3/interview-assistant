@@ -42,14 +42,14 @@
     }
   ],
   "active_model": 0,
-  "temperature": 0.7,
+  "temperature": 0.5,
   "max_tokens": 4096,
   "think_mode": false,
   "whisper_model": "base",
-  "whisper_language": "zh",
+  "whisper_language": "auto",
   "position": "后端开发",
   "language": "Python",
   "auto_detect": true,
   "silence_threshold": 0.01,
-  "silence_duration": 2.0
+  "silence_duration": 1.2
 }

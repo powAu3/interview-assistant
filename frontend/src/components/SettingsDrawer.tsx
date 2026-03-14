@@ -7,11 +7,11 @@ export default function SettingsDrawer() {
   const { settingsOpen, toggleSettings, config, options, platformInfo, sttLoaded, sttLoading } = useInterviewStore()
 
   const [form, setForm] = useState({
-    temperature: 0.7,
+    temperature: 0.5,
     max_tokens: 4096,
     whisper_model: 'base',
     silence_threshold: 0.01,
-    silence_duration: 2.5,
+    silence_duration: 1.2,
     auto_detect: true,
   })
   const [saving, setSaving] = useState(false)
@@ -84,7 +84,7 @@ export default function SettingsDrawer() {
 
           <Section title="LLM 参数">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Temperature" hint="越高回答越有创意，越低越稳定 (推荐 0.7)">
+              <Field label="Temperature" hint="越高回答越发散，越低越稳定 (推荐 0.4-0.6)">
                 <input type="number" step="0.1" min="0" max="2" value={form.temperature}
                   onChange={(e) => setForm({ ...form, temperature: parseFloat(e.target.value) })} className="input-field" />
               </Field>
@@ -124,7 +124,7 @@ export default function SettingsDrawer() {
                 <input type="number" step="0.005" min="0.001" max="0.1" value={form.silence_threshold}
                   onChange={(e) => setForm({ ...form, silence_threshold: parseFloat(e.target.value) })} className="input-field" />
               </Field>
-              <Field label="静音时长 (秒)" hint="连续静音多久才算说完。面试官爱停顿可调大 (3-4秒)">
+              <Field label="静音时长 (秒)" hint="连续静音多久才算说完。想更快出字可调低到 0.8-1.2，想更稳可调高到 1.5-2.5">
                 <input type="number" step="0.5" min="0.5" max="10" value={form.silence_duration}
                   onChange={(e) => setForm({ ...form, silence_duration: parseFloat(e.target.value) })} className="input-field" />
               </Field>
