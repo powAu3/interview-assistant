@@ -1,51 +1,41 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Save, AlertTriangle, HelpCircle, Smartphone } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 
 function NetworkQRCode() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [qrSrc, setQrSrc] = useState<string | null>(null)
   const [networkUrl, setNetworkUrl] = useState<string | null>(null)
-  const [isLocalhost, setIsLocalhost] = useState(false)
 
   useEffect(() => {
     fetch('/api/network-info')
       .then(r => r.json())
-      .then(data => {
-        const url = data.url as string
-        setNetworkUrl(url)
-        if (data.ip === '127.0.0.1') {
-          setIsLocalhost(true)
-          return
-        }
-        if (canvasRef.current) {
-          QRCode.toCanvas(canvasRef.current, url, {
-            width: 160,
-            margin: 2,
-            color: { dark: '#000000', light: '#ffffff' },
-          })
-        }
+      .then(async (data) => {
+        setNetworkUrl(data.url)
+        const src = await QRCode.toDataURL(data.url, {
+          width: 200,
+          margin: 2,
+          color: { dark: '#000000', light: '#ffffff' },
+        })
+        setQrSrc(src)
       })
       .catch(() => {})
   }, [])
 
+  if (!networkUrl) return null
+
   return (
-    <div className="space-y-2">
+    <div className="bg-bg-tertiary/50 rounded-lg p-4 space-y-3">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">
         <Smartphone className="w-3.5 h-3.5" />
         手机扫码访问
       </div>
-      {isLocalhost ? (
-        <p className="text-[11px] text-text-muted">仅限本机访问（127.0.0.1），局域网模式下才会显示二维码</p>
-      ) : networkUrl ? (
-        <div className="flex flex-col items-center gap-2">
-          <canvas ref={canvasRef} className="rounded-lg" />
-          <p className="text-[11px] text-text-muted break-all text-center">{networkUrl}</p>
-        </div>
-      ) : (
-        <p className="text-[11px] text-text-muted">获取局域网地址中...</p>
-      )}
+      <div className="flex flex-col items-center gap-2">
+        {qrSrc && <img src={qrSrc} alt="QR Code" className="rounded-lg" width={160} height={160} />}
+        <p className="text-[11px] text-accent-blue break-all text-center select-all">{networkUrl}</p>
+        <p className="text-[10px] text-text-muted text-center">手机和电脑需在同一 WiFi 下，音频在电脑端采集</p>
+      </div>
     </div>
   )
 }
@@ -121,6 +111,8 @@ export default function SettingsDrawer() {
             </span>
           </div>
 
+          <NetworkQRCode />
+
           {config && (
             <div className="bg-bg-tertiary/50 rounded-lg p-3 text-xs space-y-1">
               <p className="text-text-muted">当前模型</p>
@@ -190,8 +182,6 @@ export default function SettingsDrawer() {
             <Save className="w-4 h-4" />
             {saving ? '保存中...' : '保存设置'}
           </button>
-
-          <NetworkQRCode />
         </div>
       </div>
 

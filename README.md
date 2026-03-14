@@ -112,26 +112,20 @@ cd interview-assistant
 # 创建虚拟环境（推荐）
 python3 -m venv venv
 source venv/bin/activate        # macOS / Linux
-# venv\Scripts\Activate.ps1      # Windows PowerShell
+# venv\Scripts\activate          # Windows PowerShell
 # venv\Scripts\activate.bat      # Windows CMD
 
 # 安装依赖（根目录有快捷 requirements.txt，和 backend/requirements.txt 等价）
 pip install -r requirements.txt
 ```
 
-> **⚠️ 重要**: `pip install` 必须在激活虚拟环境后执行，否则依赖会装到系统 Python 而不是项目环境。
-> 如果没有创建虚拟环境，也可以直接用系统 Python 安装（但不推荐）：
-> ```bash
-> pip install -r requirements.txt
-> ```
+> **macOS 提示**: 如果 `sounddevice` 安装失败，先 `brew install portaudio`
 >
-> **macOS**: 如果 `sounddevice` 安装报错，先执行 `brew install portaudio`
->
-> **Windows**: 强烈建议额外安装 `soundcard`，用于 WASAPI 原生系统音频采集（音质更好）：
+> **Windows 提示**: 如果 `faster-whisper` 安装慢，可先装 CUDA 版 PyTorch 再安装。
+> 另外强烈建议额外安装 `soundcard`，用于 WASAPI 原生系统音频采集（音质更好，不需要启用"立体声混音"）：
 > ```bash
 > pip install soundcard
 > ```
-> 如果 `faster-whisper` 安装慢，可先装 CUDA 版 PyTorch 再安装。
 
 ### 第三步：安装前端依赖并构建
 
@@ -632,35 +626,6 @@ npm run build     # 输出到 frontend/dist/
 ---
 
 ## ❓ 常见问题
-
-### Q: 启动报错 `ModuleNotFoundError: No module named 'uvicorn'`（或其他包）？
-
-有两种原因：
-
-**原因一（最常见）：没有激活虚拟环境**
-
-```bash
-# 激活虚拟环境后再运行
-source venv/bin/activate         # macOS / Linux
-venv\Scripts\Activate.ps1       # Windows PowerShell
-venv\Scripts\activate.bat       # Windows CMD
-
-python start.py --mode network
-```
-
-**原因二：依赖没有安装**
-
-`start.py` 启动时会自动检测并尝试安装缺失依赖。如果自动安装失败，请手动执行：
-
-```bash
-# 使用和启动脚本相同的 Python 安装
-python -m pip install -r requirements.txt
-# 然后再启动
-python start.py --mode network
-```
-
-> 提示：`start.py` 启动时会打印正在使用的 Python 路径（`Python: x.x.x (路径)`），
-> 确认它和你安装依赖时用的是同一个 Python。
 
 ### Q: 启动报错 `npm: command not found`？
 

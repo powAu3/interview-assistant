@@ -47,9 +47,15 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def print_qrcode(url: str):
-    """Print a short hint — the real scannable QR code is shown in the web UI settings panel."""
-    print(f"  打开浏览器访问上方链接，在设置面板中可扫描二维码")
+def _print_access_info(port: int):
+    """Print access URLs for both local and LAN."""
+    ip = get_local_ip()
+    print(f"  本机访问:   http://localhost:{port}")
+    print(f"  局域网访问: http://{ip}:{port}")
+    print()
+    print(f"  手机扫码:   打开上方页面 → 右上角设置 → 底部二维码")
+    print(f"  (手机和电脑需在同一 WiFi 下，音频在电脑端采集)")
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -289,13 +295,17 @@ def run_desktop_mode(port: int):
     if not ensure_electron():
         print("[ERROR] Electron 安装失败，请检查网络后重试。")
         print("  手动安装: cd desktop && npm install")
+        print()
+        print("  或者直接用无 Electron 模式启动:")
+        print(f"    python start.py --mode network")
         sys.exit(1)
 
-    print("  启动 Electron 桌面模式...")
-    print("  屏幕共享隐身: 已开启")
-    print("  全局快捷键: Ctrl+B 显示/隐藏（任何时候都生效）")
-    print("  系统托盘: 右键可切换置顶、隐身等选项")
+    print("  Electron 桌面模式")
+    print("  - 屏幕共享隐身: 已开启")
+    print("  - 全局快捷键: Ctrl+B 显示/隐藏")
+    print("  - 系统托盘: 右键切换置顶、隐身等")
     print()
+    _print_access_info(port)
 
     env = {**os.environ, "PORT": str(port)}
     proc = subprocess.run([npx, "electron", "."], cwd=DESKTOP_DIR, env=env)
@@ -303,17 +313,10 @@ def run_desktop_mode(port: int):
 
 
 def run_network_mode(port: int):
-    """Network mode: LAN accessible via browser."""
-    ip = get_local_ip()
-    local_url = f"http://localhost:{port}"
-    network_url = f"http://{ip}:{port}"
-
-    print("  局域网模式")
-    print(f"  本机访问: {local_url}")
-    print(f"  局域网访问: {network_url}")
+    """Network mode: LAN accessible via browser (no Electron needed)."""
+    print("  纯浏览器模式（无 Electron）")
     print()
-    print("  手机扫码访问:")
-    print_qrcode(network_url)
+    _print_access_info(port)
 
     start_server("0.0.0.0", port)
 
