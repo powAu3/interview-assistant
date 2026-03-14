@@ -1,0 +1,6 @@
+# Root-level requirements — convenience alias for backend/requirements.txt
+# Usage: pip install -r requirements.txt
+-r backend/requirements.txt
+
+# Optional but strongly recommended on Windows for WASAPI loopback audio:
+# pip install soundcard
