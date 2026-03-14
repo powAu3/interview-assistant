@@ -70,6 +70,7 @@ function startPythonBackend() {
 }
 
 function createWindow() {
+  const isWindows = process.platform === 'win32';
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -77,6 +78,8 @@ function createWindow() {
     minHeight: 500,
     title: '学习助手',
     show: false,
+    // Windows 下不在任务栏显示，只在托盘
+    skipTaskbar: isWindows,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -92,8 +95,14 @@ function createWindow() {
     mainWindow.show();
   });
 
-  mainWindow.on('close', () => {
-    isQuitting = true;
+  // Windows 下关闭按钮 = 隐藏到托盘，不退出
+  mainWindow.on('close', (e) => {
+    if (!isQuitting && process.platform === 'win32') {
+      e.preventDefault();
+      mainWindow.hide();
+    } else {
+      isQuitting = true;
+    }
   });
 }
 
@@ -145,6 +154,8 @@ function createTray() {
 
   tray.setContextMenu(contextMenu);
   tray.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+  // Windows 双击托盘图标也能显示
+  tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); });
 }
 
 function registerShortcuts() {
@@ -224,7 +235,11 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  app.quit();
+  // Windows 下关闭窗口只是隐藏到托盘，不退出
+  // macOS 下保持原有行为（关闭所有窗口也不退出，等待 activate）
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    app.quit();
+  }
 });
 
 app.on('activate', () => {

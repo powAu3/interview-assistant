@@ -29,7 +29,7 @@ class AppConfig(BaseModel):
     ]
     active_model: int = 0
 
-    temperature: float = 0.7
+    temperature: float = 0.5
     max_tokens: int = 4096
     think_mode: bool = False
 
@@ -42,7 +42,7 @@ class AppConfig(BaseModel):
 
     auto_detect: bool = True
     silence_threshold: float = 0.01
-    silence_duration: float = 2.5
+    silence_duration: float = 1.5
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))
