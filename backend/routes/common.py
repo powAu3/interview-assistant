@@ -1,3 +1,4 @@
+import socket
 import threading
 import time
 from typing import Optional
@@ -62,6 +63,22 @@ async def api_update_config(body: ConfigUpdate):
     if body.whisper_model:
         threading.Thread(target=lambda: get_stt_engine().change_model(body.whisper_model), daemon=True).start()
     return {"ok": True}
+
+
+@router.get("/network-info")
+async def api_network_info():
+    """Return LAN IP and port so the frontend can render a scannable QR code."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = "127.0.0.1"
+    # Read PORT from env (set by start.py), fallback to 18080
+    import os
+    port = int(os.environ.get("PORT", 18080))
+    return {"ip": ip, "port": port, "url": f"http://{ip}:{port}"}
 
 
 @router.get("/options")

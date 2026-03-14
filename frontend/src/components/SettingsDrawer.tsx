@@ -1,7 +1,54 @@
-import { useState, useEffect } from 'react'
-import { X, Save, AlertTriangle, HelpCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Save, AlertTriangle, HelpCircle, Smartphone } from 'lucide-react'
+import QRCode from 'qrcode'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
+
+function NetworkQRCode() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [networkUrl, setNetworkUrl] = useState<string | null>(null)
+  const [isLocalhost, setIsLocalhost] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/network-info')
+      .then(r => r.json())
+      .then(data => {
+        const url = data.url as string
+        setNetworkUrl(url)
+        if (data.ip === '127.0.0.1') {
+          setIsLocalhost(true)
+          return
+        }
+        if (canvasRef.current) {
+          QRCode.toCanvas(canvasRef.current, url, {
+            width: 160,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' },
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <Smartphone className="w-3.5 h-3.5" />
+        手机扫码访问
+      </div>
+      {isLocalhost ? (
+        <p className="text-[11px] text-text-muted">仅限本机访问（127.0.0.1），局域网模式下才会显示二维码</p>
+      ) : networkUrl ? (
+        <div className="flex flex-col items-center gap-2">
+          <canvas ref={canvasRef} className="rounded-lg" />
+          <p className="text-[11px] text-text-muted break-all text-center">{networkUrl}</p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-text-muted">获取局域网地址中...</p>
+      )}
+    </div>
+  )
+}
 
 export default function SettingsDrawer() {
   const { settingsOpen, toggleSettings, config, options, platformInfo, sttLoaded, sttLoading } = useInterviewStore()
@@ -143,6 +190,8 @@ export default function SettingsDrawer() {
             <Save className="w-4 h-4" />
             {saving ? '保存中...' : '保存设置'}
           </button>
+
+          <NetworkQRCode />
         </div>
       </div>
 
