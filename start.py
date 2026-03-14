@@ -68,7 +68,45 @@ def ensure_electron():
     return r.returncode == 0
 
 
+def kill_port(port: int):
+    """Kill any process occupying the given port."""
+    system = platform.system()
+    killed = False
+    try:
+        if system == "Windows":
+            # netstat 找到 PID，再 taskkill
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True, text=True
+            )
+            for line in result.stdout.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.split()
+                    pid = parts[-1]
+                    subprocess.run(["taskkill", "/F", "/PID", pid],
+                                   capture_output=True)
+                    print(f"[OK] 已终止占用端口 {port} 的进程 (PID {pid})")
+                    killed = True
+        else:
+            # macOS / Linux: lsof
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True, text=True
+            )
+            pids = result.stdout.strip().split()
+            for pid in pids:
+                if pid:
+                    subprocess.run(["kill", "-9", pid], capture_output=True)
+                    print(f"[OK] 已终止占用端口 {port} 的进程 (PID {pid})")
+                    killed = True
+    except Exception as e:
+        print(f"[WARN] 清理端口 {port} 时出错: {e}")
+    if killed:
+        time.sleep(0.5)  # 等待端口释放
+
+
 def start_server(host: str, port: int):
+    kill_port(port)
     os.chdir(BACKEND_DIR)
     if BACKEND_DIR not in sys.path:
         sys.path.insert(0, BACKEND_DIR)
