@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(ROOT, "backend")
@@ -29,35 +30,20 @@ def get_local_ip() -> str:
 
 
 def _set_utf8_console():
-    """Switch Windows console to UTF-8 so QR block characters render correctly."""
+    """Windows: switch active code page to UTF-8 so Unicode QR chars render."""
     if platform.system() != "Windows":
-        return None
+        return
     try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        old_cp = kernel32.GetConsoleOutputCP()
-        kernel32.SetConsoleOutputCP(65001)
-        # Also set stdout/stderr to UTF-8 writer
+        subprocess.run(["chcp", "65001"], capture_output=True, shell=True)
         import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-        return old_cp
-    except Exception:
-        return None
-
-
-def _restore_console(old_cp):
-    if old_cp is None or platform.system() != "Windows":
-        return
-    try:
-        import ctypes
-        ctypes.windll.kernel32.SetConsoleOutputCP(old_cp)
     except Exception:
         pass
 
 
 def print_qrcode(url: str):
-    old_cp = _set_utf8_console()
+    _set_utf8_console()
     try:
         import qrcode
         qr = qrcode.QRCode(box_size=1, border=1)
@@ -69,8 +55,6 @@ def print_qrcode(url: str):
             print("  (二维码无法在当前终端显示，请直接访问上方链接)")
     except ImportError:
         print("  (安装 qrcode 库可显示二维码: pip install qrcode)")
-    finally:
-        _restore_console(old_cp)
 
 
 def build_frontend():

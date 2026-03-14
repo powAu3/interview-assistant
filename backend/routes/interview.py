@@ -211,12 +211,7 @@ def _process_question(
     manual_input: bool = False,
 ):
     session = get_session()
-    system_prompt = build_system_prompt()
-    if manual_input:
-        system_prompt += (
-            "\n\n[应急模式] 本题来自用户手动输入，请直接给出可运行代码"
-            "（算法题用 {language}，SQL 题用 sql），代码前后各一句思路/复杂度说明。"
-        ).format(language=get_config().language)
+    system_prompt = build_system_prompt(manual_input=manual_input)
 
     if image:
         content: list = [{"type": "text", "text": question_text}]
