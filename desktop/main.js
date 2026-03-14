@@ -104,6 +104,14 @@ function createWindow() {
       isQuitting = true;
     }
   });
+
+  // Windows 下最小化也隐藏到托盘
+  if (process.platform === 'win32') {
+    mainWindow.on('minimize', (e) => {
+      e.preventDefault();
+      mainWindow.hide();
+    });
+  }
 }
 
 function toggleWindow() {
