@@ -57,12 +57,16 @@ async def api_pause():
 
 
 @router.post("/unpause")
-async def api_resume_interview():
+async def api_resume_interview(body: dict = {}):
     session = get_session()
     if not session.is_recording:
         raise HTTPException(400, "面试未在进行中")
     if not _pause_event.is_set():
         raise HTTPException(400, "面试未处于暂停状态")
+    # 允许切换设备：传入 device_id 则使用新设备，否则沿用上次的
+    device_id = body.get("device_id")
+    if device_id is not None:
+        session.last_device_id = int(device_id)
     audio_capture.start(session.last_device_id)
     _pause_event.clear()
     session.is_paused = False

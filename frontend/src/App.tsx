@@ -200,10 +200,18 @@ export default function App() {
             </div>
           )}
           {activeModel?.supports_think && (
-            <button type="button" onClick={handleThinkToggle} className="flex items-center gap-1.5 select-none bg-transparent border-none p-0 cursor-pointer" aria-label={`Think ${config?.think_mode ? 'ON' : 'OFF'}`}>
-              <span className={`text-xs font-medium transition-colors ${config?.think_mode ? 'text-accent-green' : 'text-text-muted'}`}>Think</span>
-              <span className={`relative inline-block w-9 h-5 rounded-full transition-colors duration-200 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-200 ${config?.think_mode ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            <button
+              type="button"
+              onClick={handleThinkToggle}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors cursor-pointer select-none
+                ${config?.think_mode
+                  ? 'border-accent-green/50 bg-accent-green/10 text-accent-green'
+                  : 'border-bg-hover bg-bg-tertiary text-text-muted hover:text-text-primary'}`}
+              aria-label={`Think ${config?.think_mode ? 'ON' : 'OFF'}`}
+            >
+              <span className="text-xs font-medium">Think</span>
+              <span className={`relative inline-flex items-center w-8 h-4 rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
+                <span className={`absolute w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${config?.think_mode ? 'translate-x-4' : 'translate-x-0.5'}`} />
               </span>
             </button>
           )}

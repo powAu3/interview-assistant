@@ -67,7 +67,7 @@ export default function ControlBar() {
   }
   const handleResume = async () => {
     setLoading(true)
-    try { await api.resume() } catch (e: any) { setError(e.message) } finally { setLoading(false) }
+    try { await api.resume(selectedDevice ?? undefined) } catch (e: any) { setError(e.message) } finally { setLoading(false) }
   }
   const handleClear = async () => { await api.clear(); clearSession() }
 
@@ -158,9 +158,17 @@ export default function ControlBar() {
       <div className="flex items-center gap-2">
         <select
           value={selectedDevice ?? ''}
-          onChange={(e) => setSelectedDevice(Number(e.target.value))}
+          onChange={async (e) => {
+            const newId = Number(e.target.value)
+            setSelectedDevice(newId)
+            // 暂停中切换设备 → 自动用新设备恢复
+            if (isPaused) {
+              setLoading(true)
+              try { await api.resume(newId) } catch (err: any) { setError(err.message) } finally { setLoading(false) }
+            }
+          }}
           className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue flex-1 min-w-0 max-w-[180px] md:max-w-[200px]"
-          disabled={isRecording}
+          disabled={isRecording && !isPaused}
         >
           {devices.some((d) => d.is_loopback) && (
             <optgroup label="🔊 系统音频 (推荐)">
