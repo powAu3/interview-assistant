@@ -88,7 +88,8 @@ async def api_ask(body: ManualQuestion):
     if not body.text.strip() and not body.image:
         raise HTTPException(400, "问题不能为空")
     text = body.text.strip() or "请分析这张图片中的题目，并给出面试回答"
-    threading.Thread(target=_process_question, args=(text, body.image), daemon=True).start()
+    # 手动输入框提问通常是应急场景：允许算法/SQL题更快进入“思路+代码”模式
+    threading.Thread(target=_process_question, args=(text, body.image, True), daemon=True).start()
     return {"ok": True}
 
 
@@ -204,9 +205,20 @@ def _interview_worker():
             pass
 
 
-def _process_question(question_text: str, image: Optional[str] = None):
+def _process_question(
+    question_text: str,
+    image: Optional[str] = None,
+    manual_input: bool = False,
+):
     session = get_session()
     system_prompt = build_system_prompt()
+    if manual_input:
+        system_prompt += (
+            "\n\n[手动输入框应急模式]\n"
+            "本轮问题来自用户手动输入框，默认按应急场景处理。"
+            "若是经典算法题或SQL题，可直接给可运行代码（算法题默认语言遵循配置；SQL题用sql），"
+            "并在代码前后各补1-2句关键思路/复杂度说明。"
+        )
 
     if image:
         content: list = [{"type": "text", "text": question_text}]
