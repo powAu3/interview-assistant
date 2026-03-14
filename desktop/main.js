@@ -95,14 +95,17 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // Windows 下关闭按钮 = 隐藏到托盘，不退出
-  mainWindow.on('close', (e) => {
-    if (!isQuitting && process.platform === 'win32') {
+  // Windows 下最小化 = 隐藏到托盘
+  mainWindow.on('minimize', (e) => {
+    if (process.platform === 'win32') {
       e.preventDefault();
       mainWindow.hide();
-    } else {
-      isQuitting = true;
     }
+  });
+
+  // 关闭按钮 = 真正退出
+  mainWindow.on('close', () => {
+    isQuitting = true;
   });
 
   // Windows 下最小化也隐藏到托盘
@@ -138,7 +141,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
-    { label: '隐藏窗口 (Ctrl+B)', click: () => mainWindow?.hide() },
+    { label: '最小化到托盘 (Ctrl+B)', click: () => mainWindow?.hide() },
     { type: 'separator' },
     {
       label: '窗口置顶',
@@ -200,7 +203,7 @@ function createAppMenu() {
       submenu: [
         { role: 'about', label: `关于 ${app.name}` },
         { type: 'separator' },
-        { label: '隐藏窗口', accelerator: 'CommandOrControl+B', click: () => mainWindow?.hide() },
+        { label: '最小化到托盘', accelerator: 'CommandOrControl+B', click: () => mainWindow?.hide() },
         { type: 'separator' },
         { role: 'hide', label: '隐藏应用' },
         { role: 'unhide', label: '显示应用' },
@@ -243,11 +246,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  // Windows 下关闭窗口只是隐藏到托盘，不退出
-  // macOS 下保持原有行为（关闭所有窗口也不退出，等待 activate）
-  if (process.platform !== 'darwin' && process.platform !== 'win32') {
-    app.quit();
-  }
+  app.quit();
 });
 
 app.on('activate', () => {
