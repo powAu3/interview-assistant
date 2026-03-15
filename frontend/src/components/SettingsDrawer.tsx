@@ -47,7 +47,12 @@ export default function SettingsDrawer() {
   const [form, setForm] = useState({
     temperature: 0.5,
     max_tokens: 4096,
+    stt_provider: 'whisper' as string,
     whisper_model: 'base',
+    doubao_stt_app_id: '',
+    doubao_stt_access_token: '',
+    doubao_stt_resource_id: 'volc.seedasr.sauc.duration',
+    doubao_stt_boosting_table_id: '',
     silence_threshold: 0.01,
     silence_duration: 1.2,
     auto_detect: true,
@@ -59,7 +64,12 @@ export default function SettingsDrawer() {
       setForm({
         temperature: config.temperature,
         max_tokens: config.max_tokens,
+        stt_provider: config.stt_provider ?? 'whisper',
         whisper_model: config.whisper_model,
+        doubao_stt_app_id: config.doubao_stt_app_id ?? '',
+        doubao_stt_access_token: config.doubao_stt_access_token ?? '',
+        doubao_stt_resource_id: config.doubao_stt_resource_id ?? 'volc.seedasr.sauc.duration',
+        doubao_stt_boosting_table_id: config.doubao_stt_boosting_table_id ?? '',
         silence_threshold: config.silence_threshold,
         silence_duration: config.silence_duration,
         auto_detect: config.auto_detect,
@@ -104,13 +114,35 @@ export default function SettingsDrawer() {
             </div>
           )}
 
-          {/* STT status */}
+          {/* STT status + 识别引擎（置顶便于切换 Whisper/豆包） */}
           <div className="flex items-center gap-2 text-xs">
             <div className={`w-2 h-2 rounded-full ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
             <span className="text-text-secondary">
-              Whisper: {sttLoaded ? '已加载' : sttLoading ? '加载中...' : '未加载'}
+              语音识别 ({config?.stt_provider === 'doubao' ? '豆包 API' : 'Whisper 本地'}): {sttLoaded ? '就绪' : sttLoading ? '加载中...' : '未就绪'}
             </span>
           </div>
+
+          <Section title="语音识别引擎">
+            <Field label="识别引擎" hint="Whisper 本地免费；豆包需在 backend/config.json 中配置密钥">
+              <select value={form.stt_provider} onChange={(e) => setForm({ ...form, stt_provider: e.target.value })} className="input-field">
+                {(options?.stt_providers ?? ['whisper', 'doubao']).map((p) => (
+                  <option key={p} value={p}>{p === 'whisper' ? 'Whisper（本地）' : '豆包（API）'}</option>
+                ))}
+              </select>
+            </Field>
+            {form.stt_provider === 'whisper' && (
+              <Field label="Whisper 模型" hint="模型越大越准确但越慢。base 适合大多数场景">
+                <select value={form.whisper_model} onChange={(e) => setForm({ ...form, whisper_model: e.target.value })} className="input-field">
+                  {(options?.whisper_models ?? ['tiny', 'base', 'small', 'medium', 'large-v3']).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {form.stt_provider === 'doubao' && (
+              <p className="text-[11px] text-text-muted">豆包 App ID、Access Token、Resource ID、热词表 ID 请在 backend/config.json 中配置。</p>
+            )}
+          </Section>
 
           <NetworkQRCode />
 
@@ -134,16 +166,6 @@ export default function SettingsDrawer() {
               </Field>
             </div>
             <p className="text-[10px] text-text-muted">模型和 API Key 请在 backend/config.json 中配置</p>
-          </Section>
-
-          <Section title="语音识别 (Whisper)">
-            <Field label="Whisper 模型" hint="模型越大越准确但速度越慢。base 适合大多数场景">
-              <select value={form.whisper_model} onChange={(e) => setForm({ ...form, whisper_model: e.target.value })} className="input-field">
-                {(options?.whisper_models ?? ['tiny', 'base', 'small', 'medium']).map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </Field>
           </Section>
 
           <Section title="语音活动检测 (VAD)">

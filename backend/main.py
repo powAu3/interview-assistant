@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 def _preload_stt():
     try:
         cfg = get_config()
-        engine = get_stt_engine(cfg.whisper_model, cfg.whisper_language)
+        engine = get_stt_engine()
         ws.broadcast({"type": "stt_status", "loaded": False, "loading": True})
         engine.load_model()
         ws.broadcast({"type": "stt_status", "loaded": True, "loading": False})

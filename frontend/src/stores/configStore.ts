@@ -13,8 +13,13 @@ export interface AppConfig {
   temperature: number
   max_tokens: number
   think_mode: boolean
+  stt_provider: string
   whisper_model: string
   whisper_language: string
+  doubao_stt_app_id: string
+  doubao_stt_access_token: string
+  doubao_stt_resource_id: string
+  doubao_stt_boosting_table_id: string
   position: string
   language: string
   auto_detect: boolean
@@ -51,7 +56,7 @@ interface InterviewState {
   config: AppConfig | null
   devices: Array<{ id: number; name: string; channels: number; is_loopback: boolean; host_api: string }>
   platformInfo: { platform: string; needs_virtual_device: boolean; instructions: string } | null
-  options: { positions: string[]; languages: string[]; whisper_models: string[] } | null
+  options: { positions: string[]; languages: string[]; stt_providers?: string[]; whisper_models: string[] } | null
 
   isRecording: boolean
   isPaused: boolean

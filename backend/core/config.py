@@ -33,9 +33,18 @@ class AppConfig(BaseModel):
     max_tokens: int = 4096
     think_mode: bool = False
 
+    # 语音识别：whisper=本地 faster-whisper，doubao=豆包语音识别 API
+    stt_provider: str = "whisper"
     whisper_model: str = "base"
     # "auto" is more robust for Chinese interview speech mixed with English terms.
     whisper_language: str = "auto"
+    # 豆包语音识别 API（当 stt_provider=doubao 时使用），使用小时版 + WebSocket 双流式
+    doubao_stt_app_id: str = ""
+    doubao_stt_access_token: str = ""
+    # 资源 ID：豆包流式语音识别模型2.0 小时版
+    doubao_stt_resource_id: str = "volc.seedasr.sauc.duration"
+    # 热词表 ID：在自学习平台上传热词文件后获得；有则传入请求，没有则不传
+    doubao_stt_boosting_table_id: str = ""
 
     position: str = "后端开发"
     language: str = "Python"
@@ -103,4 +112,6 @@ LANGUAGE_OPTIONS = [
     "Python", "Java", "C++", "JavaScript", "TypeScript",
     "Go", "SQL",
 ]
-WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium"]
+WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
+# 语音识别引擎：whisper=本地，doubao=豆包 API
+STT_PROVIDER_OPTIONS = ["whisper", "doubao"]

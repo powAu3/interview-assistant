@@ -17,7 +17,8 @@
 - [功能特性](#-功能特性)
 - [架构](#-架构)
 - [快速开始](#-快速开始)
-- [配置详解](#️-配置详解)
+- [详细文档](#-详细文档)
+- [配置概览](#️-配置概览)
 - [两种运行模式](#️-两种运行模式)
 - [模拟练习模式](#️-模拟练习模式)
 - [音频配置](#-音频配置)
@@ -91,6 +92,19 @@
 
 ---
 
+## 📚 详细文档
+
+配置与接入说明已拆分为独立文档，便于查阅：
+
+| 文档 | 说明 |
+|------|------|
+| [配置说明](docs/配置说明.md) | config.json 字段说明、从哪里复制模板 |
+| [API 密钥与模型](docs/API密钥与模型.md) | 各厂商 API Key 申请、OpenAI / DeepSeek / 通义 / 智谱 / Ollama 等配置示例 |
+| [豆包语音识别](docs/豆包语音识别.md) | 豆包 ASR 开通、密钥与热词表配置（界面只做引擎切换） |
+| [音频配置](docs/音频配置.md) | macOS BlackHole、Windows WASAPI / 立体声混音 |
+
+---
+
 ## 🚀 快速开始
 
 ### 环境要求
@@ -148,7 +162,7 @@ cd ..
 cp backend/config.example.json backend/config.json
 ```
 
-然后用编辑器打开 `backend/config.json`，填入你的 API Key。详细配置说明见下方「配置详解」章节。
+然后用编辑器打开 `backend/config.json`，填入你的 API Key。详细说明见 [配置说明](docs/配置说明.md) 与 [API 密钥与模型](docs/API密钥与模型.md)。
 
 ### 第五步：启动
 
@@ -171,169 +185,13 @@ python start.py --no-build
 
 ---
 
-## ⚙️ 配置详解
+## ⚙️ 配置概览
 
-配置文件位于 `backend/config.json`。首次运行前需从模板复制：
+配置文件：`backend/config.json`（从 `backend/config.example.json` 复制）。包含大模型、语音识别（Whisper / 豆包 ASR）、岗位/语言、VAD 等，详见：
 
-```bash
-cp backend/config.example.json backend/config.json
-```
-
-> ⚠️ `config.json` 包含 API Key 等敏感信息，已加入 `.gitignore`，**不会被提交到 Git**。仓库中只有 `config.example.json` 模板。
-
-### 完整配置字段说明
-
-```jsonc
-{
-  // ── 大模型配置 ────────────────────────────────────
-  "models": [
-    {
-      "name": "GPT-4o",               // 界面显示名称（随便起）
-      "api_base_url": "https://api.openai.com/v1",  // API 地址
-      "api_key": "sk-your-key",        // API Key（必填）
-      "model": "gpt-4o",              // 模型 ID（发给 API 的 model 参数）
-      "supports_think": false,         // 是否支持 Think 深度思考模式
-      "supports_vision": true          // 是否支持图片识别（多模态）
-    }
-  ],
-  "active_model": 0,                  // 默认使用第几个模型（从 0 开始）
-  "temperature": 0.7,                 // 生成温度 (0-2)，越高越有创造性
-  "max_tokens": 4096,                 // 单次最大输出 token 数
-  "think_mode": false,                // 是否启用 Think 模式（需模型支持）
-
-  // ── 语音识别配置 ──────────────────────────────────
-  "whisper_model": "base",            // Whisper 模型: tiny/base/small/medium
-  "whisper_language": "zh",           // 识别语言: zh(中文), en(英文), ja(日文)...
-
-  // ── 学习配置 ──────────────────────────────────────
-  "position": "后端开发",              // 岗位: 前端开发/后端开发/算法工程师/测试开发
-  "language": "Python",               // 编程语言: Python/Java/C++/JavaScript
-
-  // ── 语音检测参数 ──────────────────────────────────
-  "auto_detect": true,                // 自动识别语音并发送给 LLM
-  "silence_threshold": 0.01,          // 静音阈值 (0-1)，环境噪音大可调高
-  "silence_duration": 2.0             // 静音时长(秒)，说话停顿多久算结束
-}
-```
-
-### 各种 LLM 配置示例
-
-<details>
-<summary><b>OpenAI (GPT-4o / GPT-4o-mini)</b></summary>
-
-```json
-{
-  "name": "GPT-4o",
-  "api_base_url": "https://api.openai.com/v1",
-  "api_key": "sk-proj-xxxxxxxxxxxx",
-  "model": "gpt-4o",
-  "supports_think": false,
-  "supports_vision": true
-}
-```
-API Key 获取: https://platform.openai.com/api-keys
-</details>
-
-<details>
-<summary><b>DeepSeek (V3 / R1)</b></summary>
-
-```json
-{
-  "name": "DeepSeek-V3",
-  "api_base_url": "https://api.deepseek.com",
-  "api_key": "sk-xxxxxxxxxxxx",
-  "model": "deepseek-chat",
-  "supports_think": true,
-  "supports_vision": false
-}
-```
-API Key 获取: https://platform.deepseek.com/api_keys
-</details>
-
-<details>
-<summary><b>通义千问 (Qwen)</b></summary>
-
-```json
-{
-  "name": "Qwen-Plus",
-  "api_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-  "api_key": "sk-xxxxxxxxxxxx",
-  "model": "qwen-plus",
-  "supports_think": false,
-  "supports_vision": true
-}
-```
-API Key 获取: https://dashscope.console.aliyun.com/apiKey
-</details>
-
-<details>
-<summary><b>本地部署 (Ollama)</b></summary>
-
-```json
-{
-  "name": "Ollama-Qwen",
-  "api_base_url": "http://localhost:11434/v1",
-  "api_key": "ollama",
-  "model": "qwen2.5:14b",
-  "supports_think": false,
-  "supports_vision": false
-}
-```
-无需 API Key，`api_key` 随便填即可。先确保 Ollama 运行中: `ollama serve`
-</details>
-
-<details>
-<summary><b>智谱 GLM (GLM-4-Flash / GLM-4V-Flash)</b></summary>
-
-```json
-{
-  "name": "GLM-4.7-Flash",
-  "api_base_url": "https://open.bigmodel.cn/api/paas/v4",
-  "api_key": "your-zhipu-api-key",
-  "model": "GLM-4.7-Flash",
-  "supports_think": false,
-  "supports_vision": false
-}
-```
-API Key 获取: [智谱 AI 开放平台](https://www.bigmodel.cn/invite?icode=5a%2Fd%2FBU%2FqTgh%2Bj4UEb6OnX3uFJ1nZ0jLLgipQkYjpcA%3D)（免费注册即送 token），也能直接用免费模型 x
-
-智谱还提供多模态模型 `GLM-4.6V-Flash`（设置 `"supports_vision": true`）。
-</details>
-
-<details>
-<summary><b>Claude (通过第三方兼容 API)</b></summary>
-
-```json
-{
-  "name": "Claude-3.5-Sonnet",
-  "api_base_url": "https://your-claude-proxy.com/v1",
-  "api_key": "sk-xxxxxxxxxxxx",
-  "model": "claude-3-5-sonnet-20241022",
-  "supports_think": false,
-  "supports_vision": true
-}
-```
-需要使用兼容 OpenAI 格式的 Claude 代理服务。
-</details>
-
-### 配置多个模型
-
-在 `models` 数组中添加多个模型，界面顶部会出现下拉选择器，可实时切换：
-
-```json
-{
-  "models": [
-    { "name": "GPT-4o", "api_base_url": "...", "api_key": "...", "model": "gpt-4o", "supports_think": false, "supports_vision": true },
-    { "name": "DeepSeek", "api_base_url": "...", "api_key": "...", "model": "deepseek-chat", "supports_think": true, "supports_vision": false },
-    { "name": "Ollama本地", "api_base_url": "http://localhost:11434/v1", "api_key": "x", "model": "qwen2.5:14b", "supports_think": false, "supports_vision": false }
-  ],
-  "active_model": 0
-}
-```
-
-> - `supports_vision: true` 的模型在选择器中会标注 👁，表示支持截图识别
-> - `supports_think: true` 的模型可以启用 Think 深度思考按钮
-> - 对不支持视觉的模型粘贴图片时，会弹出提醒并自动降级为纯文字
+- **[配置说明](docs/配置说明.md)** — 字段说明与模板
+- **[API 密钥与模型](docs/API密钥与模型.md)** — 各厂商 API Key 申请与配置示例
+- **[豆包语音识别](docs/豆包语音识别.md)** — 豆包 ASR 开通与热词表
 
 ---
 
@@ -408,63 +266,7 @@ python start.py --mode network
 
 ## 🎧 音频配置
 
-本工具可以捕获系统音频（如在线会议中对方的声音）。不同系统配置方式不同：
-
-### macOS — BlackHole 虚拟音频设备
-
-macOS 不允许直接录制系统输出音频，需要借助 **BlackHole** 虚拟音频设备。
-
-**1. 安装 BlackHole**
-
-```bash
-brew install blackhole-2ch
-```
-
-> 如果没有 Homebrew，先安装：https://brew.sh
-
-**2. 创建多输出设备**
-
-1. 打开 **音频 MIDI 设置**（Spotlight 搜索 "Audio MIDI Setup"）
-2. 左下角 **+** → **创建多输出设备**
-3. 右侧勾选：✅ 你的扬声器/耳机 + ✅ **BlackHole 2ch**
-4. 将 **主设备** 设为扬声器，勾选 BlackHole 的「漂移校正」
-
-**3. 设置系统输出**
-
-系统设置 → 声音 → 输出 → 选择刚创建的 **多输出设备**
-
-**4. 在工具中选择设备**
-
-选择 **BlackHole 2ch**（设备列表中带 ⟳ 标记、归类在"系统音频"下）
-
-> 📖 详细图文教程：[macOS 使用 BlackHole 录制系统声音](https://zhuanlan.zhihu.com/p/667430079)
->
-> 使用结束后，回到 系统设置 → 声音 → 输出 改回原来的扬声器即可。
-
----
-
-### Windows — WASAPI Loopback
-
-Windows 支持两种系统音频采集方式：
-
-**方式一（推荐）：soundcard WASAPI 原生采集**
-
-安装 `soundcard` 库后，设备列表会自动出现带 **★ (系统音频)** 标记的 WASAPI 设备，音质更好，无需额外配置：
-
-```bash
-pip install soundcard
-```
-
-启动后在设备下拉框中选择带 ★ 标记的设备即可。
-
-**方式二：Stereo Mix（立体声混音）**
-
-若无法安装 `soundcard`，可启用 Windows 内置的"立体声混音"：
-
-1. 右键系统托盘 🔊 音量图标 → **声音设置** → **更多声音设置**
-2. 切换到 **录制** 选项卡 → 右键空白处 → **显示已禁用的设备**
-3. 找到 **立体声混音（Stereo Mix）** → 右键 → **启用**
-4. 在工具设备列表中选择它
+本工具可捕获系统音频（如会议对方声音）或麦克风。macOS 需 BlackHole 虚拟设备，Windows 可用 WASAPI 或立体声混音。详见 **[音频配置](docs/音频配置.md)**。
 
 ## 🔧 其他功能说明
 
@@ -498,9 +300,11 @@ pip install soundcard
 - 在实时辅助模式底部控制栏点击「简历」按钮上传，或在「简历优化」Tab 中直接上传
 - **注意**: 纯图片格式的 PDF（如扫描件）无法提取文字，建议使用文字版 PDF 或 DOCX
 
-### Whisper 语音识别
+### 语音识别 (STT)
 
-使用 [faster-whisper](https://github.com/SYSTRAN/faster-whisper) 本地运行，无需联网：
+支持 **Whisper（本地）** 或 **豆包 ASR（API）**，在设置中切换。豆包开通与热词表见 **[豆包语音识别](docs/豆包语音识别.md)**。
+
+Whisper 使用 [faster-whisper](https://github.com/SYSTRAN/faster-whisper) 本地运行，无需联网：
 
 | 模型 | 大小 | 速度 | 精度 | 适用场景 |
 |------|------|------|------|---------|
@@ -536,7 +340,11 @@ interview-assistant/
 ├── LICENSE                   # CC BY-NC 4.0
 ├── .gitignore
 ├── docs/
-│   ├── skm.png               # 赞赏码
+│   ├── 配置说明.md            # config 字段与模板
+│   ├── API密钥与模型.md       # 各厂商 API Key 与配置示例
+│   ├── 豆包语音识别.md        # 豆包 ASR 与热词表
+│   ├── 音频配置.md            # macOS BlackHole / Windows 系统音频
+│   ├── skm.png                # 赞赏码
 │   └── screenshots/           # 界面截图
 ├── desktop/                  # Electron 桌面端
 │   ├── main.js               # 主进程（窗口管理/托盘/全局快捷键）

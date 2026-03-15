@@ -187,7 +187,7 @@ def _stop_practice_recording():
 
 def _practice_record_worker():
     cfg = get_config()
-    engine = get_stt_engine(cfg.whisper_model, cfg.whisper_language)
+    engine = get_stt_engine()
     if not engine.is_loaded:
         try:
             engine.load_model()

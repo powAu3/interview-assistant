@@ -89,7 +89,10 @@ function createWindow() {
 
   mainWindow.setContentProtection(true);
 
-  mainWindow.loadURL(SERVER_URL);
+  // 每次启动清除缓存，确保加载到最新的前端构建（避免设置里识别引擎等不更新）
+  mainWindow.webContents.session.clearCache().then(() => {
+    mainWindow.loadURL(SERVER_URL);
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

@@ -143,7 +143,7 @@ def stop_interview_loop():
 
 def _interview_worker():
     cfg = get_config()
-    engine = get_stt_engine(cfg.whisper_model, cfg.whisper_language)
+    engine = get_stt_engine()
 
     if not engine.is_loaded:
         broadcast({"type": "stt_status", "loaded": False, "loading": True})

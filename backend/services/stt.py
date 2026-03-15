@@ -1,20 +1,23 @@
-"""Speech-to-text using faster-whisper.
+"""Speech-to-text: faster-whisper (local) or 豆包语音识别 API.
 
-Key improvements over naïve usage:
-- language="auto"  → passes language=None to Whisper so it auto-detects
-  Chinese + English mixed speech.  This is the most impactful fix for English
-  technical term recognition.
-- temperature fallback  → [0, 0.2] lets Whisper retry with slightly higher
-  entropy when greedy decoding is uncertain.
-- initial_prompt demonstrates the target output style with English terms
-  written out verbatim, biasing the decoder toward correct spellings.
-- hotwords  → bonus boost for critical tech terms (faster-whisper ≥ 1.1).
+Whisper: language="auto", temperature fallback, hotwords for tech terms.
+Doubao: 火山引擎大模型流式语音识别 API，WebSocket 双流式（小时版 volc.seedasr.sauc.duration）。
 """
 
+import gzip
+import io
+import json
 import re
+import struct
+import uuid
 import numpy as np
 import threading
-from typing import Optional
+from typing import Optional, Any
+
+try:
+    import websocket
+except ImportError:
+    websocket = None
 
 # ---------------------------------------------------------------------------
 # Vocabulary banks – used for initial_prompt and post-processing corrections
@@ -160,7 +163,212 @@ def _postprocess(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# STTEngine
+# DoubaoSTT（豆包流式语音识别 - WebSocket 双流式，小时版）
+# ---------------------------------------------------------------------------
+# 协议：wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+# 首包：Full client request (JSON)；后续包：Audio only (200ms/包)，最后一包带结束标志
+# 参考：https://www.volcengine.com/docs/6561/1354869
+
+DOUBAO_ASR_WS_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+# 二进制协议（文档 1354869）：4B header, 4B payload_size (BE), payload；服务端响应为 4B header + 4B sequence + 4B payload_size + payload
+# 文档示例使用 Gzip：首包 JSON 与音频包均 Gzip 压缩，服务端响应也 Gzip
+# header byte0: version|header_size=0x11, byte1: msg_type|flags, byte2: serialization|compression, byte3: reserved
+MSG_FULL_CLIENT_REQUEST = 0x01
+MSG_AUDIO_ONLY = 0x02
+MSG_FULL_SERVER_RESPONSE = 0x09
+MSG_ERROR = 0x0F
+FLAG_LAST_AUDIO = 0x02
+COMPRESSION_GZIP = 0x01
+CHUNK_MS = 200  # 推荐 200ms 一包
+CHUNK_SAMPLES = 16000 * CHUNK_MS // 1000  # 3200 @ 16k
+
+
+def _audio_to_pcm_int16(audio: np.ndarray) -> np.ndarray:
+    if audio.dtype == np.float32 or audio.dtype == np.float64:
+        if audio.max() <= 1.0 and audio.min() >= -1.0:
+            return (audio * 32767).astype(np.int16)
+        return audio.astype(np.int16)
+    if audio.dtype != np.int16:
+        return audio.astype(np.int16)
+    return audio
+
+
+def _build_ws_frame_full_request(
+    app_key: str,
+    boosting_table_id: str,
+    language: str = "zh-CN",
+) -> bytes:
+    req: dict[str, Any] = {
+        "user": {"uid": app_key},
+        "audio": {
+            "format": "pcm",
+            "rate": 16000,
+            "bits": 16,
+            "channel": 1,
+            "language": language if language and language != "auto" else "zh-CN",
+        },
+        "request": {
+            "model_name": "bigmodel",
+            "enable_itn": True,
+            "enable_punc": True,
+        },
+    }
+    if boosting_table_id and boosting_table_id.strip():
+        req["request"]["corpus"] = {"boosting_table_id": boosting_table_id.strip()}
+    payload_raw = json.dumps(req, ensure_ascii=False).encode("utf-8")
+    payload = gzip.compress(payload_raw)
+    # header: type=full request, JSON, Gzip（与文档示例一致）
+    header = bytes([0x11, 0x10, 0x11, 0x00])
+    return header + struct.pack(">I", len(payload)) + payload
+
+
+def _build_ws_frame_audio(pcm_chunk: bytes, is_last: bool = False) -> bytes:
+    # type=audio, flags=0 or FLAG_LAST_AUDIO, raw, Gzip
+    payload = gzip.compress(pcm_chunk)
+    header = bytes([0x11, 0x22 if is_last else 0x20, 0x01, 0x00])
+    return header + struct.pack(">I", len(payload)) + payload
+
+
+def _parse_ws_response(data: bytes) -> tuple[int, Optional[dict]]:
+    """返回 (message_type, payload_dict or None)。Server response 为 type=9 时 payload 为 JSON（可能 Gzip）。"""
+    if len(data) < 4:
+        return 0, None
+    msg_type = (data[1] >> 4) & 0x0F
+    compression = data[2] & 0x0F
+    if msg_type == MSG_ERROR:
+        return MSG_ERROR, None
+    if msg_type == MSG_FULL_SERVER_RESPONSE:
+        if len(data) < 12:
+            return msg_type, None
+        payload_size = struct.unpack(">I", data[8:12])[0]
+        if len(data) < 12 + payload_size:
+            return msg_type, None
+        raw = data[12 : 12 + payload_size]
+        if compression == COMPRESSION_GZIP:
+            try:
+                raw = gzip.decompress(raw)
+            except Exception:
+                return msg_type, None
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            return msg_type, payload
+        except Exception:
+            return msg_type, None
+    return msg_type, None
+
+
+class DoubaoSTT:
+    """豆包流式语音识别模型2.0 小时版，WebSocket 双流式。支持热词表 ID。"""
+
+    def __init__(
+        self,
+        app_id: str,
+        access_token: str,
+        resource_id: str = "volc.seedasr.sauc.duration",
+        boosting_table_id: str = "",
+    ):
+        self.app_id = app_id or ""
+        self.access_token = access_token or ""
+        self.resource_id = resource_id or "volc.seedasr.sauc.duration"
+        self.boosting_table_id = boosting_table_id or ""
+
+    @property
+    def model_size(self) -> str:
+        return "doubao"
+
+    @property
+    def is_loaded(self) -> bool:
+        return True
+
+    @property
+    def is_loading(self) -> bool:
+        return False
+
+    def load_model(self) -> None:
+        pass
+
+    def change_model(self, _model_size: str) -> None:
+        pass
+
+    def transcribe(self, audio: np.ndarray, sample_rate: int = 16000,
+                  position: str = "后端开发", language: str = "Python") -> str:
+        if not self.access_token or websocket is None:
+            return ""
+        app_key = self.app_id or self.access_token
+        pcm = _audio_to_pcm_int16(audio)
+        if sample_rate != 16000:
+            # 线性插值重采样到 16k（API 要求 16000）
+            n_orig = len(pcm)
+            n_new = int(round(n_orig * 16000 / sample_rate))
+            if n_new < 1:
+                n_new = 1
+            indices = np.linspace(0, n_orig - 1, n_new).astype(np.int32)
+            pcm = pcm[indices]
+
+        first_frame = _build_ws_frame_full_request(
+            app_key, self.boosting_table_id, language="zh-CN"
+        )
+        n_samples = len(pcm)
+        chunks = []
+        offset = 0
+        while offset < n_samples:
+            take = min(CHUNK_SAMPLES, n_samples - offset)
+            chunk_bytes = pcm[offset : offset + take].tobytes()
+            is_last = offset + take >= n_samples
+            chunks.append(_build_ws_frame_audio(chunk_bytes, is_last=is_last))
+            offset += take
+        if not chunks:
+            pad = np.zeros(CHUNK_SAMPLES, dtype=np.int16)
+            chunks = [_build_ws_frame_audio(pad.tobytes(), is_last=True)]
+
+        headers = {
+            "X-Api-App-Key": app_key,
+            "X-Api-Access-Key": self.access_token,
+            "X-Api-Resource-Id": self.resource_id,
+            "X-Api-Connect-Id": str(uuid.uuid4()),
+        }
+        try:
+            ws = websocket.create_connection(
+                DOUBAO_ASR_WS_URL,
+                header=[f"{k}: {v}" for k, v in headers.items()],
+                timeout=30,
+            )
+            ws.send_binary(first_frame)
+            for frame in chunks:
+                ws.send_binary(frame)
+            final_text = ""
+            ws.settimeout(15)
+            while True:
+                try:
+                    raw = ws.recv()
+                except Exception:
+                    break
+                if raw is None:
+                    break
+                if isinstance(raw, str):
+                    raw = raw.encode("utf-8")
+                msg_type, payload = _parse_ws_response(raw)
+                if msg_type == MSG_ERROR:
+                    code = struct.unpack(">I", raw[4:8])[0] if len(raw) >= 8 else 0
+                    err_size = struct.unpack(">I", raw[8:12])[0] if len(raw) >= 12 else 0
+                    err_msg = raw[12:12 + err_size].decode("utf-8", errors="replace") if err_size else ""
+                    ws.close()
+                    raise RuntimeError(f"豆包 ASR 错误: {code} {err_msg}")
+                if msg_type == MSG_FULL_SERVER_RESPONSE and payload:
+                    res = payload.get("result") or {}
+                    text = (res.get("text") or "").strip()
+                    if text:
+                        final_text = text
+            ws.close()
+            return _postprocess(final_text) if final_text else ""
+        except Exception as e:
+            if "websocket" in str(type(e).__name__).lower():
+                raise RuntimeError(f"豆包 ASR 连接异常: {e}") from e
+            raise
+
+
+# ---------------------------------------------------------------------------
+# STTEngine (Whisper)
 # ---------------------------------------------------------------------------
 
 class STTEngine:
@@ -285,10 +493,36 @@ class STTEngine:
 
 
 _engine: Optional[STTEngine] = None
+_doubao_engine: Optional[DoubaoSTT] = None
 
 
-def get_stt_engine(model_size: str = "base", language: str = "zh") -> STTEngine:
+def get_stt_engine(
+    model_size: Optional[str] = None,
+    language: Optional[str] = None,
+):
+    """返回当前配置对应的 STT 引擎：whisper（本地）或 doubao（豆包 API）。"""
+    from core.config import get_config
+    cfg = get_config()
+    if cfg.stt_provider == "doubao":
+        global _doubao_engine
+        if _doubao_engine is None or (
+            _doubao_engine.app_id != cfg.doubao_stt_app_id
+            or _doubao_engine.access_token != cfg.doubao_stt_access_token
+            or _doubao_engine.resource_id != cfg.doubao_stt_resource_id
+            or _doubao_engine.boosting_table_id != (cfg.doubao_stt_boosting_table_id or "")
+        ):
+            _doubao_engine = DoubaoSTT(
+                app_id=cfg.doubao_stt_app_id,
+                access_token=cfg.doubao_stt_access_token,
+                resource_id=cfg.doubao_stt_resource_id or "volc.seedasr.sauc.duration",
+                boosting_table_id=cfg.doubao_stt_boosting_table_id or "",
+            )
+        return _doubao_engine
     global _engine
+    size = model_size if model_size is not None else cfg.whisper_model
+    lang = language if language is not None else cfg.whisper_language
     if _engine is None:
-        _engine = STTEngine(model_size=model_size, language=language)
+        _engine = STTEngine(model_size=size, language=lang)
+    elif _engine.model_size != size:
+        _engine.change_model(size)
     return _engine

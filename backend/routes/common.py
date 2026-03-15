@@ -9,7 +9,7 @@ from openai import OpenAI
 
 from core.config import (
     get_config, update_config,
-    POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS,
+    POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine
@@ -25,8 +25,13 @@ class ConfigUpdate(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     think_mode: Optional[bool] = None
+    stt_provider: Optional[str] = None
     whisper_model: Optional[str] = None
     whisper_language: Optional[str] = None
+    doubao_stt_app_id: Optional[str] = None
+    doubao_stt_access_token: Optional[str] = None
+    doubao_stt_resource_id: Optional[str] = None
+    doubao_stt_boosting_table_id: Optional[str] = None
     position: Optional[str] = None
     language: Optional[str] = None
     auto_detect: Optional[bool] = None
@@ -45,8 +50,13 @@ async def api_get_config():
         "temperature": cfg.temperature,
         "max_tokens": cfg.max_tokens,
         "think_mode": cfg.think_mode,
+        "stt_provider": cfg.stt_provider,
         "whisper_model": cfg.whisper_model,
         "whisper_language": cfg.whisper_language,
+        "doubao_stt_app_id": cfg.doubao_stt_app_id or "",
+        "doubao_stt_access_token": cfg.doubao_stt_access_token or "",
+        "doubao_stt_resource_id": cfg.doubao_stt_resource_id or "",
+        "doubao_stt_boosting_table_id": cfg.doubao_stt_boosting_table_id or "",
         "position": cfg.position,
         "language": cfg.language,
         "auto_detect": cfg.auto_detect,
@@ -60,8 +70,10 @@ async def api_get_config():
 @router.post("/config")
 async def api_update_config(body: ConfigUpdate):
     update_config(body.model_dump(exclude_none=True))
-    if body.whisper_model:
-        threading.Thread(target=lambda: get_stt_engine().change_model(body.whisper_model), daemon=True).start()
+    if body.whisper_model is not None:
+        engine = get_stt_engine()
+        if hasattr(engine, "change_model"):
+            threading.Thread(target=lambda: engine.change_model(body.whisper_model), daemon=True).start()
     return {"ok": True}
 
 
@@ -86,6 +98,7 @@ async def api_options():
     return {
         "positions": POSITION_OPTIONS,
         "languages": LANGUAGE_OPTIONS,
+        "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
     }
 
