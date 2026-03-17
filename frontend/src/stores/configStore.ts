@@ -72,6 +72,8 @@ interface InterviewState {
   modelHealth: Record<number, 'checking' | 'ok' | 'error'>
   tokenUsage: { prompt: number; completion: number; total: number }
   fallbackToast: { from: string; to: string; reason: string } | null
+  toastMessage: string | null
+  lastWSError: string | null
 
   // Resume optimizer
   resumeOptStreaming: string
@@ -108,6 +110,8 @@ interface InterviewState {
   setModelHealth: (index: number, status: 'checking' | 'ok' | 'error') => void
   setTokenUsage: (usage: { prompt: number; completion: number; total: number }) => void
   setFallbackToast: (toast: { from: string; to: string; reason: string } | null) => void
+  setToastMessage: (msg: string | null) => void
+  setLastWSError: (msg: string | null) => void
 
   // Resume optimizer actions
   appendResumeOptChunk: (chunk: string) => void
@@ -145,6 +149,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   modelHealth: {},
   tokenUsage: { prompt: 0, completion: 0, total: 0 },
   fallbackToast: null,
+  toastMessage: null,
+  lastWSError: null,
   resumeOptStreaming: '',
   resumeOptResult: '',
   resumeOptLoading: false,
@@ -208,6 +214,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
   setTokenUsage: (usage) => set({ tokenUsage: usage }),
   setFallbackToast: (toast) => set({ fallbackToast: toast }),
+  setToastMessage: (msg) => set({ toastMessage: msg }),
+  setLastWSError: (msg) => set({ lastWSError: msg }),
 
   appendResumeOptChunk: (chunk) => set((s) => ({ resumeOptStreaming: s.resumeOptStreaming + chunk })),
   setResumeOptResult: (text) => set({ resumeOptResult: text, resumeOptStreaming: '' }),

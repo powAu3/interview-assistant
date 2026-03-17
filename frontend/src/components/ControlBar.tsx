@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle, Zap } from 'lucide-react'
+import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle, Zap, Loader2 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 
@@ -35,11 +35,13 @@ export function saveQuickPrompts(prompts: string[]) {
 export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
 
 export default function ControlBar() {
-  const { isRecording, isPaused, devices, config, platformInfo, clearSession, currentStreamingId } = useInterviewStore()
+  const { isRecording, isPaused, devices, config, platformInfo, clearSession, currentStreamingId, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError } = useInterviewStore()
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [cancellingAsk, setCancellingAsk] = useState(false)
   const [resumeFile, setResumeFile] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -111,9 +113,25 @@ export default function ControlBar() {
     setLoading(true)
     try { await api.resume(selectedDevice ?? undefined) } catch (e: any) { setError(e.message) } finally { setLoading(false) }
   }
-  const handleClear = async () => { await api.clear(); clearSession() }
+  const handleClear = async () => {
+    if (qaPairs.length > 0 || transcriptions.length > 0) {
+      if (!window.confirm('确定要清空当前会话吗？转录与答案将全部清除。')) return
+    }
+    setClearing(true)
+    try {
+      await api.clear()
+      clearSession()
+      setToastMessage('已清空')
+    } catch (e: any) { setError(e.message) }
+    finally { setClearing(false) }
+  }
   const handleCancelAsk = async () => {
-    try { await api.cancelAsk() } catch {}
+    setCancellingAsk(true)
+    try {
+      await api.cancelAsk()
+      setToastMessage('已发送取消')
+    } catch {}
+    setTimeout(() => setCancellingAsk(false), 500)
   }
 
   const handleAsk = async () => {
@@ -160,6 +178,12 @@ export default function ControlBar() {
         <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
           <span>你选择的是麦克风，建议选择带 ⟳ 标记的系统音频设备</span>
+        </div>
+      )}
+      {lastWSError && (
+        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
+          <span>{lastWSError}</span>
+          <button onClick={() => setLastWSError(null)} className="ml-auto" aria-label="关闭"><X className="w-3 h-3" /></button>
         </div>
       )}
       {error && (
@@ -270,16 +294,17 @@ export default function ControlBar() {
         )}
 
         {currentStreamingId && (
-          <button onClick={handleCancelAsk}
-            className="flex items-center gap-1 px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0"
+          <button onClick={handleCancelAsk} disabled={cancellingAsk}
+            className="flex items-center gap-1 px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
             title="取消当前生成">
-            <X className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">取消生成</span>
+            {cancellingAsk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{cancellingAsk ? '取消中' : '取消生成'}</span>
           </button>
         )}
-        <button onClick={handleClear}
-          className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0">
-          <Trash2 className="w-3.5 h-3.5" />
+        <button onClick={handleClear} disabled={clearing}
+          className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50">
+          {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+          {clearing && <span className="hidden sm:inline">清空中</span>}
         </button>
       </div>
 

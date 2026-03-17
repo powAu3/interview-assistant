@@ -127,7 +127,8 @@ export function useInterviewWS() {
         s.setResumeOptLoading(false)
         break
       case 'error':
-        console.error('[WS]', msg.message)
+        s.setLastWSError(msg.message || '未知错误')
+        setTimeout(() => useInterviewStore.getState().setLastWSError(null), 5000)
         break
     }
   }

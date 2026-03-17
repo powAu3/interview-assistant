@@ -96,6 +96,7 @@ export default function App() {
   const modelHealth = useInterviewStore((s) => s.modelHealth)
   const tokenUsage = useInterviewStore((s) => s.tokenUsage)
   const fallbackToast = useInterviewStore((s) => s.fallbackToast)
+  const toastMessage = useInterviewStore((s) => s.toastMessage)
 
   const formatTokens = (n: number) => {
     if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
@@ -108,6 +109,11 @@ export default function App() {
     const timer = setTimeout(() => useInterviewStore.getState().setFallbackToast(null), 4000)
     return () => clearTimeout(timer)
   }, [fallbackToast])
+  useEffect(() => {
+    if (!toastMessage) return
+    const timer = setTimeout(() => useInterviewStore.getState().setToastMessage(null), 2000)
+    return () => clearTimeout(timer)
+  }, [toastMessage])
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -301,6 +307,14 @@ export default function App() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2">
           <div className="bg-accent-amber/90 text-black text-xs px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm">
             ⚠️ {fallbackToast.from} 不可用，已自动切换到 {fallbackToast.to}
+          </div>
+        </div>
+      )}
+      {/* Generic toast (e.g. 已清空, 已发送取消) */}
+      {toastMessage && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2">
+          <div className="bg-bg-tertiary border border-bg-hover text-text-primary text-xs px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm">
+            {toastMessage}
           </div>
         </div>
       )}

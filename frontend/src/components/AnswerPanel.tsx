@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Bot, Loader2, Copy, Check, ChevronRight, Brain } from 'lucide-react'
+import { Bot, Loader2, Copy, Check, ChevronRight, Brain, Ban } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 
 function CopyButton({ text }: { text: string }) {
@@ -116,7 +116,12 @@ export default function AnswerPanel() {
                 {qa.thinkContent && (
                   <ThinkBlock content={qa.thinkContent} isThinking={qa.isThinking} />
                 )}
-                {qa.answer ? (
+                {qa.answer === '[已取消]' ? (
+                  <div className="flex items-center gap-1.5 text-text-muted italic text-sm">
+                    <Ban className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>已取消</span>
+                  </div>
+                ) : qa.answer ? (
                   <div className="markdown-body text-sm text-text-primary leading-relaxed">
                     <ReactMarkdown
                       components={{
