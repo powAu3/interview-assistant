@@ -115,6 +115,8 @@ def main() -> int:
             ("GET", "/api/network-info", None),
             ("GET", "/api/stt/status", None),
             ("GET", "/api/session", None),
+            ("POST", "/api/clear", "{}"),
+            ("POST", "/api/ask/cancel", "{}"),
         ]
 
         for method, path, body in tests:
@@ -133,7 +135,7 @@ def main() -> int:
                 else:
                     log(f"FAIL {path} -> {e.code}")
                     return 1
-            log(f"  OK {path}")
+            log(f"  OK {method} {path}")
 
         # 5. Test SPA page
         log("4. 测试前端页面...")

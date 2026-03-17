@@ -29,8 +29,8 @@ async def api_practice_status():
 
 
 @router.post("/practice/generate")
-async def api_practice_generate(body: dict = {}):
-    count = body.get("count", 6)
+async def api_practice_generate(body: Optional[dict] = None):
+    count = (body or {}).get("count", 6)
     practice = reset_practice()
     practice.status = "generating"
     broadcast({"type": "practice_status", "status": "generating"})
@@ -71,31 +71,36 @@ async def api_practice_submit(body: PracticeSubmitBody):
     broadcast({"type": "practice_status", "status": "evaluating"})
 
     def _eval():
-        full = ""
-        broadcast({"type": "practice_eval_start", "question_id": q.id})
-        for chunk in evaluate_answer_stream(q.question, body.answer.strip()):
-            full += chunk
-            broadcast({"type": "practice_eval_chunk", "chunk": chunk})
-        score = parse_score_from_feedback(full)
-        ev = PracticeEvaluation(
-            question_id=q.id, question=q.question,
-            answer=body.answer.strip(), score=score, feedback=full,
-        )
-        practice.evaluations.append(ev)
-        practice.status = "questioning"
-        broadcast({"type": "practice_eval_done", "question_id": q.id, "score": score, "feedback": full})
-        broadcast({"type": "practice_status", "status": "questioning"})
-        broadcast({
-            "type": "token_update",
-            "prompt": _token_stats["prompt"],
-            "completion": _token_stats["completion"],
-            "total": _token_stats["total"],
-        })
         try:
-            from services.knowledge import save_record
-            save_record("practice", q.question, body.answer.strip(), score)
-        except Exception:
-            pass
+            full = ""
+            broadcast({"type": "practice_eval_start", "question_id": q.id})
+            for chunk in evaluate_answer_stream(q.question, body.answer.strip()):
+                full += chunk
+                broadcast({"type": "practice_eval_chunk", "chunk": chunk})
+            score = parse_score_from_feedback(full)
+            ev = PracticeEvaluation(
+                question_id=q.id, question=q.question,
+                answer=body.answer.strip(), score=score, feedback=full,
+            )
+            practice.evaluations.append(ev)
+            practice.status = "questioning"
+            broadcast({"type": "practice_eval_done", "question_id": q.id, "score": score, "feedback": full})
+            broadcast({"type": "practice_status", "status": "questioning"})
+            broadcast({
+                "type": "token_update",
+                "prompt": _token_stats["prompt"],
+                "completion": _token_stats["completion"],
+                "total": _token_stats["total"],
+            })
+            try:
+                from services.knowledge import save_record
+                save_record("practice", q.question, body.answer.strip(), score)
+            except Exception:
+                pass
+        except Exception as e:
+            practice.status = "questioning"
+            broadcast({"type": "error", "message": f"评价失败: {e}"})
+            broadcast({"type": "practice_status", "status": "questioning"})
 
     threading.Thread(target=_eval, daemon=True).start()
     return {"ok": True}
@@ -120,21 +125,26 @@ async def api_practice_finish():
     broadcast({"type": "practice_status", "status": "report"})
 
     def _report():
-        full = ""
-        broadcast({"type": "practice_report_start"})
-        for chunk in generate_report_stream(practice.evaluations):
-            full += chunk
-            broadcast({"type": "practice_report_chunk", "chunk": chunk})
-        practice.report = full
-        practice.status = "finished"
-        broadcast({"type": "practice_report_done", "report": full})
-        broadcast({"type": "practice_status", "status": "finished"})
-        broadcast({
-            "type": "token_update",
-            "prompt": _token_stats["prompt"],
-            "completion": _token_stats["completion"],
-            "total": _token_stats["total"],
-        })
+        try:
+            full = ""
+            broadcast({"type": "practice_report_start"})
+            for chunk in generate_report_stream(practice.evaluations):
+                full += chunk
+                broadcast({"type": "practice_report_chunk", "chunk": chunk})
+            practice.report = full
+            practice.status = "finished"
+            broadcast({"type": "practice_report_done", "report": full})
+            broadcast({"type": "practice_status", "status": "finished"})
+            broadcast({
+                "type": "token_update",
+                "prompt": _token_stats["prompt"],
+                "completion": _token_stats["completion"],
+                "total": _token_stats["total"],
+            })
+        except Exception as e:
+            practice.status = "finished"
+            broadcast({"type": "error", "message": f"报告生成失败: {e}"})
+            broadcast({"type": "practice_status", "status": "finished"})
 
     threading.Thread(target=_report, daemon=True).start()
     return {"ok": True}
@@ -186,47 +196,51 @@ def _stop_practice_recording():
 
 
 def _practice_record_worker():
-    cfg = get_config()
-    engine = get_stt_engine()
-    if not engine.is_loaded:
-        try:
-            engine.load_model()
-        except Exception as e:
-            broadcast({"type": "error", "message": f"STT 加载失败: {e}"})
-            return
-
-    vad = VADBuffer(
-        sample_rate=AudioCapture.SAMPLE_RATE,
-        silence_threshold=cfg.silence_threshold,
-        silence_duration=cfg.silence_duration,
-    )
-
-    while not _practice_stop.is_set():
-        chunk = audio_capture.get_audio_chunk(timeout=0.1)
-        if chunk is None:
-            time.sleep(0.05)
-            continue
-        energy = AudioCapture.compute_energy(chunk)
-        broadcast({"type": "audio_level", "value": round(energy, 4)})
-
-        speech_audio = vad.feed(chunk)
-        if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
+    try:
+        cfg = get_config()
+        engine = get_stt_engine()
+        if not engine.is_loaded:
             try:
-                text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
-                                        position=cfg.position, language=cfg.language)
+                engine.load_model()
+            except Exception as e:
+                broadcast({"type": "error", "message": f"STT 加载失败: {e}"})
+                return
+
+        vad = VADBuffer(
+            sample_rate=AudioCapture.SAMPLE_RATE,
+            silence_threshold=cfg.silence_threshold,
+            silence_duration=cfg.silence_duration,
+        )
+
+        while not _practice_stop.is_set():
+            chunk = audio_capture.get_audio_chunk(timeout=0.1)
+            if chunk is None:
+                time.sleep(0.05)
+                continue
+            energy = AudioCapture.compute_energy(chunk)
+            broadcast({"type": "audio_level", "value": round(energy, 4)})
+
+            speech_audio = vad.feed(chunk)
+            if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
+                try:
+                    text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
+                                            position=cfg.position, language=cfg.language)
+                    if text.strip():
+                        _practice_answer_buf.append(text.strip())
+                        broadcast({"type": "practice_transcription", "text": text.strip()})
+                except Exception:
+                    pass
+
+        remaining = vad.flush()
+        if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
+            try:
+                text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
+                                         position=cfg.position, language=cfg.language)
                 if text.strip():
                     _practice_answer_buf.append(text.strip())
                     broadcast({"type": "practice_transcription", "text": text.strip()})
             except Exception:
                 pass
-
-    remaining = vad.flush()
-    if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
-        try:
-            text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
-                                     position=cfg.position, language=cfg.language)
-            if text.strip():
-                _practice_answer_buf.append(text.strip())
-                broadcast({"type": "practice_transcription", "text": text.strip()})
-        except Exception:
-            pass
+    except Exception as e:
+        broadcast({"type": "error", "message": f"练习录音异常: {e}"})
+        broadcast({"type": "practice_recording", "value": False})

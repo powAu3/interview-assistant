@@ -1,3 +1,4 @@
+import queue
 import time
 import threading
 from typing import Optional
@@ -17,6 +18,12 @@ router = APIRouter()
 _interview_thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
 _pause_event = threading.Event()  # set = paused, clear = running
+
+# 答案生成队列：单线程顺序处理，支持中途取消
+_answer_queue: queue.Queue = queue.Queue()
+_answer_abort_event = threading.Event()
+_answer_worker_started = False
+_answer_worker_lock = threading.Lock()
 
 
 class ManualQuestion(BaseModel):
@@ -79,8 +86,27 @@ async def api_resume_interview(body: Optional[dict] = None):
 
 @router.post("/clear")
 async def api_clear():
+    _answer_abort_event.set()
+    _drain_answer_queue()
     reset_session()
     return {"ok": True}
+
+
+@router.post("/ask/cancel")
+async def api_ask_cancel():
+    """取消当前正在生成的答案，并清空队列中未处理的问题。"""
+    _answer_abort_event.set()
+    _drain_answer_queue()
+    return {"ok": True}
+
+
+def _drain_answer_queue():
+    """清空答案队列（保留当前正在处理的那条，由 abort 终止）。"""
+    try:
+        while True:
+            _answer_queue.get_nowait()
+    except queue.Empty:
+        pass
 
 
 @router.post("/ask")
@@ -88,8 +114,8 @@ async def api_ask(body: ManualQuestion):
     if not body.text.strip() and not body.image:
         raise HTTPException(400, "问题不能为空")
     text = body.text.strip() or "请分析这张图片中的题目，并给出面试回答"
-    # 手动输入框提问通常是应急场景：允许算法/SQL题更快进入“思路+代码”模式
-    threading.Thread(target=_process_question, args=(text, body.image, True), daemon=True).start()
+    _ensure_answer_worker()
+    _answer_queue.put((text, body.image, True))
     return {"ok": True}
 
 
@@ -130,6 +156,7 @@ def stop_interview_loop():
     global _interview_thread
     _stop_event.set()
     _pause_event.clear()
+    _answer_abort_event.set()
     audio_capture.stop()
     session = get_session()
     session.is_recording = False
@@ -163,44 +190,73 @@ def _interview_worker():
     )
     session = get_session()
 
-    while not _stop_event.is_set():
-        # 暂停时等待恢复
-        if _pause_event.is_set():
-            time.sleep(0.1)
-            continue
+    try:
+        while not _stop_event.is_set():
+            # 暂停时等待恢复
+            if _pause_event.is_set():
+                time.sleep(0.1)
+                continue
 
-        chunk = audio_capture.get_audio_chunk(timeout=0.1)
-        if chunk is None:
-            time.sleep(0.05)
-            continue
+            chunk = audio_capture.get_audio_chunk(timeout=0.1)
+            if chunk is None:
+                time.sleep(0.05)
+                continue
 
-        energy = AudioCapture.compute_energy(chunk)
-        broadcast({"type": "audio_level", "value": round(energy, 4)})
+            energy = AudioCapture.compute_energy(chunk)
+            broadcast({"type": "audio_level", "value": round(energy, 4)})
 
-        speech_audio = vad.feed(chunk)
-        if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
-            broadcast({"type": "transcribing", "value": True})
+            speech_audio = vad.feed(chunk)
+            if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
+                broadcast({"type": "transcribing", "value": True})
+                try:
+                    text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
+                                            position=cfg.position, language=cfg.language)
+                    if text.strip():
+                        session.add_transcription(text)
+                        broadcast({"type": "transcription", "text": text})
+                        if cfg.auto_detect:
+                            _ensure_answer_worker()
+                            _answer_queue.put((text, None, False))
+                except Exception as e:
+                    broadcast({"type": "error", "message": f"转写错误: {e}"})
+                finally:
+                    broadcast({"type": "transcribing", "value": False})
+
+        remaining = vad.flush()
+        if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
             try:
-                text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
-                                        position=cfg.position, language=cfg.language)
+                text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
+                                         position=cfg.position, language=cfg.language)
                 if text.strip():
                     session.add_transcription(text)
                     broadcast({"type": "transcription", "text": text})
-                    if cfg.auto_detect:
-                        _process_question(text)
-            except Exception as e:
-                broadcast({"type": "error", "message": f"转写错误: {e}"})
-            finally:
-                broadcast({"type": "transcribing", "value": False})
+            except Exception:
+                pass
+    except Exception as e:
+        broadcast({"type": "error", "message": f"面试循环异常: {e}"})
+        get_session().is_recording = False
+        broadcast({"type": "recording", "value": False})
 
-    remaining = vad.flush()
-    if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
+
+def _ensure_answer_worker():
+    global _answer_worker_started
+    with _answer_worker_lock:
+        if _answer_worker_started:
+            return
+        _answer_worker_started = True
+    t = threading.Thread(target=_answer_worker_loop, daemon=True)
+    t.start()
+
+
+def _answer_worker_loop():
+    while True:
         try:
-            text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
-                                     position=cfg.position, language=cfg.language)
-            if text.strip():
-                session.add_transcription(text)
-                broadcast({"type": "transcription", "text": text})
+            item = _answer_queue.get()
+            if item is None:
+                break
+            text, image, manual_input = item
+            _answer_abort_event.clear()
+            _process_question(text, image, manual_input)
         except Exception:
             pass
 
@@ -219,7 +275,7 @@ def _process_question(
         session.add_user_message(content)
     else:
         session.add_user_message(question_text)
-    messages = session.get_conversation_messages()
+    messages = session.get_conversation_messages_for_llm()
 
     display_question = question_text + (" [📷 附图]" if image else "")
     qa_id = f"qa-{len(session.qa_pairs)}-{int(time.time())}"
@@ -227,8 +283,14 @@ def _process_question(
 
     full_answer = ""
     full_think = ""
+    aborted = False
     try:
-        for chunk_type, chunk_text in chat_stream(messages, system_prompt=system_prompt):
+        for chunk_type, chunk_text in chat_stream(
+            messages, system_prompt=system_prompt, abort_check=lambda: _answer_abort_event.is_set()
+        ):
+            if _answer_abort_event.is_set():
+                aborted = True
+                break
             if chunk_type == "think":
                 full_think += chunk_text
                 broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": chunk_text})
@@ -240,21 +302,32 @@ def _process_question(
         full_answer += error_msg
         broadcast({"type": "answer_chunk", "id": qa_id, "chunk": error_msg})
 
-    session.add_assistant_message(full_answer)
-    session.add_qa(display_question, full_answer)
-    broadcast({"type": "answer_done", "id": qa_id, "question": display_question, "answer": full_answer, "think": full_think})
-    broadcast({
-        "type": "token_update",
-        "prompt": _token_stats["prompt"],
-        "completion": _token_stats["completion"],
-        "total": _token_stats["total"],
-    })
+    if aborted:
+        if session.conversation_history:
+            session.conversation_history.pop()
+        broadcast({"type": "answer_cancelled", "id": qa_id})
+        return
 
-    threading.Thread(
-        target=_save_knowledge_record,
-        args=(question_text, full_answer),
-        daemon=True,
-    ).start()
+    try:
+        session.add_assistant_message(full_answer)
+        session.add_qa(display_question, full_answer)
+        broadcast({"type": "answer_done", "id": qa_id, "question": display_question, "answer": full_answer, "think": full_think})
+        broadcast({
+            "type": "token_update",
+            "prompt": _token_stats["prompt"],
+            "completion": _token_stats["completion"],
+            "total": _token_stats["total"],
+        })
+
+        threading.Thread(
+            target=_save_knowledge_record,
+            args=(question_text, full_answer),
+            daemon=True,
+        ).start()
+    except Exception:
+        if session.conversation_history:
+            session.conversation_history.pop()
+        broadcast({"type": "answer_cancelled", "id": qa_id})
 
 
 def _save_knowledge_record(question: str, answer: str):

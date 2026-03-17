@@ -59,8 +59,11 @@ async def websocket_endpoint(ws: WebSocket):
         })
         while True:
             data = await ws.receive_text()
-            msg = json.loads(data)
-            if msg.get("type") == "ping":
+            try:
+                msg = json.loads(data)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(msg, dict) and msg.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
     except WebSocketDisconnect:
         pass

@@ -166,6 +166,8 @@ cp backend/config.example.json backend/config.json
 
 ### 第五步：启动
 
+在项目根目录下（pyenv 会自动使用 `.python-version` 指定的 3.13.9）：
+
 ```bash
 # 桌面模式（默认）— Electron 窗口，屏幕共享隐身
 python start.py
@@ -451,6 +453,16 @@ python scripts/e2e_test.py
 - `frontend/src/hooks/` — React hooks
 - `frontend/src/lib/` — 工具函数和 API 封装
 - `@/` 是 `src/` 的路径别名（在 `vite.config.ts` 和 `tsconfig.json` 中配置）
+
+### 请勿提交的文件（开源协作）
+
+以下内容已写入 `.gitignore`，**请勿**提交到仓库：
+
+- `backend/config.json`、`backend/user_config.json`（含 API Key 等敏感信息）
+- `.env`、`.env.*`（环境变量与密钥）
+- 本地/临时文件：`*.log`、`tmp/`、`temp/`、`*.bak`、IDE 配置（`.vscode/`、`.idea/`）等
+
+仅提交与功能、文档、构建相关的代码与配置；个人配置与一次性测试脚本不要入库。
 
 ---
 

@@ -27,11 +27,15 @@ def _run_optimize(jd: str):
             full_text += chunk
             broadcast({"type": "resume_opt_chunk", "chunk": chunk})
     except Exception as e:
+        full_text += f"\n\n[错误: {e}]"
         broadcast({"type": "resume_opt_chunk", "chunk": f"\n\n[错误: {e}]"})
-    broadcast({"type": "resume_opt_done", "text": full_text})
-    broadcast({
-        "type": "token_update",
-        "prompt": _token_stats["prompt"],
-        "completion": _token_stats["completion"],
-        "total": _token_stats["total"],
-    })
+    try:
+        broadcast({"type": "resume_opt_done", "text": full_text})
+        broadcast({
+            "type": "token_update",
+            "prompt": _token_stats["prompt"],
+            "completion": _token_stats["completion"],
+            "total": _token_stats["total"],
+        })
+    except Exception:
+        pass  # ws 可能已断开，仅忽略避免 daemon 线程抛错

@@ -35,7 +35,7 @@ export function saveQuickPrompts(prompts: string[]) {
 export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
 
 export default function ControlBar() {
-  const { isRecording, isPaused, devices, config, platformInfo, clearSession } = useInterviewStore()
+  const { isRecording, isPaused, devices, config, platformInfo, clearSession, currentStreamingId } = useInterviewStore()
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
@@ -112,6 +112,9 @@ export default function ControlBar() {
     try { await api.resume(selectedDevice ?? undefined) } catch (e: any) { setError(e.message) } finally { setLoading(false) }
   }
   const handleClear = async () => { await api.clear(); clearSession() }
+  const handleCancelAsk = async () => {
+    try { await api.cancelAsk() } catch {}
+  }
 
   const handleAsk = async () => {
     if (!manualQuestion.trim() && !pastedImage) return
@@ -266,6 +269,14 @@ export default function ControlBar() {
           </button>
         )}
 
+        {currentStreamingId && (
+          <button onClick={handleCancelAsk}
+            className="flex items-center gap-1 px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0"
+            title="取消当前生成">
+            <X className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">取消生成</span>
+          </button>
+        )}
         <button onClick={handleClear}
           className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0">
           <Trash2 className="w-3.5 h-3.5" />

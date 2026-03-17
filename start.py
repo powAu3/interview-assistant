@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+from typing import Optional
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(ROOT, "backend")
@@ -131,12 +132,12 @@ def _print_dep_help():
     print("    conda activate <your-env>")
 
 
-def _find_npx() -> str | None:
+def _find_npx() -> Optional[str]:
     """Return path to npx, or None if not found."""
     return shutil.which("npx") or shutil.which("npx.cmd")
 
 
-def _find_npm() -> str | None:
+def _find_npm() -> Optional[str]:
     return shutil.which("npm") or shutil.which("npm.cmd")
 
 

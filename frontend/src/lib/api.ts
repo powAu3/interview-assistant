@@ -1,4 +1,5 @@
-const BASE = ''
+/** 部署到子路径或反向代理时可通过环境变量 VITE_API_BASE 指定 API 根路径，如 '' 或 '/api' */
+const BASE = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE ?? ''
 
 async function request<T = any>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
@@ -37,6 +38,7 @@ export const api = {
   clear: () => request('/api/clear', { method: 'POST' }),
   ask: (text: string, image?: string) =>
     request('/api/ask', { method: 'POST', body: JSON.stringify({ text, image }) }),
+  cancelAsk: () => request('/api/ask/cancel', { method: 'POST' }),
   getSttStatus: () => request('/api/stt/status'),
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
 

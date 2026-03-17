@@ -1,23 +1,40 @@
+import base64
 import os
+import platform
+import subprocess
+import tempfile
+
+
+def _pdf_to_images_base64(file_path: str, dpi: int = 150) -> list[str]:
+    """用 PyMuPDF 将 PDF 每页转为 PNG 的 base64，无系统依赖。"""
+    try:
+        import fitz
+    except ImportError:
+        raise ValueError("解析图片版 PDF 需要安装 PyMuPDF：pip install pymupdf") from None
+    out = []
+    doc = fitz.open(file_path)
+    try:
+        for page in doc:
+            pix = page.get_pixmap(dpi=dpi)
+            png_bytes = pix.tobytes("png")
+            out.append(base64.b64encode(png_bytes).decode("ascii"))
+    finally:
+        doc.close()
+    return out
 
 
 def parse_pdf(file_path: str) -> str:
-    """Extract text content from a PDF resume."""
-    import pdfplumber
-
-    texts = []
-    with pdfplumber.open(file_path) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                texts.append(text.strip())
-    result = "\n\n".join(texts)
-    if not result.strip():
+    """PDF 简历统一由 VL 模型解析（需在设置中配置支持识图的模型）。"""
+    from services.llm import has_vision_model, vision_extract_text
+    if not has_vision_model():
         raise ValueError(
-            "PDF 解析结果为空（可能是纯图片格式的 PDF）。"
-            "请尝试用文字版 PDF，或转换为 DOCX/TXT 后重新上传。"
+            "上传 PDF 需要先配置支持识图的模型。请打开「设置」→ 选择一个带「识图」的模型并填写 API Key → 保存后再上传 PDF；"
+            "或改为上传 DOCX / TXT 格式的简历。"
         )
-    return result
+    images_b64 = _pdf_to_images_base64(file_path)
+    if not images_b64:
+        raise ValueError("PDF 无有效页面")
+    return vision_extract_text(images_b64)
 
 
 def _parse_docx(content: bytes) -> str:
@@ -40,6 +57,39 @@ def _parse_docx(content: bytes) -> str:
     return "\n".join(paragraphs)
 
 
+def _parse_doc(content: bytes) -> str:
+    """Extract text from legacy .doc (Word 97-2003). Uses system tool: macOS textutil, Linux antiword/catdoc."""
+    with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    try:
+        if platform.system() == "Darwin":
+            out_path = tmp_path + ".txt"
+            try:
+                subprocess.run(
+                    ["textutil", "-convert", "txt", tmp_path, "-output", out_path],
+                    check=True, capture_output=True, timeout=30
+                )
+                with open(out_path, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read()
+            finally:
+                if os.path.exists(out_path):
+                    os.unlink(out_path)
+        for cmd in (["antiword", "-t", tmp_path], ["catdoc", "-w", tmp_path]):
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
+                if r.returncode == 0 and (r.stdout or "").strip():
+                    return r.stdout.strip()
+            except FileNotFoundError:
+                continue
+        raise ValueError(
+            "当前环境无法解析 .doc 文件。macOS 无需额外安装；"
+            "Linux 请安装 antiword 或 catdoc（如 apt install antiword），或将文件另存为 .docx 后上传。"
+        )
+    finally:
+        os.unlink(tmp_path)
+
+
 def parse_resume_bytes(content: bytes, filename: str) -> str:
     """Parse resume from uploaded bytes. Supports PDF, DOCX, DOC, TXT, MD."""
     ext = os.path.splitext(filename)[1].lower()
@@ -53,15 +103,10 @@ def parse_resume_bytes(content: bytes, filename: str) -> str:
             return parse_pdf(tmp_path)
         finally:
             os.unlink(tmp_path)
-    elif ext in (".docx", ".doc"):
-        try:
-            return _parse_docx(content)
-        except Exception as e:
-            if ext == ".doc":
-                raise ValueError(
-                    "不支持旧版 .doc 格式，请用 Word 另存为 .docx 后重试"
-                ) from e
-            raise
+    elif ext == ".docx":
+        return _parse_docx(content)
+    elif ext == ".doc":
+        return _parse_doc(content)
     elif ext in (".txt", ".md"):
         return content.decode("utf-8", errors="ignore")
     else:

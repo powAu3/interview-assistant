@@ -24,6 +24,8 @@ class Session:
     created_at: float = field(default_factory=time.time)
 
     MAX_HISTORY = 20
+    CONVERSATION_TURNS_FOR_LLM = 6
+    MAX_CHARS_PER_MESSAGE = 2000
 
     def add_transcription(self, text: str):
         if text.strip():
@@ -49,6 +51,24 @@ class Session:
 
     def get_conversation_messages(self) -> list[dict]:
         return list(self.conversation_history)
+
+    def get_conversation_messages_for_llm(self) -> list[dict]:
+        """最近 N 轮对话，每条 content 截断到 max_chars，用于控制 token。"""
+        n = self.CONVERSATION_TURNS_FOR_LLM * 2
+        recent = self.conversation_history[-n:] if len(self.conversation_history) > n else self.conversation_history
+        out = []
+        for msg in recent:
+            content = msg.get("content")
+            if isinstance(content, list):
+                out.append(msg)
+                continue
+            if isinstance(content, str) and len(content) > self.MAX_CHARS_PER_MESSAGE:
+                content = content[-self.MAX_CHARS_PER_MESSAGE:].strip()
+                content = "…" + content
+                out.append({"role": msg["role"], "content": content})
+            else:
+                out.append(dict(msg))
+        return out
 
     def get_recent_transcription(self, n: int = 10) -> str:
         recent = self.transcription_history[-n:]

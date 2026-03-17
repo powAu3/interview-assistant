@@ -59,7 +59,11 @@ if os.path.isdir(FRONTEND_DIR):
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        file_path = os.path.join(FRONTEND_DIR, full_path)
+        # Prevent path traversal: resolve to realpath and ensure under FRONTEND_DIR
+        safe_dir = os.path.abspath(FRONTEND_DIR)
+        file_path = os.path.abspath(os.path.join(FRONTEND_DIR, full_path))
+        if not file_path.startswith(safe_dir):
+            return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
         if os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))

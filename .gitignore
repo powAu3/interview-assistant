@@ -6,22 +6,33 @@ dist/
 build/
 venv/
 .venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
 
 # Node
 node_modules/
 frontend/dist/
 *.tsbuildinfo
+.npm
+.yarn-integrity
 
-# Config (contains API keys)
+# Config & secrets (do not commit)
 backend/config.json
 backend/user_config.json
+.env
+.env.*
+.env.local
+*.local
+*.python-version
 
 # SQLite database
 backend/knowledge.db
 backend/knowledge.db-shm
 backend/knowledge.db-wal
 
-# Whisper models cache
+# Whisper / model cache
 *.bin
 *.pt
 
@@ -30,14 +41,21 @@ backend/knowledge.db-wal
 Thumbs.db
 *.swp
 *~
+Desktop.ini
 
-# IDE
+# IDE / editor
 .vscode/
 .idea/
 *.iml
+*.sublime-*
 
 # Cache & temp
 .cache/
 *.log
 tmp/
 temp/
+*.tmp
+*.bak
+*.backup
+
+CODE_REVIEW.md

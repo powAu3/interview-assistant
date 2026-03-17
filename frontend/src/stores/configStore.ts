@@ -100,6 +100,7 @@ interface InterviewState {
   appendThinkChunk: (id: string, chunk: string) => void
   appendAnswerChunk: (id: string, chunk: string) => void
   finalizeAnswer: (id: string, question: string, answer: string, thinkContent?: string) => void
+  cancelAnswer: (id: string) => void
   setInitData: (data: any) => void
   setSttStatus: (loaded: boolean, loading: boolean) => void
   toggleSettings: () => void
@@ -183,10 +184,20 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       currentStreamingId: null,
       qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, question, answer, thinkContent: thinkContent ?? qa.thinkContent, isThinking: false } : qa)),
     })),
+  cancelAnswer: (id) =>
+    set((s) => ({
+      currentStreamingId: null,
+      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, answer: '[已取消]', isThinking: false } : qa)),
+    })),
   setInitData: (data) =>
     set({
       transcriptions: data.transcriptions ?? [],
-      qaPairs: data.qa_pairs ?? [],
+      qaPairs: (data.qa_pairs ?? []).map((qa: Partial<QAPair> & { id: string; question: string; answer: string }) => ({
+        ...qa,
+        thinkContent: qa.thinkContent ?? '',
+        isThinking: false,
+        timestamp: qa.timestamp ?? Date.now() / 1000,
+      })),
       isRecording: data.is_recording ?? false,
       isPaused: data.is_paused ?? false,
       sttLoaded: data.stt_loaded ?? false,

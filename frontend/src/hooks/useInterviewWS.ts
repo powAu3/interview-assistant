@@ -61,6 +61,9 @@ export function useInterviewWS() {
       case 'answer_done':
         s.finalizeAnswer(msg.id, msg.question, msg.answer, msg.think)
         break
+      case 'answer_cancelled':
+        s.cancelAnswer(msg.id)
+        break
       case 'stt_status':
         s.setSttStatus(msg.loaded ?? false, msg.loading ?? false)
         break

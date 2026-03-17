@@ -1,7 +1,7 @@
 import threading
 from openai import OpenAI
 import openai
-from typing import Generator, Optional
+from typing import Callable, Generator, Optional
 from core.config import get_config
 
 SYSTEM_PROMPT_TEMPLATE = """你是一名正在参加技术面试的候选人。
@@ -85,6 +85,59 @@ def get_client() -> OpenAI:
 
 def get_client_for_model(model_cfg) -> OpenAI:
     return OpenAI(api_key=model_cfg.api_key, base_url=model_cfg.api_base_url)
+
+
+def has_vision_model() -> bool:
+    """是否已配置可用的识图模型（用于上传 PDF 前提示）。"""
+    cfg = get_config()
+    for m in cfg.models:
+        if m.supports_vision and m.api_key and m.api_key not in ("", "sk-your-api-key-here"):
+            return True
+    return False
+
+
+# PDF/简历识图专用 prompt：引导 VL 模型稳定输出纯文本
+RESUME_VISION_PROMPT = """以下是一份简历的页面图片（可能为扫描件或截图）。请将每页中的文字完整、准确地识别并输出为纯文本。
+
+要求：
+- 按页顺序合并输出，多页之间用空行分隔；
+- 保留原有段落与换行，不要合并成一大段；
+- 只输出识别出的文字内容，不要添加「识别结果」「如下」等标题或解释；
+- 专有名词、英文、数字、日期保持原样；
+- 若某页无文字或无法识别，可输出空行或省略该页，不要编造内容。"""
+
+
+def vision_extract_text(image_base64_list: list[str]) -> str:
+    """用 VL 模型把多张简历页图片识别为纯文本。image_base64_list 每项为 base64 字符串（或 data:image/png;base64,xxx）。"""
+    cfg = get_config()
+    model = None
+    for m in cfg.models:
+        if m.supports_vision and m.api_key and m.api_key not in ("", "sk-your-api-key-here"):
+            model = m
+            break
+    if not model:
+        raise ValueError(
+            "上传 PDF 简历需要先配置支持识图的模型。请在「设置」中选择并保存一个带「识图」的模型及 API Key 后再试；"
+            "或改为上传 DOCX / TXT 格式的简历。"
+        )
+    parts = [{"type": "text", "text": RESUME_VISION_PROMPT}]
+    for b64 in image_base64_list:
+        if b64.startswith("data:"):
+            url = b64
+        else:
+            url = f"data:image/png;base64,{b64}"
+        parts.append({"type": "image_url", "image_url": {"url": url}})
+    client = get_client_for_model(model)
+    try:
+        r = client.chat.completions.create(
+            model=model.model,
+            messages=[{"role": "user", "content": parts}],
+            max_tokens=4096,
+            temperature=0,
+        )
+        return (r.choices[0].message.content or "").strip()
+    except Exception as e:
+        raise ValueError(f"识图模型解析失败: {e}") from e
 
 
 _RETRYABLE_ERRORS = (
@@ -175,8 +228,9 @@ def _try_stream_with_model(model_cfg, full_messages, cfg):
 def chat_stream(
     messages: list[dict],
     system_prompt: Optional[str] = None,
+    abort_check: Optional[Callable[[], bool]] = None,
 ) -> Generator[tuple[str, str], None, None]:
-    """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'."""
+    """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'. If abort_check() returns True, stop streaming."""
     from routes.ws import broadcast
 
     cfg = get_config()
@@ -212,6 +266,8 @@ def chat_stream(
             response = _try_stream_with_model(model, full_messages_adj, cfg)
 
             for chunk in response:
+                if abort_check and abort_check():
+                    return
                 if chunk.choices:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)

@@ -1,8 +1,11 @@
 from pydantic import BaseModel
 from typing import Optional
 import json
+import logging
 import os
 import shutil
+
+logger = logging.getLogger(__name__)
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILE = os.path.join(_BACKEND_DIR, "config.json")
@@ -74,7 +77,9 @@ def update_config(updates: dict) -> AppConfig:
     global _config
     cfg = get_config()
     data = cfg.model_dump()
-    data.update({k: v for k, v in updates.items() if v is not None})
+    for k, v in updates.items():
+        if hasattr(cfg, k):
+            data[k] = v
     _config = AppConfig(**data)
     _save_config(_config)
     return _config
@@ -94,14 +99,16 @@ def _load_config() -> AppConfig:
     return AppConfig()
 
 
-def _save_config(cfg: AppConfig):
+def _save_config(cfg: AppConfig) -> bool:
     try:
         data = cfg.model_dump()
         data.pop("resume_text", None)
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        return True
+    except Exception as e:
+        logger.warning("保存配置失败: %s", e, exc_info=True)
+        return False
 
 
 POSITION_OPTIONS = [
