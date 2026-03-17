@@ -167,12 +167,10 @@ export default function App() {
             </span>
           </div>
 
-          {tokenUsage.total > 0 && (
-            <div className="hidden sm:flex items-center gap-1 ml-1" title={`Prompt: ${tokenUsage.prompt} | Completion: ${tokenUsage.completion}`}>
-              <span className="text-[10px] text-text-muted">Token:</span>
-              <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
-            </div>
-          )}
+          <div className="hidden sm:flex items-center gap-1 ml-1" title={`Prompt: ${tokenUsage.prompt} | Completion: ${tokenUsage.completion}`}>
+            <span className="text-[10px] text-text-muted">Token:</span>
+            <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">

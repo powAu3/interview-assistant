@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
+import { useInterviewStore } from '@/stores/configStore'
 import { RefreshCw, Trash2, ChevronDown, ChevronUp, Target, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 
 interface TagSummary {
@@ -117,7 +118,7 @@ export default function KnowledgeMap() {
   }
 
   const handleReset = async () => {
-    if (!confirm('确定要清空所有知识记录吗？')) return
+    if (!confirm('确定要清空所有知识记录吗？清空后不可恢复。')) return
     await api.knowledgeReset()
     loadData()
   }
@@ -132,7 +133,8 @@ export default function KnowledgeMap() {
         .map(t => t.tag)
 
       if (weakTags.length === 0) {
-        alert('暂无薄弱知识点，多做几道题再来')
+        useInterviewStore.getState().setToastMessage('暂无薄弱知识点，多做几道题再来')
+        setGenLoading(false)
         return
       }
 

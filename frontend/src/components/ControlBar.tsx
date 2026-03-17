@@ -35,15 +35,20 @@ export function saveQuickPrompts(prompts: string[]) {
 export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
 
 export default function ControlBar() {
-  const { isRecording, isPaused, devices, config, platformInfo, clearSession, currentStreamingId, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError } = useInterviewStore()
+  const { isRecording, isPaused, devices, config, platformInfo, clearSession, currentStreamingId, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError, wsConnected, modelHealth } = useInterviewStore()
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [cancellingAsk, setCancellingAsk] = useState(false)
+  const [resumeUploading, setResumeUploading] = useState(false)
   const [resumeFile, setResumeFile] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const allModelsUnavailable = config?.models && config.models.length > 0 &&
+    config.models.every((_, i) => modelHealth[i] === 'error')
+  const showColdStartHint = !isRecording && transcriptions.length === 0 && qaPairs.length === 0
   const fileRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
@@ -102,6 +107,7 @@ export default function ControlBar() {
     finally { setLoading(false) }
   }
   const handleStop = async () => {
+    if (isRecording && !window.confirm('结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
     setLoading(true)
     try { await api.stop() } catch {} finally { setLoading(false) }
   }
@@ -115,7 +121,7 @@ export default function ControlBar() {
   }
   const handleClear = async () => {
     if (qaPairs.length > 0 || transcriptions.length > 0) {
-      if (!window.confirm('确定要清空当前会话吗？转录与答案将全部清除。')) return
+      if (!window.confirm('确定要清空当前页的转录与答案吗？清空后不可恢复。')) return
     }
     setClearing(true)
     try {
@@ -151,10 +157,14 @@ export default function ControlBar() {
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setResumeUploading(true)
+    setError(null)
     try {
-      await api.uploadResume(file); setResumeFile(file.name)
+      await api.uploadResume(file)
+      setResumeFile(file.name)
       useInterviewStore.getState().setConfig(await api.getConfig())
     } catch (err: any) { setError(err.message) }
+    finally { setResumeUploading(false) }
     if (fileRef.current) fileRef.current.value = ''
   }
   const handleRemoveResume = async () => {
@@ -164,6 +174,26 @@ export default function ControlBar() {
 
   return (
     <div className="border-t border-bg-tertiary bg-bg-secondary px-3 md:px-4 py-2.5 flex-shrink-0 space-y-1.5">
+      {showColdStartHint && (
+        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>请先选择音频设备，再点击「开始」开始面试。</span>
+        </div>
+      )}
+      {!wsConnected && (
+        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+          <span>连接已断开，</span>
+          <button type="button" onClick={() => window.location.reload()} className="text-accent-blue hover:underline font-medium">
+            点击重试
+          </button>
+        </div>
+      )}
+      {allModelsUnavailable && (
+        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>所有模型不可用，请检查 API 与网络。</span>
+        </div>
+      )}
       {!hasLoopback && platformInfo?.needs_virtual_device && (
         <div className="flex items-start gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-2 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -267,7 +297,7 @@ export default function ControlBar() {
             <button onClick={handleStop} disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 bg-accent-red hover:bg-accent-red/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
               <Square className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">停止</span>
+              <span className="hidden sm:inline">结束面试</span>
             </button>
           </>
         ) : (
@@ -279,10 +309,15 @@ export default function ControlBar() {
         )}
 
         <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
-        {resumeFile || config?.has_resume ? (
+        {resumeUploading ? (
+          <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs flex-shrink-0 text-text-muted">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span className="hidden sm:inline">解析中…</span>
+          </div>
+        ) : resumeFile || config?.has_resume ? (
           <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs flex-shrink-0">
             <FileText className="w-3.5 h-3.5 text-accent-green" />
-            <span className="text-text-secondary max-w-[60px] truncate hidden sm:inline">{resumeFile || '简历'}</span>
+            <span className="text-text-secondary max-w-[60px] truncate hidden sm:inline">{resumeFile || '简历已上传'}</span>
             <button onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red"><X className="w-3 h-3" /></button>
           </div>
         ) : (
@@ -304,7 +339,7 @@ export default function ControlBar() {
         <button onClick={handleClear} disabled={clearing}
           className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50">
           {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-          {clearing && <span className="hidden sm:inline">清空中</span>}
+          <span className="hidden sm:inline">{clearing ? '清空中' : '清空内容'}</span>
         </button>
       </div>
 
@@ -334,7 +369,7 @@ export default function ControlBar() {
             onCompositionStart={() => { isComposingRef.current = true }}
             onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
             onPaste={handlePaste}
-            placeholder={pastedImage ? "可添加文字说明（可选）..." : "输入问题 / Ctrl+V 粘贴截图..."}
+            placeholder={pastedImage ? "可添加文字说明（可选），Enter 发送" : "输入问题，Enter 发送"}
             className="w-full bg-bg-tertiary text-text-primary text-xs rounded-lg px-3 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue placeholder:text-text-muted pr-8" />
           {pastedImage && (
             <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />

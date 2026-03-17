@@ -74,6 +74,7 @@ interface InterviewState {
   fallbackToast: { from: string; to: string; reason: string } | null
   toastMessage: string | null
   lastWSError: string | null
+  wsConnected: boolean
 
   // Resume optimizer
   resumeOptStreaming: string
@@ -112,6 +113,7 @@ interface InterviewState {
   setFallbackToast: (toast: { from: string; to: string; reason: string } | null) => void
   setToastMessage: (msg: string | null) => void
   setLastWSError: (msg: string | null) => void
+  setWsConnected: (v: boolean) => void
 
   // Resume optimizer actions
   appendResumeOptChunk: (chunk: string) => void
@@ -151,6 +153,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   fallbackToast: null,
   toastMessage: null,
   lastWSError: null,
+  wsConnected: true,
   resumeOptStreaming: '',
   resumeOptResult: '',
   resumeOptLoading: false,
@@ -216,6 +219,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setFallbackToast: (toast) => set({ fallbackToast: toast }),
   setToastMessage: (msg) => set({ toastMessage: msg }),
   setLastWSError: (msg) => set({ lastWSError: msg }),
+  setWsConnected: (v) => set({ wsConnected: v }),
 
   appendResumeOptChunk: (chunk) => set((s) => ({ resumeOptStreaming: s.resumeOptStreaming + chunk })),
   setResumeOptResult: (text) => set({ resumeOptResult: text, resumeOptStreaming: '' }),

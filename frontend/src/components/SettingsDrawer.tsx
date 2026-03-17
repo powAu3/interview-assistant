@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { X, Save, AlertTriangle, HelpCircle, Smartphone, Plus, RotateCcw, GripVertical } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Save, AlertTriangle, HelpCircle, Smartphone, Plus, RotateCcw, GripVertical, Keyboard } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
@@ -84,21 +84,61 @@ export default function SettingsDrawer() {
       useInterviewStore.getState().setConfig(await api.getConfig())
       toggleSettings()
     } catch (e: any) {
-      alert(e.message)
+      useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
     } finally {
       setSaving(false)
     }
   }
+
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const previousActiveRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!settingsOpen || !drawerRef.current) return
+    previousActiveRef.current = document.activeElement as HTMLElement | null
+    const focusable = drawerRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea')
+    const first = focusable[0]
+    if (first) first.focus()
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        toggleSettings()
+        previousActiveRef.current?.focus()
+        return
+      }
+      if (e.key !== 'Tab' || !drawerRef.current) return
+      const focusableNodes = Array.from(drawerRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea'))
+      const len = focusableNodes.length
+      if (len === 0) return
+      const idx = focusableNodes.indexOf(document.activeElement as HTMLElement)
+      if (e.shiftKey) {
+        if (idx <= 0) {
+          e.preventDefault()
+          focusableNodes[len - 1].focus()
+        }
+      } else {
+        if (idx === -1 || idx >= len - 1) {
+          e.preventDefault()
+          focusableNodes[0].focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousActiveRef.current?.focus()
+    }
+  }, [settingsOpen, toggleSettings])
 
   if (!settingsOpen) return null
 
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={toggleSettings} />
-      <div className="fixed right-0 top-0 bottom-0 w-full sm:w-[420px] bg-bg-secondary z-50 shadow-2xl overflow-y-auto border-l border-bg-tertiary">
+      <div ref={drawerRef} className="fixed right-0 top-0 bottom-0 w-full sm:w-[420px] bg-bg-secondary z-50 shadow-2xl overflow-y-auto border-l border-bg-tertiary">
         <div className="flex items-center justify-between px-5 py-4 border-b border-bg-tertiary">
           <h2 className="text-base font-semibold">设置</h2>
-          <button onClick={toggleSettings} className="text-text-muted hover:text-text-primary">
+          <button onClick={toggleSettings} className="text-text-muted hover:text-text-primary" aria-label="关闭">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -201,6 +241,13 @@ export default function SettingsDrawer() {
           </Section>
 
           <QuickPromptsEditor />
+
+          <Section title="快捷键">
+            <div className="flex items-start gap-2 text-xs text-text-secondary">
+              <Keyboard className="w-4 h-4 flex-shrink-0 mt-0.5 text-text-muted" />
+              <p>Boss Key：<kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">Ctrl+B</kbd>（Mac：<kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">Cmd+B</kbd>）可快速隐藏/显示窗口</p>
+            </div>
+          </Section>
 
           <button onClick={handleSave} disabled={saving}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">

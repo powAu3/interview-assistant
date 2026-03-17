@@ -12,6 +12,7 @@ export function useInterviewWS() {
     wsRef.current = ws
 
     ws.onopen = () => {
+      useInterviewStore.getState().setWsConnected(true)
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current)
         reconnectTimer.current = null
@@ -23,6 +24,7 @@ export function useInterviewWS() {
       } catch {}
     }
     ws.onclose = () => {
+      useInterviewStore.getState().setWsConnected(false)
       reconnectTimer.current = window.setTimeout(connect, 2000)
     }
     ws.onerror = () => ws.close()

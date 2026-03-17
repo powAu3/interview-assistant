@@ -65,7 +65,7 @@ function ThinkBlock({ content, isThinking }: { content: string; isThinking: bool
       >
         <div
           ref={contentRef}
-          className="px-3 pb-2.5 text-xs text-text-muted/80 leading-relaxed overflow-y-auto max-h-[200px] whitespace-pre-wrap select-text"
+          className="px-3 pb-2.5 text-xs text-text-secondary leading-relaxed overflow-y-auto max-h-[200px] whitespace-pre-wrap select-text selection:bg-accent-blue/70 selection:text-white"
         >
           {content}
           {isThinking && <span className="inline-block w-1.5 h-3 bg-accent-amber/60 ml-0.5 animate-pulse" />}
@@ -75,28 +75,47 @@ function ThinkBlock({ content, isThinking }: { content: string; isThinking: bool
   )
 }
 
+const SCROLL_NEAR_BOTTOM_THRESHOLD = 120
+
 export default function AnswerPanel() {
-  const { qaPairs, currentStreamingId } = useInterviewStore()
+  const { qaPairs, currentStreamingId, config, toggleSettings } = useInterviewStore()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollContainerRef.current
+    if (!el || !bottomRef.current) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_NEAR_BOTTOM_THRESHOLD
+    if (nearBottom) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [qaPairs, currentStreamingId])
+
+  const needsConfig = config && (!config.models?.length || !config.api_key_set)
 
   if (qaPairs.length === 0) {
     return (
       <div className="flex items-center justify-center h-full p-4">
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-3 max-w-sm">
           <Bot className="w-12 h-12 text-text-muted mx-auto opacity-40" />
           <p className="text-text-muted text-sm">AI 答案将在这里显示</p>
           <p className="text-text-muted text-xs">识别到面试问题后自动生成回答，也可以手动输入问题</p>
+          <p className="text-text-muted text-xs">请先选择音频设备并点击「开始」开始面试。</p>
+          {needsConfig && (
+            <div className="pt-2">
+              <p className="text-text-muted text-xs mb-2">请先在设置中配置模型与 API Key</p>
+              <button type="button" onClick={() => toggleSettings()} className="text-accent-blue text-xs font-medium hover:underline">
+                去设置
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full overflow-y-auto p-3 md:p-4 space-y-5">
+    <div ref={scrollContainerRef} className="h-full overflow-y-auto p-3 md:p-4 space-y-5">
       {qaPairs.map((qa) => {
         const isStreaming = qa.id === currentStreamingId
         return (
@@ -112,7 +131,7 @@ export default function AnswerPanel() {
               <div className="w-7 h-7 rounded-full bg-accent-green/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <span className="text-accent-green text-xs font-bold">A</span>
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 max-h-[280px] overflow-y-auto rounded-lg border border-bg-tertiary/50 bg-bg-tertiary/20 p-3">
                 {qa.thinkContent && (
                   <ThinkBlock content={qa.thinkContent} isThinking={qa.isThinking} />
                 )}
