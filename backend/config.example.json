@@ -57,5 +57,6 @@
   "language": "Python",
   "auto_detect": true,
   "silence_threshold": 0.01,
-  "silence_duration": 1.2
+  "silence_duration": 1.2,
+  "answer_autoscroll_bottom_px": 40
 }

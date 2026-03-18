@@ -73,6 +73,7 @@ python start.py --mode network      # 浏览器访问 http://localhost:18080
 - **配置文件**：`backend/config.json`（从 `config.example.json` 复制）。含模型、STT、岗位/语言、VAD 等。
 - **桌面模式**：`python start.py`。Electron 窗口、屏幕共享隐身、Ctrl+B 隐藏、托盘与置顶。
 - **网络模式**：`python start.py --mode network`。本机与局域网通过浏览器访问，设置面板底部可扫码。
+- **手机端「左屏审题写码」**（仅窄屏 UI 显示）：在手机浏览器打开页面后，点按钮会由**运行后端的电脑**在**后台子进程**截取主屏左半幅并送识图模型（不写该请求的 access 日志，减轻终端被系统抢到前台）。若仍被终端打断，可 `IA_ACCESS_LOG=0 python start.py` 关闭全部 HTTP 访问日志。需 `pip install mss`、macOS「屏幕录制」权限、识图模型。
 - **请勿提交**：`config.json`、`.env`、本地临时文件已加入 `.gitignore`，勿提交含密钥内容。
 
 ---

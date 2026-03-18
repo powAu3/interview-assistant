@@ -265,20 +265,31 @@ def start_server(host: str, port: int):
     # Try direct import first (fastest, works when deps are in current env)
     try:
         import uvicorn
-        uvicorn.run("main:app", host=host, port=port, log_level="info", reload=False)
+        _access_log = os.environ.get("IA_ACCESS_LOG", "1").strip().lower() not in ("0", "false", "no")
+        uvicorn.run(
+            "main:app",
+            host=host,
+            port=port,
+            log_level="info",
+            reload=False,
+            access_log=_access_log,
+        )
         return
     except ImportError:
         pass
 
     # Fallback: subprocess using sys.executable (handles venv / conda / pyenv)
     print("[INFO] uvicorn 不在当前 Python 路径，尝试通过 subprocess 启动...")
-    r = subprocess.run([
+    uv_args = [
         sys.executable, "-m", "uvicorn",
         "main:app",
         "--host", host,
         "--port", str(port),
         "--log-level", "info",
-    ], cwd=BACKEND_DIR)
+    ]
+    if os.environ.get("IA_ACCESS_LOG", "1").strip().lower() in ("0", "false", "no"):
+        uv_args.append("--no-access-log")
+    r = subprocess.run(uv_args, cwd=BACKEND_DIR)
     sys.exit(r.returncode)
 
 

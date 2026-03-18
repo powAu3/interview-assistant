@@ -276,6 +276,41 @@ async def api_ask(body: ManualQuestion):
     return {"ok": True}
 
 
+def _prompt_server_left_screen_code(language: str) -> str:
+    return (
+        f"下图来自运行本后端的电脑「主显示器左半屏」的实时画面，可能包含编程题、OJ 题干、或编辑器里的题目/代码片段。\n\n"
+        f"请根据图中可读信息作答。**代码实现请严格使用语言：{language}**。\n\n"
+        "请按下面三部分组织回答（代码必须放在 Markdown 代码块中并标明语言）：\n\n"
+        "【1 代码】\n"
+        "给出完整、可直接运行或通过常见单测框架执行的解答。\n\n"
+        "【2 思路】\n"
+        "简述核心算法或步骤、关键数据结构；若有，给出时间与空间复杂度。\n\n"
+        "【3 测试用例设计】\n"
+        "说明如何设计用例覆盖正常路径、边界与异常；可列举若干输入与期望输出或行为。\n\n"
+        "若图中无法辨认编程类题目，请简要说明，并给出在当前画面下你能提供的最大帮助。"
+    )
+
+
+@router.post("/ask-from-server-screen")
+async def api_ask_from_server_screen():
+    """手机端等远程客户端触发：截取服务端本机主屏左半幅，送 VL 按配置语言写代码（手机仅 HTTP，不调用系统截图）。"""
+    from services.llm import has_vision_model
+    from services.screen_capture import ScreenCaptureError, capture_primary_left_half_data_url
+
+    if not has_vision_model():
+        raise HTTPException(400, "请至少配置一个支持识图且已填写 API Key 的模型")
+    try:
+        data_url = capture_primary_left_half_data_url()
+    except ScreenCaptureError as e:
+        raise HTTPException(503, str(e))
+    cfg = get_config()
+    text = _prompt_server_left_screen_code(cfg.language)
+    if _pick_model_index((text, data_url, True, "server_screen_left"), set()) is None:
+        raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
+    _submit_answer_task((text, data_url, True, "server_screen_left"))
+    return {"ok": True}
+
+
 @router.get("/session")
 async def api_session():
     session = get_session()

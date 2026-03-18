@@ -41,6 +41,8 @@ export interface AppConfig {
   api_key_set: boolean
   has_resume: boolean
   max_parallel_answers?: number
+  /** 流式答案区：距底部小于该像素则自动滚到底 */
+  answer_autoscroll_bottom_px?: number
 }
 
 export interface QAPair {

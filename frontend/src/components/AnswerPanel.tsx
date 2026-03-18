@@ -70,13 +70,12 @@ function ThinkBlock({ content, isThinking, streamLayout }: { content: string; is
   )
 }
 
-const SCROLL_NEAR_BOTTOM_THRESHOLD = 120
-
 const SOURCE_LABELS: Record<string, string> = {
   conversation_loopback: '会议拾音',
   conversation_mic: '本机麦克风',
   manual_text: '键盘速记',
   manual_image: '截图审题',
+  server_screen_left: '电脑左屏',
 }
 
 function useMarkdownComponents() {
@@ -131,14 +130,16 @@ export default function AnswerPanel() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const mdComponents = useMarkdownComponents()
 
+  const scrollThreshold = Math.max(4, Math.min(400, config?.answer_autoscroll_bottom_px ?? 40))
+
   useEffect(() => {
     const el = scrollContainerRef.current
     if (!el || !bottomRef.current) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_NEAR_BOTTOM_THRESHOLD
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= scrollThreshold
     if (nearBottom) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [qaPairs, streamingIds])
+  }, [qaPairs, streamingIds, scrollThreshold])
 
   const needsConfig = config && (!config.models?.length || !config.api_key_set)
   const multiStream = streamingIds.length > 1

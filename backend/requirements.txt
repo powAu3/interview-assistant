@@ -12,4 +12,6 @@ numpy>=1.24.0
 faster-whisper>=1.0.0
 pydantic>=2.0.0
 qrcode>=7.4
+# 手机端「左屏审题」：服务端截取本机主屏左半部分
+mss>=9.0.0
 opencc-python-reimplemented>=0.1.7

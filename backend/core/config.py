@@ -60,6 +60,8 @@ class AppConfig(BaseModel):
     silence_duration: float = 1.2
     # 同时生成答案的最大路数（受可用模型数限制）
     max_parallel_answers: int = 2
+    # 答案区流式输出时，距底部小于该像素则自动滚到底（调小便于手动上滑回看）
+    answer_autoscroll_bottom_px: int = 40
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))

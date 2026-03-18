@@ -346,6 +346,13 @@ export default function SettingsDrawer() {
     think_mode: false,
   })
   const [saving, setSaving] = useState(false)
+  const [scrollBottomPx, setScrollBottomPx] = useState(40)
+
+  useEffect(() => {
+    if (config?.answer_autoscroll_bottom_px != null) {
+      setScrollBottomPx(config.answer_autoscroll_bottom_px)
+    }
+  }, [config?.answer_autoscroll_bottom_px])
 
   useEffect(() => {
     if (config) {
@@ -504,6 +511,31 @@ export default function SettingsDrawer() {
                   <span className="text-sm font-medium text-text-primary">流式</span>
                   <span className="text-[10px] text-text-muted leading-snug">自上而下通读，无单框高度限制</span>
                 </button>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                <label className="text-xs text-text-secondary">流式跟滚阈值（像素）</label>
+                <p className="text-[10px] text-text-muted leading-snug">
+                  输出流式答案时，若当前已接近底部则自动滚到底；数值越小越容易停在中段方便上滑回看（4～400，可设很小如 8）。
+                </p>
+                <input
+                  type="number"
+                  min={4}
+                  max={400}
+                  value={scrollBottomPx}
+                  onChange={(e) => setScrollBottomPx(Number(e.target.value) || 40)}
+                  onBlur={async () => {
+                    const v = Math.max(4, Math.min(400, scrollBottomPx || 40))
+                    setScrollBottomPx(v)
+                    try {
+                      await api.updateConfig({ answer_autoscroll_bottom_px: v })
+                      useInterviewStore.getState().setConfig(await api.getConfig())
+                      useInterviewStore.getState().setToastMessage('跟滚阈值已保存')
+                    } catch (e: unknown) {
+                      useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '保存失败')
+                    }
+                  }}
+                  className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
+                />
               </div>
             </Section>
 

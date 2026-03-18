@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -15,8 +16,20 @@ from routes import ws, common, interview, practice, knowledge, resume_opt
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
 
+class _SuppressStealthScreenAccessLog(logging.Filter):
+    """手机「左屏审题」请求不写 access 日志，减少终端刷新导致 macOS 把终端抢到前台。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        return "ask-from-server-screen" not in msg
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.getLogger("uvicorn.access").addFilter(_SuppressStealthScreenAccessLog())
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     ws.init_broadcast(loop, queue)
