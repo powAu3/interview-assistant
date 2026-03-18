@@ -19,6 +19,7 @@ class ModelConfig(BaseModel):
     model: str = "gpt-4o-mini"
     supports_think: bool = False
     supports_vision: bool = False
+    enabled: bool = True
 
 
 class AppConfig(BaseModel):
@@ -57,6 +58,8 @@ class AppConfig(BaseModel):
     silence_threshold: float = 0.01
     # Lower default reduces turn latency after interviewer finishes speaking.
     silence_duration: float = 1.2
+    # 同时生成答案的最大路数（受可用模型数限制）
+    max_parallel_answers: int = 2
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))

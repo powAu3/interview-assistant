@@ -35,7 +35,7 @@ export function saveQuickPrompts(prompts: string[]) {
 export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
 
 export default function ControlBar() {
-  const { isRecording, isPaused, devices, config, platformInfo, clearSession, currentStreamingId, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError, wsConnected, modelHealth } = useInterviewStore()
+  const { isRecording, isPaused, devices, config, platformInfo, clearSession, streamingIds, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError, wsConnected, modelHealth } = useInterviewStore()
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
@@ -328,12 +328,14 @@ export default function ControlBar() {
           </button>
         )}
 
-        {currentStreamingId && (
+        {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}
             className="flex items-center gap-1 px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
-            title="取消当前生成">
+            title="取消全部正在生成的回答">
             {cancellingAsk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{cancellingAsk ? '取消中' : '取消生成'}</span>
+            <span className="hidden sm:inline">
+              {cancellingAsk ? '取消中' : streamingIds.length > 1 ? `取消生成 (${streamingIds.length})` : '取消生成'}
+            </span>
           </button>
         )}
         <button onClick={handleClear} disabled={clearing}

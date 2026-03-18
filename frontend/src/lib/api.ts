@@ -17,6 +17,8 @@ export const api = {
   getConfig: () => request('/api/config'),
   updateConfig: (data: Record<string, any>) =>
     request('/api/config', { method: 'POST', body: JSON.stringify(data) }),
+  modelsLayout: (data: { order?: number[]; enabled?: boolean[]; max_parallel_answers?: number }) =>
+    request('/api/config/models-layout', { method: 'POST', body: JSON.stringify(data) }),
   getOptions: () => request('/api/options'),
   getDevices: () => request('/api/devices'),
   uploadResume: async (file: File) => {
@@ -41,6 +43,8 @@ export const api = {
   cancelAsk: () => request('/api/ask/cancel', { method: 'POST' }),
   getSttStatus: () => request('/api/stt/status'),
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
+  /** 当前各模型健康状态（检测中/可用/不可用） */
+  getModelsHealth: () => request<{ health: Record<string, string> }>('/api/models/health'),
 
   // Knowledge
   knowledgeSummary: () => request('/api/knowledge/summary'),

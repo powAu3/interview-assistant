@@ -52,7 +52,10 @@ export function useInterviewWS() {
         s.addTranscription(msg.text)
         break
       case 'answer_start':
-        s.startAnswer(msg.id, msg.question)
+        s.startAnswer(msg.id, msg.question, {
+          source: msg.source,
+          modelName: msg.model_name,
+        })
         break
       case 'answer_think_chunk':
         s.appendThinkChunk(msg.id, msg.chunk)
@@ -61,7 +64,7 @@ export function useInterviewWS() {
         s.appendAnswerChunk(msg.id, msg.chunk)
         break
       case 'answer_done':
-        s.finalizeAnswer(msg.id, msg.question, msg.answer, msg.think)
+        s.finalizeAnswer(msg.id, msg.question, msg.answer, msg.think, msg.model_name)
         break
       case 'answer_cancelled':
         s.cancelAnswer(msg.id)
@@ -111,7 +114,12 @@ export function useInterviewWS() {
         s.setModelHealth(msg.index, msg.status)
         break
       case 'token_update':
-        s.setTokenUsage({ prompt: msg.prompt, completion: msg.completion, total: msg.total })
+        s.setTokenUsage({
+          prompt: msg.prompt,
+          completion: msg.completion,
+          total: msg.total,
+          byModel: msg.by_model ?? {},
+        })
         break
       case 'model_fallback':
         s.setFallbackToast({ from: msg.from, to: msg.to, reason: msg.reason })

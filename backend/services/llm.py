@@ -147,20 +147,46 @@ _RETRYABLE_ERRORS = (
     openai.InternalServerError,
 )
 
-_token_stats = {"prompt": 0, "completion": 0, "total": 0}
+_token_stats: dict = {"prompt": 0, "completion": 0, "total": 0, "by_model": {}}
 _token_lock = threading.Lock()
 
 
 def get_token_stats() -> dict:
     with _token_lock:
-        return dict(_token_stats)
+        out = {
+            "prompt": _token_stats["prompt"],
+            "completion": _token_stats["completion"],
+            "total": _token_stats["total"],
+            "by_model": dict(_token_stats.get("by_model", {})),
+        }
+        return out
 
 
-def _add_tokens(prompt: int, completion: int):
+def _add_tokens(prompt: int, completion: int, model_name: Optional[str] = None):
     with _token_lock:
         _token_stats["prompt"] += prompt
         _token_stats["completion"] += completion
         _token_stats["total"] += prompt + completion
+        if model_name:
+            bm = _token_stats.setdefault("by_model", {})
+            cur = bm.setdefault(model_name, {"prompt": 0, "completion": 0})
+            cur["prompt"] += prompt
+            cur["completion"] += completion
+
+
+def _broadcast_tokens():
+    from routes.ws import broadcast
+
+    with _token_lock:
+        broadcast(
+            {
+                "type": "token_update",
+                "prompt": _token_stats["prompt"],
+                "completion": _token_stats["completion"],
+                "total": _token_stats["total"],
+                "by_model": dict(_token_stats.get("by_model", {})),
+            }
+        )
 
 
 def _sanitize_messages(messages: list[dict], supports_vision: bool) -> list[dict]:
@@ -271,6 +297,7 @@ def chat_stream(
                 if chunk.choices:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
+                    # 与 think_mode 无关：接口若仍返回 reasoning 则照常推送，便于对照与排错
                     if reasoning:
                         yield ("think", reasoning)
                     if delta.content:
@@ -279,13 +306,9 @@ def chat_stream(
                     _add_tokens(
                         chunk.usage.prompt_tokens or 0,
                         chunk.usage.completion_tokens or 0,
+                        model.name,
                     )
-                    broadcast({
-                        "type": "token_update",
-                        "prompt": _token_stats["prompt"],
-                        "completion": _token_stats["completion"],
-                        "total": _token_stats["total"],
-                    })
+                    _broadcast_tokens()
             return
 
         except _RETRYABLE_ERRORS as e:
@@ -296,3 +319,41 @@ def chat_stream(
             return
 
     yield ("text", f"\n\n[所有模型均不可用: {str(last_error)}]")
+
+
+def chat_stream_single_model(
+    model_cfg,
+    messages: list[dict],
+    system_prompt: Optional[str] = None,
+    abort_check: Optional[Callable[[], bool]] = None,
+) -> Generator[tuple[str, str], None, None]:
+    """仅使用指定模型流式输出，不做跨模型降级（供并行答题）。"""
+    cfg = get_config()
+    clean_messages = _sanitize_messages(messages, model_cfg.supports_vision)
+    full_messages: list = []
+    if system_prompt:
+        full_messages.append({"role": "system", "content": system_prompt})
+    full_messages.extend(clean_messages)
+    model_name = model_cfg.name
+    try:
+        response = _try_stream_with_model(model_cfg, full_messages, cfg)
+        for chunk in response:
+            if abort_check and abort_check():
+                return
+            if chunk.choices:
+                delta = chunk.choices[0].delta
+                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
+                # 与 think_mode 无关：并行答题路径同上
+                if reasoning:
+                    yield ("think", reasoning)
+                if delta.content:
+                    yield ("text", delta.content)
+            if hasattr(chunk, "usage") and chunk.usage:
+                _add_tokens(
+                    chunk.usage.prompt_tokens or 0,
+                    chunk.usage.completion_tokens or 0,
+                    model_name,
+                )
+                _broadcast_tokens()
+    except Exception as e:
+        yield ("text", f"\n\n[LLM 错误: {str(e)}]")

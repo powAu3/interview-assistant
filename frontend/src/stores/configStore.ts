@@ -1,9 +1,22 @@
 import { create } from 'zustand'
 
+const ANSWER_LAYOUT_KEY = 'ia_answer_panel_layout'
+
+function readAnswerPanelLayout(): 'cards' | 'stream' {
+  try {
+    const v = localStorage.getItem(ANSWER_LAYOUT_KEY)
+    if (v === 'stream' || v === 'cards') return v
+  } catch {
+    /* ignore */
+  }
+  return 'cards'
+}
+
 export interface ModelInfo {
   name: string
   supports_think: boolean
   supports_vision: boolean
+  enabled?: boolean
 }
 
 export interface AppConfig {
@@ -27,6 +40,7 @@ export interface AppConfig {
   silence_duration: number
   api_key_set: boolean
   has_resume: boolean
+  max_parallel_answers?: number
 }
 
 export interface QAPair {
@@ -36,6 +50,8 @@ export interface QAPair {
   thinkContent: string
   isThinking: boolean
   timestamp: number
+  questionSource?: string
+  modelLabel?: string
 }
 
 export interface PracticeQuestion {
@@ -64,13 +80,23 @@ interface InterviewState {
   isTranscribing: boolean
   transcriptions: string[]
   qaPairs: QAPair[]
+  streamingIds: string[]
   currentStreamingId: string | null
   sttLoaded: boolean
   sttLoading: boolean
 
   settingsOpen: boolean
+  /** 抽屉内标签：设置 = 常用；配置 = 模型/VAD/LLM 等 */
+  settingsDrawerTab: 'general' | 'config'
+  /** 答案区：卡片（独立滚动框）| 流式（自上而下连续阅读，多路生成时纵向排列） */
+  answerPanelLayout: 'cards' | 'stream'
   modelHealth: Record<number, 'checking' | 'ok' | 'error'>
-  tokenUsage: { prompt: number; completion: number; total: number }
+  tokenUsage: {
+    prompt: number
+    completion: number
+    total: number
+    byModel?: Record<string, { prompt: number; completion: number }>
+  }
   fallbackToast: { from: string; to: string; reason: string } | null
   toastMessage: string | null
   lastWSError: string | null
@@ -99,17 +125,30 @@ interface InterviewState {
   setAudioLevel: (v: number) => void
   setTranscribing: (v: boolean) => void
   addTranscription: (text: string) => void
-  startAnswer: (id: string, question: string) => void
+  startAnswer: (
+    id: string,
+    question: string,
+    meta?: { source?: string; modelName?: string },
+  ) => void
   appendThinkChunk: (id: string, chunk: string) => void
   appendAnswerChunk: (id: string, chunk: string) => void
-  finalizeAnswer: (id: string, question: string, answer: string, thinkContent?: string) => void
+  finalizeAnswer: (
+    id: string,
+    question: string,
+    answer: string,
+    thinkContent?: string,
+    modelName?: string,
+  ) => void
   cancelAnswer: (id: string) => void
   setInitData: (data: any) => void
   setSttStatus: (loaded: boolean, loading: boolean) => void
   toggleSettings: () => void
+  openConfigDrawer: () => void
+  setSettingsDrawerTab: (tab: 'general' | 'config') => void
+  setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
   clearSession: () => void
   setModelHealth: (index: number, status: 'checking' | 'ok' | 'error') => void
-  setTokenUsage: (usage: { prompt: number; completion: number; total: number }) => void
+  setTokenUsage: (usage: InterviewState['tokenUsage']) => void
   setFallbackToast: (toast: { from: string; to: string; reason: string } | null) => void
   setToastMessage: (msg: string | null) => void
   setLastWSError: (msg: string | null) => void
@@ -144,12 +183,15 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   isTranscribing: false,
   transcriptions: [],
   qaPairs: [],
+  streamingIds: [],
   currentStreamingId: null,
   sttLoaded: false,
   sttLoading: true,
   settingsOpen: false,
+  settingsDrawerTab: 'general',
+  answerPanelLayout: readAnswerPanelLayout(),
   modelHealth: {},
-  tokenUsage: { prompt: 0, completion: 0, total: 0 },
+  tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
   fallbackToast: null,
   toastMessage: null,
   lastWSError: null,
@@ -175,10 +217,23 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setAudioLevel: (v) => set({ audioLevel: v }),
   setTranscribing: (v) => set({ isTranscribing: v }),
   addTranscription: (text) => set((s) => ({ transcriptions: [...s.transcriptions, text] })),
-  startAnswer: (id, question) =>
+  startAnswer: (id, question, meta) =>
     set((s) => ({
       currentStreamingId: id,
-      qaPairs: [...s.qaPairs, { id, question, answer: '', thinkContent: '', isThinking: false, timestamp: Date.now() / 1000 }],
+      streamingIds: [...s.streamingIds, id],
+      qaPairs: [
+        ...s.qaPairs,
+        {
+          id,
+          question,
+          answer: '',
+          thinkContent: '',
+          isThinking: false,
+          timestamp: Date.now() / 1000,
+          questionSource: meta?.source,
+          modelLabel: meta?.modelName,
+        },
+      ],
     })),
   appendThinkChunk: (id, chunk) =>
     set((s) => ({
@@ -188,16 +243,37 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     set((s) => ({
       qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, answer: qa.answer + chunk, isThinking: false } : qa)),
     })),
-  finalizeAnswer: (id, question, answer, thinkContent) =>
-    set((s) => ({
-      currentStreamingId: null,
-      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, question, answer, thinkContent: thinkContent ?? qa.thinkContent, isThinking: false } : qa)),
-    })),
+  finalizeAnswer: (id, question, answer, thinkContent, modelName) =>
+    set((s) => {
+      const next = s.streamingIds.filter((x) => x !== id)
+      return {
+        currentStreamingId: next.length ? next[next.length - 1] : null,
+        streamingIds: next,
+        qaPairs: s.qaPairs.map((qa) =>
+          qa.id === id
+            ? {
+                ...qa,
+                question,
+                answer,
+                thinkContent: thinkContent ?? qa.thinkContent,
+                isThinking: false,
+                modelLabel: modelName ?? qa.modelLabel,
+              }
+            : qa,
+        ),
+      }
+    }),
   cancelAnswer: (id) =>
-    set((s) => ({
-      currentStreamingId: null,
-      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, answer: '[已取消]', isThinking: false } : qa)),
-    })),
+    set((s) => {
+      const next = s.streamingIds.filter((x) => x !== id)
+      return {
+        currentStreamingId: next.length ? next[next.length - 1] : null,
+        streamingIds: next,
+        qaPairs: s.qaPairs.map((qa) =>
+          qa.id === id ? { ...qa, answer: '[已取消]', isThinking: false } : qa,
+        ),
+      }
+    }),
   setInitData: (data) =>
     set({
       transcriptions: data.transcriptions ?? [],
@@ -206,16 +282,41 @@ export const useInterviewStore = create<InterviewState>((set) => ({
         thinkContent: qa.thinkContent ?? '',
         isThinking: false,
         timestamp: qa.timestamp ?? Date.now() / 1000,
+        questionSource: (qa as any).source ?? qa.questionSource,
+        modelLabel: (qa as any).model_name ?? qa.modelLabel,
       })),
       isRecording: data.is_recording ?? false,
       isPaused: data.is_paused ?? false,
       sttLoaded: data.stt_loaded ?? false,
     }),
   setSttStatus: (loaded, loading) => set({ sttLoaded: loaded, sttLoading: loading }),
-  toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
-  clearSession: () => set({ transcriptions: [], qaPairs: [], currentStreamingId: null, isPaused: false }),
+  toggleSettings: () =>
+    set((s) => {
+      if (s.settingsOpen) return { settingsOpen: false }
+      return { settingsOpen: true, settingsDrawerTab: 'general' }
+    }),
+  openConfigDrawer: () => set({ settingsOpen: true, settingsDrawerTab: 'config' }),
+  setSettingsDrawerTab: (tab) => set({ settingsDrawerTab: tab }),
+  setAnswerPanelLayout: (layout) => {
+    try {
+      localStorage.setItem(ANSWER_LAYOUT_KEY, layout)
+    } catch {
+      /* ignore */
+    }
+    set({ answerPanelLayout: layout })
+  },
+  clearSession: () =>
+    set({ transcriptions: [], qaPairs: [], currentStreamingId: null, streamingIds: [], isPaused: false }),
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
-  setTokenUsage: (usage) => set({ tokenUsage: usage }),
+  setTokenUsage: (usage) =>
+    set({
+      tokenUsage: {
+        prompt: usage.prompt,
+        completion: usage.completion,
+        total: usage.total,
+        byModel: usage.byModel ?? {},
+      },
+    }),
   setFallbackToast: (toast) => set({ fallbackToast: toast }),
   setToastMessage: (msg) => set({ toastMessage: msg }),
   setLastWSError: (msg) => set({ lastWSError: msg }),

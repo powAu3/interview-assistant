@@ -20,7 +20,13 @@ router = APIRouter()
 _model_health: dict[int, str] = {}
 
 
+def get_model_health(index: int) -> Optional[str]:
+    return _model_health.get(index)
+
+
 class ConfigUpdate(BaseModel):
+    models: Optional[list] = None
+    max_parallel_answers: Optional[int] = None
     active_model: Optional[int] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
@@ -44,7 +50,16 @@ async def api_get_config():
     cfg = get_config()
     m = cfg.get_active_model()
     return {
-        "models": [{"name": mdl.name, "supports_think": mdl.supports_think, "supports_vision": mdl.supports_vision} for mdl in cfg.models],
+        "models": [
+            {
+                "name": mdl.name,
+                "supports_think": mdl.supports_think,
+                "supports_vision": mdl.supports_vision,
+                "enabled": getattr(mdl, "enabled", True),
+            }
+            for mdl in cfg.models
+        ],
+        "max_parallel_answers": getattr(cfg, "max_parallel_answers", 2),
         "active_model": cfg.active_model,
         "model_name": m.name,
         "temperature": cfg.temperature,
@@ -69,7 +84,14 @@ async def api_get_config():
 
 @router.post("/config")
 async def api_update_config(body: ConfigUpdate):
-    update_config(body.model_dump(exclude_none=True))
+    from core.config import ModelConfig
+
+    d = body.model_dump(exclude_none=True)
+    if "models" in d:
+        d["models"] = [ModelConfig(**x) if isinstance(x, dict) else x for x in d["models"]]
+    if "max_parallel_answers" in d:
+        d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
+    update_config(d)
     if body.whisper_model is not None:
         engine = get_stt_engine()
         if hasattr(engine, "change_model"):
@@ -197,3 +219,45 @@ async def api_get_models_health():
 async def api_token_stats():
     from services.llm import get_token_stats
     return get_token_stats()
+
+
+@router.post("/config/models-layout")
+async def api_models_layout(body: dict):
+    """调整模型顺序、开关与并行路数，不丢失各模型 api_key。"""
+    cfg = get_config()
+    order = body.get("order")
+    if order is not None and isinstance(order, list):
+        models = []
+        seen = set()
+        for i in order:
+            if isinstance(i, int) and 0 <= i < len(cfg.models) and i not in seen:
+                models.append(cfg.models[i])
+                seen.add(i)
+        for i, m in enumerate(cfg.models):
+            if i not in seen:
+                models.append(m)
+    else:
+        models = list(cfg.models)
+    enabled = body.get("enabled")
+    if isinstance(enabled, list):
+        for i in range(min(len(enabled), len(models))):
+            models[i] = models[i].model_copy(update={"enabled": bool(enabled[i])})
+    mp = body.get("max_parallel_answers")
+    updates: dict = {"models": [m.model_dump() for m in models]}
+    if mp is not None:
+        updates["max_parallel_answers"] = max(1, min(8, int(mp)))
+    active = cfg.active_model
+    if order is not None and isinstance(order, list) and order:
+        try:
+            old = cfg.models[active] if 0 <= active < len(cfg.models) else None
+            if old:
+                updates["active_model"] = next(
+                    (j for j, m in enumerate(models) if m.name == old.name and m.model == old.model),
+                    min(active, len(models) - 1),
+                )
+            else:
+                updates["active_model"] = min(active, len(models) - 1)
+        except Exception:
+            updates["active_model"] = 0
+    update_config(updates)
+    return {"ok": True}

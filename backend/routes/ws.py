@@ -53,7 +53,14 @@ async def websocket_endpoint(ws: WebSocket):
             "stt_loaded": engine.is_loaded,
             "transcriptions": session.transcription_history[-50:],
             "qa_pairs": [
-                {"id": qa.id, "question": qa.question, "answer": qa.answer, "timestamp": qa.timestamp}
+                {
+                    "id": qa.id,
+                    "question": qa.question,
+                    "answer": qa.answer,
+                    "timestamp": qa.timestamp,
+                    "source": getattr(qa, "source", "") or "",
+                    "model_name": getattr(qa, "model_name", "") or "",
+                }
                 for qa in session.qa_pairs
             ],
         })

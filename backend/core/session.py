@@ -10,6 +10,8 @@ class QAPair:
     question: str
     answer: str
     timestamp: float = field(default_factory=time.time)
+    source: str = ""
+    model_name: str = ""
 
 
 @dataclass
@@ -21,6 +23,7 @@ class Session:
     is_recording: bool = False
     is_paused: bool = False
     last_device_id: int = 0
+    capture_is_loopback: bool = True
     created_at: float = field(default_factory=time.time)
 
     MAX_HISTORY = 20
@@ -40,11 +43,20 @@ class Session:
         self.conversation_history.append({"role": "assistant", "content": content})
         self._trim_history()
 
-    def add_qa(self, question: str, answer: str) -> QAPair:
+    def add_qa(
+        self,
+        question: str,
+        answer: str,
+        qa_id: Optional[str] = None,
+        source: str = "",
+        model_name: str = "",
+    ) -> QAPair:
         qa = QAPair(
-            id=f"qa-{len(self.qa_pairs)}-{int(time.time())}",
+            id=qa_id or f"qa-{len(self.qa_pairs)}-{int(time.time())}",
             question=question,
             answer=answer,
+            source=source,
+            model_name=model_name,
         )
         self.qa_pairs.append(qa)
         return qa
@@ -89,6 +101,8 @@ class Session:
 
 _session: Optional[Session] = None
 _lock = threading.Lock()
+# 并行答题时对 conversation_history / qa_pairs 的写入需串行
+conversation_lock = threading.RLock()
 
 
 def get_session() -> Session:

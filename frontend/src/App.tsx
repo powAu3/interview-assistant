@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Settings } from 'lucide-react'
+import { Settings, SlidersHorizontal } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { api } from '@/lib/api'
@@ -25,7 +25,8 @@ declare global {
 
 export default function App() {
   useInterviewWS()
-  const { config, setConfig, setDevices, setOptions, toggleSettings, sttLoaded, sttLoading } = useInterviewStore()
+  const { config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, sttLoaded, sttLoading } =
+    useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
   const [appMode, setAppMode] = useState<'assist' | 'practice' | 'knowledge' | 'resume-opt'>('assist')
@@ -138,8 +139,8 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-bg-tertiary bg-bg-secondary flex-shrink-0 gap-2">
-        <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 md:px-4 py-2 border-b border-bg-tertiary bg-bg-secondary flex-shrink-0 gap-y-2">
+        <div className="flex items-center gap-2 flex-shrink-0 min-w-0 flex-wrap">
           <span className="text-base flex-shrink-0">🎙️</span>
           <h1 className="text-sm font-semibold hidden sm:block flex-shrink-0">学习助手</h1>
 
@@ -167,13 +168,41 @@ export default function App() {
             </span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1 ml-1" title={`Prompt: ${tokenUsage.prompt} | Completion: ${tokenUsage.completion}`}>
-            <span className="text-[10px] text-text-muted">Token:</span>
-            <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
-          </div>
+          {tokenUsage.total > 0 && (
+            <div
+              className="hidden sm:flex items-center gap-1 ml-1 cursor-help"
+              title={[
+                `总计 ${tokenUsage.total}（Prompt ${tokenUsage.prompt} + Completion ${tokenUsage.completion}）`,
+                ...Object.entries(tokenUsage.byModel || {}).map(
+                  ([name, v]) => `${name}: P ${v.prompt} · C ${v.completion}`,
+                ),
+              ].join('\n')}
+            >
+              <span className="text-[10px] text-text-muted">Token:</span>
+              <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-wrap w-full sm:w-auto justify-end sm:justify-start border-t border-bg-tertiary/60 pt-2 sm:border-t-0 sm:pt-0">
+          <div className="flex items-center gap-2 mr-auto sm:mr-0 order-first sm:order-none w-full sm:w-auto justify-between sm:justify-start">
+            <span className="text-[10px] font-semibold text-accent-blue/90 tracking-wide whitespace-nowrap">Think · 全局</span>
+            <button
+              type="button"
+              onClick={handleThinkToggle}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-colors cursor-pointer select-none flex-shrink-0
+                ${config?.think_mode
+                  ? 'border-accent-green bg-accent-green/15 text-accent-green shadow-sm shadow-accent-green/10'
+                  : 'border-bg-hover bg-bg-tertiary text-text-muted hover:border-text-muted/40 hover:text-text-primary'}`}
+              title="全局：切换后影响当前及后续所有答题请求（与配置页同步）"
+              aria-label={`Think 全局 ${config?.think_mode ? '开启' : '关闭'}`}
+            >
+              <span className="text-xs font-bold">{config?.think_mode ? '开' : '关'}</span>
+              <span className={`relative inline-flex items-center w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
+                <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${config?.think_mode ? 'translate-x-4' : ''}`} />
+              </span>
+            </button>
+          </div>
           {config?.models && config.models.length > 0 && (
             <div className="relative" ref={modelDropdownRef}>
               <button onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
@@ -202,22 +231,6 @@ export default function App() {
                 </div>
               )}
             </div>
-          )}
-          {activeModel?.supports_think && (
-            <button
-              type="button"
-              onClick={handleThinkToggle}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-colors cursor-pointer select-none
-                ${config?.think_mode
-                  ? 'border-accent-green/50 bg-accent-green/10 text-accent-green'
-                  : 'border-bg-hover bg-bg-tertiary text-text-muted hover:text-text-primary'}`}
-              aria-label={`Think ${config?.think_mode ? 'ON' : 'OFF'}`}
-            >
-              <span className="text-xs font-medium">Think</span>
-              <span className={`relative inline-flex items-center w-8 h-4 rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
-                <span className={`absolute w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${config?.think_mode ? 'translate-x-4' : 'translate-x-0.5'}`} />
-              </span>
-            </button>
           )}
           {editingPos ? (
             <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
@@ -253,8 +266,21 @@ export default function App() {
               <option value="__custom__">自定义...</option>
             </select>
           )}
-          <button onClick={toggleSettings} className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors">
+          <button
+            type="button"
+            onClick={toggleSettings}
+            className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+            title="设置"
+          >
             <Settings className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={openConfigDrawer}
+            className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-accent-blue transition-colors flex-shrink-0"
+            title="配置：模型并行、VAD、LLM"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
       </header>

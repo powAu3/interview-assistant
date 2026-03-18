@@ -42,6 +42,7 @@
     }
   ],
   "active_model": 0,
+  "max_parallel_answers": 2,
   "temperature": 0.5,
   "max_tokens": 4096,
   "think_mode": false,
