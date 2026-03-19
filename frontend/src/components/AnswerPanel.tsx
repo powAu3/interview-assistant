@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Bot, Loader2, Copy, Check, ChevronRight, Brain, Ban, Layers } from 'lucide-react'
+import { Bot, Loader2, Copy, Check, ChevronRight, Brain, Ban, Layers, ArrowDown } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 
 function CopyButton({ text }: { text: string }) {
@@ -131,15 +131,46 @@ export default function AnswerPanel() {
   const mdComponents = useMarkdownComponents()
 
   const scrollThreshold = Math.max(4, Math.min(400, config?.answer_autoscroll_bottom_px ?? 40))
+  const [nearBottom, setNearBottom] = useState(true)
+
+  const updateNearBottom = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const d = el.scrollHeight - el.scrollTop - el.clientHeight
+    setNearBottom(d <= scrollThreshold)
+  }, [scrollThreshold])
 
   useEffect(() => {
     const el = scrollContainerRef.current
     if (!el || !bottomRef.current) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= scrollThreshold
-    if (nearBottom) {
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= scrollThreshold
+    if (atBottom) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [qaPairs, streamingIds, scrollThreshold])
+    updateNearBottom()
+  }, [qaPairs, streamingIds, scrollThreshold, updateNearBottom])
+
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    updateNearBottom()
+    el.addEventListener('scroll', updateNearBottom, { passive: true })
+    const ro = new ResizeObserver(() => updateNearBottom())
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', updateNearBottom)
+      ro.disconnect()
+    }
+  }, [updateNearBottom])
+
+  const hasActiveGeneration =
+    streamingIds.length > 0 || qaPairs.some((q) => q.isThinking)
+  const showScrollToLatestFab = qaPairs.length > 0 && hasActiveGeneration && !nearBottom
+
+  const scrollToLatest = () => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    requestAnimationFrame(() => updateNearBottom())
+  }
 
   const needsConfig = config && (!config.models?.length || !config.api_key_set)
   const multiStream = streamingIds.length > 1
@@ -197,10 +228,11 @@ export default function AnswerPanel() {
   }
 
   return (
-    <div
-      ref={scrollContainerRef}
-      className={`h-full overflow-y-auto px-3 py-3 md:px-4 md:py-4 ${stream ? 'space-y-10' : 'space-y-5'}`}
-    >
+    <div className="relative h-full min-h-0 flex flex-col">
+      <div
+        ref={scrollContainerRef}
+        className={`flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-4 md:py-4 ${stream ? 'space-y-10' : 'space-y-5'}`}
+      >
       {multiStream && (
         <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-amber/10 border border-accent-amber/25 text-accent-amber text-xs font-medium backdrop-blur-sm">
           <Layers className="w-4 h-4 flex-shrink-0" />
@@ -278,6 +310,34 @@ export default function AnswerPanel() {
         )
       })}
       <div ref={bottomRef} />
+      </div>
+
+      {showScrollToLatestFab && (
+        <div className="pointer-events-none absolute bottom-4 right-5 z-20 hidden md:block">
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            title="下方正在生成，点击回到底部"
+            aria-label="滚动到最新生成内容"
+            className="pointer-events-auto flex h-[52px] w-[52px] items-center justify-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-transform hover:scale-105 active:scale-95"
+          >
+            <span className="relative flex h-[52px] w-[52px] items-center justify-center">
+              <span
+                className="absolute inset-0 rounded-full border-[3px] border-sky-300/25"
+                aria-hidden
+              />
+              <span
+                className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-sky-400 border-r-sky-300 animate-spin"
+                style={{ animationDuration: '1.05s' }}
+                aria-hidden
+              />
+              <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white ring-1 ring-black/5">
+                <ArrowDown className="h-[18px] w-[18px] text-neutral-900" strokeWidth={2.75} />
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
