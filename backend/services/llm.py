@@ -175,7 +175,7 @@ def _add_tokens(prompt: int, completion: int, model_name: Optional[str] = None):
 
 
 def _broadcast_tokens():
-    from routes.ws import broadcast
+    from api.realtime.ws import broadcast
 
     with _token_lock:
         broadcast(
@@ -257,7 +257,7 @@ def chat_stream(
     abort_check: Optional[Callable[[], bool]] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'. If abort_check() returns True, stop streaming."""
-    from routes.ws import broadcast
+    from api.realtime.ws import broadcast
 
     cfg = get_config()
     active_model = cfg.get_active_model()

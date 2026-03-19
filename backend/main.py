@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse
 
 from core.config import get_config
 from services.stt import get_stt_engine
-from routes import ws, common, interview, practice, knowledge, resume_opt
+from api.realtime import ws
+from api import common, assist, practice, analytics, resume, jobs
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
@@ -36,7 +37,7 @@ async def lifespan(app: FastAPI):
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     threading.Thread(target=_preload_stt, daemon=True).start()
     yield
-    interview.stop_interview_loop()
+    assist.stop_interview_loop()
     dispatch_task.cancel()
 
 
@@ -60,10 +61,11 @@ app.add_middleware(
 
 app.include_router(ws.router)
 app.include_router(common.router, prefix="/api")
-app.include_router(interview.router, prefix="/api")
+app.include_router(assist.router, prefix="/api")
 app.include_router(practice.router, prefix="/api")
-app.include_router(knowledge.router, prefix="/api")
-app.include_router(resume_opt.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
+app.include_router(resume.router, prefix="/api")
+app.include_router(jobs.router, prefix="/api")
 
 
 if os.path.isdir(FRONTEND_DIR):

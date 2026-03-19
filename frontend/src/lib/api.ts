@@ -73,4 +73,39 @@ export const api = {
   practiceRecord: (action: 'start' | 'stop', device_id?: number) =>
     request('/api/practice/record', { method: 'POST', body: JSON.stringify({ action, device_id }) }),
   practiceStatus: () => request('/api/practice/status'),
+
+  // Job tracker (desktop / local SQLite)
+  jobTrackerStages: () => request<{ stages: string[] }>('/api/job-tracker/stages'),
+  jobTrackerApplications: (params?: { stage?: string; q?: string; sort_by?: string; sort_dir?: string }) => {
+    const sp = new URLSearchParams()
+    if (params?.stage) sp.set('stage', params.stage)
+    if (params?.q) sp.set('q', params.q)
+    if (params?.sort_by) sp.set('sort_by', params.sort_by)
+    if (params?.sort_dir) sp.set('sort_dir', params.sort_dir)
+    const qs = sp.toString()
+    return request<{ items: Record<string, unknown>[] }>(`/api/job-tracker/applications${qs ? `?${qs}` : ''}`)
+  },
+  jobTrackerCreateApplication: (body: Record<string, unknown>) =>
+    request('/api/job-tracker/applications', { method: 'POST', body: JSON.stringify(body) }),
+  jobTrackerPatchApplication: (id: number, body: Record<string, unknown>) =>
+    request(`/api/job-tracker/applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  jobTrackerDeleteApplication: (id: number) =>
+    request(`/api/job-tracker/applications/${id}`, { method: 'DELETE' }),
+  jobTrackerBatchStage: (ids: number[], stage: string) =>
+    request('/api/job-tracker/applications/batch-stage', {
+      method: 'PATCH',
+      body: JSON.stringify({ ids, stage }),
+    }),
+  jobTrackerListOffers: () => request<{ items: Record<string, unknown>[] }>('/api/job-tracker/offers'),
+  jobTrackerUpsertOffer: (body: Record<string, unknown>) =>
+    request('/api/job-tracker/offers', { method: 'POST', body: JSON.stringify(body) }),
+  jobTrackerPatchOffer: (id: number, body: Record<string, unknown>) =>
+    request(`/api/job-tracker/offers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  jobTrackerDeleteOffer: (id: number) =>
+    request(`/api/job-tracker/offers/${id}`, { method: 'DELETE' }),
+  jobTrackerCompare: (offer_ids: number[]) =>
+    request<{ items: Record<string, unknown>[] }>('/api/job-tracker/compare', {
+      method: 'POST',
+      body: JSON.stringify({ offer_ids }),
+    }),
 }

@@ -27,10 +27,16 @@ backend/user_config.json
 *.local
 *.python-version
 
-# SQLite database
+# SQLite database（统一 backend/data/；根目录旧库可手动删除）
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
 backend/knowledge.db
 backend/knowledge.db-shm
 backend/knowledge.db-wal
+backend/job_tracker.db
+backend/job_tracker.db-shm
+backend/job_tracker.db-wal
 
 # Whisper / model cache
 *.bin

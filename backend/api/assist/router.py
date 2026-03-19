@@ -10,8 +10,8 @@ from core.session import get_session, reset_session, conversation_lock
 from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import get_stt_engine, transcription_for_publish
 from services.llm import build_system_prompt, chat_stream_single_model, get_token_stats
-from routes.common import get_model_health
-from routes.ws import broadcast
+from api.common import get_model_health
+from api.realtime.ws import broadcast
 
 router = APIRouter()
 
@@ -295,7 +295,7 @@ def _prompt_server_left_screen_code(language: str) -> str:
 async def api_ask_from_server_screen():
     """手机端等远程客户端触发：截取服务端本机主屏左半幅，送 VL 按配置语言写代码（手机仅 HTTP，不调用系统截图）。"""
     from services.llm import has_vision_model
-    from services.screen_capture import ScreenCaptureError, capture_primary_left_half_data_url
+    from services.capture import ScreenCaptureError, capture_primary_left_half_data_url
 
     if not has_vision_model():
         raise HTTPException(400, "请至少配置一个支持识图且已填写 API Key 的模型")
@@ -580,7 +580,7 @@ def _process_question_parallel(
 
 def _save_knowledge_record(question: str, answer: str):
     try:
-        from services.knowledge import save_record
+        from services.storage.knowledge import save_record
 
         save_record("assist", question, answer)
     except Exception:

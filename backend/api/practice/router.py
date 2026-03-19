@@ -14,7 +14,7 @@ from services.practice import (
     parse_score_from_feedback, PracticeEvaluation,
 )
 from services.llm import _token_stats
-from routes.ws import broadcast
+from api.realtime.ws import broadcast
 
 router = APIRouter()
 
@@ -93,7 +93,7 @@ async def api_practice_submit(body: PracticeSubmitBody):
                 "total": _token_stats["total"],
             })
             try:
-                from services.knowledge import save_record
+                from services.storage.knowledge import save_record
                 save_record("practice", q.question, body.answer.strip(), score)
             except Exception:
                 pass

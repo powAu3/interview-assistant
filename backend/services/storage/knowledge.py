@@ -7,8 +7,9 @@ from typing import Optional
 
 from core.config import get_config
 from services.llm import get_client
+from services.storage.paths import sqlite_path
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "knowledge.db")
+DB_PATH = sqlite_path("knowledge.db")
 _db_lock = threading.Lock()
 
 

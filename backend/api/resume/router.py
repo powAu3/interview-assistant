@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from services.resume_optimizer import optimize_resume_stream
 from services.llm import _token_stats
-from routes.ws import broadcast
+from api.realtime.ws import broadcast
 
 
 router = APIRouter()

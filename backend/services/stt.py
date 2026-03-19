@@ -1,7 +1,7 @@
 """Speech-to-text: faster-whisper (local) or 豆包语音识别 API.
 
-Whisper: language="auto", temperature fallback, hotwords for tech terms.
-Doubao: 火山引擎大模型流式语音识别 API，WebSocket 双流式（小时版 volc.seedasr.sauc.duration）。
+Whisper: language="auto", temperature fallback；技术词见本模块 TECH_VOCAB / TERM_CORRECTIONS。
+Doubao: 火山引擎流式 ASR（小时版）；控制台热词表词文件见仓库 docs/stt/。
 """
 
 import gzip

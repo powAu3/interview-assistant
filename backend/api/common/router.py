@@ -172,7 +172,7 @@ async def api_stt_status():
 
 
 def _check_single_model(index: int):
-    from routes.ws import broadcast
+    from api.realtime.ws import broadcast
     cfg = get_config()
     if index >= len(cfg.models):
         return

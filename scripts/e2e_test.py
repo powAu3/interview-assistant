@@ -117,6 +117,10 @@ def main() -> int:
             ("GET", "/api/session", None),
             ("POST", "/api/clear", "{}"),
             ("POST", "/api/ask/cancel", "{}"),
+            # 能力分析 / 求职看板（api 分包后路径不变）
+            ("GET", "/api/knowledge/summary", None),
+            ("GET", "/api/job-tracker/stages", None),
+            ("GET", "/api/job-tracker/applications", None),
         ]
 
         for method, path, body in tests:

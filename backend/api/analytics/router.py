@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from services.knowledge import get_summary, get_history, reset_all
+from services.storage.knowledge import get_summary, get_history, reset_all
 
 router = APIRouter()
 

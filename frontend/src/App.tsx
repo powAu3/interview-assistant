@@ -10,6 +10,7 @@ import SettingsDrawer from '@/components/SettingsDrawer'
 import PracticeMode from '@/components/PracticeMode'
 import KnowledgeMap from '@/components/KnowledgeMap'
 import ResumeOptimizer from '@/components/ResumeOptimizer'
+import JobTracker from '@/components/JobTracker'
 
 declare global {
   interface Window {
@@ -29,7 +30,18 @@ export default function App() {
     useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
-  const [appMode, setAppMode] = useState<'assist' | 'practice' | 'knowledge' | 'resume-opt'>('assist')
+  const [appMode, setAppMode] = useState<
+    'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
+  >('assist')
+  const [isElectronApp, setIsElectronApp] = useState(false)
+
+  useEffect(() => {
+    setIsElectronApp(typeof window !== 'undefined' && !!window.electronAPI)
+  }, [])
+
+  useEffect(() => {
+    if (appMode === 'job-tracker' && !isElectronApp) setAppMode('assist')
+  }, [appMode, isElectronApp])
   const [editingPos, setEditingPos] = useState(false)
   const [editingLang, setEditingLang] = useState(false)
   const [customInput, setCustomInput] = useState('')
@@ -159,12 +171,15 @@ export default function App() {
 
           {/* Mode tabs — 移动端仅显示实时辅助，其余模式在 sm: 以上才显示 */}
           <div className="flex bg-bg-tertiary rounded-lg p-0.5 ml-1">
-            {([
-              ['assist', '实时辅助'],
-              ['practice', '模拟练习'],
-              ['knowledge', '能力分析'],
-              ['resume-opt', '简历优化'],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ['assist', '实时辅助'],
+                ['practice', '模拟练习'],
+                ['knowledge', '能力分析'],
+                ['resume-opt', '简历优化'],
+                ...(isElectronApp ? [['job-tracker', '求职看板'] as const] : []),
+              ] as const
+            ).map(([key, label]) => (
               <button key={key} onClick={() => setAppMode(key)}
                 className={`px-2 md:px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0
                   ${key !== 'assist' ? 'hidden sm:block' : ''}
@@ -356,6 +371,9 @@ export default function App() {
 
       {/* ── Resume Optimizer ── */}
       {appMode === 'resume-opt' && <ResumeOptimizer />}
+
+      {/* ── Job tracker (Electron only) ── */}
+      {appMode === 'job-tracker' && isElectronApp && <JobTracker />}
 
       {/* Fallback toast */}
       {fallbackToast && (
