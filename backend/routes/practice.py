@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from core.config import get_config
 from services.audio import AudioCapture, VADBuffer, audio_capture
-from services.stt import get_stt_engine
+from services.stt import get_stt_engine, transcription_for_publish
 from services.practice import (
     get_practice, reset_practice,
     generate_questions, evaluate_answer_stream, generate_report_stream,
@@ -225,9 +225,13 @@ def _practice_record_worker():
                 try:
                     text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
                                             position=cfg.position, language=cfg.language)
-                    if text.strip():
-                        _practice_answer_buf.append(text.strip())
-                        broadcast({"type": "practice_transcription", "text": text.strip()})
+                    min_sig = getattr(
+                        get_config(), "transcription_min_sig_chars", 2
+                    )
+                    pub = transcription_for_publish(text, min_sig)
+                    if pub:
+                        _practice_answer_buf.append(pub)
+                        broadcast({"type": "practice_transcription", "text": pub})
                 except Exception:
                     pass
 
@@ -236,9 +240,13 @@ def _practice_record_worker():
             try:
                 text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
                                          position=cfg.position, language=cfg.language)
-                if text.strip():
-                    _practice_answer_buf.append(text.strip())
-                    broadcast({"type": "practice_transcription", "text": text.strip()})
+                min_sig = getattr(
+                    get_config(), "transcription_min_sig_chars", 2
+                )
+                pub = transcription_for_publish(text, min_sig)
+                if pub:
+                    _practice_answer_buf.append(pub)
+                    broadcast({"type": "practice_transcription", "text": pub})
             except Exception:
                 pass
     except Exception as e:

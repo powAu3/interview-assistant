@@ -140,6 +140,64 @@ def _get_t2s_converter():
     return _t2s_converter
 
 
+# 中日韩统一表意文字（用于慢语速 ASR 在相邻汉字间插入「，」的合并）
+_CJK = r"\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
+
+
+def _normalize_slow_speech_commas(text: str) -> str:
+    """慢语速时模型常在相邻汉字间插入逗号，如「你，好。做一下，自，我，介，绍」。
+
+    策略：
+    - 相邻「汉字，汉字」出现不少于 2 处时，整段迭代合并（慢读长句）。
+    - 仅 1 处且全句汉字数 <=3 时再合并（如「你，好」），避免误伤「中国，美国」。
+    - 不处理含空格的逗号片段，以免误伤正常停顿。
+    """
+    if not text:
+        return text
+    pat_adj_fw = re.compile(rf"([{_CJK}])，([{_CJK}])")
+    pat_adj_ascii = re.compile(rf"([{_CJK}]),([{_CJK}])")
+
+    def count_adjacent_cjk_commas(s: str) -> int:
+        return len(pat_adj_fw.findall(s)) + len(pat_adj_ascii.findall(s))
+
+    def cjk_len(s: str) -> int:
+        return len(re.findall(rf"[{_CJK}]", s))
+
+    adj = count_adjacent_cjk_commas(text)
+    n_cjk = cjk_len(text)
+    # 多处「字，字」视为慢语速；仅一处且总长很短时再合并（如「你，好」），避免「中国，美国」
+    should_merge_all = adj >= 2
+    should_merge_short = adj == 1 and n_cjk <= 3
+    if not (should_merge_all or should_merge_short):
+        return text
+
+    t = text
+    prev = None
+    while prev != t:
+        prev = t
+        t = pat_adj_fw.sub(r"\1\2", t)
+        t = pat_adj_ascii.sub(r"\1\2", t)
+    return t
+
+
+def transcription_significant_len(text: str) -> int:
+    """有效字符数：仅统计汉字、英文、数字（不含标点与空白），用于过滤「嗯」等短语气词。"""
+    if not text:
+        return 0
+    return len(re.findall(rf"[{_CJK}A-Za-z0-9]", text))
+
+
+def transcription_for_publish(text: str, min_significant_chars: int = 2) -> Optional[str]:
+    """若去标点后的有效字符不足阈值，返回 None（不写入历史、不广播、不触发自动答题）。"""
+    t = (text or "").strip()
+    if not t:
+        return None
+    need = max(1, int(min_significant_chars))
+    if transcription_significant_len(t) < need:
+        return None
+    return t
+
+
 def _build_initial_prompt(position: str, language: str) -> str:
     """Short demonstration prompt for Whisper.
 
@@ -159,6 +217,7 @@ def _postprocess(text: str) -> str:
         text = converter.convert(text)
     for pattern, replacement in TERM_CORRECTIONS.items():
         text = re.sub(pattern, replacement, text)
+    text = _normalize_slow_speech_commas(text)
     return text.strip()
 
 

@@ -43,6 +43,8 @@ export interface AppConfig {
   max_parallel_answers?: number
   /** 流式答案区：距底部小于该像素则自动滚到底 */
   answer_autoscroll_bottom_px?: number
+  /** 转写有效字符下限（去标点后计汉字/字母/数字），低于则不展示、不自动答题 */
+  transcription_min_sig_chars?: number
 }
 
 export interface QAPair {

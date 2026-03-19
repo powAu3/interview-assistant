@@ -342,6 +342,7 @@ export default function SettingsDrawer() {
     doubao_stt_boosting_table_id: '',
     silence_threshold: 0.01,
     silence_duration: 1.2,
+    transcription_min_sig_chars: 2,
     auto_detect: true,
     think_mode: false,
   })
@@ -367,6 +368,7 @@ export default function SettingsDrawer() {
         doubao_stt_boosting_table_id: config.doubao_stt_boosting_table_id ?? '',
         silence_threshold: config.silence_threshold,
         silence_duration: config.silence_duration,
+        transcription_min_sig_chars: config.transcription_min_sig_chars ?? 2,
         auto_detect: config.auto_detect,
         think_mode: config.think_mode ?? false,
       })
@@ -587,6 +589,25 @@ export default function SettingsDrawer() {
               {form.stt_provider === 'doubao' && (
                 <p className="text-[11px] text-text-muted">豆包密钥与 Resource ID 等在 backend/config.json 中配置。</p>
               )}
+              <Field
+                label="转写最少有效字"
+                hint="去标点只计汉字/英文/数字；低于则不写入转写区、不触发自动答题（如过滤「嗯」）"
+              >
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={form.transcription_min_sig_chars}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      transcription_min_sig_chars: Math.max(1, parseInt(e.target.value, 10) || 1),
+                    })
+                  }
+                  className="input-field"
+                />
+              </Field>
             </Section>
 
             <ModelsParallelEditor />

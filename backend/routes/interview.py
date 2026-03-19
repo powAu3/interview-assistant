@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from core.config import get_config
 from core.session import get_session, reset_session, conversation_lock
 from services.audio import AudioCapture, VADBuffer, audio_capture
-from services.stt import get_stt_engine
+from services.stt import get_stt_engine, transcription_for_publish
 from services.llm import build_system_prompt, chat_stream_single_model, get_token_stats
 from routes.common import get_model_health
 from routes.ws import broadcast
@@ -420,16 +420,20 @@ def _interview_worker():
                         position=cfg.position,
                         language=cfg.language,
                     )
-                    if text.strip():
-                        session.add_transcription(text)
-                        broadcast({"type": "transcription", "text": text})
+                    min_sig = getattr(
+                        get_config(), "transcription_min_sig_chars", 2
+                    )
+                    pub = transcription_for_publish(text, min_sig)
+                    if pub:
+                        session.add_transcription(pub)
+                        broadcast({"type": "transcription", "text": pub})
                         if cfg.auto_detect:
                             src = (
                                 "conversation_loopback"
                                 if session.capture_is_loopback
                                 else "conversation_mic"
                             )
-                            _submit_answer_task((text, None, False, src))
+                            _submit_answer_task((pub, None, False, src))
                 except Exception as e:
                     broadcast({"type": "error", "message": f"转写错误: {e}"})
                 finally:
@@ -441,9 +445,13 @@ def _interview_worker():
                 text = engine.transcribe(
                     remaining, AudioCapture.SAMPLE_RATE, position=cfg.position, language=cfg.language
                 )
-                if text.strip():
-                    session.add_transcription(text)
-                    broadcast({"type": "transcription", "text": text})
+                min_sig = getattr(
+                    get_config(), "transcription_min_sig_chars", 2
+                )
+                pub = transcription_for_publish(text, min_sig)
+                if pub:
+                    session.add_transcription(pub)
+                    broadcast({"type": "transcription", "text": pub})
             except Exception:
                 pass
     except Exception as e:

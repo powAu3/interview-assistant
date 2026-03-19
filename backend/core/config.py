@@ -62,6 +62,8 @@ class AppConfig(BaseModel):
     max_parallel_answers: int = 2
     # 答案区流式输出时，距底部小于该像素则自动滚到底（调小便于手动上滑回看）
     answer_autoscroll_bottom_px: int = 40
+    # 转写广播/入历史/自动答题：去标点后的有效字符（中英数字）至少为该值；过滤「嗯」等
+    transcription_min_sig_chars: int = 2
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))

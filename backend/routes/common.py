@@ -44,6 +44,7 @@ class ConfigUpdate(BaseModel):
     silence_threshold: Optional[float] = None
     silence_duration: Optional[float] = None
     answer_autoscroll_bottom_px: Optional[int] = None
+    transcription_min_sig_chars: Optional[int] = None
 
 
 @router.get("/config")
@@ -79,6 +80,7 @@ async def api_get_config():
         "silence_threshold": cfg.silence_threshold,
         "silence_duration": cfg.silence_duration,
         "answer_autoscroll_bottom_px": max(4, min(400, getattr(cfg, "answer_autoscroll_bottom_px", 40))),
+        "transcription_min_sig_chars": max(1, min(50, getattr(cfg, "transcription_min_sig_chars", 2))),
         "has_resume": bool(cfg.resume_text),
         "api_key_set": bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here")),
     }
@@ -95,6 +97,8 @@ async def api_update_config(body: ConfigUpdate):
         d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
     if "answer_autoscroll_bottom_px" in d:
         d["answer_autoscroll_bottom_px"] = max(4, min(400, int(d["answer_autoscroll_bottom_px"])))
+    if "transcription_min_sig_chars" in d:
+        d["transcription_min_sig_chars"] = max(1, min(50, int(d["transcription_min_sig_chars"])))
     update_config(d)
     if body.whisper_model is not None:
         engine = get_stt_engine()

@@ -58,5 +58,6 @@
   "auto_detect": true,
   "silence_threshold": 0.01,
   "silence_duration": 1.2,
-  "answer_autoscroll_bottom_px": 40
+  "answer_autoscroll_bottom_px": 40,
+  "transcription_min_sig_chars": 2
 }
