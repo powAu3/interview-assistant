@@ -56,7 +56,7 @@ export default function OfferCompareModal({ open, items, onClose }: Props) {
             <table className="w-full border-collapse text-xs min-w-[640px]">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-[#16161f] text-left py-2 px-3 text-text-muted font-bold border-b border-bg-hover w-28">
+                  <th className="sticky left-0 z-10 bg-bg-tertiary text-left py-2 px-3 text-text-muted font-bold border-b border-bg-hover w-28">
                     维度
                   </th>
                   {items.map((o) => (

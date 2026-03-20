@@ -1,7 +1,15 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        var k = 'ia-color-scheme'
+        var t = localStorage.getItem(k) || 'vscode-dark-plus'
+        if (['vscode-dark-plus', 'vscode-light-plus', 'vscode-dark-hc'].indexOf(t) < 0) t = 'vscode-dark-plus'
+        document.documentElement.setAttribute('data-theme', t)
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>智能面试学习辅助助手</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236366f1'/%3E%3Crect x='24' y='12' width='16' height='28' rx='8' fill='white'/%3E%3Cpath d='M18 32 a14 14 0 0 0 28 0' stroke='white' stroke-width='3' fill='none'/%3E%3Cline x1='32' y1='46' x2='32' y2='52' stroke='white' stroke-width='3'/%3E%3Cline x1='24' y1='52' x2='40' y2='52' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E" />

@@ -16,11 +16,13 @@ import {
   LayoutGrid,
   AlignVerticalSpaceAround,
   SlidersHorizontal,
+  Palette,
 } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { DEFAULT_QUICK_PROMPTS, getQuickPrompts, saveQuickPrompts } from './ControlBar'
+import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
 
 function NetworkQRCode() {
   const [qrSrc, setQrSrc] = useState<string | null>(null)
@@ -176,7 +178,7 @@ function ModelsParallelEditor() {
         <div>
           <h3 className="text-sm font-semibold text-text-primary">多模型答题</h3>
           <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
-            列表越靠上优先级越高；拖拽左侧手柄调整顺序。仅启用的模型会参与作答。
+            顶栏「优先」模型会最先被分配题目（空闲且可用时）；多路并行时其余题目按<strong className="text-text-secondary">本列表从上到下的顺序</strong>依次占剩余槽位。拖拽左侧手柄调整顺序，仅启用的模型参与作答。
           </p>
         </div>
         <button
@@ -329,6 +331,8 @@ export default function SettingsDrawer() {
     setSettingsDrawerTab,
     answerPanelLayout,
     setAnswerPanelLayout,
+    colorScheme,
+    setColorScheme,
   } = useInterviewStore()
 
   const [form, setForm] = useState({
@@ -500,6 +504,36 @@ export default function SettingsDrawer() {
                 语音识别: {sttLoaded ? '就绪' : sttLoading ? '加载中…' : '未就绪'}（{config?.stt_provider === 'doubao' ? '豆包' : 'Whisper'}）
               </span>
             </div>
+
+            <Section title="配色方案（参考 VS Code）">
+              <p className="text-[11px] text-text-muted -mt-1 leading-relaxed">
+                仅切换背景、文字与代码高亮主题，<strong className="text-text-secondary">不改变字体族</strong>。
+                选中文本颜色已按各主题单独设置，避免浅色字配浅色底。
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                {COLOR_SCHEME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setColorScheme(opt.id)
+                      useInterviewStore.getState().setToastMessage(`已切换为 ${opt.label}`)
+                    }}
+                    className={`flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      colorScheme === opt.id
+                        ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
+                        : 'border-bg-hover bg-bg-tertiary/30 hover:border-bg-hover'
+                    }`}
+                  >
+                    <span className="text-sm font-medium text-text-primary flex items-center gap-2">
+                      <Palette className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />
+                      {opt.label}
+                    </span>
+                    <span className="text-[10px] text-text-muted leading-snug pl-6">{opt.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
 
             <Section title="答案展示方式">
               <p className="text-[11px] text-text-muted -mt-1">多路模型同时生成时，流式模式下各路答案自上而下依次排开，整页滚动阅读。</p>
@@ -754,11 +788,17 @@ export default function SettingsDrawer() {
 
       <style>{`
         .input-field {
-          width: 100%; background: #1a1a24; color: #e2e8f0; font-size: 0.75rem;
-          border-radius: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid #24243a;
-          outline: none; transition: border-color 0.15s;
+          width: 100%;
+          background: rgb(var(--c-bg-tertiary));
+          color: rgb(var(--c-text-primary));
+          font-size: 0.75rem;
+          border-radius: 0.5rem;
+          padding: 0.5rem 0.75rem;
+          border: 1px solid rgb(var(--c-bg-hover));
+          outline: none;
+          transition: border-color 0.15s;
         }
-        .input-field:focus { border-color: #6366f1; }
+        .input-field:focus { border-color: rgb(var(--c-accent-blue)); }
       `}</style>
     </>
   )

@@ -8,10 +8,101 @@
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
   overflow: hidden;
+}
+
+/* ========== 主题变量（与 tailwind.config 中 rgb(var(--c-*) / <alpha>) 对应）========== */
+
+[data-theme='vscode-dark-plus'] {
+  --c-bg-primary: 15 15 18;
+  --c-bg-secondary: 26 26 36;
+  --c-bg-tertiary: 36 36 58;
+  --c-bg-hover: 42 42 68;
+  --c-text-primary: 226 232 240;
+  --c-text-secondary: 148 163 184;
+  --c-text-muted: 100 116 139;
+  --c-accent-blue: 99 102 241;
+  --c-accent-green: 34 197 94;
+  --c-accent-red: 239 68 68;
+  --c-accent-amber: 245 158 11;
+  --c-scrollbar-thumb: 51 65 85;
+  --c-scrollbar-thumb-hover: 71 85 105;
+  --c-selection-bg: 99 102 241;
+  --c-selection-fg: 255 255 255;
+  --c-md-code-bg: 30 41 59;
+  --c-md-pre-bg: 15 23 42;
+  --c-md-pre-border: 30 41 59;
+  --c-md-strong: 226 232 240;
+  --c-md-blockquote: 148 163 184;
+  --c-code-shell-bg: 11 18 32;
+  --c-code-header-bg: 17 26 46;
+  --c-code-inline-bg: 27 36 56;
+  --c-code-inline-fg: 219 234 254;
+}
+
+[data-theme='vscode-light-plus'] {
+  --c-bg-primary: 255 255 255;
+  --c-bg-secondary: 243 243 243;
+  --c-bg-tertiary: 237 237 237;
+  --c-bg-hover: 228 228 228;
+  --c-text-primary: 30 30 30;
+  --c-text-secondary: 80 80 80;
+  --c-text-muted: 110 110 110;
+  --c-accent-blue: 0 92 197;
+  --c-accent-green: 16 124 16;
+  --c-accent-red: 196 43 28;
+  --c-accent-amber: 184 134 11;
+  --c-scrollbar-thumb: 180 180 180;
+  --c-scrollbar-thumb-hover: 150 150 150;
+  --c-selection-bg: 0 95 184;
+  --c-selection-fg: 255 255 255;
+  --c-md-code-bg: 240 240 240;
+  --c-md-pre-bg: 246 248 250;
+  --c-md-pre-border: 220 220 220;
+  --c-md-strong: 30 30 30;
+  --c-md-blockquote: 80 80 80;
+  --c-code-shell-bg: 246 248 250;
+  --c-code-header-bg: 237 241 245;
+  --c-code-inline-bg: 234 242 250;
+  --c-code-inline-fg: 12 99 141;
+}
+
+[data-theme='vscode-dark-hc'] {
+  --c-bg-primary: 0 0 0;
+  --c-bg-secondary: 10 10 10;
+  --c-bg-tertiary: 26 26 26;
+  --c-bg-hover: 42 42 42;
+  --c-text-primary: 255 255 255;
+  --c-text-secondary: 220 220 220;
+  --c-text-muted: 180 180 180;
+  --c-accent-blue: 58 150 221;
+  --c-accent-green: 106 185 48;
+  --c-accent-red: 255 80 80;
+  --c-accent-amber: 255 198 0;
+  --c-scrollbar-thumb: 100 100 100;
+  --c-scrollbar-thumb-hover: 160 160 160;
+  --c-selection-bg: 255 255 0;
+  --c-selection-fg: 0 0 0;
+  --c-md-code-bg: 0 0 0;
+  --c-md-pre-bg: 0 0 0;
+  --c-md-pre-border: 128 128 128;
+  --c-md-strong: 255 255 255;
+  --c-md-blockquote: 200 200 200;
+  --c-code-shell-bg: 0 0 0;
+  --c-code-header-bg: 20 20 20;
+  --c-code-inline-bg: 30 30 30;
+  --c-code-inline-fg: 255 255 200;
+}
+
+/* 文本选中：保证各主题下对比度足够，不依赖字体（仅改颜色） */
+::selection {
+  background: rgb(var(--c-selection-bg) / 0.45);
+  color: rgb(var(--c-selection-fg));
 }
 
 ::-webkit-scrollbar {
@@ -23,37 +114,64 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgb(var(--c-scrollbar-thumb));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgb(var(--c-scrollbar-thumb-hover));
 }
 
-.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
-.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
 
-.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
   margin-top: 1em;
   margin-bottom: 0.5em;
   font-weight: 600;
+  color: rgb(var(--c-text-primary));
 }
-.markdown-body h1 { font-size: 1.25rem; }
-.markdown-body h2 { font-size: 1.125rem; }
-.markdown-body h3 { font-size: 1rem; }
-.markdown-body p { margin-bottom: 0.5em; line-height: 1.7; }
-.markdown-body ul, .markdown-body ol { margin-left: 1.5em; margin-bottom: 0.5em; }
-.markdown-body li { margin-bottom: 0.25em; line-height: 1.6; }
+.markdown-body h1 {
+  font-size: 1.25rem;
+}
+.markdown-body h2 {
+  font-size: 1.125rem;
+}
+.markdown-body h3 {
+  font-size: 1rem;
+}
+.markdown-body p {
+  margin-bottom: 0.5em;
+  line-height: 1.7;
+  color: rgb(var(--c-text-secondary));
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin-left: 1.5em;
+  margin-bottom: 0.5em;
+  color: rgb(var(--c-text-secondary));
+}
+.markdown-body li {
+  margin-bottom: 0.25em;
+  line-height: 1.6;
+}
 .markdown-body code {
-  background: #1e293b;
+  background: rgb(var(--c-md-code-bg));
   padding: 0.125em 0.375em;
   border-radius: 0.25rem;
   font-size: 0.875em;
+  color: rgb(var(--c-code-inline-fg));
 }
 .markdown-body pre {
-  background: #0f172a;
-  border: 1px solid #1e293b;
+  background: rgb(var(--c-md-pre-bg));
+  border: 1px solid rgb(var(--c-md-pre-border));
   border-radius: 0.5rem;
   padding: 1em;
   overflow-x: auto;
@@ -62,20 +180,39 @@ html, body, #root {
 .markdown-body pre code {
   background: transparent;
   padding: 0;
+  color: inherit;
 }
-.markdown-body strong { color: #e2e8f0; }
+.markdown-body strong {
+  color: rgb(var(--c-md-strong));
+}
 .markdown-body blockquote {
-  border-left: 3px solid #6366f1;
+  border-left: 3px solid rgb(var(--c-accent-blue));
   padding-left: 1em;
-  color: #94a3b8;
+  color: rgb(var(--c-md-blockquote));
   margin-bottom: 0.5em;
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .animate-pulse-dot {
   animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* 答案区 Prism 代码块外壳（随主题变量） */
+.code-block-shell {
+  box-shadow: 0 0 0 1px rgb(var(--c-accent-blue) / 0.08);
+  border: 1px solid rgb(var(--c-accent-blue) / 0.35);
+  background: rgb(var(--c-code-shell-bg));
+}
+.code-block-head {
+  background: rgb(var(--c-code-header-bg));
+  border-bottom: 1px solid rgb(var(--c-accent-blue) / 0.2);
 }

@@ -165,15 +165,15 @@ export default function OfferEditModal({ open, application, offer, onClose, onSa
       <style>{`
         .input-jt {
           width: 100%;
-          background: #1a1a24;
-          color: #e2e8f0;
+          background: rgb(var(--c-bg-tertiary));
+          color: rgb(var(--c-text-primary));
           font-size: 0.75rem;
           border-radius: 0.5rem;
           padding: 0.5rem 0.75rem;
-          border: 1px solid #24243a;
+          border: 1px solid rgb(var(--c-bg-hover));
           outline: none;
         }
-        .input-jt:focus { border-color: #6366f1; }
+        .input-jt:focus { border-color: rgb(var(--c-accent-blue)); }
       `}</style>
     </div>
   )

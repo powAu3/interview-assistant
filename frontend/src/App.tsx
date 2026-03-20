@@ -87,6 +87,7 @@ export default function App() {
   const handleModelChange = async (active_model: number) => {
     await api.updateConfig({ active_model })
     setConfig(await api.getConfig())
+    useInterviewStore.getState().setToastMessage('已设为优先答题模型（实时辅助优先占用该路）')
   }
   const handleThinkToggle = async () => {
     await api.updateConfig({ think_mode: !config?.think_mode })
@@ -233,10 +234,15 @@ export default function App() {
           </div>
           {config?.models && config.models.length > 0 && (
             <div className="relative" ref={modelDropdownRef}>
-              <button onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                className="flex items-center gap-1.5 bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover hover:border-accent-blue transition-colors max-w-[130px] md:max-w-[160px]">
+              <button
+                type="button"
+                onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+                title="优先答题模型：实时辅助会优先把题目分给该模型（空闲且可用时）；多题并行时其余题目按「配置」里模型顺序依次占剩余路。"
+                className="flex items-center gap-1.5 bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover hover:border-accent-blue transition-colors max-w-[130px] md:max-w-[160px]"
+              >
                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`} />
-                <span className="truncate">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
+                <span className="text-[9px] text-accent-blue/90 font-medium flex-shrink-0 hidden sm:inline">优先</span>
+                <span className="truncate min-w-0">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
                 <svg className="w-3 h-3 flex-shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {modelDropdownOpen && (

@@ -1,4 +1,10 @@
 import { create } from 'zustand'
+import type { ColorSchemeId } from '@/lib/colorScheme'
+import {
+  COLOR_SCHEME_STORAGE_KEY,
+  readStoredColorScheme,
+  applyColorSchemeToDocument,
+} from '@/lib/colorScheme'
 
 const ANSWER_LAYOUT_KEY = 'ia_answer_panel_layout'
 
@@ -98,6 +104,8 @@ interface InterviewState {
   settingsDrawerTab: 'general' | 'config'
   /** 答案区：卡片（独立滚动框）| 流式（自上而下连续阅读，多路生成时纵向排列） */
   answerPanelLayout: 'cards' | 'stream'
+  /** 界面配色（VS Code 风格，见 index.css data-theme） */
+  colorScheme: ColorSchemeId
   modelHealth: Record<number, 'checking' | 'ok' | 'error'>
   tokenUsage: {
     prompt: number
@@ -154,6 +162,7 @@ interface InterviewState {
   openConfigDrawer: () => void
   setSettingsDrawerTab: (tab: 'general' | 'config') => void
   setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
+  setColorScheme: (id: ColorSchemeId) => void
   clearSession: () => void
   setModelHealth: (index: number, status: 'checking' | 'ok' | 'error') => void
   setTokenUsage: (usage: InterviewState['tokenUsage']) => void
@@ -198,6 +207,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   settingsOpen: false,
   settingsDrawerTab: 'general',
   answerPanelLayout: readAnswerPanelLayout(),
+  colorScheme: readStoredColorScheme(),
   modelHealth: {},
   tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
   fallbackToast: null,
@@ -313,6 +323,15 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     }
     set({ answerPanelLayout: layout })
   },
+  setColorScheme: (id) => {
+    try {
+      localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, id)
+    } catch {
+      /* ignore */
+    }
+    applyColorSchemeToDocument(id)
+    set({ colorScheme: id })
+  },
   clearSession: () =>
     set({ transcriptions: [], qaPairs: [], currentStreamingId: null, streamingIds: [], isPaused: false }),
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
@@ -359,3 +378,5 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       practiceRecording: false,
     }),
 }))
+
+applyColorSchemeToDocument(readStoredColorScheme())

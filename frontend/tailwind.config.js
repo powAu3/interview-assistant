@@ -6,21 +6,21 @@ export default {
     extend: {
       colors: {
         bg: {
-          primary: '#0f0f12',
-          secondary: '#1a1a24',
-          tertiary: '#24243a',
-          hover: '#2a2a44',
+          primary: 'rgb(var(--c-bg-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--c-bg-secondary) / <alpha-value>)',
+          tertiary: 'rgb(var(--c-bg-tertiary) / <alpha-value>)',
+          hover: 'rgb(var(--c-bg-hover) / <alpha-value>)',
         },
         accent: {
-          blue: '#6366f1',
-          green: '#22c55e',
-          red: '#ef4444',
-          amber: '#f59e0b',
+          blue: 'rgb(var(--c-accent-blue) / <alpha-value>)',
+          green: 'rgb(var(--c-accent-green) / <alpha-value>)',
+          red: 'rgb(var(--c-accent-red) / <alpha-value>)',
+          amber: 'rgb(var(--c-accent-amber) / <alpha-value>)',
         },
         text: {
-          primary: '#e2e8f0',
-          secondary: '#94a3b8',
-          muted: '#64748b',
+          primary: 'rgb(var(--c-text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--c-text-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--c-text-muted) / <alpha-value>)',
         },
       },
     },

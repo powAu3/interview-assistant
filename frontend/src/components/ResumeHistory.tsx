@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { History, Trash2, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { ChevronDown, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { api, type ResumeHistoryItem } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
 
@@ -111,7 +111,7 @@ function ResumeHistoryListBody({
   )
 }
 
-/** 底栏：向上弹出的简历历史 */
+/** 底栏：简历旁小三角展开上传记录（向上弹出） */
 export function ResumeHistoryPopover({ className = '' }: { className?: string }) {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<ResumeHistoryItem[]>([])
@@ -181,30 +181,44 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
   }
 
   return (
-    <div ref={wrapRef} className={`relative ${className}`}>
+    <div ref={wrapRef} className={`relative flex items-stretch self-stretch ${className}`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-bg-hover flex-shrink-0"
-        title="简历上传历史"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="上传记录"
+        title="上传记录"
+        className={`flex items-center justify-center min-w-[1.375rem] px-0.5 rounded-r-lg text-text-muted hover:text-text-primary hover:bg-bg-hover/70 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-blue/50 ${
+          open ? 'text-accent-blue bg-accent-blue/15' : ''
+        }`}
       >
-        <History className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">历史</span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
       </button>
       {open && (
-        <div
-          className="absolute bottom-full mb-1 right-0 z-[80] w-[min(18rem,calc(100vw-2rem))] max-h-72 overflow-y-auto rounded-xl border border-bg-tertiary bg-bg-secondary shadow-xl p-2"
-        >
-          <div className="text-[10px] text-text-muted px-1 pb-2 border-b border-bg-tertiary mb-2">
-            上传记录（最多 {maxN} 条，最近使用的在下方）
+        <div className="absolute bottom-full left-1/2 z-[80] flex -translate-x-1/2 flex-col items-center pointer-events-auto">
+          <div
+            className="w-[min(16.5rem,calc(100vw-1rem))] max-h-[min(17rem,45vh)] overflow-y-auto rounded-xl border border-bg-tertiary bg-bg-secondary shadow-lg shadow-black/25 p-2"
+          >
+            <div className="text-[10px] text-text-muted px-1 pb-1.5 border-b border-bg-tertiary mb-1.5">
+              上传记录（最多 {maxN} 条，最近使用的在下方）
+            </div>
+            <ResumeHistoryListBody
+              items={items}
+              loading={loading}
+              busyId={busyId}
+              max={maxN}
+              onApply={onApply}
+              onDelete={onDelete}
+            />
           </div>
-          <ResumeHistoryListBody
-            items={items}
-            loading={loading}
-            busyId={busyId}
-            max={maxN}
-            onApply={onApply}
-            onDelete={onDelete}
+          {/* 指向下三角，视觉上贴近小箭头 */}
+          <div
+            className="h-0 w-0 border-x-[6px] border-x-transparent border-t-[7px] border-t-bg-secondary -mt-px drop-shadow-sm"
+            aria-hidden
           />
         </div>
       )}

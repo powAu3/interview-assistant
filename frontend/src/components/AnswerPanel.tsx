@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { oneDark, oneLight, a11yDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Bot, Loader2, Copy, Check, ChevronRight, Brain, Ban, Layers, ArrowDown } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
+import type { ColorSchemeId } from '@/lib/colorScheme'
+
+function prismThemeForScheme(id: ColorSchemeId) {
+  if (id === 'vscode-light-plus') return oneLight
+  if (id === 'vscode-dark-hc') return a11yDark
+  return oneDark
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -60,7 +67,7 @@ function ThinkBlock({ content, isThinking, streamLayout }: { content: string; is
       <div className={`transition-all duration-300 ease-in-out overflow-hidden ${collapsed ? 'max-h-0' : maxH}`}>
         <div
           ref={contentRef}
-          className={`px-3 pb-2.5 text-xs text-text-secondary leading-relaxed overflow-y-auto ${maxH} whitespace-pre-wrap select-text selection:bg-accent-blue/70 selection:text-white`}
+          className={`px-3 pb-2.5 text-xs text-text-secondary leading-relaxed overflow-y-auto ${maxH} whitespace-pre-wrap select-text`}
         >
           {content}
           {isThinking && <span className="inline-block w-1.5 h-3 bg-accent-amber/60 ml-0.5 animate-pulse" />}
@@ -78,7 +85,8 @@ const SOURCE_LABELS: Record<string, string> = {
   server_screen_left: '电脑左屏',
 }
 
-function useMarkdownComponents() {
+function useMarkdownComponents(colorScheme: ColorSchemeId) {
+  const prismStyle = prismThemeForScheme(colorScheme)
   return useMemo(
     () => ({
       code({ className, children, ...props }: { className?: string; children?: React.ReactNode } & Record<string, unknown>) {
@@ -87,13 +95,13 @@ function useMarkdownComponents() {
         if (match) {
           const lang = match[1].toLowerCase()
           return (
-            <div className="my-3 rounded-xl border border-accent-blue/35 bg-[#0b1220] shadow-[0_0_0_1px_rgba(59,130,246,0.08)] overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 bg-[#111a2e] border-b border-accent-blue/20">
-                <span className="text-[11px] uppercase tracking-wide text-accent-blue/90 font-semibold">{lang}</span>
+            <div className="code-block-shell my-3 rounded-xl overflow-hidden">
+              <div className="code-block-head flex items-center justify-between px-3 py-2">
+                <span className="text-[11px] uppercase tracking-wide text-accent-blue font-semibold">{lang}</span>
                 <CopyButton text={codeStr} />
               </div>
               <SyntaxHighlighter
-                style={oneDark}
+                style={prismStyle}
                 language={lang}
                 PreTag="div"
                 customStyle={{
@@ -101,7 +109,7 @@ function useMarkdownComponents() {
                   borderRadius: 0,
                   fontSize: '0.82rem',
                   lineHeight: 1.55,
-                  background: '#0b1220',
+                  background: 'rgb(var(--c-code-shell-bg))',
                   padding: '0.9rem 1rem',
                 }}
                 codeTagProps={{ style: { fontFamily: 'JetBrains Mono, Consolas, monospace' } }}
@@ -113,22 +121,29 @@ function useMarkdownComponents() {
           )
         }
         return (
-          <code className="px-1.5 py-0.5 rounded-md bg-[#1b2438] border border-accent-blue/25 text-[#dbeafe]" {...props}>
+          <code
+            className="px-1.5 py-0.5 rounded-md border border-accent-blue/25"
+            style={{
+              background: 'rgb(var(--c-code-inline-bg))',
+              color: 'rgb(var(--c-code-inline-fg))',
+            }}
+            {...props}
+          >
             {children}
           </code>
         )
       },
     }),
-    [],
+    [prismStyle, colorScheme],
   )
 }
 
 export default function AnswerPanel() {
-  const { qaPairs, streamingIds, config, toggleSettings, answerPanelLayout } = useInterviewStore()
+  const { qaPairs, streamingIds, config, toggleSettings, answerPanelLayout, colorScheme } = useInterviewStore()
   const stream = answerPanelLayout === 'stream'
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const mdComponents = useMarkdownComponents()
+  const mdComponents = useMarkdownComponents(colorScheme)
 
   const scrollThreshold = Math.max(4, Math.min(400, config?.answer_autoscroll_bottom_px ?? 40))
   const [nearBottom, setNearBottom] = useState(true)

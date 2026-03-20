@@ -320,30 +320,41 @@ export default function ControlBar() {
           </button>
         )}
 
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
-        {resumeUploading ? (
-          <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs flex-shrink-0 text-text-muted">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span className="hidden sm:inline">解析中…</span>
-          </div>
-        ) : resumeFile || config?.has_resume ? (
-          <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs flex-shrink-0">
-            <FileText className="w-3.5 h-3.5 text-accent-green" />
-            <span className="text-text-secondary max-w-[60px] truncate hidden sm:inline">{resumeFile || config?.resume_active_filename || '简历已上传'}</span>
-            <button type="button" onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline hidden sm:inline">
-              更换
+        <div
+          className={`hidden md:inline-flex items-stretch flex-shrink-0 rounded-lg border bg-bg-tertiary overflow-visible ${
+            resumeUploading || resumeFile || config?.has_resume
+              ? 'border-bg-hover'
+              : 'border-dashed border-bg-hover/90'
+          }`}
+        >
+          <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
+          {resumeUploading ? (
+            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs text-text-muted rounded-l-lg">
+              <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+              <span className="hidden sm:inline">解析中…</span>
+            </div>
+          ) : resumeFile || config?.has_resume ? (
+            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs rounded-l-lg min-w-0 max-w-[200px]">
+              <FileText className="w-3.5 h-3.5 text-accent-green flex-shrink-0" />
+              <span className="text-text-secondary truncate hidden sm:inline">{resumeFile || config?.resume_active_filename || '简历已上传'}</span>
+              <button type="button" onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline hidden sm:inline flex-shrink-0">
+                更换
+              </button>
+              <button type="button" onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red flex-shrink-0"><X className="w-3 h-3" /></button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1 pl-2 pr-1 py-2 text-text-secondary text-xs transition-colors rounded-l-lg hover:bg-bg-hover/60"
+            >
+              <Upload className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="hidden sm:inline whitespace-nowrap">简历</span>
             </button>
-            <button type="button" onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red"><X className="w-3 h-3" /></button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-dashed border-bg-hover flex-shrink-0">
-            <Upload className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">简历</span>
-          </button>
-        )}
-
-        <ResumeHistoryPopover />
+          )}
+          <div className="w-px shrink-0 bg-bg-hover/70 self-stretch my-1" aria-hidden />
+          <ResumeHistoryPopover />
+        </div>
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
+import { isLightColorScheme } from '@/lib/colorScheme'
 import { api } from '@/lib/api'
 import { FileSearch, Upload, FileText, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -7,7 +8,9 @@ import { ResumeHistoryPanel } from '@/components/ResumeHistory'
 
 export default function ResumeOptimizer() {
   const [jdText, setJdText] = useState('')
-  const { config, setConfig, resumeOptStreaming, resumeOptResult, resumeOptLoading, setToastMessage } = useInterviewStore()
+  const { config, setConfig, resumeOptStreaming, resumeOptResult, resumeOptLoading, setToastMessage, colorScheme } =
+    useInterviewStore()
+  const lightMarkdown = isLightColorScheme(colorScheme)
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -126,7 +129,9 @@ export default function ResumeOptimizer() {
             </div>
           </div>
         ) : (
-          <div className="prose prose-invert prose-sm max-w-none
+          <div
+            className={`prose prose-sm max-w-none markdown-body
+            ${lightMarkdown ? '' : 'prose-invert'}
             prose-headings:text-text-primary prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
             prose-p:text-text-secondary prose-p:text-xs prose-p:leading-relaxed
             prose-li:text-text-secondary prose-li:text-xs
@@ -134,7 +139,8 @@ export default function ResumeOptimizer() {
             prose-table:text-xs
             prose-th:text-text-primary prose-th:bg-bg-tertiary prose-th:px-2 prose-th:py-1
             prose-td:text-text-secondary prose-td:px-2 prose-td:py-1 prose-td:border-bg-hover
-          ">
+          `}
+          >
             <ReactMarkdown>{displayText}</ReactMarkdown>
             {resumeOptLoading && (
               <span className="inline-block w-1.5 h-3 bg-accent-blue animate-pulse rounded-sm ml-0.5" />
