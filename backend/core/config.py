@@ -53,6 +53,8 @@ class AppConfig(BaseModel):
     position: str = "后端开发"
     language: str = "Python"
     resume_text: Optional[str] = None
+    # 当前生效的简历对应的历史记录 id（写入 config.json；简历正文仍不入库）
+    resume_active_history_id: Optional[int] = None
 
     auto_detect: bool = True
     silence_threshold: float = 0.01

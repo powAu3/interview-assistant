@@ -13,6 +13,27 @@ async function request<T = any>(url: string, opts?: RequestInit): Promise<T> {
   return res.json()
 }
 
+export interface ResumeHistoryItem {
+  id: number
+  original_filename: string
+  file_size: number
+  created_at: number
+  last_used_at: number
+  parsed_ok: boolean
+  preview: string
+  parse_error: string | null
+  is_active: boolean
+}
+
+export interface ResumeUploadResult {
+  ok: boolean
+  history_id: number
+  parsed: boolean
+  length?: number | null
+  preview?: string | null
+  parse_error?: string | null
+}
+
 export const api = {
   getConfig: () => request('/api/config'),
   updateConfig: (data: Record<string, any>) =>
@@ -21,7 +42,7 @@ export const api = {
     request('/api/config/models-layout', { method: 'POST', body: JSON.stringify(data) }),
   getOptions: () => request('/api/options'),
   getDevices: () => request('/api/devices'),
-  uploadResume: async (file: File) => {
+  uploadResume: async (file: File): Promise<ResumeUploadResult> => {
     const fd = new FormData()
     fd.append('file', file)
     const res = await fetch(`${BASE}/api/resume`, { method: 'POST', body: fd })
@@ -32,6 +53,14 @@ export const api = {
     return res.json()
   },
   deleteResume: () => request('/api/resume', { method: 'DELETE' }),
+  resumeHistory: () => request<{ items: ResumeHistoryItem[]; max: number }>('/api/resume/history'),
+  resumeHistoryApply: (id: number) =>
+    request<{ ok: boolean; history_id: number; length: number; preview: string }>(
+      `/api/resume/history/${id}/apply`,
+      { method: 'POST' },
+    ),
+  resumeHistoryDelete: (id: number) =>
+    request<{ ok: boolean }>(`/api/resume/history/${id}`, { method: 'DELETE' }),
   start: (device_id: number) =>
     request('/api/start', { method: 'POST', body: JSON.stringify({ device_id }) }),
   stop: () => request('/api/stop', { method: 'POST' }),

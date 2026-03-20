@@ -31,6 +31,8 @@ backend/user_config.json
 backend/data/*.db
 backend/data/*.db-wal
 backend/data/*.db-shm
+# 用户上传的简历原件
+backend/data/resume_uploads/
 backend/knowledge.db
 backend/knowledge.db-shm
 backend/knowledge.db-wal

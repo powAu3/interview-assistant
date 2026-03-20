@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle, Zap, Loader2 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
+import { ResumeHistoryPopover } from '@/components/ResumeHistory'
 
 const DEFAULT_QUICK_PROMPTS = [
   '写代码实现',
@@ -63,6 +64,12 @@ export default function ControlBar() {
       window.removeEventListener('quick-prompts-updated', onStorage)
     }
   }, [])
+
+  useEffect(() => {
+    const name = config?.resume_active_filename
+    if (name) setResumeFile(name)
+    else if (!config?.has_resume) setResumeFile(null)
+  }, [config?.resume_active_filename, config?.has_resume])
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const hasLoopback = devices.some((d) => d.is_loopback)
@@ -160,9 +167,14 @@ export default function ControlBar() {
     setResumeUploading(true)
     setError(null)
     try {
-      await api.uploadResume(file)
+      const res = await api.uploadResume(file)
       setResumeFile(file.name)
       useInterviewStore.getState().setConfig(await api.getConfig())
+      if (res.parsed) {
+        setToastMessage('简历已解析并选用')
+      } else {
+        setToastMessage(`已保存到历史，解析未成功：${res.parse_error || '请检查格式或稍后重试'}`)
+      }
     } catch (err: any) { setError(err.message) }
     finally { setResumeUploading(false) }
     if (fileRef.current) fileRef.current.value = ''
@@ -317,16 +329,21 @@ export default function ControlBar() {
         ) : resumeFile || config?.has_resume ? (
           <div className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary rounded-lg text-xs flex-shrink-0">
             <FileText className="w-3.5 h-3.5 text-accent-green" />
-            <span className="text-text-secondary max-w-[60px] truncate hidden sm:inline">{resumeFile || '简历已上传'}</span>
-            <button onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red"><X className="w-3 h-3" /></button>
+            <span className="text-text-secondary max-w-[60px] truncate hidden sm:inline">{resumeFile || config?.resume_active_filename || '简历已上传'}</span>
+            <button type="button" onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline hidden sm:inline">
+              更换
+            </button>
+            <button type="button" onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red"><X className="w-3 h-3" /></button>
           </div>
         ) : (
-          <button onClick={() => fileRef.current?.click()}
+          <button type="button" onClick={() => fileRef.current?.click()}
             className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-dashed border-bg-hover flex-shrink-0">
             <Upload className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">简历</span>
           </button>
         )}
+
+        <ResumeHistoryPopover />
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}

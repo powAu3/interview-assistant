@@ -40,6 +40,10 @@ export interface AppConfig {
   silence_duration: number
   api_key_set: boolean
   has_resume: boolean
+  /** 当前生效简历在历史中的 id，无则 null */
+  resume_active_history_id?: number | null
+  /** 当前生效简历原始文件名 */
+  resume_active_filename?: string | null
   max_parallel_answers?: number
   /** 流式答案区：距底部小于该像素则自动滚到底 */
   answer_autoscroll_bottom_px?: number

@@ -13,7 +13,13 @@ from core.config import (
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine
-from services.resume import parse_resume_bytes, summarize_resume
+from services.storage.resume_history import (
+    add_upload,
+    apply_entry,
+    delete_entry,
+    get_filename_for_id,
+    list_entries,
+)
 
 router = APIRouter()
 
@@ -82,6 +88,12 @@ async def api_get_config():
         "answer_autoscroll_bottom_px": max(4, min(400, getattr(cfg, "answer_autoscroll_bottom_px", 40))),
         "transcription_min_sig_chars": max(1, min(50, getattr(cfg, "transcription_min_sig_chars", 2))),
         "has_resume": bool(cfg.resume_text),
+        "resume_active_history_id": getattr(cfg, "resume_active_history_id", None),
+        "resume_active_filename": (
+            get_filename_for_id(cfg.resume_active_history_id)
+            if getattr(cfg, "resume_active_history_id", None) is not None
+            else None
+        ),
         "api_key_set": bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here")),
     }
 
@@ -148,20 +160,38 @@ async def api_upload_resume(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "未选择文件")
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(400, "文件大小不能超过 10MB")
     try:
-        text = parse_resume_bytes(content, file.filename)
-        summary = summarize_resume(text)
-        update_config({"resume_text": summary})
-        return {"ok": True, "length": len(summary), "preview": summary[:200]}
-    except Exception as e:
+        return add_upload(content, file.filename)
+    except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @router.delete("/resume")
 async def api_delete_resume():
-    update_config({"resume_text": None})
+    update_config({"resume_text": None, "resume_active_history_id": None})
+    return {"ok": True}
+
+
+@router.get("/resume/history")
+async def api_resume_history():
+    return {"items": list_entries(), "max": 10}
+
+
+@router.post("/resume/history/{entry_id}/apply")
+async def api_resume_history_apply(entry_id: int):
+    try:
+        return apply_entry(entry_id)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/resume/history/{entry_id}")
+async def api_resume_history_delete(entry_id: int):
+    delete_entry(entry_id)
     return {"ok": True}
 
 

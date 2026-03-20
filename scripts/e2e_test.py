@@ -121,6 +121,7 @@ def main() -> int:
             ("GET", "/api/knowledge/summary", None),
             ("GET", "/api/job-tracker/stages", None),
             ("GET", "/api/job-tracker/applications", None),
+            ("GET", "/api/resume/history", None),
         ]
 
         for method, path, body in tests:

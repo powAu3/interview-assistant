@@ -3,10 +3,11 @@ import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { FileSearch, Upload, FileText, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { ResumeHistoryPanel } from '@/components/ResumeHistory'
 
 export default function ResumeOptimizer() {
   const [jdText, setJdText] = useState('')
-  const { config, setConfig, resumeOptStreaming, resumeOptResult, resumeOptLoading } = useInterviewStore()
+  const { config, setConfig, resumeOptStreaming, resumeOptResult, resumeOptLoading, setToastMessage } = useInterviewStore()
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -19,8 +20,15 @@ export default function ResumeOptimizer() {
     setUploading(true)
     setUploadError(null)
     try {
-      await api.uploadResume(file)
+      const res = await api.uploadResume(file)
       setConfig(await api.getConfig())
+      if (res.parsed) {
+        setToastMessage('简历已解析并选用')
+        setUploadError(null)
+      } else {
+        setUploadError(`已保存到历史，解析未成功：${res.parse_error || '请检查格式'}`)
+        setToastMessage('文件已保存，可在历史中「选用」重试解析')
+      }
     } catch (err: any) {
       setUploadError(err.message || '上传失败')
     }
@@ -78,6 +86,8 @@ export default function ResumeOptimizer() {
             </button>
           )}
         </div>
+
+        <ResumeHistoryPanel />
 
         {uploadError && (
           <div className="flex items-center gap-2 bg-accent-red/10 text-accent-red text-xs px-3 py-2 rounded-lg">

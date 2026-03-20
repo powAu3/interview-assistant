@@ -355,16 +355,25 @@ function UploadResumeButton() {
     if (!file) return
     setUploading(true)
     try {
-      await api.uploadResume(file)
+      const res = await api.uploadResume(file)
       useInterviewStore.getState().setConfig(await api.getConfig())
-    } catch {}
+      if (res.parsed) {
+        useInterviewStore.getState().setToastMessage('简历已解析并选用')
+      } else {
+        useInterviewStore.getState().setToastMessage(
+          `已保存到历史，解析未成功：${res.parse_error || '可在底栏「历史」中重试'}`,
+        )
+      }
+    } catch (err) {
+      useInterviewStore.getState().setToastMessage(err instanceof Error ? err.message : '上传失败')
+    }
     setUploading(false)
     if (fileRef.current) fileRef.current.value = ''
   }
 
   return (
     <>
-      <input ref={fileRef} type="file" accept=".pdf,.txt,.md" onChange={handleUpload} className="hidden" />
+      <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleUpload} className="hidden" />
       <button onClick={() => fileRef.current?.click()} disabled={uploading}
         className="mt-2 px-3 py-1.5 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg inline-flex items-center gap-1">
         <Upload className="w-3 h-3" /> {uploading ? '上传中...' : '上传简历'}
