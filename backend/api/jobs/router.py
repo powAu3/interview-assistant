@@ -41,6 +41,13 @@ class BatchStageBody(BaseModel):
     stage: str
 
 
+class ReorderStageBody(BaseModel):
+    """将某阶段下记录的 sort_order 按 ordered_ids 顺序重排（须与该阶段当前 id 集合一致）。"""
+
+    stage: str
+    ordered_ids: list[int]
+
+
 class OfferCreate(BaseModel):
     application_id: int
     base_salary: str = ""
@@ -96,6 +103,14 @@ async def api_create_application(body: ApplicationCreate):
 @router.patch("/job-tracker/applications/batch-stage")
 async def api_batch_stage(body: BatchStageBody):
     n = jt.batch_update_stage(body.ids, body.stage)
+    return {"updated": n}
+
+
+@router.patch("/job-tracker/applications/reorder-stage")
+async def api_reorder_stage(body: ReorderStageBody):
+    n = jt.reorder_stage_applications(body.stage, body.ordered_ids)
+    if n <= 0:
+        raise HTTPException(400, "Invalid stage or ordered_ids does not match current applications in that stage")
     return {"updated": n}
 
 

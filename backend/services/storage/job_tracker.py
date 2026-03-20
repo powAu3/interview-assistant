@@ -217,6 +217,21 @@ def patch_application(app_id: int, data: dict[str, Any]) -> Optional[dict[str, A
     feedback = str(data["feedback"]) if "feedback" in data else existing["feedback"]
     notes = str(data["notes"]) if "notes" in data else existing["notes"]
     sort_order = int(data["sort_order"]) if "sort_order" in data else int(existing.get("sort_order") or 0)
+    # 跨阶段移动且未显式指定 sort_order 时，排到目标列末尾，便于看板插入后再 reorder
+    if (
+        "stage" in data
+        and "sort_order" not in data
+        and data["stage"] in STAGE_VALUES
+        and data["stage"] != existing["stage"]
+    ):
+        with _db_lock:
+            conn = _get_conn()
+            row = conn.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM applications WHERE stage = ?",
+                (data["stage"],),
+            ).fetchone()
+            conn.close()
+        sort_order = int(row[0]) + 1
 
     if "todos" in data:
         todos_json = json.dumps(data["todos"], ensure_ascii=False)
@@ -283,6 +298,33 @@ def batch_update_stage(ids: list[int], stage: str) -> int:
         count = cur.rowcount
         conn.close()
     return count
+
+
+def reorder_stage_applications(stage: str, ordered_ids: list[int]) -> int:
+    """
+    将某阶段下的记录按 ordered_ids 顺序重排 sort_order（0..n-1）。
+    ordered_ids 必须与当前该 stage 下的 id 集合完全一致（双射），否则返回 0。
+    """
+    if stage not in STAGE_VALUES or not ordered_ids:
+        return 0
+    if len(ordered_ids) != len(set(ordered_ids)):
+        return 0
+    current = list_applications(stage=stage, sort_by="sort_order", sort_dir="asc")
+    cur_ids = sorted(int(r["id"]) for r in current)
+    new_ids = sorted(int(i) for i in ordered_ids)
+    if cur_ids != new_ids:
+        return 0
+    now = _now()
+    with _db_lock:
+        conn = _get_conn()
+        for i, aid in enumerate(ordered_ids):
+            conn.execute(
+                "UPDATE applications SET sort_order = ?, updated_at = ? WHERE id = ? AND stage = ?",
+                (i, now, int(aid), stage),
+            )
+        conn.commit()
+        conn.close()
+    return len(ordered_ids)
 
 
 # --- Offers ---
