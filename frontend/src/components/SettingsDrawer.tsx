@@ -347,6 +347,7 @@ export default function SettingsDrawer() {
     think_mode: false,
   })
   const [saving, setSaving] = useState(false)
+  const [generalSaving, setGeneralSaving] = useState(false)
   const [scrollBottomPx, setScrollBottomPx] = useState(40)
 
   useEffect(() => {
@@ -385,6 +386,22 @@ export default function SettingsDrawer() {
       useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** 「设置」页：将跟滚阈值等与后端同步（展示类项已即时生效） */
+  const handleSaveGeneral = async () => {
+    setGeneralSaving(true)
+    try {
+      const v = Math.max(4, Math.min(400, scrollBottomPx || 40))
+      setScrollBottomPx(v)
+      await api.updateConfig({ answer_autoscroll_bottom_px: v })
+      useInterviewStore.getState().setConfig(await api.getConfig())
+      useInterviewStore.getState().setToastMessage('设置已保存')
+    } catch (e: unknown) {
+      useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setGeneralSaving(false)
     }
   }
 
@@ -467,7 +484,7 @@ export default function SettingsDrawer() {
 
         <div className="flex-1 overflow-y-auto min-h-0">
           {/* —— 设置：常用、展示 —— */}
-          <div className={`p-5 space-y-5 ${settingsDrawerTab !== 'general' ? 'hidden' : ''}`}>
+          <div className={`p-5 space-y-5 pb-8 ${settingsDrawerTab !== 'general' ? 'hidden' : ''}`}>
             {platformInfo?.needs_virtual_device && (
               <div className="bg-accent-amber/10 border border-accent-amber/30 rounded-lg p-3 text-xs space-y-2">
                 <div className="flex items-start gap-2">
@@ -553,6 +570,19 @@ export default function SettingsDrawer() {
                 </p>
               </div>
             </Section>
+
+            <p className="text-[10px] text-text-muted px-0.5 -mt-2">
+              答案卡片/流式、快捷词等为本地即时生效；跟滚阈值需点保存写入后端（与配置页一致）。
+            </p>
+            <button
+              type="button"
+              onClick={handleSaveGeneral}
+              disabled={generalSaving}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {generalSaving ? '保存中…' : '保存设置'}
+            </button>
 
             <button
               type="button"
