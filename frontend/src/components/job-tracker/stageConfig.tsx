@@ -122,6 +122,21 @@ export const STAGE_ORDER: Stage[] = [
   'withdrawn',
 ]
 
+/** 已结束阶段（看板可折叠隐藏） */
+export const TERMINAL_STAGES: Stage[] = ['rejected', 'withdrawn']
+
+/** 进行中（不含已拒/已放弃） */
+export const ONGOING_STAGES: Stage[] = STAGE_ORDER.filter((s) => !TERMINAL_STAGES.includes(s))
+
+/** 快捷「下一阶段」：沿 STAGE_ORDER 走一步，不进入已结束列，且 offer 后无「下一」 */
+export function nextStageAfter(current: string): string | null {
+  const i = STAGE_ORDER.indexOf(current as Stage)
+  if (i < 0) return null
+  const next = STAGE_ORDER[i + 1]
+  if (!next || TERMINAL_STAGES.includes(next)) return null
+  return next
+}
+
 export const STAGE_LABELS: Record<string, string> = {
   applied: '已投递',
   written: '笔试',

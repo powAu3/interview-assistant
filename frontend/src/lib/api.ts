@@ -125,6 +125,11 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ ids, stage }),
     }),
+  jobTrackerReorderStage: (stage: string, orderedIds: number[]) =>
+    request<{ updated: number }>('/api/job-tracker/applications/reorder-stage', {
+      method: 'PATCH',
+      body: JSON.stringify({ stage, ordered_ids: orderedIds }),
+    }),
   jobTrackerListOffers: () => request<{ items: Record<string, unknown>[] }>('/api/job-tracker/offers'),
   jobTrackerUpsertOffer: (body: Record<string, unknown>) =>
     request('/api/job-tracker/offers', { method: 'POST', body: JSON.stringify(body) }),

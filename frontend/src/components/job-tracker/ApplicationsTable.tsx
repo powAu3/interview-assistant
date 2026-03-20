@@ -11,7 +11,7 @@ import {
 import dayjs from 'dayjs'
 import { Trash2, Briefcase } from 'lucide-react'
 import type { Application, Offer } from './types'
-import { STAGE_LABELS, STAGE_ORDER } from './stageConfig'
+import { ONGOING_STAGES, STAGE_LABELS, STAGE_ORDER, TERMINAL_STAGES } from './stageConfig'
 
 const columnHelper = createColumnHelper<Application>()
 
@@ -134,7 +134,7 @@ type Props = {
   offerByAppId: Map<number, Offer>
   selectedOfferIds: Set<number>
   toggleOfferSelect: (offerId: number) => void
-  onPatch: (id: number, patch: Partial<Application>) => void
+  onPatch: (id: number, patch: Partial<Application>) => void | Promise<boolean>
   onDelete: (id: number) => void
   onOpenOffer: (app: Application) => void
   dense: boolean
@@ -238,6 +238,10 @@ export default function ApplicationsTable({
           const opts = STAGE_ORDER.includes(st as (typeof STAGE_ORDER)[number])
             ? STAGE_ORDER
             : ([st, ...STAGE_ORDER.filter((x) => x !== st)] as typeof STAGE_ORDER)
+          const ongoingOpts = opts.filter((s) => ONGOING_STAGES.includes(s as (typeof ONGOING_STAGES)[number]))
+          const terminalOpts = opts.filter((s) => TERMINAL_STAGES.includes(s as (typeof TERMINAL_STAGES)[number]))
+          const inGrouped = new Set([...ongoingOpts, ...terminalOpts])
+          const otherOpts = opts.filter((s) => !inGrouped.has(s))
           return (
             <select
               value={st}
@@ -248,7 +252,25 @@ export default function ApplicationsTable({
               }
               onChange={(e) => patch(row.original.id, { stage: e.target.value })}
             >
-              {opts.map((s) => (
+              {ongoingOpts.length > 0 ? (
+                <optgroup label="进行中">
+                  {ongoingOpts.map((s) => (
+                    <option key={s} value={s}>
+                      {STAGE_LABELS[s] ?? s}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {terminalOpts.length > 0 ? (
+                <optgroup label="已结束">
+                  {terminalOpts.map((s) => (
+                    <option key={s} value={s}>
+                      {STAGE_LABELS[s] ?? s}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {otherOpts.map((s) => (
                 <option key={s} value={s}>
                   {STAGE_LABELS[s] ?? s}
                 </option>
@@ -385,7 +407,7 @@ export default function ApplicationsTable({
     <div className="rounded-xl border border-bg-hover/80 bg-bg-secondary/40 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
       <div className="overflow-x-auto max-h-[calc(100vh-220px)] overflow-y-auto">
         <table className="w-full border-collapse text-left min-w-[1100px]">
-          <thead className="sticky top-0 z-20 bg-[#16161f] shadow-sm border-b border-bg-hover">
+          <thead className="sticky top-0 z-20 bg-bg-tertiary shadow-sm border-b border-bg-hover">
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((header) => {
@@ -396,7 +418,7 @@ export default function ApplicationsTable({
                       key={header.id}
                       className={`${headerPad} text-[10px] font-bold uppercase tracking-wider text-text-muted border-b border-bg-hover whitespace-nowrap ${
                         pinned === 'left'
-                          ? 'sticky z-30 bg-[#16161f] shadow-[4px_0_12px_rgba(0,0,0,0.2)]'
+                          ? 'sticky z-30 bg-bg-tertiary shadow-[4px_0_12px_rgba(0,0,0,0.2)]'
                           : ''
                       } ${isCompany ? 'left-0 min-w-[140px]' : ''}`}
                       style={

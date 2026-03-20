@@ -16,11 +16,17 @@ import ApplicationsTable from './job-tracker/ApplicationsTable'
 import KanbanBoard from './job-tracker/KanbanBoard'
 import OfferCompareModal from './job-tracker/OfferCompareModal'
 import OfferEditModal from './job-tracker/OfferEditModal'
-import type { Application, Offer } from './job-tracker/types'
+import type { Application, Offer, Stage } from './job-tracker/types'
 import { parseApplication, parseOffer } from './job-tracker/types'
+import { isLightColorScheme } from '@/lib/colorScheme'
+import { STAGE_LABELS, TERMINAL_STAGES } from './job-tracker/stageConfig'
+
+const SHOW_TERMINAL_STORAGE_KEY = 'ia-jobtracker-show-terminal'
 
 export default function JobTracker() {
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
+  const colorScheme = useInterviewStore((s) => s.colorScheme)
+  const isLight = isLightColorScheme(colorScheme)
   const [applications, setApplications] = useState<Application[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,6 +37,23 @@ export default function JobTracker() {
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareItems, setCompareItems] = useState<Offer[]>([])
   const [offerModalApp, setOfferModalApp] = useState<Application | null>(null)
+  const [showTerminalStages, setShowTerminalStages] = useState(() => {
+    try {
+      const v = localStorage.getItem(SHOW_TERMINAL_STORAGE_KEY)
+      if (v === null) return false
+      return v === '1'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_TERMINAL_STORAGE_KEY, showTerminalStages ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [showTerminalStages])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -73,9 +96,11 @@ export default function JobTracker() {
         const raw = await api.jobTrackerPatchApplication(id, patch as Record<string, unknown>)
         const next = parseApplication(raw as Record<string, unknown>)
         setApplications((prev) => prev.map((x) => (x.id === id ? next : x)))
+        return true
       } catch (e) {
         setToastMessage(e instanceof Error ? e.message : '保存失败')
         load()
+        return false
       }
     },
     [load, setToastMessage],
@@ -106,9 +131,36 @@ export default function JobTracker() {
 
   const onStageChange = useCallback(
     async (appId: number, stage: string) => {
-      await onPatch(appId, { stage })
+      const ok = await onPatch(appId, { stage })
+      if (ok) {
+        setToastMessage(`已移至 ${STAGE_LABELS[stage] ?? stage}`)
+      }
     },
-    [onPatch],
+    [onPatch, setToastMessage],
+  )
+
+  const onReorderInStage = useCallback(
+    async (stage: string, orderedIds: number[]) => {
+      setApplications((prev) =>
+        prev.map((a) => {
+          const i = orderedIds.indexOf(a.id)
+          if (i < 0 || a.stage !== stage) return a
+          return { ...a, sort_order: i }
+        }),
+      )
+      try {
+        await api.jobTrackerReorderStage(stage, orderedIds)
+      } catch (e) {
+        setToastMessage(e instanceof Error ? e.message : '排序失败')
+        load()
+      }
+    },
+    [load, setToastMessage],
+  )
+
+  const terminalApplicationsCount = useMemo(
+    () => applications.filter((a) => TERMINAL_STAGES.includes(a.stage as Stage)).length,
+    [applications],
   )
 
   const addRow = useCallback(async () => {
@@ -165,10 +217,18 @@ export default function JobTracker() {
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg-primary">
-      <div className="relative flex-shrink-0 overflow-hidden border-b border-white/[0.06] px-4 py-3.5 md:px-5">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-indigo-950/40 via-bg-secondary/90 to-violet-950/25" />
-        <div className="pointer-events-none absolute -top-20 right-0 h-40 w-40 rounded-full bg-accent-blue/15 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-64 rounded-full bg-violet-500/10 blur-2xl" />
+      <div
+        className={`relative flex-shrink-0 overflow-hidden border-b px-4 py-3.5 md:px-5 ${
+          isLight ? 'border-bg-hover bg-bg-secondary' : 'border-white/[0.06]'
+        }`}
+      >
+        {!isLight && (
+          <>
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-indigo-950/40 via-bg-secondary/90 to-violet-950/25" />
+            <div className="pointer-events-none absolute -top-20 right-0 h-40 w-40 rounded-full bg-accent-blue/15 blur-3xl" />
+            <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-64 rounded-full bg-violet-500/10 blur-2xl" />
+          </>
+        )}
         <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue/25 to-indigo-600/20 text-accent-blue ring-1 ring-accent-blue/25 shadow-lg shadow-accent-blue/10">
@@ -193,17 +253,25 @@ export default function JobTracker() {
                 placeholder="搜索公司、岗位、城市…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-black/20 border border-white/[0.08] text-xs text-text-primary placeholder:text-text-muted/60 focus:border-accent-blue/50 focus:ring-2 focus:ring-accent-blue/20 focus:outline-none transition-shadow shadow-inner"
+                className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-xs text-text-primary placeholder:text-text-muted/60 focus:border-accent-blue/50 focus:ring-2 focus:ring-accent-blue/20 focus:outline-none transition-shadow shadow-inner ${
+                  isLight ? 'bg-bg-tertiary border border-bg-hover' : 'bg-black/20 border border-white/[0.08]'
+                }`}
               />
             </div>
-            <div className="flex rounded-2xl border border-white/[0.08] bg-black/15 p-1 shadow-inner backdrop-blur-sm">
+            <div
+              className={`flex rounded-2xl border p-1 shadow-inner backdrop-blur-sm ${
+                isLight ? 'border-bg-hover bg-bg-tertiary/80' : 'border-white/[0.08] bg-black/15'
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => setView('table')}
                 className={`px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 rounded-xl transition-all ${
                   view === 'table'
                     ? 'bg-gradient-to-b from-accent-blue to-blue-600 text-white shadow-md shadow-accent-blue/25'
-                    : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
+                    : isLight
+                      ? 'text-text-muted hover:text-text-primary hover:bg-bg-hover'
+                      : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
                 }`}
               >
                 <Table2 className="w-3.5 h-3.5" />
@@ -215,7 +283,9 @@ export default function JobTracker() {
                 className={`px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 rounded-xl transition-all ${
                   view === 'kanban'
                     ? 'bg-gradient-to-b from-violet-600 to-indigo-700 text-white shadow-md shadow-violet-500/25'
-                    : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
+                    : isLight
+                      ? 'text-text-muted hover:text-text-primary hover:bg-bg-hover'
+                      : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
                 }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
@@ -228,7 +298,9 @@ export default function JobTracker() {
               className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-all ${
                 dense
                   ? 'border-accent-blue/40 bg-accent-blue/12 text-accent-blue shadow-sm shadow-accent-blue/10'
-                  : 'border-white/[0.08] bg-black/10 text-text-muted hover:border-white/15 hover:text-text-primary'
+                  : isLight
+                    ? 'border-bg-hover bg-bg-tertiary text-text-muted hover:border-bg-hover hover:text-text-primary'
+                    : 'border-white/[0.08] bg-black/10 text-text-muted hover:border-white/15 hover:text-text-primary'
               }`}
               title="行高"
             >
@@ -238,7 +310,11 @@ export default function JobTracker() {
             <button
               type="button"
               onClick={runCompare}
-              className="px-3 py-2 rounded-xl border border-white/[0.08] bg-black/10 text-xs font-medium text-text-secondary hover:border-amber-500/30 hover:bg-amber-500/5 hover:text-amber-200/90 flex items-center gap-1.5 transition-colors"
+              className={`px-3 py-2 rounded-xl border text-xs font-medium text-text-secondary hover:border-amber-500/30 hover:bg-amber-500/5 flex items-center gap-1.5 transition-colors ${
+                isLight
+                  ? 'border-bg-hover bg-bg-tertiary hover:text-amber-800'
+                  : 'border-white/[0.08] bg-black/10 hover:text-amber-200/90'
+              }`}
             >
               <Scale className="w-3.5 h-3.5" />
               对比 Offer
@@ -247,7 +323,9 @@ export default function JobTracker() {
               type="button"
               onClick={load}
               disabled={loading}
-              className="p-2.5 rounded-xl border border-white/[0.08] bg-black/10 text-text-muted hover:text-accent-blue hover:border-accent-blue/25 disabled:opacity-50 transition-colors"
+              className={`p-2.5 rounded-xl border text-text-muted hover:text-accent-blue hover:border-accent-blue/25 disabled:opacity-50 transition-colors ${
+                isLight ? 'border-bg-hover bg-bg-tertiary' : 'border-white/[0.08] bg-black/10'
+              }`}
               title="刷新"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -267,7 +345,9 @@ export default function JobTracker() {
       <div
         className={`flex-1 min-h-0 overflow-hidden p-3 md:p-4 ${
           view === 'kanban'
-            ? 'bg-gradient-to-b from-bg-primary via-[#0f0f16] to-indigo-950/[0.12]'
+            ? isLight
+              ? 'bg-bg-secondary'
+              : 'bg-gradient-to-b from-bg-primary via-[#0f0f16] to-indigo-950/[0.12]'
             : ''
         }`}
       >
@@ -286,7 +366,15 @@ export default function JobTracker() {
             search={search}
           />
         ) : (
-          <KanbanBoard applications={applications} onStageChange={onStageChange} search={search} />
+          <KanbanBoard
+            applications={applications}
+            onStageChange={onStageChange}
+            onReorderInStage={onReorderInStage}
+            search={search}
+            showTerminalStages={showTerminalStages}
+            onShowTerminalStagesChange={setShowTerminalStages}
+            terminalApplicationsCount={terminalApplicationsCount}
+          />
         )}
       </div>
 
