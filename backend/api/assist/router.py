@@ -80,6 +80,18 @@ def _model_eligible(i: int, m, need_vision: bool) -> bool:
     return True
 
 
+def _dispatch_model_order(cfg) -> list[int]:
+    """
+    实时辅助选路顺序：先顶栏「优先模型」(active_model)，再按配置里当前列表顺序尝试其余模型。
+    与多模型并行配合：优先模型空闲时尽量先用它；多路时其余路按列表顺序占槽。
+    """
+    n = len(cfg.models)
+    if n == 0:
+        return []
+    p = max(0, min(int(cfg.active_model), n - 1))
+    return [p] + [i for i in range(n) if i != p]
+
+
 def _pick_model_index(task: Tuple[str, Optional[str], bool, str], busy: set[int]) -> Optional[int]:
     text, image, manual, source = task
     need_vision = bool(image)
@@ -96,13 +108,16 @@ def _pick_model_index(task: Tuple[str, Optional[str], bool, str], busy: set[int]
             return False
         return True
 
-    for i, m in enumerate(cfg.models):
+    order = _dispatch_model_order(cfg)
+    for i in order:
+        m = cfg.models[i]
         if not ok_basic(i, m):
             continue
         if get_model_health(i) == "error":
             continue
         return i
-    for i, m in enumerate(cfg.models):
+    for i in order:
+        m = cfg.models[i]
         if ok_basic(i, m):
             return i
     return None
