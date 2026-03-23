@@ -16,8 +16,12 @@ from typing import Optional, Any
 
 try:
     import websocket
+    _WS_TIMEOUT = getattr(websocket, "WebSocketTimeoutException", TimeoutError)
+    _WS_CLOSED = getattr(websocket, "WebSocketConnectionClosedException", ConnectionError)
 except ImportError:
     websocket = None
+    _WS_TIMEOUT = TimeoutError
+    _WS_CLOSED = ConnectionError
 
 # ---------------------------------------------------------------------------
 # Vocabulary banks – used for initial_prompt and post-processing corrections
@@ -140,32 +144,40 @@ def _get_t2s_converter():
     return _t2s_converter
 
 
-# 中日韩统一表意文字（用于慢语速 ASR 在相邻汉字间插入「，」的合并）
+# 中日韩统一表意文字（慢语速 ASR 常在相邻汉字间插入逗号/句号，见下方统一归一）
 _CJK = r"\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
 
+# 相邻「汉字 + 标点 + 汉字」：逗号与句号在同一套逻辑里处理，避免到处改
+_PAT_CJK_COMMA_FW = re.compile(rf"([{_CJK}])，([{_CJK}])")
+_PAT_CJK_COMMA_ASCII = re.compile(rf"([{_CJK}]),([{_CJK}])")
+_PAT_CJK_PERIOD_FW = re.compile(rf"([{_CJK}])。([{_CJK}])")
+_PAT_CJK_PERIOD_ASCII = re.compile(rf"([{_CJK}])\.([{_CJK}])")
 
-def _normalize_slow_speech_commas(text: str) -> str:
-    """慢语速时模型常在相邻汉字间插入逗号，如「你，好。做一下，自，我，介，绍」。
+
+def _normalize_slow_speech_intraword_punct(text: str) -> str:
+    """慢语速 ASR 常在**相邻汉字之间**插入逗号或句号，如「你，好」「你。好」「做。一。下，自，我，介，绍」。
+
+    统一在本函数处理（仅此一处；多段 VAD 拼接见 `join_transcription_fragments`，不负责句内标点）。
 
     策略：
-    - 相邻「汉字，汉字」出现不少于 2 处时，整段迭代合并（慢读长句）。
-    - 仅 1 处且全句汉字数 <=3 时再合并（如「你，好」），避免误伤「中国，美国」。
-    - 不处理含空格的逗号片段，以免误伤正常停顿。
+    - 统计「字，字」「字。字」（含半角 , .）出现次数，**合计**判断；
+    - 不少于 2 处时整段迭代去掉中间标点（慢读长句）；
+    - 仅 1 处且全句汉字数 <=3 时再合并（如「你，好」），避免误伤「中国，美国」「你好。请问」等。
+    - 不匹配含空格的片段，以免误伤正常停顿。
     """
     if not text:
         return text
-    pat_adj_fw = re.compile(rf"([{_CJK}])，([{_CJK}])")
-    pat_adj_ascii = re.compile(rf"([{_CJK}]),([{_CJK}])")
 
-    def count_adjacent_cjk_commas(s: str) -> int:
-        return len(pat_adj_fw.findall(s)) + len(pat_adj_ascii.findall(s))
+    def count_adjacent_cjk_punct(s: str) -> int:
+        n = len(_PAT_CJK_COMMA_FW.findall(s)) + len(_PAT_CJK_COMMA_ASCII.findall(s))
+        n += len(_PAT_CJK_PERIOD_FW.findall(s)) + len(_PAT_CJK_PERIOD_ASCII.findall(s))
+        return n
 
     def cjk_len(s: str) -> int:
         return len(re.findall(rf"[{_CJK}]", s))
 
-    adj = count_adjacent_cjk_commas(text)
+    adj = count_adjacent_cjk_punct(text)
     n_cjk = cjk_len(text)
-    # 多处「字，字」视为慢语速；仅一处且总长很短时再合并（如「你，好」），避免「中国，美国」
     should_merge_all = adj >= 2
     should_merge_short = adj == 1 and n_cjk <= 3
     if not (should_merge_all or should_merge_short):
@@ -175,9 +187,15 @@ def _normalize_slow_speech_commas(text: str) -> str:
     prev = None
     while prev != t:
         prev = t
-        t = pat_adj_fw.sub(r"\1\2", t)
-        t = pat_adj_ascii.sub(r"\1\2", t)
+        t = _PAT_CJK_COMMA_FW.sub(r"\1\2", t)
+        t = _PAT_CJK_COMMA_ASCII.sub(r"\1\2", t)
+        t = _PAT_CJK_PERIOD_FW.sub(r"\1\2", t)
+        t = _PAT_CJK_PERIOD_ASCII.sub(r"\1\2", t)
     return t
+
+
+# 旧称：与 _normalize_slow_speech_intraword_punct 为同一实现（仅逗号逻辑已并入其中）
+_normalize_slow_speech_commas = _normalize_slow_speech_intraword_punct
 
 
 def transcription_significant_len(text: str) -> int:
@@ -196,6 +214,18 @@ def transcription_for_publish(text: str, min_significant_chars: int = 2) -> Opti
     if transcription_significant_len(t) < need:
         return None
     return t
+
+
+def join_transcription_fragments(parts: list[str]) -> str:
+    """将 VAD 多段 ASR 拼成一句再送 LLM：中文直接衔接，英文/数字之间补空格。"""
+    qs = [p.strip() for p in parts if p and str(p).strip()]
+    if not qs:
+        return ""
+    acc = qs[0]
+    for q in qs[1:]:
+        need_space = bool(re.search(r"[a-zA-Z0-9]$", acc) and re.match(r"^[a-zA-Z0-9]", q))
+        acc = f"{acc} {q}" if need_space else f"{acc}{q}"
+    return acc.strip()
 
 
 def _build_initial_prompt(position: str, language: str) -> str:
@@ -217,7 +247,7 @@ def _postprocess(text: str) -> str:
         text = converter.convert(text)
     for pattern, replacement in TERM_CORRECTIONS.items():
         text = re.sub(pattern, replacement, text)
-    text = _normalize_slow_speech_commas(text)
+    text = _normalize_slow_speech_intraword_punct(text)
     return text.strip()
 
 
