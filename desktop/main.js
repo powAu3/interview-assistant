@@ -2,6 +2,31 @@ const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, ipcMain } =
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
+
+const pkg = require('./package.json');
+
+/** 应用显示名：环境变量 ELECTRON_APP_DISPLAY_NAME > desktop/app-title.json > package.json appDisplayName > 默认 */
+function loadAppDisplayName() {
+  const env = process.env.ELECTRON_APP_DISPLAY_NAME;
+  if (env && String(env).trim()) return String(env).trim();
+  const titlePath = path.join(__dirname, 'app-title.json');
+  try {
+    const raw = fs.readFileSync(titlePath, 'utf8');
+    const j = JSON.parse(raw);
+    if (j && typeof j.appDisplayName === 'string' && j.appDisplayName.trim()) {
+      return j.appDisplayName.trim();
+    }
+  } catch {
+    /* 无文件或解析失败 */
+  }
+  if (pkg.appDisplayName && String(pkg.appDisplayName).trim()) {
+    return String(pkg.appDisplayName).trim();
+  }
+  return '学习助手';
+}
+
+const APP_DISPLAY_NAME = loadAppDisplayName();
 
 const ROOT = path.resolve(__dirname, '..');
 const BACKEND_DIR = path.join(ROOT, 'backend');
@@ -76,7 +101,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 500,
-    title: '学习助手',
+    title: APP_DISPLAY_NAME,
     show: false,
     // Windows 下不在任务栏显示，只在托盘
     skipTaskbar: isWindows,
@@ -92,6 +117,12 @@ function createWindow() {
   // 每次启动清除缓存，确保加载到最新的前端构建（避免设置里识别引擎等不更新）
   mainWindow.webContents.session.clearCache().then(() => {
     mainWindow.loadURL(SERVER_URL);
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    const t = JSON.stringify(APP_DISPLAY_NAME);
+    mainWindow.webContents.executeJavaScript(`document.title = ${t}`).catch(() => {});
+    mainWindow.setTitle(APP_DISPLAY_NAME);
   });
 
   mainWindow.once('ready-to-show', () => {
@@ -140,7 +171,7 @@ function createTray() {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip('学习助手');
+  tray.setToolTip(APP_DISPLAY_NAME);
 
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
@@ -230,6 +261,11 @@ app.on('before-quit', () => {
 });
 
 app.whenReady().then(async () => {
+  try {
+    app.setName(APP_DISPLAY_NAME);
+  } catch {
+    /* 个别平台/版本可能不支持 */
+  }
   createAppMenu();
   console.log('Starting Python backend...');
   startPythonBackend();
