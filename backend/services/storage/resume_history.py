@@ -27,10 +27,31 @@ def _uploads_dir() -> str:
     return d
 
 
+def _ensure_resume_summary_column(conn: sqlite3.Connection) -> None:
+    """旧库可能缺列，避免 SELECT/UPDATE 报错或 INSERT 与表结构不一致。"""
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(resume_entries)").fetchall()]
+        if not cols or "resume_summary" in cols:
+            return
+        conn.execute("ALTER TABLE resume_entries ADD COLUMN resume_summary TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+
+def _row_get(row: sqlite3.Row, key: str, default: Any = None) -> Any:
+    try:
+        v = row[key]
+        return default if v is None else v
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
 def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    _ensure_resume_summary_column(conn)
     return conn
 
 
@@ -52,8 +73,16 @@ def init_db() -> None:
             )
             """
         )
+        _migrate_add_resume_summary(conn)
         conn.commit()
         conn.close()
+
+
+def _migrate_add_resume_summary(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("ALTER TABLE resume_entries ADD COLUMN resume_summary TEXT")
+    except sqlite3.OperationalError:
+        pass
 
 
 init_db()
@@ -183,8 +212,8 @@ def add_upload(content: bytes, original_filename: str) -> dict[str, Any]:
                 """
                 INSERT INTO resume_entries (
                     original_filename, stored_basename, file_size,
-                    created_at, last_used_at, parsed_ok, preview, parse_error
-                ) VALUES (?,?,?,?,?,?,?,?)
+                    created_at, last_used_at, parsed_ok, preview, parse_error, resume_summary
+                ) VALUES (?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     original_filename[:512],
@@ -195,6 +224,7 @@ def add_upload(content: bytes, original_filename: str) -> dict[str, Any]:
                     1 if parsed_ok else 0,
                     preview_text or "",
                     parse_error,
+                    summary if summary else "",
                 ),
             )
             conn.commit()
@@ -249,10 +279,35 @@ def _read_entry_bytes(entry_id: int) -> tuple[bytes, str, str]:
 
 
 def apply_entry(entry_id: int) -> dict[str, Any]:
-    """从历史选用：重新解析并设为当前简历；更新 last_used_at 到队尾。"""
-    content, original_filename, _ = _read_entry_bytes(entry_id)
+    """从历史选用：若库中已有完整 resume_summary 则直接选用（秒开）；否则从文件解析后写入。"""
     now = time.time()
+    with _db_lock:
+        conn = _conn()
+        row = conn.execute("SELECT * FROM resume_entries WHERE id = ?", (entry_id,)).fetchone()
+        conn.close()
+    if not row:
+        raise FileNotFoundError("记录不存在")
 
+    cached = (_row_get(row, "resume_summary", "") or "").strip()
+    if cached:
+        with _db_lock:
+            conn = _conn()
+            conn.execute(
+                "UPDATE resume_entries SET last_used_at = ? WHERE id = ?",
+                (now, entry_id),
+            )
+            conn.commit()
+            conn.close()
+        update_config({"resume_text": cached, "resume_active_history_id": entry_id})
+        return {
+            "ok": True,
+            "history_id": entry_id,
+            "length": len(cached),
+            "preview": cached[:200],
+            "from_cache": True,
+        }
+
+    content, original_filename, _ = _read_entry_bytes(entry_id)
     try:
         text = parse_resume_bytes(content, original_filename)
         summary = summarize_resume(text)
@@ -265,10 +320,11 @@ def apply_entry(entry_id: int) -> dict[str, Any]:
         conn.execute(
             """
             UPDATE resume_entries
-            SET last_used_at = ?, parsed_ok = 1, preview = ?, parse_error = NULL
+            SET last_used_at = ?, parsed_ok = 1, preview = ?, parse_error = NULL,
+                resume_summary = ?
             WHERE id = ?
             """,
-            (now, preview_text, entry_id),
+            (now, preview_text, summary, entry_id),
         )
         conn.commit()
         conn.close()
@@ -280,6 +336,7 @@ def apply_entry(entry_id: int) -> dict[str, Any]:
         "history_id": entry_id,
         "length": len(summary),
         "preview": summary[:200],
+        "from_cache": False,
     }
 
 
@@ -290,3 +347,50 @@ def delete_entry(entry_id: int) -> None:
         _delete_row_and_file(conn, entry_id)
         conn.commit()
         conn.close()
+
+
+def get_entry_detail(entry_id: int) -> dict[str, Any]:
+    """返回单条历史摘要用于预览/编辑。不在此接口同步全量重解析 PDF（大文件会拖垮请求）。"""
+    cfg = get_config()
+    active_id = cfg.resume_active_history_id
+    with _db_lock:
+        conn = _conn()
+        row = conn.execute("SELECT * FROM resume_entries WHERE id = ?", (entry_id,)).fetchone()
+        conn.close()
+    if not row:
+        raise FileNotFoundError("记录不存在")
+    rs = (_row_get(row, "resume_summary", "") or "").strip()
+    preview = (_row_get(row, "preview", "") or "").strip()
+    # 优先完整摘要；否则仅展示入库时的 preview（通常约 500 字）；选用一次后会写入 resume_summary
+    summary_text = rs if rs else preview
+    base = _row_to_item(row, active_id)
+    base["summary"] = summary_text
+    base["summary_is_full"] = bool(rs)
+    return base
+
+
+def update_entry_summary(entry_id: int, summary: str) -> dict[str, Any]:
+    summary = (summary or "").strip()
+    if len(summary) > 400_000:
+        raise ValueError("简历摘要过长（上限约 40 万字符）")
+    preview_text = summary[:500]
+    with _db_lock:
+        conn = _conn()
+        row = conn.execute("SELECT id FROM resume_entries WHERE id = ?", (entry_id,)).fetchone()
+        if not row:
+            conn.close()
+            raise FileNotFoundError("记录不存在")
+        conn.execute(
+            """
+            UPDATE resume_entries
+            SET resume_summary = ?, preview = ?, parsed_ok = 1, parse_error = NULL
+            WHERE id = ?
+            """,
+            (summary, preview_text, entry_id),
+        )
+        conn.commit()
+        conn.close()
+    cfg = get_config()
+    if cfg.resume_active_history_id == entry_id:
+        update_config({"resume_text": summary})
+    return {"ok": True, "length": len(summary)}
