@@ -1,4 +1,5 @@
-"""本机主显示器左半屏截图：在独立子进程中执行，尽量不抢前台焦点（配合关闭该接口的 access 日志）。"""
+"""本机主显示器截图：在独立子进程中执行，尽量不抢前台焦点（配合关闭该接口的 access 日志）。
+区域由配置 screen_capture_region 决定：full / left_half / right_half / top_half / bottom_half。"""
 
 from __future__ import annotations
 
@@ -11,18 +12,23 @@ class ScreenCaptureError(Exception):
     """截屏不可用（无显示器、无权限、未安装 mss 等）。"""
 
 
-def capture_primary_left_half_data_url() -> str:
+def capture_primary_region_data_url(region: str = "left_half") -> str:
     """
-    在子进程内截取主显示器左半屏，返回 data:image/png;base64,...
+    在子进程内截取主显示器指定区域，返回 data:image/png;base64,...
+    region: full | left_half | right_half | top_half | bottom_half
     - Windows: CREATE_NO_WINDOW，不弹出控制台
     - 与主进程分离 session，降低终端/IDE 因本进程图形调用被抢焦点的概率
     """
     worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_screen_capture_worker.py")
     if not os.path.isfile(worker):
         raise ScreenCaptureError("截屏子进程脚本缺失")
+    valid = ("full", "left_half", "right_half", "top_half", "bottom_half")
+    region = (region or "left_half").strip()
+    if region not in valid:
+        region = "left_half"
 
     kwargs: dict = {
-        "args": [sys.executable, worker],
+        "args": [sys.executable, worker, region],
         "capture_output": True,
         "timeout": 20,
         "stdin": subprocess.DEVNULL,
@@ -55,3 +61,11 @@ def capture_primary_left_half_data_url() -> str:
     if len(raw) < 100:
         raise ScreenCaptureError("截屏数据异常")
     return f"data:image/png;base64,{raw}"
+
+
+def capture_primary_left_half_data_url() -> str:
+    """兼容旧调用：使用配置中的 screen_capture_region，若未注入则用 left_half。"""
+    from core.config import get_config
+    cfg = get_config()
+    region = getattr(cfg, "screen_capture_region", None) or "left_half"
+    return capture_primary_region_data_url(region)
