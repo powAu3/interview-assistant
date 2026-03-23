@@ -55,6 +55,12 @@ export interface AppConfig {
   answer_autoscroll_bottom_px?: number
   /** 转写有效字符下限（去标点后计汉字/字母/数字），低于则不展示、不自动答题 */
   transcription_min_sig_chars?: number
+  /** 多段 ASR 合并：上一段结束后静默超过该秒数再送出；0=每段立即发送 */
+  assist_transcription_merge_gap_sec?: number
+  /** 从首段 ASR 起最长等待（秒），超时强制送出 */
+  assist_transcription_merge_max_sec?: number
+  /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
+  screen_capture_region?: string
 }
 
 export interface QAPair {
@@ -86,7 +92,7 @@ interface InterviewState {
   config: AppConfig | null
   devices: Array<{ id: number; name: string; channels: number; is_loopback: boolean; host_api: string }>
   platformInfo: { platform: string; needs_virtual_device: boolean; instructions: string } | null
-  options: { positions: string[]; languages: string[]; stt_providers?: string[]; whisper_models: string[] } | null
+  options: { positions: string[]; languages: string[]; stt_providers?: string[]; whisper_models: string[]; screen_capture_regions?: string[] } | null
 
   isRecording: boolean
   isPaused: boolean

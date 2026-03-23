@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ChevronDown, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
-import { api, type ResumeHistoryItem } from '@/lib/api'
+import { ChevronDown, Loader2, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
+import { api, type ResumeHistoryDetail, type ResumeHistoryItem } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
 
 function formatShort(ts: number) {
@@ -22,6 +22,162 @@ function formatSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
+function ResumeHistoryDetailModal({
+  entryId,
+  onClose,
+  onSaved,
+}: {
+  entryId: number | null
+  onClose: () => void
+  onSaved?: () => void
+}) {
+  const [detail, setDetail] = useState<ResumeHistoryDetail | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const setToastMessage = useInterviewStore((s) => s.setToastMessage)
+  const setConfig = useInterviewStore((s) => s.setConfig)
+
+  useEffect(() => {
+    if (entryId == null) {
+      setDetail(null)
+      setEditing(false)
+      setText('')
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setEditing(false)
+    api
+      .resumeHistoryDetail(entryId)
+      .then((d) => {
+        if (!cancelled) {
+          setDetail(d)
+          setText(d.summary || '')
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setToastMessage(e instanceof Error ? e.message : '加载失败')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [entryId, setToastMessage])
+
+  const handleSave = async () => {
+    if (entryId == null) return
+    setSaving(true)
+    try {
+      await api.resumeHistoryUpdate(entryId, text)
+      setToastMessage('已保存')
+      setEditing(false)
+      setDetail((d) => (d ? { ...d, summary: text } : d))
+      onSaved?.()
+      setConfig(await api.getConfig())
+    } catch (e: unknown) {
+      setToastMessage(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (entryId == null) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="resume-detail-title"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose()
+      }}
+    >
+      <div
+        className="bg-bg-secondary border border-bg-tertiary rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-bg-tertiary gap-2">
+          <h3 id="resume-detail-title" className="text-sm font-semibold text-text-primary truncate min-w-0">
+            {detail?.original_filename ?? '简历摘要'}
+          </h3>
+          <button
+            type="button"
+            className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary shrink-0"
+            aria-label="关闭"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-3 flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-accent-blue" />
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2 flex-wrap items-center">
+                <button
+                  type="button"
+                  disabled={editing}
+                  onClick={() => setEditing(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-accent-blue/15 text-accent-blue hover:bg-accent-blue/25 disabled:opacity-40"
+                >
+                  编辑
+                </button>
+                {editing && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(false)
+                        setText(detail?.summary ?? '')
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-bg-hover text-text-secondary hover:bg-bg-tertiary"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void handleSave()}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-accent-green/20 text-accent-green hover:bg-accent-green/30 disabled:opacity-50"
+                    >
+                      {saving ? '保存中…' : '保存'}
+                    </button>
+                  </>
+                )}
+              </div>
+              <p className="text-[10px] text-text-muted">
+                以下为写入系统的简历摘要（用于面试上下文）。解析失败时可能仅有片段；编辑保存后若该条为「当前」简历会同步到答题上下文。
+              </p>
+              {detail?.parsed_ok && detail.summary_is_full === false && (
+                <p className="text-[10px] text-accent-amber/90">
+                  当前为节选预览。点击列表中「选用」成功一次后，会写入完整摘要，此处即可显示与编辑全文。
+                </p>
+              )}
+              <textarea
+                readOnly={!editing}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className={`flex-1 min-h-[220px] w-full rounded-lg border border-bg-hover bg-bg-tertiary px-3 py-2 text-xs text-text-primary leading-relaxed resize-y ${
+                  editing ? 'ring-1 ring-accent-blue/30' : 'cursor-default opacity-95'
+                }`}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface ListProps {
   items: ResumeHistoryItem[]
   loading: boolean
@@ -29,6 +185,7 @@ interface ListProps {
   max: number
   onApply: (id: number) => void
   onDelete: (id: number, e: React.MouseEvent) => void
+  onOpenDetail?: (id: number) => void
   emptyHint?: string
 }
 
@@ -39,6 +196,7 @@ function ResumeHistoryListBody({
   max,
   onApply,
   onDelete,
+  onOpenDetail,
   emptyHint = '暂无上传记录',
 }: ListProps) {
   if (loading && items.length === 0) {
@@ -86,6 +244,18 @@ function ResumeHistoryListBody({
             )}
           </div>
           <div className="flex flex-col gap-0.5 shrink-0">
+            {onOpenDetail && (
+              <button
+                type="button"
+                disabled={busyId !== null}
+                title="预览 / 编辑摘要"
+                onClick={() => onOpenDetail(rec.id)}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-bg-hover/80 text-text-secondary hover:text-accent-blue flex items-center justify-center gap-0.5 disabled:opacity-40"
+              >
+                <FileText className="w-3 h-3" />
+                预览
+              </button>
+            )}
             <button
               type="button"
               disabled={busyId !== null}
@@ -114,6 +284,7 @@ function ResumeHistoryListBody({
 /** 底栏：简历旁小三角展开上传记录（向上弹出） */
 export function ResumeHistoryPopover({ className = '' }: { className?: string }) {
   const [open, setOpen] = useState(false)
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [items, setItems] = useState<ResumeHistoryItem[]>([])
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -182,6 +353,11 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
 
   return (
     <div ref={wrapRef} className={`relative flex items-stretch self-stretch ${className}`}>
+      <ResumeHistoryDetailModal
+        entryId={detailId}
+        onClose={() => setDetailId(null)}
+        onSaved={() => void refresh()}
+      />
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -213,6 +389,7 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
               max={maxN}
               onApply={onApply}
               onDelete={onDelete}
+              onOpenDetail={(id) => setDetailId(id)}
             />
           </div>
           {/* 指向下三角，视觉上贴近小箭头 */}
@@ -228,6 +405,7 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
 
 /** 简历优化页：内联展示历史 */
 export function ResumeHistoryPanel() {
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [items, setItems] = useState<ResumeHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -284,6 +462,11 @@ export function ResumeHistoryPanel() {
 
   return (
     <div className="rounded-lg border border-bg-tertiary bg-bg-tertiary/30 p-2 space-y-2">
+      <ResumeHistoryDetailModal
+        entryId={detailId}
+        onClose={() => setDetailId(null)}
+        onSaved={() => void refresh()}
+      />
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-text-muted">上传历史（最多 {maxN} 条，最近在上传或选用的在下方）</span>
         <button
@@ -301,6 +484,7 @@ export function ResumeHistoryPanel() {
         max={maxN}
         onApply={onApply}
         onDelete={onDelete}
+        onOpenDetail={(id) => setDetailId(id)}
       />
     </div>
   )

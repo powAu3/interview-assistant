@@ -1,7 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
 import { RefreshCw, Trash2, ChevronDown, ChevronUp, Target, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+
+/** 同一会话内 ASR 多段间隔通常很短；超过该秒数视为新问题，不合并 */
+const ASSIST_MERGE_GAP_SEC = 100
 
 interface TagSummary {
   tag: string
@@ -18,6 +21,72 @@ interface HistoryRecord {
   score: number | null
   tags: string[]
   created_at: number
+}
+
+/** 合并后的展示行：mergedCount>1 表示由多条原始记录合并 */
+interface DisplayHistoryRecord extends HistoryRecord {
+  mergedCount?: number
+}
+
+function mergeHistoryByTimeGap(records: HistoryRecord[]): DisplayHistoryRecord[] {
+  if (records.length === 0) return []
+  const chronological = [...records].sort((a, b) => a.created_at - b.created_at)
+  const groups: HistoryRecord[][] = []
+  let buf: HistoryRecord[] = []
+
+  const flush = () => {
+    if (buf.length === 0) return
+    groups.push(buf)
+    buf = []
+  }
+
+  for (const rec of chronological) {
+    if (buf.length === 0) {
+      buf.push(rec)
+      continue
+    }
+    const last = buf[buf.length - 1]
+    const sameSession = rec.session_type === last.session_type
+    const gapOk = rec.created_at - last.created_at <= ASSIST_MERGE_GAP_SEC
+    if (sameSession && gapOk) {
+      buf.push(rec)
+    } else {
+      flush()
+      buf.push(rec)
+    }
+  }
+  flush()
+
+  const merged: DisplayHistoryRecord[] = groups.map((g) => {
+    if (g.length === 1) {
+      return { ...g[0] }
+    }
+    const questions = g.map((r) => r.question.trim()).filter(Boolean)
+    const qJoined =
+      questions.reduce((acc, q) => {
+        if (!acc) return q
+        const needSpace = /[a-zA-Z0-9]$/.test(acc) && /^[a-zA-Z0-9]/.test(q)
+        return needSpace ? `${acc} ${q}` : `${acc}${q}`
+      }, '') || g[g.length - 1].question
+    const answers = g.map((r) => (r.answer || '').trim()).filter(Boolean)
+    const tagSet = new Set<string>()
+    g.forEach((r) => r.tags?.forEach((t) => tagSet.add(t)))
+    const scores = g.map((r) => r.score).filter((s): s is number => s != null && !Number.isNaN(s))
+    const avgScore =
+      scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null
+    return {
+      id: g[0].id,
+      session_type: g[0].session_type,
+      question: qJoined,
+      answer: answers.join('\n\n———\n\n'),
+      score: avgScore,
+      tags: [...tagSet],
+      created_at: g[g.length - 1].created_at,
+      mergedCount: g.length,
+    }
+  })
+  merged.sort((a, b) => b.created_at - a.created_at)
+  return merged
 }
 
 function RadarChart({ tags }: { tags: TagSummary[] }) {
@@ -84,12 +153,15 @@ function TrendIcon({ trend }: { trend: string }) {
 
 export default function KnowledgeMap() {
   const [tags, setTags] = useState<TagSummary[]>([])
-  const [history, setHistory] = useState<HistoryRecord[]>([])
+  /** 接口返回的原始行（分页累积），合并仅用于展示 */
+  const [rawHistory, setRawHistory] = useState<HistoryRecord[]>([])
   const [historyTotal, setHistoryTotal] = useState(0)
   const [historyPage, setHistoryPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [genLoading, setGenLoading] = useState(false)
+
+  const history = useMemo(() => mergeHistoryByTimeGap(rawHistory), [rawHistory])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -99,7 +171,7 @@ export default function KnowledgeMap() {
         api.knowledgeHistory(1, 20),
       ])
       setTags(sumRes.tags || [])
-      setHistory(histRes.records || [])
+      setRawHistory(histRes.records || [])
       setHistoryTotal(histRes.total || 0)
       setHistoryPage(1)
     } catch {}
@@ -112,7 +184,7 @@ export default function KnowledgeMap() {
     const next = historyPage + 1
     try {
       const res = await api.knowledgeHistory(next, 20)
-      setHistory(prev => [...prev, ...(res.records || [])])
+      setRawHistory((prev) => [...prev, ...(res.records || [])])
       setHistoryPage(next)
     } catch {}
   }
@@ -211,17 +283,28 @@ export default function KnowledgeMap() {
 
           {/* History */}
           <div className="bg-bg-secondary rounded-xl p-4 border border-bg-tertiary">
-            <h3 className="text-xs font-medium text-text-secondary mb-3">
-              历史记录 <span className="text-text-muted">({historyTotal})</span>
+            <h3 className="text-xs font-medium text-text-secondary mb-1">
+              历史记录{' '}
+              <span className="text-text-muted">
+                ({history.length} 组{rawHistory.length !== history.length ? ` · 原始 ${rawHistory.length} 条` : ''})
+              </span>
             </h3>
+            <p className="text-[10px] text-text-muted mb-3 leading-snug">
+              同一次辅助/练习中、间隔在约 {ASSIST_MERGE_GAP_SEC} 秒内的连续语音提问会合并为一行，便于阅读；展开可查看合并后的完整问答。
+            </p>
             <div className="space-y-2">
-              {history.map(rec => (
-                <div key={rec.id} className="border border-bg-tertiary rounded-lg overflow-hidden">
+              {history.map((rec) => (
+                <div key={`${rec.id}-${rec.mergedCount ?? 1}`} className="border border-bg-tertiary rounded-lg overflow-hidden">
                   <button onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-bg-tertiary/50 transition-colors">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${rec.session_type === 'practice' ? 'bg-accent-blue/10 text-accent-blue' : 'bg-accent-green/10 text-accent-green'}`}>
                       {rec.session_type === 'practice' ? '练习' : '辅助'}
                     </span>
+                    {rec.mergedCount != null && rec.mergedCount > 1 && (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted shrink-0" title="由多条语音识别片段合并">
+                        ×{rec.mergedCount}
+                      </span>
+                    )}
                     <span className="flex-1 text-xs text-text-primary truncate">{rec.question}</span>
                     {rec.score !== null && <span className="text-[10px] text-accent-amber">{rec.score}/10</span>}
                     <span className="text-[10px] text-text-muted">
@@ -232,8 +315,14 @@ export default function KnowledgeMap() {
                   {expandedId === rec.id && (
                     <div className="px-3 pb-3 space-y-2 border-t border-bg-tertiary">
                       <div className="pt-2">
-                        <p className="text-[10px] text-text-muted mb-1">回答</p>
-                        <p className="text-xs text-text-secondary whitespace-pre-wrap">{rec.answer?.slice(0, 500) || '(无回答)'}</p>
+                        <p className="text-[10px] text-text-muted mb-1">问题（合并展示）</p>
+                        <p className="text-xs text-text-primary whitespace-pre-wrap leading-relaxed">{rec.question || '(无)'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-text-muted mb-1">回答{rec.mergedCount != null && rec.mergedCount > 1 ? '（多段按顺序拼接）' : ''}</p>
+                        <p className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[min(50vh,24rem)] overflow-y-auto">
+                          {rec.answer?.trim() ? rec.answer : '(无回答)'}
+                        </p>
                       </div>
                       {rec.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1">
@@ -247,7 +336,7 @@ export default function KnowledgeMap() {
                 </div>
               ))}
             </div>
-            {history.length < historyTotal && (
+            {rawHistory.length < historyTotal && (
               <button onClick={loadMoreHistory}
                 className="w-full mt-3 py-2 text-xs text-accent-blue hover:text-accent-blue/80 transition-colors">
                 加载更多

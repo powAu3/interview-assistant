@@ -115,10 +115,13 @@ function ModelsParallelEditor() {
     if (!config?.models?.length) return
     setLaySaving(true)
     try {
+      const prevActive = config.active_model ?? 0
+      const newActive = Math.max(0, order.indexOf(prevActive))
       await api.modelsLayout({
         order,
         enabled: order.map((i) => enabledList[i] ?? true),
         max_parallel_answers: maxP,
+        active_model: newActive,
       })
       useInterviewStore.getState().setConfig(await api.getConfig())
       useInterviewStore.getState().setToastMessage('已保存排序与并行设置')
@@ -347,6 +350,8 @@ export default function SettingsDrawer() {
     silence_threshold: 0.01,
     silence_duration: 1.2,
     transcription_min_sig_chars: 2,
+    assist_transcription_merge_gap_sec: 2.0,
+    assist_transcription_merge_max_sec: 12.0,
     auto_detect: true,
     think_mode: false,
   })
@@ -374,6 +379,8 @@ export default function SettingsDrawer() {
         silence_threshold: config.silence_threshold,
         silence_duration: config.silence_duration,
         transcription_min_sig_chars: config.transcription_min_sig_chars ?? 2,
+        assist_transcription_merge_gap_sec: config.assist_transcription_merge_gap_sec ?? 2.0,
+        assist_transcription_merge_max_sec: config.assist_transcription_merge_max_sec ?? 12.0,
         auto_detect: config.auto_detect,
         think_mode: config.think_mode ?? false,
       })
@@ -594,6 +601,34 @@ export default function SettingsDrawer() {
 
             <NetworkQRCode />
 
+            {config && (options?.screen_capture_regions?.length ?? 0) > 0 && (
+              <Section title="电脑截图区域">
+                <p className="text-[10px] text-text-muted mb-2 leading-snug">
+                  手机端「截屏审题」时，服务端截取主显示器的范围（全屏或半屏）。
+                </p>
+                <select
+                  value={config.screen_capture_region ?? 'left_half'}
+                  onChange={async (e) => {
+                    const v = e.target.value
+                    try {
+                      await api.updateConfig({ screen_capture_region: v })
+                      useInterviewStore.getState().setConfig(await api.getConfig())
+                      useInterviewStore.getState().setToastMessage('截图区域已保存')
+                    } catch (err) {
+                      useInterviewStore.getState().setToastMessage(err instanceof Error ? err.message : '保存失败')
+                    }
+                  }}
+                  className="input-field w-full max-w-[200px]"
+                >
+                  {options!.screen_capture_regions!.map((r) => (
+                    <option key={r} value={r}>
+                      {r === 'full' ? '全屏' : r === 'left_half' ? '左半屏' : r === 'right_half' ? '右半屏' : r === 'top_half' ? '上半屏' : '下半屏'}
+                    </option>
+                  ))}
+                </select>
+              </Section>
+            )}
+
             <QuickPromptsEditor />
 
             <Section title="快捷键">
@@ -759,6 +794,52 @@ export default function SettingsDrawer() {
                     max="10"
                     value={form.silence_duration}
                     onChange={(e) => setForm({ ...form, silence_duration: parseFloat(e.target.value) })}
+                    className="input-field"
+                  />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <Field
+                  label="转写合并间隔 (秒)"
+                  hint="多段识别拼成一句再发；上一段结束后静默超过该时间则送出。填 0 = 关闭合并（每段立即发）"
+                >
+                  <input
+                    type="number"
+                    step="0.5"
+                    min={0}
+                    max={15}
+                    value={form.assist_transcription_merge_gap_sec}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        assist_transcription_merge_gap_sec: Math.max(
+                          0,
+                          Math.min(15, parseFloat(e.target.value) || 0)
+                        ),
+                      })
+                    }
+                    className="input-field"
+                  />
+                </Field>
+                <Field
+                  label="合并最长等待 (秒)"
+                  hint="从第一段起超过该时间强制送出，避免对方长停顿永远不触发"
+                >
+                  <input
+                    type="number"
+                    step={1}
+                    min={1}
+                    max={120}
+                    value={form.assist_transcription_merge_max_sec}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        assist_transcription_merge_max_sec: Math.max(
+                          1,
+                          Math.min(120, parseFloat(e.target.value) || 12)
+                        ),
+                      })
+                    }
                     className="input-field"
                   />
                 </Field>

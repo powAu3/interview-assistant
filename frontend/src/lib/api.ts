@@ -25,6 +25,13 @@ export interface ResumeHistoryItem {
   is_active: boolean
 }
 
+/** GET /resume/history/:id 返回在列表项基础上增加 summary */
+export type ResumeHistoryDetail = ResumeHistoryItem & {
+  summary: string
+  /** false 表示仅展示入库时的节选，点「选用」成功后会写入全文摘要 */
+  summary_is_full?: boolean
+}
+
 export interface ResumeUploadResult {
   ok: boolean
   history_id: number
@@ -38,8 +45,12 @@ export const api = {
   getConfig: () => request('/api/config'),
   updateConfig: (data: Record<string, any>) =>
     request('/api/config', { method: 'POST', body: JSON.stringify(data) }),
-  modelsLayout: (data: { order?: number[]; enabled?: boolean[]; max_parallel_answers?: number }) =>
-    request('/api/config/models-layout', { method: 'POST', body: JSON.stringify(data) }),
+  modelsLayout: (data: {
+    order?: number[]
+    enabled?: boolean[]
+    max_parallel_answers?: number
+    active_model?: number
+  }) => request('/api/config/models-layout', { method: 'POST', body: JSON.stringify(data) }),
   getOptions: () => request('/api/options'),
   getDevices: () => request('/api/devices'),
   uploadResume: async (file: File): Promise<ResumeUploadResult> => {
@@ -61,6 +72,12 @@ export const api = {
     ),
   resumeHistoryDelete: (id: number) =>
     request<{ ok: boolean }>(`/api/resume/history/${id}`, { method: 'DELETE' }),
+  resumeHistoryDetail: (id: number) => request<ResumeHistoryDetail>(`/api/resume/history/${id}`),
+  resumeHistoryUpdate: (id: number, summary: string) =>
+    request<{ ok: boolean; length: number }>(`/api/resume/history/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ summary }),
+    }),
   start: (device_id: number) =>
     request('/api/start', { method: 'POST', body: JSON.stringify({ device_id }) }),
   stop: () => request('/api/stop', { method: 'POST' }),
