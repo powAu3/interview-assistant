@@ -59,5 +59,8 @@
   "silence_threshold": 0.01,
   "silence_duration": 1.2,
   "answer_autoscroll_bottom_px": 40,
-  "transcription_min_sig_chars": 2
+  "transcription_min_sig_chars": 2,
+  "assist_transcription_merge_gap_sec": 2.0,
+  "assist_transcription_merge_max_sec": 12.0,
+  "screen_capture_region": "left_half"
 }

@@ -66,6 +66,12 @@ class AppConfig(BaseModel):
     answer_autoscroll_bottom_px: int = 40
     # 转写广播/入历史/自动答题：去标点后的有效字符（中英数字）至少为该值；过滤「嗯」等
     transcription_min_sig_chars: int = 2
+    # 实时辅助：多段 ASR 合并后再写入转写/触发自动答题。上一段结束后若超过该秒数仍无新段则送出；0=关闭合并（恢复每段立即发送）
+    assist_transcription_merge_gap_sec: float = 2.0
+    # 从第一段 ASR 起最长等待（秒），超时强制送出，避免对方长停顿导致永远不触发
+    assist_transcription_merge_max_sec: float = 12.0
+    # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
+    screen_capture_region: str = "left_half"
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))
@@ -131,3 +137,5 @@ LANGUAGE_OPTIONS = [
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API
 STT_PROVIDER_OPTIONS = ["whisper", "doubao"]
+# 电脑截图区域
+SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]
