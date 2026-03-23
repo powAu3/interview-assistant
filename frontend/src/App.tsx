@@ -349,14 +349,14 @@ export default function App() {
 
           {/* 仅手机端：由服务端截本机主屏左半幅送 VL，手机不调用系统截图 */}
           {mobileTab === 'answer' && (
-            <div className="md:hidden flex-shrink-0 px-3 py-2 border-t border-bg-tertiary bg-bg-secondary/95 backdrop-blur-sm">
+            <div className="md:hidden flex-shrink-0 px-3 py-3 border-t border-bg-tertiary bg-bg-secondary/95 backdrop-blur-sm">
               <button
                 type="button"
                 disabled={serverScreenLoading}
                 onClick={handleServerScreenAsk}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-medium shadow-sm disabled:opacity-60 active:scale-[0.99] transition-transform"
+                className="w-full flex items-center justify-center gap-3 min-h-[52px] py-3.5 rounded-xl bg-accent-blue text-white text-base font-semibold shadow-sm disabled:opacity-60 active:scale-[0.99] transition-transform"
               >
-                <MonitorSmartphone className="w-4 h-4 flex-shrink-0" />
+                <MonitorSmartphone className="w-5 h-5 flex-shrink-0" />
                 {serverScreenLoading ? '截取左屏并提交中…' : '左屏审题写码'}
               </button>
               <p className="text-[10px] text-text-muted text-center mt-1.5 leading-snug px-0.5">
