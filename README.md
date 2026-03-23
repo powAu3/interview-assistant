@@ -1,23 +1,16 @@
 # 智能面试学习辅助助手
 
-实时语音转录 + AI 问答 + 模拟练习 + 简历优化，支持多模型与多技术栈。
-
-<p align="center">
-  <img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue" alt="License" />
-  <img src="https://img.shields.io/badge/python-3.10+-green" alt="Python" />
-  <img src="https://img.shields.io/badge/node-18+-orange" alt="Node" />
-</p>
+实时语音转录 + AI 问答 + 模拟练习 + 简历优化，支持多模型与多技术栈。  
+用户反馈不会被共享屏幕共享！！，可以clone && Star试一试呀。
 
 ---
 
 ## 界面预览
 
+
 | 实时辅助 | 模拟练习 | 能力分析 | 简历优化 |
-|:---:|:---:|:---:|:---:|
-| ![实时辅助](docs/screenshots/assist-mode.png) | ![模拟练习](docs/screenshots/practice-mode.png) | ![能力分析](docs/screenshots/knowledge-map.png) | ![简历优化](docs/screenshots/resume-optimizer.png) |
-
-
-
+| ---- | ---- | ---- | ---- |
+| 实时辅助 | 模拟练习 | 能力分析 | 简历优化 |
 
 
 ## 功能概览
@@ -45,7 +38,7 @@
 
 ## 快速开始
 
-**环境**：Python 3.10+、Node.js 18+。推荐使用 pyenv，项目内已包含 `.python-version`。
+**环境**：Python 3.10+、Node.js 18+
 
 ```bash
 git clone https://github.com/powAu3/interview-assistant.git
@@ -76,6 +69,7 @@ python start.py --mode network      # 浏览器访问 http://localhost:18080
 
 - **配置文件**：`backend/config.json`（从 `config.example.json` 复制）。含模型、STT、岗位/语言、VAD 等。
 - **桌面模式**：`python start.py`。Electron 窗口、屏幕共享隐身、Ctrl+B 隐藏、托盘与置顶。
+- **Electron 窗口/托盘标题**：编辑 `desktop/app-title.json` 中的 `appDisplayName`；或设置环境变量 `ELECTRON_APP_DISPLAY_NAME`（优先级最高）；亦可填 `desktop/package.json` 的 `appDisplayName` 作为兜底。浏览器页签标题见 `frontend/index.html` 的 `<title>`。
 - **网络模式**：`python start.py --mode network`。本机与局域网通过浏览器访问，设置面板底部可扫码。
 - **手机端「左屏审题写码」**（仅窄屏 UI 显示）：在手机浏览器打开页面后，点按钮会由**运行后端的电脑**在**后台子进程**截取主屏左半幅并送识图模型（不写该请求的 access 日志，减轻终端被系统抢到前台）。若仍被终端打断，可 `IA_ACCESS_LOG=0 python start.py` 关闭全部 HTTP 访问日志。需 `pip install mss`、macOS「屏幕录制」权限、识图模型。
 - **请勿提交**：`config.json`、`.env`、本地临时文件已加入 `.gitignore`，勿提交含密钥内容。
@@ -115,7 +109,3 @@ python scripts/e2e_test.py
 ## 赞赏
 
 若对你有帮助，欢迎请作者喝杯咖啡：
-
-<p align="center">
-  <img src="docs/skm.png" width="260" alt="赞赏码" />
-</p>
