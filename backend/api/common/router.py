@@ -4,12 +4,14 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from openai import OpenAI
 
 from core.config import (
     get_config, update_config,
     POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
+    SCREEN_CAPTURE_REGION_OPTIONS,
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine
@@ -17,8 +19,10 @@ from services.storage.resume_history import (
     add_upload,
     apply_entry,
     delete_entry,
+    get_entry_detail,
     get_filename_for_id,
     list_entries,
+    update_entry_summary,
 )
 
 router = APIRouter()
@@ -51,6 +55,9 @@ class ConfigUpdate(BaseModel):
     silence_duration: Optional[float] = None
     answer_autoscroll_bottom_px: Optional[int] = None
     transcription_min_sig_chars: Optional[int] = None
+    assist_transcription_merge_gap_sec: Optional[float] = None
+    assist_transcription_merge_max_sec: Optional[float] = None
+    screen_capture_region: Optional[str] = None
 
 
 @router.get("/config")
@@ -87,6 +94,13 @@ async def api_get_config():
         "silence_duration": cfg.silence_duration,
         "answer_autoscroll_bottom_px": max(4, min(400, getattr(cfg, "answer_autoscroll_bottom_px", 40))),
         "transcription_min_sig_chars": max(1, min(50, getattr(cfg, "transcription_min_sig_chars", 2))),
+        "assist_transcription_merge_gap_sec": max(
+            0.0, min(15.0, float(getattr(cfg, "assist_transcription_merge_gap_sec", 2.0) or 0.0))
+        ),
+        "assist_transcription_merge_max_sec": max(
+            1.0, min(120.0, float(getattr(cfg, "assist_transcription_merge_max_sec", 12.0) or 12.0))
+        ),
+        "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "has_resume": bool(cfg.resume_text),
         "resume_active_history_id": getattr(cfg, "resume_active_history_id", None),
         "resume_active_filename": (
@@ -111,6 +125,16 @@ async def api_update_config(body: ConfigUpdate):
         d["answer_autoscroll_bottom_px"] = max(4, min(400, int(d["answer_autoscroll_bottom_px"])))
     if "transcription_min_sig_chars" in d:
         d["transcription_min_sig_chars"] = max(1, min(50, int(d["transcription_min_sig_chars"])))
+    if "assist_transcription_merge_gap_sec" in d:
+        d["assist_transcription_merge_gap_sec"] = max(
+            0.0, min(15.0, float(d["assist_transcription_merge_gap_sec"]))
+        )
+    if "assist_transcription_merge_max_sec" in d:
+        d["assist_transcription_merge_max_sec"] = max(
+            1.0, min(120.0, float(d["assist_transcription_merge_max_sec"]))
+        )
+    if "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
+        d.pop("screen_capture_region", None)
     update_config(d)
     if body.whisper_model is not None:
         engine = get_stt_engine()
@@ -142,6 +166,7 @@ async def api_options():
         "languages": LANGUAGE_OPTIONS,
         "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
+        "screen_capture_regions": SCREEN_CAPTURE_REGION_OPTIONS,
     }
 
 
@@ -179,14 +204,37 @@ async def api_resume_history():
     return {"items": list_entries(), "max": 10}
 
 
-@router.post("/resume/history/{entry_id}/apply")
-async def api_resume_history_apply(entry_id: int):
+class ResumeHistoryUpdateBody(BaseModel):
+    summary: str = ""
+
+
+@router.get("/resume/history/{entry_id}")
+async def api_resume_history_detail(entry_id: int):
     try:
-        return apply_entry(entry_id)
-    except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        return get_entry_detail(entry_id)
+    except FileNotFoundError:
+        raise HTTPException(404, "记录不存在")
+
+
+@router.put("/resume/history/{entry_id}")
+async def api_resume_history_update(entry_id: int, body: ResumeHistoryUpdateBody):
+    try:
+        return update_entry_summary(entry_id, body.summary)
+    except FileNotFoundError:
+        raise HTTPException(404, "记录不存在")
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@router.post("/resume/history/{entry_id}/apply")
+async def api_resume_history_apply(entry_id: int):
+    """在线程池执行，避免大 PDF 解析阻塞事件循环导致其它请求（含预览）卡死。"""
+    try:
+        return await run_in_threadpool(apply_entry, entry_id)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @router.delete("/resume/history/{entry_id}")
@@ -285,12 +333,28 @@ async def api_models_layout(body: dict):
     if mp is not None:
         updates["max_parallel_answers"] = max(1, min(8, int(mp)))
     active = cfg.active_model
-    if order is not None and isinstance(order, list) and order:
+    client_active = body.get("active_model")
+    # 前端在重排后传入新列表中的优先模型下标，避免同名同 endpoint 模型时 next() 匹配到错误项
+    if (
+        isinstance(client_active, int)
+        and not isinstance(client_active, bool)
+        and len(models) > 0
+    ):
+        ca = int(client_active)
+        if 0 <= ca < len(models):
+            updates["active_model"] = ca
+    elif order is not None and isinstance(order, list) and order:
         try:
             old = cfg.models[active] if 0 <= active < len(cfg.models) else None
             if old:
                 updates["active_model"] = next(
-                    (j for j, m in enumerate(models) if m.name == old.name and m.model == old.model),
+                    (
+                        j
+                        for j, m in enumerate(models)
+                        if m.name == old.name
+                        and m.model == old.model
+                        and m.api_base_url == old.api_base_url
+                    ),
                     min(active, len(models) - 1),
                 )
             else:
