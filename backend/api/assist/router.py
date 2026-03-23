@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from core.config import get_config
 from core.session import get_session, reset_session, conversation_lock
 from services.audio import AudioCapture, VADBuffer, audio_capture
-from services.stt import get_stt_engine, transcription_for_publish
+from services.stt import get_stt_engine, transcription_for_publish, join_transcription_fragments
 from services.llm import build_system_prompt, chat_stream_single_model, get_token_stats
 from api.common import get_model_health
 from api.realtime.ws import broadcast
@@ -35,6 +35,86 @@ _next_commit_seq = 0
 _next_submit_seq = 0
 _commit_lock = threading.Lock()
 
+# 实时辅助：多段 ASR 按时间窗合并后再写入转写 / 触发自动答题（减轻 VAD 碎句）
+_asr_merge_parts: list[str] = []
+_asr_merge_mono_first: Optional[float] = None
+_asr_merge_mono_last: Optional[float] = None
+
+
+def _reset_asr_merge_buffer():
+    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
+    _asr_merge_parts = []
+    _asr_merge_mono_first = None
+    _asr_merge_mono_last = None
+
+
+def _flush_asr_merge_buffer_now(cfg, session) -> None:
+    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
+    if not _asr_merge_parts:
+        return
+    parts = list(_asr_merge_parts)
+    _asr_merge_parts.clear()
+    _asr_merge_mono_first = None
+    _asr_merge_mono_last = None
+    merged_raw = join_transcription_fragments(parts)
+    min_sig = getattr(cfg, "transcription_min_sig_chars", 2)
+    pub = transcription_for_publish(merged_raw, min_sig)
+    if not pub:
+        return
+    session.add_transcription(pub)
+    broadcast({"type": "transcription", "text": pub})
+    if cfg.auto_detect:
+        src = (
+            "conversation_loopback"
+            if session.capture_is_loopback
+            else "conversation_mic"
+        )
+        _submit_answer_task((pub, None, False, src))
+
+
+def _try_flush_asr_merge_buffer(cfg, session, now_mono: float, force: bool = False) -> None:
+    if not _asr_merge_parts:
+        return
+    gap = float(getattr(cfg, "assist_transcription_merge_gap_sec", 2.0) or 0.0)
+    max_wait = float(getattr(cfg, "assist_transcription_merge_max_sec", 12.0) or 12.0)
+    if max_wait < 1.0:
+        max_wait = 12.0
+    if force:
+        _flush_asr_merge_buffer_now(cfg, session)
+        return
+    if gap <= 0:
+        return
+    if _asr_merge_mono_last is None:
+        return
+    since_last = now_mono - _asr_merge_mono_last
+    burst_age = (now_mono - _asr_merge_mono_first) if _asr_merge_mono_first is not None else 0.0
+    if since_last >= gap or burst_age >= max_wait:
+        _flush_asr_merge_buffer_now(cfg, session)
+
+
+def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, force_flush_tail: bool = False) -> None:
+    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
+    gap = float(getattr(cfg, "assist_transcription_merge_gap_sec", 2.0) or 0.0)
+    if gap <= 0:
+        session.add_transcription(pub)
+        broadcast({"type": "transcription", "text": pub})
+        if cfg.auto_detect:
+            src = (
+                "conversation_loopback"
+                if session.capture_is_loopback
+                else "conversation_mic"
+            )
+            _submit_answer_task((pub, None, False, src))
+        return
+    if not _asr_merge_parts:
+        _asr_merge_mono_first = now_mono
+    _asr_merge_parts.append(pub)
+    _asr_merge_mono_last = now_mono
+    if force_flush_tail:
+        _flush_asr_merge_buffer_now(cfg, session)
+    else:
+        _try_flush_asr_merge_buffer(cfg, session, now_mono, False)
+
 
 def _bump_generation():
     global _answer_generation
@@ -57,6 +137,7 @@ def _reset_answer_state():
         _next_commit_seq = 0
         _next_submit_seq = 0
     _task_session_version += 1
+    _reset_asr_merge_buffer()
 
 
 class ManualQuestion(BaseModel):
@@ -80,6 +161,21 @@ def _model_eligible(i: int, m, need_vision: bool) -> bool:
     return True
 
 
+def _priority_model_index(cfg) -> int:
+    """与 get_active_model() 指向同一条模型配置，避免仅依赖 active_model 整数与列表不同步。"""
+    n = len(cfg.models)
+    if n <= 0:
+        return 0
+    try:
+        am = cfg.get_active_model()
+    except Exception:
+        return max(0, min(int(cfg.active_model), n - 1))
+    for i, m in enumerate(cfg.models):
+        if m is am:
+            return i
+    return max(0, min(int(cfg.active_model), n - 1))
+
+
 def _dispatch_model_order(cfg) -> list[int]:
     """
     实时辅助选路顺序：先顶栏「优先模型」(active_model)，再按配置里当前列表顺序尝试其余模型。
@@ -88,7 +184,7 @@ def _dispatch_model_order(cfg) -> list[int]:
     n = len(cfg.models)
     if n == 0:
         return []
-    p = max(0, min(int(cfg.active_model), n - 1))
+    p = _priority_model_index(cfg)
     return [p] + [i for i in range(n) if i != p]
 
 
@@ -295,12 +391,14 @@ def _prompt_server_left_screen_code(language: str) -> str:
     return (
         f"下图来自运行本后端的电脑「主显示器左半屏」的实时画面，可能包含编程题、OJ 题干、或编辑器里的题目/代码片段。\n\n"
         f"请根据图中可读信息作答。**代码实现请严格使用语言：{language}**。\n\n"
-        "请按下面三部分组织回答（代码必须放在 Markdown 代码块中并标明语言）：\n\n"
-        "【1 代码】\n"
+        "请按下面四部分组织回答（代码必须放在 Markdown 代码块中并标明语言）：\n\n"
+        "【1 题目分析】\n"
+        "给出题目类型、leetcode难度（不超过一行）\n\n"
+        "【2 代码】\n"
         "给出完整、可直接运行或通过常见单测框架执行的解答。\n\n"
-        "【2 思路】\n"
+        "【3 思路】\n"
         "简述核心算法或步骤、关键数据结构；若有，给出时间与空间复杂度。\n\n"
-        "【3 测试用例设计】\n"
+        "【4 测试用例设计】\n"
         "说明如何设计用例覆盖正常路径、边界与异常；可列举若干输入与期望输出或行为。\n\n"
         "若图中无法辨认编程类题目，请简要说明，并给出在当前画面下你能提供的最大帮助。"
     )
@@ -410,9 +508,13 @@ def _interview_worker():
         silence_duration=cfg.silence_duration,
     )
     session = get_session()
+    _reset_asr_merge_buffer()
 
     try:
         while not _stop_event.is_set():
+            now = time.monotonic()
+            _try_flush_asr_merge_buffer(get_config(), session, now, False)
+
             if _pause_event.is_set():
                 time.sleep(0.1)
                 continue
@@ -440,15 +542,9 @@ def _interview_worker():
                     )
                     pub = transcription_for_publish(text, min_sig)
                     if pub:
-                        session.add_transcription(pub)
-                        broadcast({"type": "transcription", "text": pub})
-                        if cfg.auto_detect:
-                            src = (
-                                "conversation_loopback"
-                                if session.capture_is_loopback
-                                else "conversation_mic"
-                            )
-                            _submit_answer_task((pub, None, False, src))
+                        _append_transcription_fragment(
+                            get_config(), session, pub, time.monotonic(), False
+                        )
                 except Exception as e:
                     broadcast({"type": "error", "message": f"转写错误: {e}"})
                 finally:
@@ -465,14 +561,22 @@ def _interview_worker():
                 )
                 pub = transcription_for_publish(text, min_sig)
                 if pub:
-                    session.add_transcription(pub)
-                    broadcast({"type": "transcription", "text": pub})
+                    _append_transcription_fragment(
+                        get_config(), session, pub, time.monotonic(), True
+                    )
             except Exception:
                 pass
     except Exception as e:
         broadcast({"type": "error", "message": f"面试循环异常: {e}"})
         get_session().is_recording = False
         broadcast({"type": "recording", "value": False})
+    finally:
+        try:
+            _try_flush_asr_merge_buffer(
+                get_config(), get_session(), time.monotonic(), True
+            )
+        except Exception:
+            pass
 
 
 def _process_question_parallel(
