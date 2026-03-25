@@ -10,7 +10,7 @@ from openai import OpenAI
 
 from core.config import (
     get_config, update_config,
-    POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
+    POSITION_OPTIONS, LANGUAGE_OPTIONS, PRACTICE_AUDIENCE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
 )
 from services.audio import AudioCapture
@@ -50,6 +50,7 @@ class ConfigUpdate(BaseModel):
     doubao_stt_boosting_table_id: Optional[str] = None
     position: Optional[str] = None
     language: Optional[str] = None
+    practice_audience: Optional[str] = None
     auto_detect: Optional[bool] = None
     silence_threshold: Optional[float] = None
     silence_duration: Optional[float] = None
@@ -89,6 +90,7 @@ async def api_get_config():
         "doubao_stt_boosting_table_id": cfg.doubao_stt_boosting_table_id or "",
         "position": cfg.position,
         "language": cfg.language,
+        "practice_audience": getattr(cfg, "practice_audience", "campus_intern"),
         "auto_detect": cfg.auto_detect,
         "silence_threshold": cfg.silence_threshold,
         "silence_duration": cfg.silence_duration,
@@ -135,6 +137,8 @@ async def api_update_config(body: ConfigUpdate):
         )
     if "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
         d.pop("screen_capture_region", None)
+    if "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
+        d.pop("practice_audience", None)
     update_config(d)
     if body.whisper_model is not None:
         engine = get_stt_engine()
@@ -164,6 +168,7 @@ async def api_options():
     return {
         "positions": POSITION_OPTIONS,
         "languages": LANGUAGE_OPTIONS,
+        "practice_audiences": PRACTICE_AUDIENCE_OPTIONS,
         "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
         "screen_capture_regions": SCREEN_CAPTURE_REGION_OPTIONS,

@@ -9,7 +9,15 @@ from core.config import get_config
 from core.session import get_session, reset_session, conversation_lock
 from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import get_stt_engine, transcription_for_publish, join_transcription_fragments
-from services.llm import build_system_prompt, chat_stream_single_model, get_token_stats
+from services.llm import (
+    PROMPT_MODE_ASR_REALTIME,
+    PROMPT_MODE_MANUAL_TEXT,
+    PROMPT_MODE_SERVER_SCREEN,
+    build_system_prompt,
+    chat_stream_single_model,
+    get_token_stats,
+    postprocess_answer_for_mode,
+)
 from api.common import get_model_health
 from api.realtime.ws import broadcast
 
@@ -159,6 +167,14 @@ def _model_eligible(i: int, m, need_vision: bool) -> bool:
     if need_vision and not m.supports_vision:
         return False
     return True
+
+
+def _prompt_mode_for_task(source: str, manual_input: bool) -> str:
+    if source.startswith("server_screen_"):
+        return PROMPT_MODE_SERVER_SCREEN
+    if manual_input:
+        return PROMPT_MODE_MANUAL_TEXT
+    return PROMPT_MODE_ASR_REALTIME
 
 
 def _priority_model_index(cfg) -> int:
@@ -387,26 +403,30 @@ async def api_ask(body: ManualQuestion):
     return {"ok": True}
 
 
-def _prompt_server_left_screen_code(language: str) -> str:
+def _screen_region_label(region: str) -> str:
+    labels = {
+        "full": "主显示器全屏",
+        "left_half": "主显示器左半屏",
+        "right_half": "主显示器右半屏",
+        "top_half": "主显示器上半屏",
+        "bottom_half": "主显示器下半屏",
+    }
+    return labels.get(region, "主显示器左半屏")
+
+
+def _prompt_server_screen_code(language: str, region: str) -> str:
+    where = _screen_region_label(region)
     return (
-        f"下图来自运行本后端的电脑「主显示器左半屏」的实时画面，可能包含编程题、OJ 题干、或编辑器里的题目/代码片段。\n\n"
-        f"请根据图中可读信息作答。**代码实现请严格使用语言：{language}**。\n\n"
-        "请按下面四部分组织回答（代码必须放在 Markdown 代码块中并标明语言）：\n\n"
-        "【1 题目分析】\n"
-        "给出题目类型、leetcode难度（不超过一行）\n\n"
-        "【2 代码】\n"
-        "给出完整、可直接运行或通过常见单测框架执行的解答。\n\n"
-        "【3 思路】\n"
-        "简述核心算法或步骤、关键数据结构；若有，给出时间与空间复杂度。\n\n"
-        "【4 测试用例设计】\n"
-        "说明如何设计用例覆盖正常路径、边界与异常；可列举若干输入与期望输出或行为。\n\n"
-        "若图中无法辨认编程类题目，请简要说明，并给出在当前画面下你能提供的最大帮助。"
+        f"下图来自运行本后端的电脑「{where}」的实时画面，可能包含题目描述、输入输出约束或代码片段。\n\n"
+        f"请基于图中可见信息作答。若是编程题，代码请优先使用 {language}（SQL 题使用 sql）。\n\n"
+        "请尽量按以下顺序组织：题目理解、代码、思路与复杂度、测试要点。\n"
+        "如果关键信息看不清，请明确说明缺失项，不要编造。"
     )
 
 
 @router.post("/ask-from-server-screen")
 async def api_ask_from_server_screen():
-    """手机端等远程客户端触发：截取服务端本机主屏左半幅，送 VL 按配置语言写代码（手机仅 HTTP，不调用系统截图）。"""
+    """手机端等远程客户端触发：截取服务端本机主屏指定区域，送 VL 作答（手机仅 HTTP，不调用系统截图）。"""
     from services.llm import has_vision_model
     from services.capture import ScreenCaptureError, capture_primary_left_half_data_url
 
@@ -417,7 +437,8 @@ async def api_ask_from_server_screen():
     except ScreenCaptureError as e:
         raise HTTPException(503, str(e))
     cfg = get_config()
-    text = _prompt_server_left_screen_code(cfg.language)
+    region = getattr(cfg, "screen_capture_region", "left_half") or "left_half"
+    text = _prompt_server_screen_code(cfg.language, region)
     if _pick_model_index((text, data_url, True, "server_screen_left"), set()) is None:
         raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
     _submit_answer_task((text, data_url, True, "server_screen_left"))
@@ -593,7 +614,12 @@ def _process_question_parallel(
     def aborted() -> bool:
         return my_gen != _answer_generation
 
-    system_prompt = build_system_prompt(manual_input=manual_input)
+    prompt_mode = _prompt_mode_for_task(source, manual_input)
+    system_prompt = build_system_prompt(
+        manual_input=manual_input,
+        mode=prompt_mode,
+        screen_region=getattr(cfg, "screen_capture_region", "left_half"),
+    )
 
     if image:
         user_for_llm: Any = [
@@ -645,6 +671,9 @@ def _process_question_parallel(
     if aborted():
         broadcast({"type": "answer_cancelled", "id": qa_id})
         return
+
+    # Post-generation quality gate: remove leaked thinking artifacts / unstable markdown.
+    full_answer = postprocess_answer_for_mode(full_answer, prompt_mode)
 
     def _commit():
         global _task_session_version

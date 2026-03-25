@@ -341,6 +341,7 @@ export default function SettingsDrawer() {
   const [form, setForm] = useState({
     temperature: 0.5,
     max_tokens: 4096,
+    practice_audience: 'campus_intern' as string,
     stt_provider: 'whisper' as string,
     whisper_model: 'base',
     doubao_stt_app_id: '',
@@ -370,6 +371,7 @@ export default function SettingsDrawer() {
       setForm({
         temperature: config.temperature,
         max_tokens: config.max_tokens,
+        practice_audience: config.practice_audience ?? 'campus_intern',
         stt_provider: config.stt_provider ?? 'whisper',
         whisper_model: config.whisper_model,
         doubao_stt_app_id: config.doubao_stt_app_id ?? '',
@@ -710,6 +712,25 @@ export default function SettingsDrawer() {
             </Section>
 
             <ModelsParallelEditor />
+
+            <Section title="模拟面试维度">
+              <Field
+                label="候选人维度"
+                hint="影响练习模式的出题与点评风格；不再固定一面/二面模板。"
+              >
+                <select
+                  value={form.practice_audience}
+                  onChange={(e) => setForm({ ...form, practice_audience: e.target.value })}
+                  className="input-field"
+                >
+                  {(options?.practice_audiences ?? ['campus_intern', 'social']).map((v) => (
+                    <option key={v} value={v}>
+                      {v === 'social' ? '社招' : '校招（实习）'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Section>
 
             {config && (
               <div className="bg-bg-tertiary/50 rounded-xl p-3 text-xs space-y-1 border border-bg-hover/50">

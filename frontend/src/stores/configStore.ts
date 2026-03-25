@@ -41,6 +41,8 @@ export interface AppConfig {
   doubao_stt_boosting_table_id: string
   position: string
   language: string
+  /** 模拟练习候选人维度：campus_intern=校招/实习，social=社招 */
+  practice_audience?: string
   auto_detect: boolean
   silence_threshold: number
   silence_duration: number
@@ -92,7 +94,14 @@ interface InterviewState {
   config: AppConfig | null
   devices: Array<{ id: number; name: string; channels: number; is_loopback: boolean; host_api: string }>
   platformInfo: { platform: string; needs_virtual_device: boolean; instructions: string } | null
-  options: { positions: string[]; languages: string[]; stt_providers?: string[]; whisper_models: string[]; screen_capture_regions?: string[] } | null
+  options: {
+    positions: string[]
+    languages: string[]
+    practice_audiences?: string[]
+    stt_providers?: string[]
+    whisper_models: string[]
+    screen_capture_regions?: string[]
+  } | null
 
   isRecording: boolean
   isPaused: boolean

@@ -153,6 +153,10 @@ export default function PracticeMode() {
               <span className="text-text-primary font-medium">{config?.position}</span>
               <label className="text-text-muted ml-2">语言:</label>
               <span className="text-text-primary font-medium">{config?.language}</span>
+              <label className="text-text-muted ml-2">维度:</label>
+              <span className="text-text-primary font-medium">
+                {config?.practice_audience === 'social' ? '社招' : '校招（实习）'}
+              </span>
             </div>
           </div>
 

@@ -55,6 +55,7 @@
   "doubao_stt_boosting_table_id": "",
   "position": "后端开发",
   "language": "Python",
+  "practice_audience": "campus_intern",
   "auto_detect": true,
   "silence_threshold": 0.01,
   "silence_duration": 1.2,

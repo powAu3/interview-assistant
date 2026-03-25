@@ -52,6 +52,8 @@ class AppConfig(BaseModel):
 
     position: str = "后端开发"
     language: str = "Python"
+    # 模拟面试候选人维度：campus_intern=校招/实习，social=社招
+    practice_audience: str = "campus_intern"
     resume_text: Optional[str] = None
     # 当前生效的简历对应的历史记录 id（写入 config.json；简历正文仍不入库）
     resume_active_history_id: Optional[int] = None
@@ -134,6 +136,7 @@ LANGUAGE_OPTIONS = [
     "Python", "Java", "C++", "JavaScript", "TypeScript",
     "Go", "SQL",
 ]
+PRACTICE_AUDIENCE_OPTIONS = ["campus_intern", "social"]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API
 STT_PROVIDER_OPTIONS = ["whisper", "doubao"]
