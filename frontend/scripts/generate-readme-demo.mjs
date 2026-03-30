@@ -302,21 +302,28 @@ async function emit(page, message) {
   }, message)
 }
 
-async function captureFrame(page, frames, delayMs = 240) {
-  if (delayMs > 0) await page.waitForTimeout(delayMs)
-  frames.push(await page.screenshot({ type: 'png' }))
+async function captureFrame(
+  page,
+  frames,
+  { waitMs = 240, displayMs = 560 } = {},
+) {
+  if (waitMs > 0) await page.waitForTimeout(waitMs)
+  frames.push({
+    png: await page.screenshot({ type: 'png' }),
+    displayMs,
+  })
 }
 
-function encodeGif(frameBuffers) {
+function encodeGif(frames) {
   const gif = GIFEncoder()
 
-  frameBuffers.forEach((buffer, index) => {
-    const png = PNG.sync.read(buffer)
+  frames.forEach((frame, index) => {
+    const png = PNG.sync.read(frame.png)
     const palette = quantize(png.data, 192, { format: 'rgb444' })
     const indexed = applyPalette(png.data, palette, 'rgb444')
     gif.writeFrame(indexed, png.width, png.height, {
       palette,
-      delay: index < 2 ? 320 : 220,
+      delay: frame.displayMs,
       repeat: index === 0 ? 0 : undefined,
     })
   })
@@ -344,22 +351,22 @@ async function runDemo(page) {
     },
   })
 
-  await captureFrame(page, frames, 300)
-  await captureFrame(page, frames, 220)
+  await captureFrame(page, frames, { waitMs: 300, displayMs: 780 })
+  await captureFrame(page, frames, { waitMs: 220, displayMs: 720 })
 
   await page.getByRole('button', { name: '开始' }).click()
   await emit(page, { type: 'recording', value: true })
   await emit(page, { type: 'audio_level', value: 0.18 })
-  await captureFrame(page, frames, 220)
+  await captureFrame(page, frames, { waitMs: 220, displayMs: 620 })
 
   await emit(page, { type: 'transcribing', value: true })
   await emit(page, { type: 'audio_level', value: 0.46 })
-  await captureFrame(page, frames, 220)
+  await captureFrame(page, frames, { waitMs: 220, displayMs: 620 })
 
   const firstQuestion = '请你讲一下 Redis 持久化机制，以及 AOF 和 RDB 的取舍。'
   await emit(page, { type: 'transcription', text: firstQuestion })
   await emit(page, { type: 'transcribing', value: false })
-  await captureFrame(page, frames, 260)
+  await captureFrame(page, frames, { waitMs: 260, displayMs: 820 })
 
   await emit(page, {
     type: 'answer_start',
@@ -373,21 +380,21 @@ async function runDemo(page) {
     id: 'demo-1',
     chunk: '按正式面试长答来讲：先结论，再讲机制、取舍、线上做法和追问点。',
   })
-  await captureFrame(page, frames, 240)
+  await captureFrame(page, frames, { waitMs: 240, displayMs: 720 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-1',
     chunk: `如果我是候选人，我不会把这个问题回答成“RDB 和 AOF 二选一”，而是先给结论：线上通常会同时开启两者，因为 RDB 解决的是“恢复速度”，AOF 解决的是“数据完整性”，真正要比较的是业务更怕恢复慢还是更怕丢数据。\n\n`,
   })
-  await captureFrame(page, frames, 240)
+  await captureFrame(page, frames, { waitMs: 240, displayMs: 760 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-1',
     chunk: `正式展开我会分五层来答：\n1. RDB 是周期性快照，优点是文件紧凑、恢复快，适合冷启动和全量恢复；缺点是两次快照之间如果实例宕机，会丢最后一段数据。\n2. AOF 是把写命令按策略追加到日志里，数据完整性更高，但文件更大、恢复更慢，而且 fsync 配置不当会把磁盘压力传导到延迟。\n3. 生产上通常会同时开启：恢复时优先用 AOF，没有 AOF 再回退到 RDB，这样能兼顾恢复能力和重启速度。\n4. 真正线上要继续看 AOF 重写时机、主从复制延迟、哨兵切换窗口、磁盘 IO 峰值，以及高峰流量下是否会放大抖动。\n5. 如果面试官继续追问，我会补一句：持久化只能解决“重启后怎么恢复”，不能单独解决“故障期间是否丢数据”，还要结合主从、故障转移和客户端重试一起看。\n`,
   })
-  await captureFrame(page, frames, 260)
+  await captureFrame(page, frames, { waitMs: 260, displayMs: 920 })
 
   const firstAnswer = `如果我是候选人，我不会把这个问题回答成“RDB 和 AOF 二选一”，而是先给结论：线上通常会同时开启两者，因为 RDB 解决的是“恢复速度”，AOF 解决的是“数据完整性”，真正要比较的是业务更怕恢复慢还是更怕丢数据。
 
@@ -406,12 +413,12 @@ async function runDemo(page) {
     think: '按正式面试长答来讲：先结论，再讲机制、取舍、线上做法和追问点。',
     model_name: 'GPT-4.1 Mini',
   })
-  await captureFrame(page, frames, 300)
+  await captureFrame(page, frames, { waitMs: 300, displayMs: 1400 })
 
   const input = page.getByPlaceholder('输入问题，Enter 发送')
   await input.click()
   await input.type('写代码实现：给一个 Redis 缓存穿透防护的 Java 示例', { delay: 28 })
-  await captureFrame(page, frames, 260)
+  await captureFrame(page, frames, { waitMs: 260, displayMs: 700 })
   await input.press('Enter')
   await emit(page, {
     type: 'answer_start',
@@ -420,21 +427,21 @@ async function runDemo(page) {
     source: 'manual_text',
     model_name: 'DeepSeek V3',
   })
-  await captureFrame(page, frames, 200)
+  await captureFrame(page, frames, { waitMs: 200, displayMs: 620 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-2',
     chunk: `这个题如果面试里让我写代码，我会先给一个“布隆过滤器 + 缓存空值”的可落地版本，因为它同时覆盖了非法 key 和热点空值两类缓存穿透。\n\n\`\`\`java\npublic String queryUser(String userId) {\n`,
   })
-  await captureFrame(page, frames, 220)
+  await captureFrame(page, frames, { waitMs: 220, displayMs: 720 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-2',
     chunk: `    if (!bloomFilter.mightContain(userId)) return null;\n    String key = "user:" + userId;\n    String cached = redis.get(key);\n`,
   })
-  await captureFrame(page, frames, 220)
+  await captureFrame(page, frames, { waitMs: 220, displayMs: 820 })
 
   const secondAnswer = `这个题如果面试里让我写代码，我会先给一个“布隆过滤器 + 缓存空值”的可落地版本，因为它同时覆盖了非法 key 和热点空值两类缓存穿透。
 
@@ -470,8 +477,8 @@ public String queryUser(String userId) {
     model_name: 'DeepSeek V3',
   })
 
-  await captureFrame(page, frames, 280)
-  await captureFrame(page, frames, 300)
+  await captureFrame(page, frames, { waitMs: 280, displayMs: 1400 })
+  await captureFrame(page, frames, { waitMs: 300, displayMs: 1600 })
   return frames
 }
 
@@ -509,7 +516,7 @@ async function main() {
       const frames = await runDemo(page)
       const gif = encodeGif(frames)
       await writeFile(OUTPUT_GIF, gif)
-      await writeFile(OUTPUT_POSTER, frames[frames.length - 1])
+      await writeFile(OUTPUT_POSTER, frames[frames.length - 1].png)
       console.log(`saved ${OUTPUT_GIF}`)
       console.log(`saved ${OUTPUT_POSTER}`)
     } finally {
