@@ -1,6 +1,9 @@
 # 智能面试学习辅助助手
 
-实时语音转写、AI 问答、模拟练习与简历优化；多模型、多技术栈。桌面端可对屏幕共享隐身，降低误分享助手界面的风险。欢迎 clone / Star 试用。
+实时听题，自动生成专业面试回答。
+面向真实技术面试场景：支持系统音频 / 麦克风转写、手动追问、截图审题、多模型切换；Electron 端还提供共享隐身和 Boss Key。
+
+![AI 实时辅助演示](docs/screenshots/assist-demo.gif)
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue" alt="License" />
@@ -8,44 +11,40 @@
   <img src="https://img.shields.io/badge/node-18+-orange" alt="Node" />
 </p>
 
----
+## 为什么值得试
 
-## 界面预览
+- **实时转写**：采集系统音频或麦克风，把面试过程实时转成文字。
+- **AI 自动答题**：识别问题后直接生成回答，也可以手动输入追问。
+- **截图审题**：支持粘贴截图，把题目、代码或页面内容直接交给模型分析。
+- **多模型协同**：支持 OpenAI 兼容接口、优先模型、并行路数、自动降级、Think 与识图。
+- **更适合实战**：Electron 端支持共享隐身、`Ctrl/Command + B` Boss Key、托盘和窗口置顶。
 
-| 实时辅助 | 模拟练习 | 能力分析 | 简历优化 |
-| :---: | :---: | :---: | :---: |
-| ![实时辅助](docs/screenshots/assist-mode.png) | ![模拟练习](docs/screenshots/practice-mode.png) | ![能力分析](docs/screenshots/knowledge-map.png) | ![简历优化](docs/screenshots/resume-optimizer.png) |
+## 核心流程
 
-> 若上图不显示，请按 [docs/screenshots/README.md](docs/screenshots/README.md) 将四张 PNG 放到 `docs/screenshots/`（与仓库中文件名一致）。
+1. 选择系统音频或麦克风。
+2. 点击开始，实时转写面试内容。
+3. 识别到问题后自动生成回答。
+4. 需要时手动追问、补一句“写代码实现”、或直接截图审题。
 
----
+静态界面预览：
 
-## 功能概览
+![实时辅助主界面](docs/screenshots/assist-mode.png)
 
-- **实时辅助**：系统/麦克风 → Whisper 转写 → 自动或手动提问 → 流式答案；支持暂停、清空、取消生成。
-- **模拟练习**：AI 出题 → 作答 → 即时评分与报告。
-- **能力分析**：知识图谱与雷达图，薄弱点出题。
-- **简历优化**：上传 PDF/DOCX/DOC，对照 JD 给出匹配度与修改建议。
-- **简历上传历史**：最近 **10** 份原件保留在 `backend/data/resume_uploads/`（不入 git）；解析失败也会存档，可在底栏「历史」或简历页选用、删除；列表**最近使用的在下方**（与能力分析「新在上」相反）。
-- **求职看板（仅 Electron）**：本地 SQLite 表格 + **管道视图**（阶段导航、列内拖拽排序写 `sort_order`、卡片 **阶段下拉**、可选 **显示已结束**）；Offer 与多 Offer 对比；浏览器/手机无此入口。
-- **多模型**：OpenAI 兼容接口，界面切换；Think、识图；主模型不可用时自动降级。
-- **桌面 / 网络**：Electron（共享隐身、Boss Key）或浏览器（局域网扫码）。
-- **设置**：顶栏齿轮 — 答案卡片/流式、扫码、快捷词、**配色**等；滑块入口 — **配置**（模型并行、VAD、LLM）。多路生成时流式布局带提示条。
-- **配色**：**Dark+ / Light+ / Dark 高对比**（参考 VS Code），`localStorage` 记忆；代码高亮与**选中文本**按主题配色，保证对比度。
+## 其他辅助能力
 
-### 多模型并行与来源
-
-- **顶栏**选「优先」模型：有空槽时题目优先派给它；多题并行时其余题目按**配置里模型列表自上而下**占满路数。
-- **设置 → 配置**：调整模型顺序、启用/关闭、**最大并行路数**（`max_parallel_answers`）；关闭的模型不参与答题。
-- 多路可用时多题**并行**；槽满则**排队**；仅一路时与串行一致。
-- 题目带**来源**（会议拾音 / 本机麦 / 速记 / 截图审题），答案带**所用模型**；Header Token 大于 0 时显示，**悬停**可看按模型分流。
-- 配好 API 后可在界面内连续提问或多次速记，结合多模型设置自行验证并行与排队。
-
----
+- **模拟练习**：AI 出题、逐题评价、生成练习报告。
+- **能力分析**：沉淀知识点、薄弱点和历史记录。
+- **简历优化**：上传简历并对照 JD 给出修改建议。
+- **求职看板（仅 Electron）**：本地记录投递进度和 Offer 对比。
 
 ## 快速开始
 
-**环境**：Python 3.10+、Node.js 18+（可用 pyenv，仓库含 `.python-version`）。
+### 1. 准备环境
+
+- Python `3.10+`
+- Node.js `18+`
+
+### 2. 安装与配置
 
 ```bash
 git clone https://github.com/powAu3/interview-assistant.git
@@ -53,31 +52,26 @@ cd interview-assistant
 
 pip install -r backend/requirements.txt
 
-cd frontend && npm install && npm run build && cd ..
-
 cp backend/config.example.json backend/config.json
-# 编辑 backend/config.json 填入 API Key
-
-python start.py                 # 桌面（Electron）
-python start.py --mode network  # 浏览器 http://localhost:18080
+# 编辑 backend/config.json，填入你的模型 API Key
 ```
 
-`python quick-start.py` 等价桌面模式并跳过前端构建。
+### 3. 启动
 
-更多说明：[docs/配置说明.md](docs/配置说明.md)、[docs/API密钥与模型.md](docs/API密钥与模型.md)、[docs/豆包语音识别.md](docs/豆包语音识别.md)、[docs/音频配置.md](docs/音频配置.md)。
+```bash
+python start.py                 # 桌面模式（Electron）
+python start.py --mode network  # 浏览器模式，默认 http://localhost:18080
+```
 
----
+补充说明：
 
-## 配置与运行模式
+- 首次启动若前端尚未构建，`start.py` 会自动安装前端依赖并构建，所以本机仍需要 Node.js。
+- `python quick-start.py` 等价于桌面模式的快捷启动，适合已经构建过前端的情况。
 
-- **配置**：`backend/config.json`（由 `config.example.json` 复制），含模型、STT、岗位/语言、VAD 等。
-- **桌面**：`python start.py` — Electron、共享隐身、Ctrl+B、托盘与置顶。
-- **窗口标题**：`desktop/app-title.json` 的 `appDisplayName`，或环境变量 `ELECTRON_APP_DISPLAY_NAME`（优先），或 `desktop/package.json` 的 `appDisplayName`；浏览器标题见 `frontend/index.html`。
-- **网络**：`python start.py --mode network`；设置底部可扫码。
-- **手机「左屏审题写码」**（窄屏）：由**运行后端的电脑**在子进程截主屏指定区域送识图模型；该请求不写 access 日志。若仍抢焦点可 `IA_ACCESS_LOG=0 python start.py`。需 `mss`、macOS 屏幕录制权限、识图模型。区域可在配置中选全屏/半屏等。
-- **勿提交**密钥：`config.json`、`.env` 等已在 `.gitignore`。
+推荐优先使用桌面模式：`python start.py`。
+如果只想用浏览器访问，可运行 `python start.py --mode network`。
 
----
+更多配置见：[配置说明](docs/配置说明.md)、[API 密钥与模型](docs/API密钥与模型.md)、[音频配置](docs/音频配置.md)、[豆包语音识别](docs/豆包语音识别.md)。
 
 ## 开发与自测
 
@@ -88,24 +82,29 @@ cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 18080 --reload
 python scripts/e2e_test.py
 ```
 
----
+更新 README 截图：
+
+```bash
+cd frontend
+npx playwright install chromium   # 首次执行需要
+npm run screenshots:readme
+npm run demo:readme
+```
+
+截图和演示 GIF 都会自动输出到 `docs/screenshots/`，详细说明见 [docs/screenshots/README.md](docs/screenshots/README.md)。
 
 ## 常见问题
 
-- **npm / Node**：需 Node.js 18+（如 `nvm install 18`）。
-- **Electron 慢**：`ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 后在 `desktop/` 执行 `npm install`。
-- **sounddevice（macOS）**：先 `brew install portaudio`。
-- **Whisper 慢**：`export HF_ENDPOINT=https://hf-mirror.com`。
-- **端口占用**：`python start.py --port 9090` 或释放 18080。
-
----
+- **Node / npm 报错**：请确认 Node.js 版本为 `18+`。
+- **Electron 下载慢**：可先设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 后再在 `desktop/` 执行 `npm install`。
+- **macOS 下 sounddevice 安装失败**：先执行 `brew install portaudio`。
+- **Whisper 模型下载慢**：可设置 `export HF_ENDPOINT=https://hf-mirror.com`。
+- **端口冲突**：可改为 `python start.py --port 9090`。
 
 ## 开源协议与免责
 
-- **协议**：[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — 个人与非商业可用，商用需授权。
-- **免责**：仅供学习研究，后果自负；请勿用于学术不端或违规场景。
-
----
+- **协议**：[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)。
+- **免责**：项目仅供学习研究，请勿用于学术不端、违规考试或其他不合规场景；使用后果自行承担。
 
 ## 赞赏
 
