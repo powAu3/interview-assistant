@@ -4,9 +4,13 @@ import { useInterviewStore } from '@/stores/configStore'
 export function useInterviewWS() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<number | null>(null)
+  const shouldReconnect = useRef(true)
 
   const connect = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN
+      || wsRef.current?.readyState === WebSocket.CONNECTING
+    ) return
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
     wsRef.current = ws
@@ -24,7 +28,11 @@ export function useInterviewWS() {
       } catch {}
     }
     ws.onclose = () => {
+      if (wsRef.current !== ws) return
+      wsRef.current = null
       useInterviewStore.getState().setWsConnected(false)
+      if (!shouldReconnect.current) return
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       reconnectTimer.current = window.setTimeout(connect, 2000)
     }
     ws.onerror = () => ws.close()
@@ -108,7 +116,7 @@ export function useInterviewWS() {
         s.setPracticeRecording(msg.value)
         break
       case 'practice_transcription':
-        // handled directly in PracticeMode component via store
+        s.appendPracticeAnswerDraft(msg.text)
         break
       case 'model_health':
         s.setModelHealth(msg.index, msg.status)
@@ -144,15 +152,18 @@ export function useInterviewWS() {
   }
 
   useEffect(() => {
+    shouldReconnect.current = true
     connect()
     const ping = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN)
         wsRef.current.send(JSON.stringify({ type: 'ping' }))
     }, 30000)
     return () => {
+      shouldReconnect.current = false
       clearInterval(ping)
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       wsRef.current?.close()
+      wsRef.current = null
     }
   }, [])
 }

@@ -89,11 +89,14 @@ export default function ControlBar() {
   const hasLoopback = devices.some((d) => d.is_loopback)
 
   useEffect(() => {
-    if (devices.length > 0 && selectedDevice === null) {
-      const loopback = devices.find((d) => d.is_loopback)
-      setSelectedDevice(loopback?.id ?? devices[0].id)
+    if (devices.length === 0) {
+      if (selectedDevice !== null) setSelectedDevice(null)
+      return
     }
-  }, [devices])
+    if (selectedDevice !== null && devices.some((d) => d.id === selectedDevice)) return
+    const loopback = devices.find((d) => d.is_loopback)
+    setSelectedDevice(loopback?.id ?? devices[0].id)
+  }, [devices, selectedDevice])
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items

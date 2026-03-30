@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from openai import OpenAI
 
 from core.config import (
@@ -14,7 +14,7 @@ from core.config import (
     SCREEN_CAPTURE_REGION_OPTIONS,
 )
 from services.audio import AudioCapture
-from services.stt import get_stt_engine
+from services.stt import get_stt_engine, set_whisper_language
 from services.storage.resume_history import (
     add_upload,
     apply_entry,
@@ -65,6 +65,7 @@ class ConfigUpdate(BaseModel):
 async def api_get_config():
     cfg = get_config()
     m = cfg.get_active_model()
+    resume_active_history_id = getattr(cfg, "resume_active_history_id", None)
     return {
         "models": [
             {
@@ -104,10 +105,10 @@ async def api_get_config():
         ),
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "has_resume": bool(cfg.resume_text),
-        "resume_active_history_id": getattr(cfg, "resume_active_history_id", None),
+        "resume_active_history_id": resume_active_history_id,
         "resume_active_filename": (
-            get_filename_for_id(cfg.resume_active_history_id)
-            if getattr(cfg, "resume_active_history_id", None) is not None
+            get_filename_for_id(resume_active_history_id)
+            if resume_active_history_id is not None
             else None
         ),
         "api_key_set": bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here")),
@@ -119,31 +120,41 @@ async def api_update_config(body: ConfigUpdate):
     from core.config import ModelConfig
 
     d = body.model_dump(exclude_none=True)
-    if "models" in d:
-        d["models"] = [ModelConfig(**x) if isinstance(x, dict) else x for x in d["models"]]
-    if "max_parallel_answers" in d:
-        d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
-    if "answer_autoscroll_bottom_px" in d:
-        d["answer_autoscroll_bottom_px"] = max(4, min(400, int(d["answer_autoscroll_bottom_px"])))
-    if "transcription_min_sig_chars" in d:
-        d["transcription_min_sig_chars"] = max(1, min(50, int(d["transcription_min_sig_chars"])))
-    if "assist_transcription_merge_gap_sec" in d:
-        d["assist_transcription_merge_gap_sec"] = max(
-            0.0, min(15.0, float(d["assist_transcription_merge_gap_sec"]))
-        )
-    if "assist_transcription_merge_max_sec" in d:
-        d["assist_transcription_merge_max_sec"] = max(
-            1.0, min(120.0, float(d["assist_transcription_merge_max_sec"]))
-        )
-    if "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
-        d.pop("screen_capture_region", None)
-    if "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
-        d.pop("practice_audience", None)
-    update_config(d)
+    try:
+        if "models" in d:
+            d["models"] = [ModelConfig(**x) if isinstance(x, dict) else x for x in d["models"]]
+            if not d["models"]:
+                raise HTTPException(400, "至少保留一个模型")
+        if "max_parallel_answers" in d:
+            d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
+        if "answer_autoscroll_bottom_px" in d:
+            d["answer_autoscroll_bottom_px"] = max(4, min(400, int(d["answer_autoscroll_bottom_px"])))
+        if "transcription_min_sig_chars" in d:
+            d["transcription_min_sig_chars"] = max(1, min(50, int(d["transcription_min_sig_chars"])))
+        if "assist_transcription_merge_gap_sec" in d:
+            d["assist_transcription_merge_gap_sec"] = max(
+                0.0, min(15.0, float(d["assist_transcription_merge_gap_sec"]))
+            )
+        if "assist_transcription_merge_max_sec" in d:
+            d["assist_transcription_merge_max_sec"] = max(
+                1.0, min(120.0, float(d["assist_transcription_merge_max_sec"]))
+            )
+        if "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
+            d.pop("screen_capture_region", None)
+        if "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
+            d.pop("practice_audience", None)
+        update_config(d)
+    except HTTPException:
+        raise
+    except (TypeError, ValueError, ValidationError) as e:
+        raise HTTPException(400, str(e)) from e
+    if body.whisper_language is not None:
+        set_whisper_language(body.whisper_language)
     if body.whisper_model is not None:
         engine = get_stt_engine()
+        new_model = body.whisper_model
         if hasattr(engine, "change_model"):
-            threading.Thread(target=lambda: engine.change_model(body.whisper_model), daemon=True).start()
+            threading.Thread(target=lambda: engine.change_model(new_model), daemon=True).start()
     return {"ok": True}
 
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Play, Square, Mic, Send, RotateCcw, FileText, Upload, ChevronRight, Trophy, X, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useInterviewStore } from '@/stores/configStore'
@@ -15,10 +15,9 @@ export default function PracticeMode() {
   const {
     config, devices, practiceStatus, practiceQuestions, practiceIndex,
     practiceEvals, practiceEvalStreaming, practiceReport, practiceReportStreaming,
-    practiceRecording, sttLoaded,
+    practiceRecording, sttLoaded, practiceAnswerDraft, setPracticeAnswerDraft,
   } = useInterviewStore()
 
-  const [answer, setAnswer] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedMic, setSelectedMic] = useState<number | null>(null)
@@ -29,8 +28,13 @@ export default function PracticeMode() {
   const mics = devices.filter((d) => !d.is_loopback)
 
   useEffect(() => {
-    if (mics.length > 0 && selectedMic === null) setSelectedMic(mics[0].id)
-  }, [devices])
+    if (mics.length === 0) {
+      if (selectedMic !== null) setSelectedMic(null)
+      return
+    }
+    if (selectedMic !== null && mics.some((d) => d.id === selectedMic)) return
+    setSelectedMic(mics[0].id)
+  }, [mics, selectedMic])
 
   useEffect(() => { evalEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [practiceEvalStreaming])
   useEffect(() => { reportEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [practiceReportStreaming])
@@ -41,30 +45,6 @@ export default function PracticeMode() {
   const isLast = practiceIndex >= practiceQuestions.length - 1
   const answeredCount = practiceEvals.length
 
-  const wsTranscriptRef = useRef('')
-  useEffect(() => {
-    const unsub = useInterviewStore.subscribe((state, prev) => {
-      // not great but simple: listen for practice_transcription via a polling approach
-    })
-    return unsub
-  }, [])
-
-  const onWsMessage = useCallback((e: MessageEvent) => {
-    try {
-      const msg = JSON.parse(e.data)
-      if (msg.type === 'practice_transcription') {
-        setAnswer((prev) => (prev ? prev + ' ' : '') + msg.text)
-      }
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
-    ws.onmessage = onWsMessage
-    return () => ws.close()
-  }, [onWsMessage])
-
   const handleGenerate = async () => {
     setLoading(true); setError(null)
     try { await api.practiceGenerate(questionCount) }
@@ -73,15 +53,15 @@ export default function PracticeMode() {
   }
 
   const handleSubmit = async () => {
-    if (!answer.trim()) return
+    if (!practiceAnswerDraft.trim()) return
     setLoading(true); setError(null)
-    try { await api.practiceSubmit(answer.trim()) }
+    try { await api.practiceSubmit(practiceAnswerDraft.trim()) }
     catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }
 
   const handleNext = async () => {
-    setAnswer(''); setError(null)
+    setPracticeAnswerDraft(''); setError(null)
     try { await api.practiceNext() }
     catch (e: any) { setError(e.message) }
   }
@@ -94,7 +74,7 @@ export default function PracticeMode() {
   }
 
   const handleReset = async () => {
-    setAnswer(''); setError(null)
+    setPracticeAnswerDraft(''); setError(null)
     useInterviewStore.getState().resetPractice()
     try { await api.practiceReset() } catch {}
   }
@@ -274,12 +254,12 @@ export default function PracticeMode() {
                 </>
               )}
             </div>
-            <textarea value={answer} onChange={(e) => setAnswer(e.target.value)}
+            <textarea value={practiceAnswerDraft} onChange={(e) => setPracticeAnswerDraft(e.target.value)}
               placeholder="输入你的回答... 也可以点击「语音回答」用麦克风"
               rows={5}
               className="w-full bg-bg-tertiary text-text-primary text-sm rounded-lg px-3 py-2.5 border border-bg-hover focus:outline-none focus:border-accent-blue placeholder:text-text-muted resize-none" />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-text-muted">{answer.length} 字</span>
+              <span className="text-xs text-text-muted">{practiceAnswerDraft.length} 字</span>
               <div className="flex gap-2">
                 {answeredCount > 0 && (
                   <button onClick={handleFinish} disabled={loading}
@@ -287,7 +267,7 @@ export default function PracticeMode() {
                     提前结束 →
                   </button>
                 )}
-                <button onClick={handleSubmit} disabled={loading || !answer.trim()}
+                <button onClick={handleSubmit} disabled={loading || !practiceAnswerDraft.trim()}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs font-medium rounded-lg disabled:opacity-40">
                   <Send className="w-3.5 h-3.5" /> 提交回答
                 </button>

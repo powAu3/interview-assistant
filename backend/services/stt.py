@@ -12,7 +12,7 @@ import struct
 import uuid
 import numpy as np
 import threading
-from typing import Optional, Any
+from typing import Optional, Any, cast
 
 try:
     import websocket
@@ -130,7 +130,7 @@ TERM_CORRECTIONS = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-_t2s_converter = None
+_t2s_converter: Any = None
 
 
 def _get_t2s_converter():
@@ -243,8 +243,8 @@ def _build_initial_prompt(position: str, language: str) -> str:
 
 def _postprocess(text: str) -> str:
     converter = _get_t2s_converter()
-    if converter and converter is not False:
-        text = converter.convert(text)
+    if converter and converter is not False and hasattr(converter, "convert"):
+        text = cast(Any, converter).convert(text)
     for pattern, replacement in TERM_CORRECTIONS.items():
         text = re.sub(pattern, replacement, text)
     text = _normalize_slow_speech_intraword_punct(text)
@@ -554,10 +554,15 @@ class STTEngine:
             log_prob_threshold=-1.0,
         )
 
+        model = self._model
+        if model is None:
+            raise RuntimeError("Whisper 模型未成功加载")
+        model_any = cast(Any, model)
+
         try:
-            segments, _ = self._model.transcribe(audio_f, hotwords=hotwords_str, **kwargs)
+            segments, _ = model_any.transcribe(audio_f, hotwords=hotwords_str, **kwargs)
         except TypeError:
-            segments, _ = self._model.transcribe(audio_f, **kwargs)
+            segments, _ = model_any.transcribe(audio_f, **kwargs)
 
         texts = []
         for seg in segments:
@@ -583,6 +588,12 @@ class STTEngine:
 
 _engine: Optional[STTEngine] = None
 _doubao_engine: Optional[DoubaoSTT] = None
+
+
+def set_whisper_language(language: str) -> None:
+    global _engine
+    if _engine is not None:
+        _engine.language = language
 
 
 def get_stt_engine(
@@ -614,4 +625,6 @@ def get_stt_engine(
         _engine = STTEngine(model_size=size, language=lang)
     elif _engine.model_size != size:
         _engine.change_model(size)
+    if _engine.language != lang:
+        _engine.language = lang
     return _engine

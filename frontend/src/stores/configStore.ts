@@ -147,6 +147,7 @@ interface InterviewState {
   practiceReport: string
   practiceReportStreaming: string
   practiceRecording: boolean
+  practiceAnswerDraft: string
 
   setConfig: (config: AppConfig) => void
   setDevices: (devices: any[], platformInfo: any) => void
@@ -201,6 +202,8 @@ interface InterviewState {
   appendPracticeReportChunk: (chunk: string) => void
   finalizePracticeReport: (report: string) => void
   setPracticeRecording: (v: boolean) => void
+  setPracticeAnswerDraft: (text: string) => void
+  appendPracticeAnswerDraft: (text: string) => void
   resetPractice: () => void
 }
 
@@ -241,6 +244,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   practiceReport: '',
   practiceReportStreaming: '',
   practiceRecording: false,
+  practiceAnswerDraft: '',
 
   setConfig: (config) => set({ config }),
   setDevices: (devices, platformInfo) => set({ devices, platformInfo }),
@@ -369,9 +373,14 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setResumeOptLoading: (v) => set({ resumeOptLoading: v }),
   resetResumeOpt: () => set({ resumeOptStreaming: '', resumeOptResult: '', resumeOptLoading: false }),
 
-  setPracticeStatus: (s) => set({ practiceStatus: s }),
-  setPracticeQuestions: (qs) => set({ practiceQuestions: qs, practiceIndex: 0 }),
-  setPracticeIndex: (i) => set({ practiceIndex: i }),
+  setPracticeStatus: (s) =>
+    set(() => (
+      s === 'idle' || s === 'generating'
+        ? { practiceStatus: s, practiceAnswerDraft: '' }
+        : { practiceStatus: s }
+    )),
+  setPracticeQuestions: (qs) => set({ practiceQuestions: qs, practiceIndex: 0, practiceAnswerDraft: '' }),
+  setPracticeIndex: (i) => set({ practiceIndex: i, practiceAnswerDraft: '' }),
   appendPracticeEvalChunk: (chunk) => set((s) => ({ practiceEvalStreaming: s.practiceEvalStreaming + chunk })),
   finalizePracticeEval: (ev) =>
     set((s) => ({
@@ -381,6 +390,11 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   appendPracticeReportChunk: (chunk) => set((s) => ({ practiceReportStreaming: s.practiceReportStreaming + chunk })),
   finalizePracticeReport: (report) => set({ practiceReport: report, practiceReportStreaming: '' }),
   setPracticeRecording: (v) => set({ practiceRecording: v }),
+  setPracticeAnswerDraft: (text) => set({ practiceAnswerDraft: text }),
+  appendPracticeAnswerDraft: (text) =>
+    set((s) => ({
+      practiceAnswerDraft: s.practiceAnswerDraft ? `${s.practiceAnswerDraft} ${text}` : text,
+    })),
   resetPractice: () =>
     set({
       practiceStatus: 'idle',
@@ -391,6 +405,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       practiceReport: '',
       practiceReportStreaming: '',
       practiceRecording: false,
+      practiceAnswerDraft: '',
     }),
 }))
 

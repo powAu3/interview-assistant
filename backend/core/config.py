@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 import json
 import logging
@@ -22,15 +22,17 @@ class ModelConfig(BaseModel):
     enabled: bool = True
 
 
+def _default_model_config() -> ModelConfig:
+    return ModelConfig(
+        name="请在 config.json 中配置",
+        api_base_url="https://api.openai.com/v1",
+        api_key="",
+        model="gpt-4o-mini",
+    )
+
+
 class AppConfig(BaseModel):
-    models: list[ModelConfig] = [
-        ModelConfig(
-            name="请在 config.json 中配置",
-            api_base_url="https://api.openai.com/v1",
-            api_key="",
-            model="gpt-4o-mini",
-        ),
-    ]
+    models: list[ModelConfig] = Field(default_factory=lambda: [_default_model_config()])
     active_model: int = 0
 
     temperature: float = 0.5
@@ -74,6 +76,13 @@ class AppConfig(BaseModel):
     assist_transcription_merge_max_sec: float = 12.0
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
     screen_capture_region: str = "left_half"
+
+    @model_validator(mode="after")
+    def _ensure_valid_models(self):
+        if not self.models:
+            self.models = [_default_model_config()]
+        self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
+        return self
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))

@@ -5,7 +5,7 @@ import threading
 from typing import Optional, Generator
 from dataclasses import dataclass, field
 from core.config import get_config
-from services.llm import get_client, _add_tokens, _token_stats
+from services.llm import get_client_for_model, _add_tokens, _token_stats
 
 
 @dataclass
@@ -77,6 +77,36 @@ def reset_practice() -> PracticeSession:
 def _normalize_practice_audience(raw: Optional[str]) -> str:
     v = (raw or "").strip().lower()
     return "social" if v == "social" else "campus_intern"
+
+
+def _practice_model_ready(m) -> bool:
+    return bool(
+        getattr(m, "enabled", True)
+        and m.api_key
+        and m.api_key not in ("", "sk-your-api-key-here")
+    )
+
+
+def _pick_practice_model():
+    from api.common import get_model_health
+
+    cfg = get_config()
+    if not cfg.models:
+        raise ValueError("没有可用的练习模型：请至少配置一个模型")
+
+    active = max(0, min(int(cfg.active_model), len(cfg.models) - 1))
+    order = [active] + [i for i in range(len(cfg.models)) if i != active]
+
+    for respect_health in (True, False):
+        for i in order:
+            model_cfg = cfg.models[i]
+            if not _practice_model_ready(model_cfg):
+                continue
+            if respect_health and get_model_health(i) == "error":
+                continue
+            return model_cfg
+
+    raise ValueError("没有可用的练习模型：请至少启用一个已配置 API Key 的模型")
 
 
 def _practice_audience_meta(audience: str) -> tuple[str, str, str]:
@@ -244,8 +274,8 @@ REPORT_PROMPT = """你是一位国内大厂技术面试官，本轮候选人维�
 
 def generate_questions(count: int = 6) -> list[PracticeQuestion]:
     cfg = get_config()
-    m = cfg.get_active_model()
-    client = get_client()
+    m = _pick_practice_model()
+    client = get_client_for_model(m)
     audience = _normalize_practice_audience(getattr(cfg, "practice_audience", "campus_intern"))
     audience_label, audience_profile, audience_focus = _practice_audience_meta(audience)
 
@@ -284,8 +314,8 @@ def generate_questions(count: int = 6) -> list[PracticeQuestion]:
 
 def evaluate_answer_stream(question: str, answer: str) -> Generator[str, None, None]:
     cfg = get_config()
-    m = cfg.get_active_model()
-    client = get_client()
+    m = _pick_practice_model()
+    client = get_client_for_model(m)
     audience = _normalize_practice_audience(getattr(cfg, "practice_audience", "campus_intern"))
     audience_label, _, _ = _practice_audience_meta(audience)
 
@@ -316,8 +346,8 @@ def evaluate_answer_stream(question: str, answer: str) -> Generator[str, None, N
 
 def generate_report_stream(evaluations: list[PracticeEvaluation]) -> Generator[str, None, None]:
     cfg = get_config()
-    m = cfg.get_active_model()
-    client = get_client()
+    m = _pick_practice_model()
+    client = get_client_for_model(m)
     audience = _normalize_practice_audience(getattr(cfg, "practice_audience", "campus_intern"))
     audience_label, _, _ = _practice_audience_meta(audience)
 

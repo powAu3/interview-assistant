@@ -53,6 +53,13 @@ export default function App() {
   const assistSplitDragging = useRef(false)
   const assistSplitPctRef = useRef(32)
   const [assistSplitPct, setAssistSplitPct] = useState(32)
+  const persistAssistSplit = (nextPct: number) => {
+    try {
+      localStorage.setItem(ASSIST_SPLIT_KEY, String(Math.round(nextPct * 10) / 10))
+    } catch {
+      /* ignore */
+    }
+  }
   useEffect(() => {
     assistSplitPctRef.current = assistSplitPct
   }, [assistSplitPct])
@@ -85,11 +92,7 @@ export default function App() {
       assistSplitDragging.current = false
       document.body.style.removeProperty('cursor')
       document.body.style.removeProperty('user-select')
-      try {
-        localStorage.setItem(ASSIST_SPLIT_KEY, String(Math.round(assistSplitPctRef.current * 10) / 10))
-      } catch {
-        /* ignore */
-      }
+      persistAssistSplit(assistSplitPctRef.current)
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -432,11 +435,7 @@ export default function App() {
                 const c = 32
                 assistSplitPctRef.current = c
                 setAssistSplitPct(c)
-                try {
-                  localStorage.setItem(ASSIST_SPLIT_KEY, String(c))
-                } catch {
-                  /* ignore */
-                }
+                persistAssistSplit(c)
               }}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -445,12 +444,14 @@ export default function App() {
                   const c = Math.min(62, Math.max(24, assistSplitPctRef.current + delta))
                   assistSplitPctRef.current = c
                   setAssistSplitPct(c)
+                  persistAssistSplit(c)
                 }
                 if (e.key === 'Home' || e.key === 'End') {
                   e.preventDefault()
                   const c = e.key === 'Home' ? 24 : 62
                   assistSplitPctRef.current = c
                   setAssistSplitPct(c)
+                  persistAssistSplit(c)
                 }
               }}
             >

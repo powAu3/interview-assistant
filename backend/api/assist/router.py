@@ -13,6 +13,7 @@ from services.llm import (
     PROMPT_MODE_ASR_REALTIME,
     PROMPT_MODE_MANUAL_TEXT,
     PROMPT_MODE_SERVER_SCREEN,
+    PromptMode,
     build_system_prompt,
     chat_stream_single_model,
     get_token_stats,
@@ -136,14 +137,13 @@ def _capture_generation() -> int:
 
 
 def _reset_answer_state():
-    global _pending, _in_flight_models, _commit_buffer, _next_commit_seq, _next_submit_seq, _task_session_version
+    global _pending, _in_flight_models, _commit_buffer, _next_commit_seq, _task_session_version
     with _dispatch_lock:
         _pending.clear()
         _in_flight_models.clear()
     with _commit_lock:
         _commit_buffer.clear()
-        _next_commit_seq = 0
-        _next_submit_seq = 0
+        _next_commit_seq = _next_submit_seq
     _task_session_version += 1
     _reset_asr_merge_buffer()
 
@@ -169,7 +169,7 @@ def _model_eligible(i: int, m, need_vision: bool) -> bool:
     return True
 
 
-def _prompt_mode_for_task(source: str, manual_input: bool) -> str:
+def _prompt_mode_for_task(source: str, manual_input: bool) -> PromptMode:
     if source.startswith("server_screen_"):
         return PROMPT_MODE_SERVER_SCREEN
     if manual_input:
@@ -302,6 +302,8 @@ def _run_answer_worker(
 def _flush_commit(seq: int, apply_fn: Callable[[], None]):
     global _next_commit_seq
     with _commit_lock:
+        if seq < _next_commit_seq:
+            return
         _commit_buffer[seq] = apply_fn
         while _next_commit_seq in _commit_buffer:
             _commit_buffer.pop(_next_commit_seq)()
@@ -374,22 +376,10 @@ async def api_clear():
     return {"ok": True}
 
 
-def _reset_pipeline_after_abort():
-    """取消后重置序号，避免未完成序号阻塞后续提交。"""
-    global _next_submit_seq, _next_commit_seq
-    with _commit_lock:
-        _commit_buffer.clear()
-        _next_commit_seq = 0
-    with _dispatch_lock:
-        _next_submit_seq = 0
-
-
 @router.post("/ask/cancel")
 async def api_ask_cancel():
     _bump_generation()
-    with _dispatch_lock:
-        _pending.clear()
-    _reset_pipeline_after_abort()
+    _reset_answer_state()
     return {"ok": True}
 
 
@@ -472,17 +462,19 @@ def _start_nonblocking(device_id: int):
     _stop_event.clear()
     _pause_event.clear()
 
+    capture_is_loopback = False
+    for d in AudioCapture.list_devices():
+        if d["id"] == device_id:
+            capture_is_loopback = d["is_loopback"]
+            break
+
+    audio_capture.start(device_id)
+
     session = get_session()
     session.is_recording = True
     session.is_paused = False
     session.last_device_id = device_id
-    session.capture_is_loopback = False
-    for d in AudioCapture.list_devices():
-        if d["id"] == device_id:
-            session.capture_is_loopback = d["is_loopback"]
-            break
-
-    audio_capture.start(device_id)
+    session.capture_is_loopback = capture_is_loopback
     broadcast({"type": "recording", "value": True})
     broadcast({"type": "paused", "value": False})
 
@@ -495,8 +487,7 @@ def stop_interview_loop():
     _stop_event.set()
     _pause_event.clear()
     _bump_generation()
-    with _dispatch_lock:
-        _pending.clear()
+    _reset_answer_state()
     audio_capture.stop()
     session = get_session()
     session.is_recording = False
@@ -614,7 +605,7 @@ def _process_question_parallel(
     def aborted() -> bool:
         return my_gen != _answer_generation
 
-    prompt_mode = _prompt_mode_for_task(source, manual_input)
+    prompt_mode: PromptMode = _prompt_mode_for_task(source, manual_input)
     system_prompt = build_system_prompt(
         manual_input=manual_input,
         mode=prompt_mode,
