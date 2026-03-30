@@ -1,5 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Square, Trash2, Upload, Send, FileText, X, AlertTriangle, Image as ImageIcon, Pause, PlayCircle, Zap, Loader2 } from 'lucide-react'
+import {
+  Play,
+  Square,
+  Trash2,
+  Upload,
+  Send,
+  FileText,
+  X,
+  AlertTriangle,
+  Image as ImageIcon,
+  Pause,
+  PlayCircle,
+  Zap,
+  Loader2,
+} from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { ResumeHistoryPopover } from '@/components/ResumeHistory'
@@ -138,6 +152,7 @@ export default function ControlBar() {
     } catch (e: any) { setError(e.message) }
     finally { setClearing(false) }
   }
+
   const handleCancelAsk = async () => {
     setCancellingAsk(true)
     try {

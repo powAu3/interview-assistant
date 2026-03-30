@@ -47,6 +47,60 @@ export default function App() {
   const [customInput, setCustomInput] = useState('')
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
 
+  /** md+ 实时辅助：左右分栏比例（%），持久化 localStorage */
+  const ASSIST_SPLIT_KEY = 'ia_assist_split_pct'
+  const assistSplitContainerRef = useRef<HTMLDivElement>(null)
+  const assistSplitDragging = useRef(false)
+  const assistSplitPctRef = useRef(32)
+  const [assistSplitPct, setAssistSplitPct] = useState(32)
+  useEffect(() => {
+    assistSplitPctRef.current = assistSplitPct
+  }, [assistSplitPct])
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ASSIST_SPLIT_KEY)
+      if (raw == null) return
+      const v = parseFloat(raw)
+      if (Number.isFinite(v)) {
+        const c = Math.min(62, Math.max(24, v))
+        assistSplitPctRef.current = c
+        setAssistSplitPct(c)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!assistSplitDragging.current || !assistSplitContainerRef.current) return
+      const r = assistSplitContainerRef.current.getBoundingClientRect()
+      if (r.width < 80) return
+      const p = ((e.clientX - r.left) / r.width) * 100
+      const c = Math.min(62, Math.max(24, p))
+      assistSplitPctRef.current = c
+      setAssistSplitPct(c)
+    }
+    const onUp = () => {
+      if (!assistSplitDragging.current) return
+      assistSplitDragging.current = false
+      document.body.style.removeProperty('cursor')
+      document.body.style.removeProperty('user-select')
+      try {
+        localStorage.setItem(ASSIST_SPLIT_KEY, String(Math.round(assistSplitPctRef.current * 10) / 10))
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('blur', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('blur', onUp)
+    }
+  }, [])
+
   const handleBossKey = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
       e.preventDefault()
@@ -214,24 +268,33 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-wrap w-full sm:w-auto justify-end sm:justify-start border-t border-bg-tertiary/60 pt-2 sm:border-t-0 sm:pt-0">
-          <div className="flex items-center gap-2 mr-auto sm:mr-0 order-first sm:order-none w-full sm:w-auto justify-between sm:justify-start">
-            <span className="text-[10px] font-semibold text-accent-blue/90 tracking-wide whitespace-nowrap">Think · 全局</span>
-            <button
-              type="button"
-              onClick={handleThinkToggle}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-colors cursor-pointer select-none flex-shrink-0
-                ${config?.think_mode
-                  ? 'border-accent-green bg-accent-green/15 text-accent-green shadow-sm shadow-accent-green/10'
-                  : 'border-bg-hover bg-bg-tertiary text-text-muted hover:border-text-muted/40 hover:text-text-primary'}`}
-              title="全局：切换后影响当前及后续所有答题请求（与配置页同步）"
-              aria-label={`Think 全局 ${config?.think_mode ? '开启' : '关闭'}`}
-            >
-              <span className="text-xs font-bold">{config?.think_mode ? '开' : '关'}</span>
-              <span className={`relative inline-flex items-center w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
-                <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${config?.think_mode ? 'translate-x-4' : ''}`} />
+          <button
+            type="button"
+            onClick={handleThinkToggle}
+            className={`flex items-center gap-2.5 pl-3 pr-2.5 py-1.5 rounded-xl border-2 transition-colors cursor-pointer select-none flex-shrink-0 mr-auto sm:mr-0 order-first sm:order-none
+              ${config?.think_mode
+                ? 'border-accent-green bg-accent-green/15 text-accent-green shadow-sm shadow-accent-green/10'
+                : 'border-bg-hover bg-bg-tertiary text-text-secondary hover:border-text-muted/40 hover:text-text-primary'}`}
+            title="Think·全局：开启后请求模型思考能力（与配置页同步）"
+            aria-label={`Think 全局 ${config?.think_mode ? '开启' : '关闭'}`}
+          >
+            <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap leading-none">
+              Think
+              <span
+                className={`font-medium ${config?.think_mode ? 'text-accent-green/80' : 'text-text-muted'}`}
+              >
+                ·全局
               </span>
-            </button>
-          </div>
+            </span>
+            <span
+              className={`relative inline-flex w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}
+              aria-hidden
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${config?.think_mode ? 'translate-x-4' : ''}`}
+              />
+            </span>
+          </button>
           {config?.models && config.models.length > 0 && (
             <div className="relative" ref={modelDropdownRef}>
               <button
@@ -334,11 +397,69 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex-1 hidden md:flex overflow-hidden min-h-0">
-            <div className="w-[30%] min-w-[250px] border-r border-bg-tertiary flex flex-col">
+          <div
+            ref={assistSplitContainerRef}
+            className="flex-1 hidden md:flex overflow-hidden min-h-0"
+          >
+            <div
+              className="flex flex-col min-w-0 flex-shrink-0 border-r border-bg-tertiary"
+              style={{
+                width: `${assistSplitPct}%`,
+                minWidth: '220px',
+                maxWidth: '70%',
+              }}
+            >
               <TranscriptionPanel />
             </div>
-            <div className="flex-1 flex flex-col">
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="拖动调节转录区与答案区宽度"
+              aria-valuemin={24}
+              aria-valuemax={62}
+              aria-valuenow={Math.round(assistSplitPct)}
+              tabIndex={0}
+              className="w-1.5 flex-shrink-0 cursor-col-resize group relative z-10 outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/50 focus-visible:ring-inset bg-bg-hover/60 hover:bg-accent-blue/25 active:bg-accent-blue/40 transition-colors"
+              title="拖动调节左右宽度；双击恢复默认比例"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                assistSplitDragging.current = true
+                document.body.style.cursor = 'col-resize'
+                document.body.style.userSelect = 'none'
+              }}
+              onDoubleClick={(e) => {
+                e.preventDefault()
+                const c = 32
+                assistSplitPctRef.current = c
+                setAssistSplitPct(c)
+                try {
+                  localStorage.setItem(ASSIST_SPLIT_KEY, String(c))
+                } catch {
+                  /* ignore */
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                  e.preventDefault()
+                  const delta = e.key === 'ArrowLeft' ? -2 : 2
+                  const c = Math.min(62, Math.max(24, assistSplitPctRef.current + delta))
+                  assistSplitPctRef.current = c
+                  setAssistSplitPct(c)
+                }
+                if (e.key === 'Home' || e.key === 'End') {
+                  e.preventDefault()
+                  const c = e.key === 'Home' ? 24 : 62
+                  assistSplitPctRef.current = c
+                  setAssistSplitPct(c)
+                }
+              }}
+            >
+              <span
+                className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-bg-hover group-hover:bg-accent-blue/50 pointer-events-none"
+                aria-hidden
+              />
+            </div>
+            <div className="flex-1 flex flex-col min-w-0 min-h-0">
               <AnswerPanel />
             </div>
           </div>
