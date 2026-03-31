@@ -228,6 +228,98 @@ def join_transcription_fragments(parts: list[str]) -> str:
     return acc.strip()
 
 
+_FILLER_PREFIX = re.compile(
+    r"^(?:"
+    r"嗯+|啊+|呃+|额+|诶+|欸+|唉+|"
+    r"那个|这个|就是|然后|所以|"
+    r"我想想|让我想想|等一下|等会|等会儿|稍等"
+    r")(?:[\s,，。.!！?？;；:：、]+|$)",
+    re.IGNORECASE,
+)
+_QUESTION_CUE = re.compile(
+    r"(什么|怎么|如何|为什么|为何|区别|原理|作用|流程|实现|设计|优化|排查|处理|"
+    r"介绍(?:一下|下)?|说(?:一下|下)?|讲(?:一下|下)?|聊(?:一下|下)?|解释(?:一下|下)?|"
+    r"分析(?:一下|下)?|怎么做|怎么办|有哪些|是否|能不能|可不可以|对比(?:一下|下)?|"
+    r"展开讲讲|详细说说)",
+    re.IGNORECASE,
+)
+_DIRECTIVE_QUESTION_CUE = re.compile(
+    r"(?:请|你|麻烦|帮我|能否|能不能|可不可以).{0,24}"
+    r"(?:介绍|说|讲|聊|解释|分析|设计|实现|排查|优化|比较|总结)(?:一下|下)?",
+    re.IGNORECASE,
+)
+_INCOMPLETE_TAIL = re.compile(
+    r"(?:因为|所以|然后|但是|并且|或者|以及|如果|比如|例如|就是|那个|这个|首先|其次|再然后)$",
+    re.IGNORECASE,
+)
+_QUESTION_SPLIT = re.compile(r"[？?]+")
+_QUESTION_CONNECTOR_SPLIT = re.compile(
+    r"(?:[，,；;]\s*|\s+)(?=(?:再说|再讲|再聊|然后|另外|还有|还有一个|顺便|"
+    r"第二个问题|另一个问题|下一个问题))",
+    re.IGNORECASE,
+)
+
+
+def _strip_filler_prefix(text: str) -> str:
+    t = (text or "").strip()
+    prev = None
+    while t and t != prev:
+        prev = t
+        t = _FILLER_PREFIX.sub("", t).strip()
+    return t
+
+
+def normalize_transcription_for_analysis(text: str) -> str:
+    t = _strip_filler_prefix((text or "").strip())
+    t = re.sub(r"\s+", " ", t)
+    t = t.strip(" \t\r\n,，。.!！?？;；:：、")
+    return t
+
+
+def split_question_like_text(text: str) -> list[str]:
+    raw = (text or "").strip()
+    if not raw:
+        return []
+
+    parts = [p for p in _QUESTION_SPLIT.split(raw) if p and p.strip()]
+    if not parts:
+        parts = [raw]
+
+    out: list[str] = []
+    for part in parts:
+        subparts = _QUESTION_CONNECTOR_SPLIT.split(part)
+        for sub in subparts:
+            cleaned = normalize_transcription_for_analysis(sub)
+            if cleaned:
+                out.append(cleaned)
+
+    deduped: list[str] = []
+    for item in out:
+        if not deduped or deduped[-1] != item:
+            deduped.append(item)
+    return deduped
+
+
+def is_stable_question_text(text: str, min_significant_chars: int = 4) -> bool:
+    normalized = normalize_transcription_for_analysis(text)
+    if not normalized:
+        return False
+
+    sig = transcription_significant_len(normalized)
+    need = max(2, int(min_significant_chars))
+    if sig < need:
+        return False
+    if _INCOMPLETE_TAIL.search(normalized):
+        return False
+    if "?" in text or "？" in text:
+        return True
+    if _QUESTION_CUE.search(normalized):
+        return True
+    if _DIRECTIVE_QUESTION_CUE.search(normalized):
+        return True
+    return bool(sig >= max(6, need + 1) and re.search(r"(?:吗|么|呢)$", normalized))
+
+
 def _build_initial_prompt(position: str, language: str) -> str:
     """Short demonstration prompt for Whisper.
 

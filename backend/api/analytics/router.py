@@ -6,12 +6,12 @@ router = APIRouter()
 
 @router.get("/knowledge/summary")
 async def api_knowledge_summary():
-    return {"tags": get_summary()}
+    return {"tags": get_summary(("assist",))}
 
 
 @router.get("/knowledge/history")
 async def api_knowledge_history(page: int = 1, page_size: int = 20):
-    return get_history(page, page_size)
+    return get_history(page, page_size, ("assist",))
 
 
 @router.delete("/knowledge/reset")

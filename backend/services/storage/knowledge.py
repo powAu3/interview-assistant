@@ -41,6 +41,13 @@ def init_db():
 init_db()
 
 
+def _session_type_where(session_types: Optional[tuple[str, ...]]) -> tuple[str, list[str]]:
+    if not session_types:
+        return "", []
+    placeholders = ",".join("?" for _ in session_types)
+    return f" WHERE session_type IN ({placeholders})", list(session_types)
+
+
 def extract_tags(question: str, answer: str = "") -> list[str]:
     """Use LLM to extract 3-5 knowledge tags from a Q&A pair."""
     cfg = get_config()
@@ -89,11 +96,15 @@ def save_record(
         conn.close()
 
 
-def get_summary() -> list[dict]:
+def get_summary(session_types: Optional[tuple[str, ...]] = None) -> list[dict]:
     """Return per-tag aggregated stats: avg score, count, recent trend."""
+    where_sql, params = _session_type_where(session_types)
     with _db_lock:
         conn = _get_conn()
-        rows = conn.execute("SELECT tags, score, created_at FROM question_records ORDER BY created_at DESC").fetchall()
+        rows = conn.execute(
+            f"SELECT tags, score, created_at FROM question_records{where_sql} ORDER BY created_at DESC",
+            params,
+        ).fetchall()
         conn.close()
 
     tag_data: dict[str, list[dict]] = {}
@@ -133,14 +144,22 @@ def get_summary() -> list[dict]:
     return result
 
 
-def get_history(page: int = 1, page_size: int = 20) -> dict:
+def get_history(
+    page: int = 1,
+    page_size: int = 20,
+    session_types: Optional[tuple[str, ...]] = None,
+) -> dict:
     offset = (page - 1) * page_size
+    where_sql, params = _session_type_where(session_types)
     with _db_lock:
         conn = _get_conn()
-        total = conn.execute("SELECT COUNT(*) as c FROM question_records").fetchone()["c"]
+        total = conn.execute(
+            f"SELECT COUNT(*) as c FROM question_records{where_sql}",
+            params,
+        ).fetchone()["c"]
         rows = conn.execute(
-            "SELECT * FROM question_records ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (page_size, offset),
+            f"SELECT * FROM question_records{where_sql} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            [*params, page_size, offset],
         ).fetchall()
         conn.close()
 
