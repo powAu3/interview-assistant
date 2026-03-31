@@ -3,6 +3,13 @@ const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const {
+  ShortcutStatus,
+  createShortcutState,
+  loadShortcutConfig,
+  saveShortcutConfig,
+  validateShortcutMap,
+} = require('./shortcuts');
 
 const pkg = require('./package.json');
 
@@ -37,6 +44,7 @@ let mainWindow = null;
 let tray = null;
 let pythonProcess = null;
 let isQuitting = false;
+let shortcuts = {};
 
 function createTrayIcon() {
   const size = 16;
@@ -161,6 +169,36 @@ function toggleWindow() {
   }
 }
 
+function postBackend(pathname, body = '{}') {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      `${SERVER_URL}${pathname}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let raw = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { raw += chunk; });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(raw ? JSON.parse(raw) : { ok: true });
+            return;
+          }
+          reject(new Error(raw || res.statusMessage || `HTTP ${res.statusCode}`));
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 function createTray() {
   const iconPath = path.join(__dirname, 'icon.png');
   let icon;
@@ -175,7 +213,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: '显示窗口', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
-    { label: '最小化到托盘 (Ctrl+B)', click: () => mainWindow?.hide() },
+    { label: '隐藏到托盘', click: () => toggleWindow() },
     { type: 'separator' },
     {
       label: '窗口置顶',
@@ -204,11 +242,107 @@ function createTray() {
 }
 
 function registerShortcuts() {
-  globalShortcut.register('CommandOrControl+B', toggleWindow);
+  shortcuts = loadShortcutConfig(app);
+  Object.values(shortcuts).forEach((shortcut) => {
+    const callback = shortcutCallbacks[shortcut.action];
+    if (!callback) return;
+    if (globalShortcut.register(shortcut.key, callback)) {
+      shortcut.status = ShortcutStatus.Registered;
+    } else {
+      shortcut.status = ShortcutStatus.Failed;
+    }
+  });
 }
+
+function unregisterShortcut(action) {
+  const shortcut = shortcuts[action];
+  if (!shortcut) return;
+  globalShortcut.unregister(shortcut.key);
+  shortcut.status = ShortcutStatus.Available;
+}
+
+function unregisterAllManagedShortcuts() {
+  Object.keys(shortcuts).forEach((action) => unregisterShortcut(action));
+}
+
+function registerShortcutSet(nextShortcuts) {
+  const validation = validateShortcutMap(nextShortcuts);
+  if (!validation.ok) {
+    return { ok: false, error: validation.error, shortcuts };
+  }
+
+  const prevShortcuts = shortcuts;
+  unregisterAllManagedShortcuts();
+
+  const nextState = JSON.parse(JSON.stringify(nextShortcuts));
+  let failedKey = null;
+  for (const shortcut of Object.values(nextState)) {
+    const callback = shortcutCallbacks[shortcut.action];
+    if (!callback) continue;
+    if (globalShortcut.register(shortcut.key, callback)) {
+      shortcut.status = ShortcutStatus.Registered;
+    } else {
+      shortcut.status = ShortcutStatus.Failed;
+      failedKey = shortcut.key;
+      break;
+    }
+  }
+
+  if (failedKey) {
+    Object.values(nextState).forEach((shortcut) => globalShortcut.unregister(shortcut.key));
+    shortcuts = prevShortcuts;
+    Object.values(shortcuts).forEach((shortcut) => {
+      const callback = shortcutCallbacks[shortcut.action];
+      if (!callback) return;
+      globalShortcut.register(shortcut.key, callback);
+      shortcut.status = ShortcutStatus.Registered;
+    });
+    return { ok: false, error: `快捷键注册失败：${failedKey}`, shortcuts };
+  }
+
+  shortcuts = nextState;
+  saveShortcutConfig(app, shortcuts);
+  return { ok: true, shortcuts };
+}
+
+const shortcutCallbacks = {
+  hideOrShowWindow: () => toggleWindow(),
+  hardClearSession: async () => {
+    try {
+      await postBackend('/api/clear');
+    } catch (error) {
+      console.error('hardClearSession failed:', error);
+    }
+  },
+  askFromServerScreen: async () => {
+    try {
+      await postBackend('/api/ask-from-server-screen');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    } catch (error) {
+      console.error('askFromServerScreen failed:', error);
+    }
+  },
+};
 
 ipcMain.handle('hide-window', () => mainWindow?.hide());
 ipcMain.handle('show-window', () => { mainWindow?.show(); mainWindow?.focus(); });
+ipcMain.handle('get-shortcuts', () => shortcuts);
+ipcMain.handle('update-shortcuts', (_event, updates) => {
+  const next = JSON.parse(JSON.stringify(shortcuts));
+  for (const update of updates || []) {
+    if (!next[update.action]) continue;
+    next[update.action].key = update.key;
+  }
+  return registerShortcutSet(next);
+});
+ipcMain.handle('reset-shortcuts', () => {
+  try { fs.unlinkSync(path.join(app.getPath('userData'), 'shortcuts.json')); } catch {}
+  const defaults = createShortcutState();
+  return registerShortcutSet(defaults);
+});
 ipcMain.handle('toggle-always-on-top', () => {
   if (!mainWindow) return false;
   const next = !mainWindow.isAlwaysOnTop();
@@ -237,7 +371,7 @@ function createAppMenu() {
       submenu: [
         { role: 'about', label: `关于 ${app.name}` },
         { type: 'separator' },
-        { label: '最小化到托盘', accelerator: 'CommandOrControl+B', click: () => mainWindow?.hide() },
+        { label: '隐藏/显示窗口', click: () => toggleWindow() },
         { type: 'separator' },
         { role: 'hide', label: '隐藏应用' },
         { role: 'unhide', label: '显示应用' },

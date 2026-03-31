@@ -58,6 +58,10 @@ class ConfigUpdate(BaseModel):
     transcription_min_sig_chars: Optional[int] = None
     assist_transcription_merge_gap_sec: Optional[float] = None
     assist_transcription_merge_max_sec: Optional[float] = None
+    assist_asr_confirm_window_sec: Optional[float] = None
+    assist_asr_group_max_wait_sec: Optional[float] = None
+    assist_asr_interrupt_running: Optional[bool] = None
+    assist_high_churn_short_answer: Optional[bool] = None
     screen_capture_region: Optional[str] = None
 
 
@@ -103,6 +107,14 @@ async def api_get_config():
         "assist_transcription_merge_max_sec": max(
             1.0, min(120.0, float(getattr(cfg, "assist_transcription_merge_max_sec", 12.0) or 12.0))
         ),
+        "assist_asr_confirm_window_sec": max(
+            0.0, min(5.0, float(getattr(cfg, "assist_asr_confirm_window_sec", 0.45) or 0.0))
+        ),
+        "assist_asr_group_max_wait_sec": max(
+            0.2, min(8.0, float(getattr(cfg, "assist_asr_group_max_wait_sec", 1.2) or 1.2))
+        ),
+        "assist_asr_interrupt_running": bool(getattr(cfg, "assist_asr_interrupt_running", True)),
+        "assist_high_churn_short_answer": bool(getattr(cfg, "assist_high_churn_short_answer", False)),
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "has_resume": bool(cfg.resume_text),
         "resume_active_history_id": resume_active_history_id,
@@ -138,6 +150,14 @@ async def api_update_config(body: ConfigUpdate):
         if "assist_transcription_merge_max_sec" in d:
             d["assist_transcription_merge_max_sec"] = max(
                 1.0, min(120.0, float(d["assist_transcription_merge_max_sec"]))
+            )
+        if "assist_asr_confirm_window_sec" in d:
+            d["assist_asr_confirm_window_sec"] = max(
+                0.0, min(5.0, float(d["assist_asr_confirm_window_sec"]))
+            )
+        if "assist_asr_group_max_wait_sec" in d:
+            d["assist_asr_group_max_wait_sec"] = max(
+                0.2, min(8.0, float(d["assist_asr_group_max_wait_sec"]))
             )
         if "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
             d.pop("screen_capture_region", None)

@@ -74,6 +74,14 @@ class AppConfig(BaseModel):
     assist_transcription_merge_gap_sec: float = 2.0
     # 从第一段 ASR 起最长等待（秒），超时强制送出，避免对方长停顿导致永远不触发
     assist_transcription_merge_max_sec: float = 12.0
+    # 实时辅助：问句候选组在最后一条有效追问后静默超过该秒数再确认提交
+    assist_asr_confirm_window_sec: float = 0.45
+    # 实时辅助：候选问句组从第一条有效追问开始的最长等待时间
+    assist_asr_group_max_wait_sec: float = 1.2
+    # 实时辅助：确认新问句组后是否中断仍在生成的旧 ASR 回答
+    assist_asr_interrupt_running: bool = True
+    # 实时辅助：高 churn 场景下自动切短答，优先跟住最新问题
+    assist_high_churn_short_answer: bool = False
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
     screen_capture_region: str = "left_half"
 
