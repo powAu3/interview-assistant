@@ -61,6 +61,8 @@ export interface AppConfig {
   assist_transcription_merge_gap_sec?: number
   /** 从首段 ASR 起最长等待（秒），超时强制送出 */
   assist_transcription_merge_max_sec?: number
+  /** 高 churn 场景下自动切短答 */
+  assist_high_churn_short_answer?: boolean
   /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
   screen_capture_region?: string
 }

@@ -12,7 +12,7 @@ import struct
 import uuid
 import numpy as np
 import threading
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 
 try:
     import websocket
@@ -226,6 +226,178 @@ def join_transcription_fragments(parts: list[str]) -> str:
         need_space = bool(re.search(r"[a-zA-Z0-9]$", acc) and re.match(r"^[a-zA-Z0-9]", q))
         acc = f"{acc} {q}" if need_space else f"{acc}{q}"
     return acc.strip()
+
+
+_FILLER_PREFIX = re.compile(
+    r"^(?:"
+    r"嗯+|恩+|啊+|呃+|额+|诶+|欸+|唉+|"
+    r"那个|这个|就是|然后|所以|"
+    r"我想想|让我想想|等一下|等会|等会儿|稍等"
+    r")(?:[\s,，。.!！?？;；:：、]+|$)",
+    re.IGNORECASE,
+)
+_BACKCHANNEL = re.compile(
+    r"^(?:"
+    r"对+|对对+|没错|是的|好|好的|行|可以|嗯+|恩+|啊+|哦+|噢+|"
+    r"明白了|知道了|收到|你说得对|你说的对|确实|继续|继续吧|然后呢|还有吗"
+    r")(?:[\s,，。.!！?？;；:：、]+|$)",
+    re.IGNORECASE,
+)
+_QUESTION_CUE = re.compile(
+    r"(什么|怎么|如何|为什么|为何|区别|原理|作用|流程|实现|设计|优化|排查|处理|"
+    r"介绍(?:一下|下)?|说(?:一下|下)?|讲(?:一下|下)?|聊(?:一下|下)?|解释(?:一下|下)?|"
+    r"分析(?:一下|下)?|怎么做|怎么办|有哪些|是否|能不能|可不可以|对比(?:一下|下)?|"
+    r"展开讲讲|详细说说|举个例子|继续讲|接着说)",
+    re.IGNORECASE,
+)
+_DIRECTIVE_QUESTION_CUE = re.compile(
+    r"(?:请|你|麻烦|帮我|能否|能不能|可不可以).{0,24}"
+    r"(?:介绍|说|讲|聊|解释|分析|设计|实现|排查|优化|比较|总结|展开)(?:一下|下)?",
+    re.IGNORECASE,
+)
+_INCOMPLETE_TAIL = re.compile(
+    r"(?:因为|所以|然后|但是|并且|或者|以及|如果|比如|例如|就是|那个|这个|首先|其次|再然后)$",
+    re.IGNORECASE,
+)
+_QUESTION_SPLIT = re.compile(r"[？?]+")
+_QUESTION_CONNECTOR_SPLIT = re.compile(
+    r"(?:[，,；;]\s*|\s+)(?=(?:再说|再讲|再聊|然后|另外|还有|还有一个|顺便|"
+    r"第二个问题|另一个问题|下一个问题))",
+    re.IGNORECASE,
+)
+
+AsrQuestionCandidate = Literal["ignore", "candidate", "promote"]
+
+
+def _strip_filler_prefix(text: str) -> str:
+    t = (text or "").strip()
+    prev = None
+    while t and t != prev:
+        prev = t
+        t = _FILLER_PREFIX.sub("", t).strip()
+    return t
+
+
+def normalize_transcription_for_analysis(text: str) -> str:
+    t = _strip_filler_prefix((text or "").strip())
+    t = re.sub(r"\s+", " ", t)
+    t = t.strip(" \t\r\n,，。.!！?？;；:：、")
+    return t
+
+
+def split_question_like_text(text: str) -> list[str]:
+    raw = (text or "").strip()
+    if not raw:
+        return []
+
+    parts = [p for p in _QUESTION_SPLIT.split(raw) if p and p.strip()]
+    if not parts:
+        parts = [raw]
+
+    out: list[str] = []
+    for part in parts:
+        subparts = _QUESTION_CONNECTOR_SPLIT.split(part)
+        for sub in subparts:
+            cleaned = normalize_transcription_for_analysis(sub)
+            if cleaned:
+                out.append(cleaned)
+
+    deduped: list[str] = []
+    for item in out:
+        if not deduped or deduped[-1] != item:
+            deduped.append(item)
+    return deduped
+
+
+def is_backchannel_text(text: str) -> bool:
+    normalized = normalize_transcription_for_analysis(text)
+    if not normalized:
+        return True
+    normalized = re.sub(r"^(?:嗯+|恩+|啊+|呃+|额+|诶+|欸+|哦+|噢+)", "", normalized).strip()
+    if not normalized:
+        return True
+    return bool(_BACKCHANNEL.fullmatch(normalized))
+
+
+def classify_asr_question_candidate(
+    text: str,
+    min_significant_chars: int = 4,
+) -> tuple[AsrQuestionCandidate, str]:
+    normalized = normalize_transcription_for_analysis(text)
+    if not normalized:
+        return "ignore", ""
+    backchannel_cleaned = re.sub(r"^(?:嗯+|恩+|啊+|呃+|额+|诶+|欸+|哦+|噢+)", "", normalized).strip()
+    if is_backchannel_text(normalized):
+        return "ignore", backchannel_cleaned or normalized
+
+    sig = transcription_significant_len(normalized)
+    need = max(2, int(min_significant_chars))
+    has_question_mark = "?" in text or "？" in text
+    has_question_cue = bool(_QUESTION_CUE.search(normalized))
+    has_directive_cue = bool(_DIRECTIVE_QUESTION_CUE.search(normalized))
+    has_tail_question = bool(re.search(r"(?:吗|么|呢)$", normalized))
+    incomplete_tail = bool(_INCOMPLETE_TAIL.search(normalized))
+
+    if has_question_mark and sig >= 2:
+        return "promote", normalized
+    if has_question_cue or has_directive_cue:
+        return "promote", normalized
+    if has_tail_question and sig >= max(3, need - 1):
+        return "promote", normalized
+    if incomplete_tail:
+        if sig >= need:
+            return "candidate", normalized
+        return "ignore", normalized
+    if sig >= max(5, need + 1):
+        return "candidate", normalized
+    return "ignore", normalized
+
+
+def is_viable_asr_question_group(
+    texts: list[str],
+    min_significant_chars: int = 4,
+) -> bool:
+    cleaned_parts: list[str] = []
+    saw_promote = False
+    for text in texts:
+        parts = split_question_like_text(text) or [normalize_transcription_for_analysis(text)]
+        for part in parts:
+            if not part:
+                continue
+            kind, cleaned = classify_asr_question_candidate(part, min_significant_chars)
+            if cleaned:
+                cleaned_parts.append(cleaned)
+            if kind == "promote":
+                saw_promote = True
+    if saw_promote:
+        return True
+    if len(cleaned_parts) >= 2:
+        return True
+    merged = "".join(cleaned_parts)
+    return transcription_significant_len(merged) >= max(6, int(min_significant_chars) + 1)
+
+
+def build_asr_question_group_text(texts: list[str], max_items: int = 4) -> str:
+    items: list[str] = []
+    for text in texts:
+        parts = split_question_like_text(text) or [normalize_transcription_for_analysis(text)]
+        for part in parts:
+            if not part:
+                continue
+            if not items or items[-1] != part:
+                items.append(part)
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) > max_items:
+        items = [items[0], *items[-(max_items - 1):]]
+    followups = "\n".join(f"{idx}. {item}" for idx, item in enumerate(items[1:], start=1))
+    return (
+        "以下内容来自同一轮实时面试中的连续追问，请合并理解，优先回答最后一个追问，并兼顾前文上下文。\n\n"
+        f"主问题：{items[0]}\n\n"
+        f"连续追问：\n{followups}"
+    )
 
 
 def _build_initial_prompt(position: str, language: str) -> str:

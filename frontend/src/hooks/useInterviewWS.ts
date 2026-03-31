@@ -51,6 +51,9 @@ export function useInterviewWS() {
       case 'transcription':
         s.addTranscription(msg.text)
         break
+      case 'session_cleared':
+        s.clearSession()
+        break
       case 'answer_start':
         s.startAnswer(msg.id, msg.question, {
           source: msg.source,

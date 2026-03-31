@@ -62,8 +62,32 @@ def _base_prompt_prefix(position: str, language: str, resume_section: str) -> st
     )
 
 
-def _asr_realtime_prompt_body(language: str, language_lower: str) -> str:
-    return (
+def _asr_realtime_prompt_body(
+    language: str,
+    language_lower: str,
+    high_churn_short_answer: bool = False,
+) -> str:
+    if high_churn_short_answer:
+        return (
+            "\n场景：当前处于实时面试高 churn 模式，面试官切题或追问很快。\n\n"
+            "核心目标：优先跟住最新问题，宁可短答，也不要展开成长答。\n\n"
+            "回答流程：\n"
+            "1. 先判断当前输入是不是一个完整可答的问题；\n"
+            "2. 如果不是完整问题，只输出一句“信息不足，先等待更完整的问题”；然后停止；\n"
+            "3. 如果是完整问题，直接回答，不要输出任何判断过程或元话术。\n\n"
+            "短答硬约束：\n"
+            "- 开头先用 1 句给结论；\n"
+            "- 然后只保留 3-4 条最关键的机制/步骤/风险点；\n"
+            "- 默认控制在约 80-180 字，复杂题最多 220 字；\n"
+            "- 禁止背景铺垫、长例子、延伸知识树、重复解释；\n"
+            "- 如果还有后续可追问点，只留最后 1 句点到为止，不要展开；\n"
+            "- 除非明确要求写代码，否则不要输出代码。\n\n"
+            "输出格式：\n"
+            "- 只用纯文本短段落，或纯文本编号 1) 2) 3)；\n"
+            "- 禁止 Markdown 标题、列表、加粗和分隔线；\n"
+            "- 不要写“我理解你问的是”“这是一个完整问题”等开场白。\n"
+        )
+    body = (
         "\n场景：本轮输入来自实时语音转写（可能是碎句、口头禅、半句话）。\n\n"
         "回答流程：\n"
         "1. 先判断这是不是一个完整可答的面试问题；\n"
@@ -105,6 +129,7 @@ def _asr_realtime_prompt_body(language: str, language_lower: str) -> str:
         "- 禁止 Markdown 标题、列表、加粗和分隔线；\n"
         "- 需要代码时允许使用 Markdown 代码块。\n"
     )
+    return body
 
 
 def _manual_text_prompt_body(language: str, language_lower: str) -> str:
@@ -266,6 +291,7 @@ def build_system_prompt(
     manual_input: bool = False,
     mode: Optional[PromptMode] = None,
     screen_region: Optional[str] = None,
+    high_churn_short_answer: bool = False,
 ) -> str:
     """Build context-aware system prompt for realtime assist.
 
@@ -289,7 +315,11 @@ def build_system_prompt(
     elif mode == PROMPT_MODE_MANUAL_TEXT:
         body = _manual_text_prompt_body(cfg.language, lang_lower)
     else:
-        body = _asr_realtime_prompt_body(cfg.language, lang_lower)
+        body = _asr_realtime_prompt_body(
+            cfg.language,
+            lang_lower,
+            high_churn_short_answer=high_churn_short_answer,
+        )
     return prefix + body
 
 

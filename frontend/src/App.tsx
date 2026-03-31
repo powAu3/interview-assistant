@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Settings, SlidersHorizontal, MonitorSmartphone } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useShortcutsStore } from '@/stores/shortcutsStore'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { api } from '@/lib/api'
 import TranscriptionPanel from '@/components/TranscriptionPanel'
@@ -17,6 +18,9 @@ declare global {
     electronAPI?: {
       hideWindow: () => Promise<void>
       showWindow: () => Promise<void>
+      getShortcuts: () => Promise<Record<string, { action: string; key: string; defaultKey: string; label: string; category: string; status?: string }>>
+      updateShortcuts: (shortcuts: Array<{ action: string; key: string }>) => Promise<{ ok: boolean; error?: string; shortcuts: Record<string, unknown> }>
+      resetShortcuts: () => Promise<{ ok: boolean; error?: string; shortcuts: Record<string, unknown> }>
       toggleAlwaysOnTop: () => Promise<boolean>
       toggleContentProtection: () => Promise<boolean>
       getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
@@ -47,19 +51,6 @@ export default function App() {
   const [customInput, setCustomInput] = useState('')
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
 
-  const handleBossKey = useCallback((e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-      e.preventDefault()
-      window.electronAPI?.hideWindow()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!window.electronAPI) return
-    document.addEventListener('keydown', handleBossKey)
-    return () => document.removeEventListener('keydown', handleBossKey)
-  }, [handleBossKey])
-
   useEffect(() => {
     Promise.all([
       api.getConfig().then(setConfig),
@@ -68,6 +59,13 @@ export default function App() {
     ]).then(() => {
       api.checkModelsHealth().catch(() => {})
     }).catch((e) => setInitError(e.message))
+  }, [])
+
+  useEffect(() => {
+    if (!window.electronAPI?.getShortcuts) return
+    window.electronAPI.getShortcuts()
+      .then((shortcuts) => useShortcutsStore.getState().setShortcuts(shortcuts))
+      .catch(() => {})
   }, [])
 
   const handlePositionChange = async (val: string) => {
@@ -98,7 +96,7 @@ export default function App() {
     setServerScreenLoading(true)
     try {
       await api.askFromServerScreen()
-      useInterviewStore.getState().setToastMessage('已截取电脑左半屏并提交识图模型，请在答案区查看')
+      useInterviewStore.getState().setToastMessage('已按当前截图区域配置提交服务端截图审题，请在答案区查看')
     } catch (e: unknown) {
       useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '提交失败')
     } finally {
@@ -357,7 +355,7 @@ export default function App() {
                 className="w-full flex items-center justify-center gap-3 min-h-[52px] py-3.5 rounded-xl bg-accent-blue text-white text-base font-semibold shadow-sm disabled:opacity-60 active:scale-[0.99] transition-transform"
               >
                 <MonitorSmartphone className="w-5 h-5 flex-shrink-0" />
-                {serverScreenLoading ? '截取左屏并提交中…' : '左屏审题写码'}
+                {serverScreenLoading ? '截图审题提交中…' : '服务端截图审题'}
               </button>
               <p className="text-[10px] text-text-muted text-center mt-1.5 leading-snug px-0.5">
                 在后台子进程截主屏左半幅，该请求不写访问日志以减少终端抢焦点。若仍被终端打断，可用 <code className="text-[9px] bg-bg-tertiary px-0.5 rounded">IA_ACCESS_LOG=0</code> 启动后端关闭全部 HTTP 访问日志。须配置识图模型与屏幕录制权限。

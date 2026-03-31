@@ -82,7 +82,7 @@ const SOURCE_LABELS: Record<string, string> = {
   conversation_mic: '本机麦克风',
   manual_text: '键盘速记',
   manual_image: '截图审题',
-  server_screen_left: '电脑左屏',
+  server_screen_left: '服务端截图审题',
 }
 
 function useMarkdownComponents(colorScheme: ColorSchemeId) {
