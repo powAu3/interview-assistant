@@ -757,6 +757,12 @@ _engine: Optional[STTEngine] = None
 _doubao_engine: Optional[DoubaoSTT] = None
 
 
+def set_whisper_language(language: str) -> None:
+    global _engine
+    if _engine is not None:
+        _engine.language = language
+
+
 def get_stt_engine(
     model_size: Optional[str] = None,
     language: Optional[str] = None,
