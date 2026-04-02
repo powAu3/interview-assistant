@@ -30,7 +30,7 @@ declare global {
 
 export default function App() {
   useInterviewWS()
-  const { config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, sttLoaded, sttLoading } =
+  const { config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading } =
     useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
@@ -43,9 +43,7 @@ export default function App() {
     setIsElectronApp(typeof window !== 'undefined' && !!window.electronAPI)
   }, [])
 
-  useEffect(() => {
-    if (appMode === 'job-tracker' && !isElectronApp) setAppMode('assist')
-  }, [appMode, isElectronApp])
+  // job-tracker is now available on both web and Electron
   const [editingPos, setEditingPos] = useState(false)
   const [editingLang, setEditingLang] = useState(false)
   const [customInput, setCustomInput] = useState('')
@@ -125,6 +123,15 @@ export default function App() {
       .then((shortcuts) => useShortcutsStore.getState().setShortcuts(shortcuts))
       .catch(() => {})
   }, [])
+
+  const hasGuided = useRef(false)
+  useEffect(() => {
+    if (!config || hasGuided.current) return
+    if (!config.api_key_set) {
+      hasGuided.current = true
+      openModelsDrawer()
+    }
+  }, [config, openModelsDrawer])
 
   const handlePositionChange = async (val: string) => {
     const v = val.trim()
@@ -219,43 +226,44 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-bg-primary overflow-hidden">
+    <div className="h-screen flex flex-col bg-bg-primary overflow-hidden noise-bg">
       {/* Header */}
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 md:px-4 py-2 border-b border-bg-tertiary bg-bg-secondary flex-shrink-0 gap-y-2">
-        <div className="flex items-center gap-2 flex-shrink-0 min-w-0 flex-wrap">
-          <span className="text-base flex-shrink-0">🎙️</span>
-          <h1 className="text-sm font-semibold hidden sm:block flex-shrink-0">学习助手</h1>
+      <header className="header-gradient flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 md:px-5 py-2.5 flex-shrink-0 gap-y-2">
+        <div className="flex items-center gap-2.5 flex-shrink-0 min-w-0 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-blue/20 to-accent-blue/5 flex items-center justify-center border border-accent-blue/10">
+              <span className="text-sm">🎙️</span>
+            </div>
+            <h1 className="text-sm font-bold hidden sm:block flex-shrink-0 tracking-tight">学习助手</h1>
+          </div>
 
-          {/* Mode tabs — 移动端仅显示实时辅助，其余模式在 sm: 以上才显示 */}
-          <div className="flex bg-bg-tertiary rounded-lg p-0.5 ml-1">
+          <div className="flex overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none">
             {(
               [
                 ['assist', '实时辅助'],
                 ['practice', '模拟练习'],
                 ['knowledge', '能力分析'],
                 ['resume-opt', '简历优化'],
-                ...(isElectronApp ? [['job-tracker', '求职看板'] as const] : []),
+                ['job-tracker', '\u6C42\u804C\u770B\u677F'] as const,
               ] as const
             ).map(([key, label]) => (
               <button key={key} onClick={() => setAppMode(key)}
-                className={`px-2 md:px-2.5 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0
-                  ${key !== 'assist' ? 'hidden sm:block' : ''}
-                  ${appMode === key ? 'bg-accent-blue text-white' : 'text-text-muted hover:text-text-primary'}`}>
+                className={`px-2.5 md:px-3 py-1.5 text-xs rounded-[10px] transition-all duration-200 whitespace-nowrap flex-shrink-0 font-medium ${appMode === key ? 'bg-accent-blue text-white shadow-sm shadow-accent-blue/20' : 'text-text-muted hover:text-text-primary hover:bg-bg-hover/50'}`}>
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+          <div className="flex items-center gap-1.5 ml-1.5 flex-shrink-0 bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20">
             <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
-            <span className="text-[10px] text-text-muted hidden sm:inline">
-              {sttLoaded ? 'STT就绪' : sttLoading ? 'STT加载中' : 'STT未加载'}
+            <span className="text-[10px] text-text-muted hidden sm:inline font-medium">
+              {sttLoaded ? 'STT就绪' : sttLoading ? '加载中' : '未加载'}
             </span>
           </div>
 
           {tokenUsage.total > 0 && (
             <div
-              className="hidden sm:flex items-center gap-1 ml-1 cursor-help"
+              className="hidden sm:flex items-center gap-1.5 ml-1 cursor-help bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20"
               title={[
                 `总计 ${tokenUsage.total}（Prompt ${tokenUsage.prompt} + Completion ${tokenUsage.completion}）`,
                 ...Object.entries(tokenUsage.byModel || {}).map(
@@ -263,37 +271,32 @@ export default function App() {
                 ),
               ].join('\n')}
             >
-              <span className="text-[10px] text-text-muted">Token:</span>
-              <span className="text-[10px] text-accent-blue font-mono">{formatTokens(tokenUsage.total)}</span>
+              <span className="text-[10px] text-text-muted font-medium">Token</span>
+              <span className="text-[10px] text-accent-blue font-mono font-medium">{formatTokens(tokenUsage.total)}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-wrap w-full sm:w-auto justify-end sm:justify-start border-t border-bg-tertiary/60 pt-2 sm:border-t-0 sm:pt-0">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-wrap w-full sm:w-auto justify-end sm:justify-start border-t border-bg-tertiary/30 pt-2 sm:border-t-0 sm:pt-0">
           <button
             type="button"
             onClick={handleThinkToggle}
-            className={`flex items-center gap-2.5 pl-3 pr-2.5 py-1.5 rounded-xl border-2 transition-colors cursor-pointer select-none flex-shrink-0 mr-auto sm:mr-0 order-first sm:order-none
+            className={`flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-xl border transition-all duration-200 cursor-pointer select-none flex-shrink-0 mr-auto sm:mr-0 order-first sm:order-none
               ${config?.think_mode
-                ? 'border-accent-green bg-accent-green/15 text-accent-green shadow-sm shadow-accent-green/10'
-                : 'border-bg-hover bg-bg-tertiary text-text-secondary hover:border-text-muted/40 hover:text-text-primary'}`}
+                ? 'border-accent-green/40 bg-accent-green/10 text-accent-green shadow-sm shadow-accent-green/10'
+                : 'border-bg-hover/60 bg-bg-tertiary/50 text-text-secondary hover:border-text-muted/30 hover:text-text-primary'}`}
             title="Think·全局：开启后请求模型思考能力（与配置页同步）"
             aria-label={`Think 全局 ${config?.think_mode ? '开启' : '关闭'}`}
           >
             <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap leading-none">
               Think
-              <span
-                className={`font-medium ${config?.think_mode ? 'text-accent-green/80' : 'text-text-muted'}`}
-              >
-                ·全局
-              </span>
             </span>
             <span
-              className={`relative inline-flex w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}
+              className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover/80'}`}
               aria-hidden
             >
               <span
-                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${config?.think_mode ? 'translate-x-4' : ''}`}
+                className={`absolute top-[2px] left-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200 ${config?.think_mode ? 'translate-x-[14px]' : ''}`}
               />
             </span>
           </button>
@@ -302,29 +305,28 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                title="优先答题模型：实时辅助会优先把题目分给该模型（空闲且可用时）；多题并行时其余题目按「配置」里模型顺序依次占剩余路。"
-                className="flex items-center gap-1.5 bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover hover:border-accent-blue transition-colors max-w-[130px] md:max-w-[160px]"
+                title="优先答题模型"
+                className="flex items-center gap-1.5 bg-bg-tertiary/50 text-text-primary text-xs rounded-xl px-2.5 py-1.5 border border-bg-hover/50 hover:border-accent-blue/40 transition-all duration-200 max-w-[130px] md:max-w-[160px]"
               >
                 <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`} />
-                <span className="text-[9px] text-accent-blue/90 font-medium flex-shrink-0 hidden sm:inline">优先</span>
-                <span className="truncate min-w-0">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
-                <svg className="w-3 h-3 flex-shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                <span className="truncate min-w-0 font-medium">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
+                <svg className={`w-3 h-3 flex-shrink-0 text-text-muted transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {modelDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-bg-secondary border border-bg-hover rounded-lg shadow-lg z-50 min-w-[180px] py-1">
+                <div className="absolute right-0 top-full mt-1.5 glass border border-bg-hover/50 rounded-xl shadow-xl shadow-black/20 z-50 min-w-[200px] py-1.5 animate-fade-up">
                   {config.models.map((m, i) => (
                     <button key={i}
                       onClick={async () => { setModelDropdownOpen(false); await handleModelChange(i) }}
-                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-bg-tertiary transition-colors ${i === config.active_model ? 'text-accent-blue' : 'text-text-primary'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(i)}`} />
-                      <span className="truncate">{m.name}{m.supports_vision ? ' 👁' : ''}</span>
-                      {i === config.active_model && <span className="ml-auto text-accent-blue">✓</span>}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-bg-tertiary/50 transition-all duration-150 ${i === config.active_model ? 'text-accent-blue bg-accent-blue/5' : 'text-text-primary'}`}>
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${healthDot(i)}`} />
+                      <span className="truncate font-medium">{m.name}{m.supports_vision ? ' 👁' : ''}</span>
+                      {i === config.active_model && <span className="ml-auto text-accent-blue text-[10px] font-semibold">优先</span>}
                     </button>
                   ))}
-                  <div className="border-t border-bg-hover mt-1 pt-1 px-3 py-1">
+                  <div className="border-t border-bg-hover/40 mt-1 pt-1 px-3 py-1.5">
                     <button onClick={() => { api.checkModelsHealth().catch(() => {}); }}
-                      className="text-[10px] text-text-muted hover:text-accent-blue transition-colors">
-                      🔄 重新检查
+                      className="text-[10px] text-text-muted hover:text-accent-blue transition-colors font-medium">
+                      重新检查连接
                     </button>
                   </div>
                 </div>
@@ -368,7 +370,7 @@ export default function App() {
           <button
             type="button"
             onClick={toggleSettings}
-            className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+            className="p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
             title="设置"
           >
             <Settings className="w-4 h-4" />
@@ -376,7 +378,7 @@ export default function App() {
           <button
             type="button"
             onClick={openConfigDrawer}
-            className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-accent-blue transition-colors flex-shrink-0"
+            className="p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-accent-blue transition-all duration-200 border border-transparent hover:border-accent-blue/20 flex-shrink-0"
             title="配置：模型并行、VAD、LLM"
           >
             <SlidersHorizontal className="w-4 h-4" />
@@ -421,7 +423,7 @@ export default function App() {
               aria-valuemax={62}
               aria-valuenow={Math.round(assistSplitPct)}
               tabIndex={0}
-              className="w-1.5 flex-shrink-0 cursor-col-resize group relative z-10 outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/50 focus-visible:ring-inset bg-bg-hover/60 hover:bg-accent-blue/25 active:bg-accent-blue/40 transition-colors"
+              className="w-1 flex-shrink-0 cursor-col-resize group relative z-10 outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/50 focus-visible:ring-inset bg-bg-hover/30 hover:bg-accent-blue/20 active:bg-accent-blue/40 transition-all duration-150"
               title="拖动调节左右宽度；双击恢复默认比例"
               onMouseDown={(e) => {
                 e.preventDefault()
@@ -499,21 +501,19 @@ export default function App() {
       {/* ── Resume Optimizer ── */}
       {appMode === 'resume-opt' && <ResumeOptimizer />}
 
-      {/* ── Job tracker (Electron only) ── */}
-      {appMode === 'job-tracker' && isElectronApp && <JobTracker />}
+      {/* ── Job tracker ── */}
+      {appMode === 'job-tracker' && <JobTracker />}
 
-      {/* Fallback toast */}
       {fallbackToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2">
-          <div className="bg-accent-amber/90 text-black text-xs px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm">
-            ⚠️ {fallbackToast.from} 不可用，已自动切换到 {fallbackToast.to}
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
+          <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20">
+            <span className="text-accent-amber font-semibold">⚠</span>&nbsp; {fallbackToast.from} 不可用，切换到 {fallbackToast.to}
           </div>
         </div>
       )}
-      {/* Generic toast (e.g. 已清空, 已发送取消) */}
       {toastMessage && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2">
-          <div className="bg-bg-tertiary border border-bg-hover text-text-primary text-xs px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
+          <div className="glass border border-bg-hover/50 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 font-medium">
             {toastMessage}
           </div>
         </div>

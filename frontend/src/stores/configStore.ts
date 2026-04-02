@@ -25,6 +25,17 @@ export interface ModelInfo {
   enabled?: boolean
 }
 
+export interface ModelFullInfo {
+  name: string
+  api_base_url: string
+  api_key: string
+  model: string
+  supports_think: boolean
+  supports_vision: boolean
+  enabled: boolean
+  has_key: boolean
+}
+
 export interface AppConfig {
   models: ModelInfo[]
   active_model: number
@@ -39,6 +50,9 @@ export interface AppConfig {
   doubao_stt_access_token: string
   doubao_stt_resource_id: string
   doubao_stt_boosting_table_id: string
+  iflytek_stt_app_id: string
+  iflytek_stt_api_key: string
+  iflytek_stt_api_secret: string
   position: string
   language: string
   /** 模拟练习候选人维度：campus_intern=校招/实习，social=社招 */
@@ -117,8 +131,8 @@ interface InterviewState {
   sttLoading: boolean
 
   settingsOpen: boolean
-  /** 抽屉内标签：设置 = 常用；配置 = 模型/VAD/LLM 等 */
-  settingsDrawerTab: 'general' | 'config'
+  /** 抽屉内标签：设置 = 常用；配置 = VAD/LLM 等；模型 = 模型 CRUD */
+  settingsDrawerTab: 'general' | 'config' | 'models'
   /** 答案区：卡片（独立滚动框）| 流式（自上而下连续阅读，多路生成时纵向排列） */
   answerPanelLayout: 'cards' | 'stream'
   /** 界面配色（VS Code 风格，见 index.css data-theme） */
@@ -178,7 +192,8 @@ interface InterviewState {
   setSttStatus: (loaded: boolean, loading: boolean) => void
   toggleSettings: () => void
   openConfigDrawer: () => void
-  setSettingsDrawerTab: (tab: 'general' | 'config') => void
+  openModelsDrawer: () => void
+  setSettingsDrawerTab: (tab: 'general' | 'config' | 'models') => void
   setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
   setColorScheme: (id: ColorSchemeId) => void
   clearSession: () => void
@@ -233,7 +248,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   fallbackToast: null,
   toastMessage: null,
   lastWSError: null,
-  wsConnected: true,
+  wsConnected: false,
   resumeOptStreaming: '',
   resumeOptResult: '',
   resumeOptLoading: false,
@@ -335,6 +350,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       return { settingsOpen: true, settingsDrawerTab: 'general' }
     }),
   openConfigDrawer: () => set({ settingsOpen: true, settingsDrawerTab: 'config' }),
+  openModelsDrawer: () => set({ settingsOpen: true, settingsDrawerTab: 'models' }),
   setSettingsDrawerTab: (tab) => set({ settingsDrawerTab: tab }),
   setAnswerPanelLayout: (layout) => {
     try {

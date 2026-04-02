@@ -203,7 +203,7 @@ export default function ControlBar() {
   }
 
   return (
-    <div className="border-t border-bg-tertiary bg-bg-secondary px-3 md:px-4 py-2.5 flex-shrink-0 space-y-1.5">
+    <div className="control-bar px-3 md:px-5 py-2.5 flex-shrink-0 space-y-1.5">
       {showColdStartHint && (
         <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -313,28 +313,28 @@ export default function ControlBar() {
           <>
             {isPaused ? (
               <button onClick={handleResume} disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-accent-green hover:bg-accent-green/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+                className="flex items-center gap-1.5 px-3.5 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}>
                 <PlayCircle className="w-3.5 h-3.5" />
                 <span>继续</span>
               </button>
             ) : (
               <button onClick={handlePause} disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-accent-amber hover:bg-accent-amber/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+                className="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs font-semibold rounded-xl transition-all duration-150 disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
                 <Pause className="w-3.5 h-3.5" />
                 <span>暂停</span>
               </button>
             )}
             <button onClick={handleStop} disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 bg-accent-red hover:bg-accent-red/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+              className="flex items-center gap-1.5 px-3.5 py-2 btn-danger text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
               <Square className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">结束面试</span>
             </button>
           </>
         ) : (
           <button onClick={handleStart} disabled={loading || selectedDevice === null}
-            className="flex items-center gap-1.5 px-3 py-2 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0">
+            className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
             <Play className="w-3.5 h-3.5" />
-            <span>开始</span>
+            <span>开始面试</span>
           </button>
         )}
 
@@ -393,7 +393,7 @@ export default function ControlBar() {
 
       {/* 快捷提示词 */}
       {quickPrompts.length > 0 && (
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
           <Zap className="w-3 h-3 text-accent-amber flex-shrink-0" />
           {quickPrompts.map((prompt) => (
             <button key={prompt}
@@ -401,7 +401,7 @@ export default function ControlBar() {
                 setManualQuestion((prev) => prev ? `${prev} ${prompt}` : prompt)
                 inputRef.current?.focus()
               }}
-              className="px-2 py-0.5 text-[11px] rounded-full border border-accent-blue/30 text-accent-blue bg-accent-blue/5 hover:bg-accent-blue/15 hover:border-accent-blue/50 transition-colors whitespace-nowrap flex-shrink-0">
+              className="prompt-pill px-2.5 py-1 text-[11px] rounded-lg font-medium whitespace-nowrap flex-shrink-0">
               {prompt}
             </button>
           ))}
@@ -417,14 +417,14 @@ export default function ControlBar() {
             onCompositionStart={() => { isComposingRef.current = true }}
             onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
             onPaste={handlePaste}
-            placeholder={pastedImage ? "可添加文字说明（可选），Enter 发送" : "输入问题，Enter 发送"}
-            className="w-full bg-bg-tertiary text-text-primary text-xs rounded-lg px-3 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue placeholder:text-text-muted pr-8" />
+            placeholder={pastedImage ? "可添加文字说明（可选），Enter 发送" : "输入问题，Enter 发送…"}
+            className="w-full bg-bg-tertiary/60 text-text-primary text-xs rounded-xl px-3.5 py-2.5 border border-bg-hover/50 focus:outline-none focus:border-accent-blue/50 focus:ring-1 focus:ring-accent-blue/20 placeholder:text-text-muted/60 pr-8 transition-all duration-200" />
           {pastedImage && (
             <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
           )}
         </div>
         <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
-          className="px-2.5 py-2 bg-accent-blue hover:bg-accent-blue/90 text-white text-xs rounded-lg transition-colors disabled:opacity-30 flex-shrink-0">
+          className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-20 flex-shrink-0">
           <Send className="w-3.5 h-3.5" />
         </button>
       </div>

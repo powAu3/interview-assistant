@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,6 +16,11 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
+  font-family: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
 }
 
 /* ========== 主题变量（与 tailwind.config 中 rgb(var(--c-*) / <alpha>) 对应）========== */
@@ -215,4 +222,187 @@ body,
 .code-block-head {
   background: rgb(var(--c-code-header-bg));
   border-bottom: 1px solid rgb(var(--c-accent-blue) / 0.2);
+}
+
+/* ========== Glass morphism utilities ========== */
+.glass {
+  background: rgb(var(--c-bg-secondary) / 0.7);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+/* ========== Subtle noise texture ========== */
+.noise-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ========== Staggered entrance animations ========== */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgb(var(--c-accent-blue) / 0.2); }
+  50% { box-shadow: 0 0 16px rgb(var(--c-accent-blue) / 0.35); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.3s ease-out both;
+}
+.animate-slide-left {
+  animation: slide-in-left 0.25s ease-out both;
+}
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+/* ========== Audio waveform bars ========== */
+@keyframes wave-bar {
+  0%, 100% { height: 20%; }
+  50% { height: 100%; }
+}
+.wave-bar {
+  animation: wave-bar 0.6s ease-in-out infinite;
+}
+
+/* ========== Enhanced header gradient ========== */
+.header-gradient {
+  background: linear-gradient(
+    180deg,
+    rgb(var(--c-bg-secondary)) 0%,
+    rgb(var(--c-bg-secondary) / 0.95) 100%
+  );
+  border-bottom: 1px solid rgb(var(--c-bg-tertiary) / 0.8);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+/* ========== Transcription item entry ========== */
+.transcription-item {
+  animation: fade-up 0.3s ease-out both;
+  border-left: 2px solid rgb(var(--c-accent-blue) / 0.4);
+  transition: border-color 0.2s, background 0.2s;
+}
+.transcription-item:hover {
+  border-left-color: rgb(var(--c-accent-blue) / 0.8);
+  background: rgb(var(--c-bg-tertiary) / 0.7);
+}
+
+/* ========== Control bar gradient ========== */
+.control-bar {
+  background: linear-gradient(
+    0deg,
+    rgb(var(--c-bg-secondary)) 0%,
+    rgb(var(--c-bg-secondary) / 0.95) 100%
+  );
+  border-top: 1px solid rgb(var(--c-bg-tertiary) / 0.6);
+  box-shadow: 0 -1px 3px rgb(0 0 0 / 0.08);
+}
+
+/* ========== Improved button styles ========== */
+.btn-primary {
+  background: linear-gradient(135deg, rgb(var(--c-accent-blue)) 0%, rgb(var(--c-accent-blue) / 0.85) 100%);
+  color: white;
+  border: 1px solid rgb(var(--c-accent-blue) / 0.3);
+  box-shadow: 0 1px 3px rgb(var(--c-accent-blue) / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.1);
+  transition: all 0.15s ease;
+}
+.btn-primary:hover {
+  box-shadow: 0 2px 8px rgb(var(--c-accent-blue) / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.15);
+  transform: translateY(-0.5px);
+}
+.btn-primary:active {
+  transform: translateY(0.5px);
+  box-shadow: 0 0 2px rgb(var(--c-accent-blue) / 0.2);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, rgb(var(--c-accent-red)) 0%, rgb(var(--c-accent-red) / 0.85) 100%);
+  color: white;
+  border: 1px solid rgb(var(--c-accent-red) / 0.3);
+  box-shadow: 0 1px 3px rgb(var(--c-accent-red) / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.1);
+  transition: all 0.15s ease;
+}
+.btn-danger:hover {
+  box-shadow: 0 2px 8px rgb(var(--c-accent-red) / 0.35);
+}
+
+.btn-ghost {
+  background: rgb(var(--c-bg-tertiary) / 0.5);
+  color: rgb(var(--c-text-secondary));
+  border: 1px solid rgb(var(--c-bg-hover) / 0.6);
+  transition: all 0.15s ease;
+}
+.btn-ghost:hover {
+  background: rgb(var(--c-bg-hover));
+  color: rgb(var(--c-text-primary));
+  border-color: rgb(var(--c-text-muted) / 0.3);
+}
+
+/* ========== Answer card ========== */
+.answer-card {
+  border: 1px solid rgb(var(--c-bg-hover) / 0.6);
+  border-radius: 0.75rem;
+  background: rgb(var(--c-bg-secondary) / 0.6);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.answer-card:hover {
+  border-color: rgb(var(--c-accent-blue) / 0.2);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.08);
+}
+
+/* ========== Recording pulse ring ========== */
+@keyframes recording-ring {
+  0% { box-shadow: 0 0 0 0 rgb(var(--c-accent-red) / 0.4); }
+  70% { box-shadow: 0 0 0 8px rgb(var(--c-accent-red) / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--c-accent-red) / 0); }
+}
+.recording-pulse {
+  animation: recording-ring 1.5s ease-out infinite;
+}
+
+/* ========== Preflight diagnostic panel ========== */
+.preflight-panel {
+  max-width: 420px;
+  width: 100%;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid rgb(var(--c-bg-hover) / 0.5);
+  background: rgb(var(--c-bg-secondary) / 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ========== Kanban card entrance ========== */
+.kanban-card {
+  animation: fade-up 0.3s ease-out both;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.kanban-card:hover {
+  transform: translateY(-1px);
+}
+
+/* ========== Quick prompt pills ========== */
+.prompt-pill {
+  background: rgb(var(--c-bg-tertiary) / 0.6);
+  border: 1px solid rgb(var(--c-bg-hover) / 0.5);
+  color: rgb(var(--c-text-secondary));
+  transition: all 0.15s ease;
+}
+.prompt-pill:hover {
+  background: rgb(var(--c-accent-blue) / 0.1);
+  border-color: rgb(var(--c-accent-blue) / 0.3);
+  color: rgb(var(--c-accent-blue));
+  transform: translateY(-1px);
 }
