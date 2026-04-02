@@ -8,6 +8,10 @@ import {
 
 const ANSWER_LAYOUT_KEY = 'ia_answer_panel_layout'
 
+const CHUNK_THROTTLE_MS = 50
+const _chunkBuffer: Map<string, { answer: string; think: string }> = new Map()
+let _chunkFlushTimer: ReturnType<typeof setTimeout> | null = null
+
 function readAnswerPanelLayout(): 'cards' | 'stream' {
   try {
     const v = localStorage.getItem(ANSWER_LAYOUT_KEY)
@@ -224,6 +228,28 @@ interface InterviewState {
   resetPractice: () => void
 }
 
+function _scheduleChunkFlush(set: (fn: (s: InterviewState) => Partial<InterviewState>) => void) {
+  if (_chunkFlushTimer !== null) return
+  _chunkFlushTimer = setTimeout(() => {
+    _chunkFlushTimer = null
+    const pending = new Map(_chunkBuffer)
+    _chunkBuffer.clear()
+    if (pending.size === 0) return
+    set((s) => ({
+      qaPairs: s.qaPairs.map((qa) => {
+        const buf = pending.get(qa.id)
+        if (!buf) return qa
+        return {
+          ...qa,
+          thinkContent: buf.think ? qa.thinkContent + buf.think : qa.thinkContent,
+          answer: buf.answer ? qa.answer + buf.answer : qa.answer,
+          isThinking: buf.answer ? false : buf.think ? true : qa.isThinking,
+        }
+      }),
+    }))
+  }, CHUNK_THROTTLE_MS)
+}
+
 export const useInterviewStore = create<InterviewState>((set) => ({
   config: null,
   devices: [],
@@ -289,14 +315,18 @@ export const useInterviewStore = create<InterviewState>((set) => ({
         },
       ],
     })),
-  appendThinkChunk: (id, chunk) =>
-    set((s) => ({
-      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, thinkContent: qa.thinkContent + chunk, isThinking: true } : qa)),
-    })),
-  appendAnswerChunk: (id, chunk) =>
-    set((s) => ({
-      qaPairs: s.qaPairs.map((qa) => (qa.id === id ? { ...qa, answer: qa.answer + chunk, isThinking: false } : qa)),
-    })),
+  appendThinkChunk: (id, chunk) => {
+    const buf = _chunkBuffer.get(id) ?? { answer: '', think: '' }
+    buf.think += chunk
+    _chunkBuffer.set(id, buf)
+    _scheduleChunkFlush(set)
+  },
+  appendAnswerChunk: (id, chunk) => {
+    const buf = _chunkBuffer.get(id) ?? { answer: '', think: '' }
+    buf.answer += chunk
+    _chunkBuffer.set(id, buf)
+    _scheduleChunkFlush(set)
+  },
   finalizeAnswer: (id, question, answer, thinkContent, modelName) =>
     set((s) => {
       const next = s.streamingIds.filter((x) => x !== id)

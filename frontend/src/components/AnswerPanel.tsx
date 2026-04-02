@@ -200,18 +200,22 @@ export default function AnswerPanel() {
           <span>{'\u5DF2\u53D6\u6D88'}</span>
         </div>
       ) : qa.answer ? (
-        <div className={`markdown-body text-sm text-text-primary leading-relaxed ${stream ? 'max-w-none' : ''}`}>
-          <ReactMarkdown components={mdComponents as any}>{qa.answer}</ReactMarkdown>
-        </div>
+        isStreaming && !qa.isThinking ? (
+          <div className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap break-words">
+            {qa.answer}
+            <span className="inline-block w-2 h-4 bg-accent-green ml-0.5 animate-pulse-dot rounded-full align-middle" />
+          </div>
+        ) : (
+          <div className={`markdown-body text-sm text-text-primary leading-relaxed ${stream ? 'max-w-none' : ''}`}>
+            <ReactMarkdown components={mdComponents as any}>{qa.answer}</ReactMarkdown>
+          </div>
+        )
       ) : isStreaming && !qa.isThinking ? (
         <div className="flex items-center gap-2 text-text-muted text-sm">
           <Loader2 className="w-4 h-4 animate-spin" />
           {'\u751F\u6210\u4E2D\u2026'}
         </div>
       ) : null}
-      {isStreaming && qa.answer && !qa.isThinking && (
-        <span className="inline-block w-2 h-4 bg-accent-green ml-0.5 animate-pulse-dot rounded-full" />
-      )}
       {qa.modelLabel && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
         <p
           className={`text-[10px] text-text-muted/70 mt-2.5 pt-2 border-t border-bg-tertiary/30 flex items-center gap-1 ${stream ? 'border-bg-hover/40' : ''}`}
