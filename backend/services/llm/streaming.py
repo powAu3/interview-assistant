@@ -5,6 +5,9 @@ from openai import OpenAI
 import openai
 from typing import Callable, Generator, Optional
 from core.config import get_config
+from core.logger import get_logger
+
+_log = get_logger("llm.streaming")
 
 
 # ---------------------------------------------------------------------------
@@ -242,12 +245,15 @@ def chat_stream(
             return
 
         except _RETRYABLE_ERRORS as e:
+            _log.warning("LLM retryable error model=%s: %s", model.name, e)
             last_error = e
             continue
         except Exception as e:
+            _log.error("LLM fatal error model=%s: %s", model.name, e, exc_info=True)
             yield ("text", f"\n\n[LLM 错误: {str(e)}]")
             return
 
+    _log.error("All models exhausted: %s", last_error)
     yield ("text", f"\n\n[所有模型均不可用: {str(last_error)}]")
 
 
@@ -285,4 +291,5 @@ def chat_stream_single_model(
                 )
                 _broadcast_tokens()
     except Exception as e:
+        _log.error("LLM single-model error model=%s: %s", model_name, e, exc_info=True)
         yield ("text", f"\n\n[LLM 错误: {str(e)}]")

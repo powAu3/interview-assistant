@@ -57,6 +57,9 @@ Desktop.ini
 *.iml
 *.sublime-*
 
+# Logs (contain transcription/answer data, sensitive)
+log/
+
 # Cache & temp
 .cache/
 *.log

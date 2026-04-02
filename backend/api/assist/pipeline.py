@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Tuple
 
 from core.config import get_config
+from core.logger import get_interview_logger, get_logger
 from core.session import get_session, reset_session, conversation_lock
+
+_ilog = get_interview_logger()
+_elog = get_logger("pipeline")
 from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import (
     build_asr_question_group_text,
@@ -388,6 +392,11 @@ def _flush_asr_question_group_now(cfg, session) -> None:
     high_churn_short = _is_high_churn_asr_submission(cfg, now_mono)
     turn_id = _begin_asr_turn()
     _record_asr_turn(now_mono)
+    _ilog.info(
+        "ASR_QUESTION turn=%d utterances=%d churn=%s text=%r",
+        turn_id, len(group.utterances), high_churn_short,
+        question_text[:150],
+    )
     submit_answer_task(
         (
             question_text,
@@ -615,6 +624,7 @@ def start_nonblocking(device_id: int):
     session.is_paused = False
     session.last_device_id = device_id
     session.capture_is_loopback = capture_is_loopback
+    _ilog.info("INTERVIEW_START device=%s loopback=%s", device_id, capture_is_loopback)
     broadcast({"type": "recording", "value": True})
     broadcast({"type": "paused", "value": False})
 
@@ -639,6 +649,7 @@ def stop_interview_loop():
         _interview_thread.join(timeout=3)
     _interview_thread = None
     gc.collect()
+    _ilog.info("INTERVIEW_STOP qa_count=%d", len(session.qa_pairs))
 
 
 def pause_interview():
@@ -716,21 +727,30 @@ def _interview_worker():
             if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
                 broadcast({"type": "transcribing", "value": True})
                 try:
+                    t0 = time.monotonic()
                     text = engine.transcribe(
                         speech_audio,
                         AudioCapture.SAMPLE_RATE,
                         position=cfg.position,
                         language=cfg.language,
                     )
+                    stt_ms = (time.monotonic() - t0) * 1000
+                    audio_sec = len(speech_audio) / AudioCapture.SAMPLE_RATE
+                    _ilog.info(
+                        "ASR raw=%.1fs stt=%.0fms text=%r",
+                        audio_sec, stt_ms, text[:120] if text else "",
+                    )
                     min_sig = getattr(
                         get_config(), "transcription_min_sig_chars", 2
                     )
                     pub = transcription_for_publish(text, min_sig)
                     if pub:
+                        _ilog.info("ASR publish=%r", pub[:120])
                         _append_transcription_fragment(
                             get_config(), session, pub, time.monotonic(), False
                         )
                 except Exception as e:
+                    _elog.error("ASR transcribe error: %s", e, exc_info=True)
                     broadcast({"type": "error", "message": f"\u8f6c\u5199\u9519\u8bef: {e}"})
                 finally:
                     broadcast({"type": "transcribing", "value": False})
@@ -752,6 +772,7 @@ def _interview_worker():
             except Exception:
                 pass
     except Exception as e:
+        _elog.error("Interview worker crashed: %s", e, exc_info=True)
         broadcast({"type": "error", "message": f"\u9762\u8bd5\u5faa\u73af\u5f02\u5e38: {e}"})
         get_session().is_recording = False
         broadcast({"type": "recording", "value": False})
@@ -840,12 +861,14 @@ def _process_question_parallel(
         base_messages = list(session_ref.get_conversation_messages_for_llm())
         last_qa = session_ref.get_last_qa()
 
+    is_followup = False
     if (
         not image
         and last_qa
         and source in ("asr", "manual_text")
         and classify_followup(question_text, last_qa.question, last_qa.answer)
     ):
+        is_followup = True
         prev_answer_summary = last_qa.answer[:500]
         user_for_llm = (
             f"[\u8ffd\u95ee\u4e0a\u4e0b\u6587] \u4e0a\u4e00\u4e2a\u95ee\u9898\uff1a{last_qa.question}\n"
@@ -857,6 +880,10 @@ def _process_question_parallel(
 
     display_question = question_text + (" [\U0001f4f7 \u9644\u56fe]" if image else "")
     qa_id = f"qa-{seq}-{int(time.time() * 1000)}"
+    _ilog.info(
+        "ANSWER_START id=%s model=%s source=%s followup=%s q=%r",
+        qa_id, model_cfg.name, source, is_followup, question_text[:120],
+    )
     broadcast(
         {
             "type": "answer_start",
@@ -870,6 +897,8 @@ def _process_question_parallel(
 
     full_answer = ""
     full_think = ""
+    gen_start = time.monotonic()
+    first_token_mono: Optional[float] = None
     try:
         for chunk_type, chunk_text in chat_stream_single_model(
             model_cfg,
@@ -879,6 +908,8 @@ def _process_question_parallel(
         ):
             if aborted():
                 break
+            if first_token_mono is None:
+                first_token_mono = time.monotonic()
             if chunk_type == "think":
                 full_think += chunk_text
                 broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": chunk_text})
@@ -886,11 +917,16 @@ def _process_question_parallel(
                 full_answer += chunk_text
                 broadcast({"type": "answer_chunk", "id": qa_id, "chunk": chunk_text})
     except Exception as e:
+        _elog.error("LLM stream error id=%s: %s", qa_id, e, exc_info=True)
         err = f"\n\n[\u751f\u6210\u7b54\u6848\u51fa\u9519: {e}]"
         full_answer += err
         broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
 
+    gen_elapsed = (time.monotonic() - gen_start) * 1000
+    first_token_ms = (first_token_mono - gen_start) * 1000 if first_token_mono else gen_elapsed
+
     if aborted():
+        _ilog.info("ANSWER_CANCEL id=%s after=%.0fms", qa_id, gen_elapsed)
         broadcast({"type": "answer_cancelled", "id": qa_id})
         _mark_seq_skipped(seq)
         return
@@ -918,6 +954,13 @@ def _process_question_parallel(
                 model_name=model_cfg.name,
             )
             stats = get_token_stats()
+            _ilog.info(
+                "ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms "
+                "answer_len=%d think_len=%d tokens_prompt=%d tokens_completion=%d",
+                qa_id, model_cfg.name, first_token_ms, gen_elapsed,
+                len(full_answer), len(full_think),
+                stats["prompt"], stats["completion"],
+            )
             broadcast(
                 {
                     "type": "answer_done",

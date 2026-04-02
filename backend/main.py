@@ -10,9 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from core.config import get_config
+from core.logger import setup_logging, get_logger
 from services.stt import get_stt_engine
 from api.realtime import ws
 from api import common, assist, practice, analytics, resume, jobs
+
+setup_logging()
+_log = get_logger("app.main")
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
@@ -31,12 +35,24 @@ class _SuppressStealthScreenAccessLog(logging.Filter):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.getLogger("uvicorn.access").addFilter(_SuppressStealthScreenAccessLog())
+
+    cfg = get_config()
+    models_summary = ", ".join(
+        f"{m.name}({'on' if m.enabled else 'off'})" for m in cfg.models
+    )
+    _log.info(
+        "CONFIG stt=%s position=%s lang=%s models=[%s] temp=%.1f max_tokens=%d think=%s",
+        cfg.stt_provider, cfg.position, cfg.language,
+        models_summary, cfg.temperature, cfg.max_tokens, cfg.think_mode,
+    )
+
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue(maxsize=500)
     ws.init_broadcast(loop, queue)
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     threading.Thread(target=_preload_stt, daemon=True).start()
     yield
+    _log.info("SHUTDOWN cleaning up")
     assist.stop_interview_loop()
     dispatch_task.cancel()
 
@@ -45,10 +61,13 @@ def _preload_stt():
     try:
         cfg = get_config()
         engine = get_stt_engine()
+        _log.info("STT preload start provider=%s", cfg.stt_provider)
         ws.broadcast({"type": "stt_status", "loaded": False, "loading": True})
         engine.load_model()
+        _log.info("STT preload done provider=%s", cfg.stt_provider)
         ws.broadcast({"type": "stt_status", "loaded": True, "loading": False})
     except Exception as e:
+        _log.error("STT preload failed: %s", e, exc_info=True)
         ws.broadcast({"type": "stt_status", "loaded": False, "loading": False, "error": str(e)})
 
 

@@ -9,7 +9,10 @@ import numpy as np
 import threading
 from typing import Optional, Any
 
+from core.logger import get_logger
 from .text_utils import TECH_VOCAB, _postprocess, _build_initial_prompt
+
+_log = get_logger("stt.engines")
 
 try:
     import websocket
@@ -215,6 +218,7 @@ class DoubaoSTT:
             ws.close()
             return _postprocess(final_text) if final_text else ""
         except Exception as e:
+            _log.error("Doubao ASR error: %s", e, exc_info=True)
             if "websocket" in str(type(e).__name__).lower():
                 raise RuntimeError(f"豆包 ASR 连接异常: {e}") from e
             raise
@@ -412,6 +416,7 @@ class IflyitekSTT:
         try:
             ws = websocket.create_connection(auth_url, timeout=15)
         except Exception as e:
+            _log.error("Iflytek ASR connect failed: %s", e, exc_info=True)
             raise RuntimeError(f"讯飞 ASR 连接失败: {e}") from e
 
         try:
@@ -472,7 +477,8 @@ class IflyitekSTT:
             ws.close()
             text = "".join(result_parts).strip()
             return _postprocess(text) if text else ""
-        except Exception:
+        except Exception as e:
+            _log.error("Iflytek ASR error: %s", e, exc_info=True)
             try:
                 ws.close()
             except Exception:

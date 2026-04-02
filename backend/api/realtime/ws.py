@@ -1,11 +1,14 @@
 import asyncio
 import json
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from core.session import get_session
 from services.stt import get_stt_engine
+
+_log = logging.getLogger("ws")
 
 router = APIRouter()
 
@@ -46,6 +49,7 @@ def broadcast(data: dict):
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     ws_clients.add(ws)
+    _log.info("WS connect clients=%d", len(ws_clients))
     try:
         session = get_session()
         engine = get_stt_engine()
@@ -79,3 +83,4 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         ws_clients.discard(ws)
+        _log.info("WS disconnect clients=%d", len(ws_clients))
