@@ -8,17 +8,27 @@ from core.config import get_config
 
 
 # ---------------------------------------------------------------------------
-# Client helpers
+# Client helpers (pooled by api_key + base_url)
 # ---------------------------------------------------------------------------
+
+_client_cache: dict[tuple[str, str], OpenAI] = {}
+_client_cache_lock = threading.Lock()
+
 
 def get_client() -> OpenAI:
     cfg = get_config()
     m = cfg.get_active_model()
-    return OpenAI(api_key=m.api_key, base_url=m.api_base_url)
+    return get_client_for_model(m)
 
 
 def get_client_for_model(model_cfg) -> OpenAI:
-    return OpenAI(api_key=model_cfg.api_key, base_url=model_cfg.api_base_url)
+    key = (model_cfg.api_key, model_cfg.api_base_url)
+    with _client_cache_lock:
+        client = _client_cache.get(key)
+        if client is None:
+            client = OpenAI(api_key=model_cfg.api_key, base_url=model_cfg.api_base_url)
+            _client_cache[key] = client
+        return client
 
 
 def has_vision_model() -> bool:

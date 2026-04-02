@@ -13,6 +13,7 @@ from .text_utils import (
     classify_asr_question_candidate,
     is_viable_asr_question_group,
     build_asr_question_group_text,
+    classify_followup,
     AsrQuestionCandidate,
 )
 
@@ -40,6 +41,7 @@ __all__ = [
     "classify_asr_question_candidate",
     "is_viable_asr_question_group",
     "build_asr_question_group_text",
+    "classify_followup",
     "AsrQuestionCandidate",
     "STTEngine",
     "DoubaoSTT",

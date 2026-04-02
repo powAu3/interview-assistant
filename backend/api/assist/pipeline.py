@@ -1,5 +1,6 @@
 """Interview assist pipeline: ASR buffering, task dispatch, parallel answer workers."""
 
+import gc
 import time
 import threading
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import (
     build_asr_question_group_text,
     classify_asr_question_candidate,
+    classify_followup,
     get_stt_engine,
     is_viable_asr_question_group,
     join_transcription_fragments,
@@ -402,15 +404,25 @@ def _flush_asr_question_group_now(cfg, session) -> None:
     )
 
 
+def _asr_fast_confirm_sec(cfg) -> float:
+    fast = float(getattr(cfg, "assist_asr_fast_confirm_sec", 0.2) or 0.0)
+    return max(0.1, min(2.0, fast))
+
+
 def _try_flush_asr_question_group(cfg, session, now_mono: float, force: bool = False) -> None:
     group = _pending_asr_group
     if group is None:
         return
     confirm = _asr_confirm_window_sec(cfg)
+    fast_confirm = _asr_fast_confirm_sec(cfg)
     max_wait = _asr_group_max_wait_sec(cfg)
     since_last = now_mono - group.last_mono
     age = now_mono - group.first_mono
-    if force or age >= max_wait or (group.has_promote and since_last >= confirm):
+    if force or age >= max_wait:
+        _flush_asr_question_group_now(cfg, session)
+    elif group.has_promote and len(group.utterances) == 1 and since_last >= fast_confirm:
+        _flush_asr_question_group_now(cfg, session)
+    elif group.has_promote and since_last >= confirm:
         _flush_asr_question_group_now(cfg, session)
 
 
@@ -619,11 +631,14 @@ def stop_interview_loop():
     session = get_session()
     session.is_recording = False
     session.is_paused = False
+    if len(session.transcription_history) > 30:
+        session.transcription_history = session.transcription_history[-30:]
     broadcast({"type": "recording", "value": False})
     broadcast({"type": "paused", "value": False})
     if _interview_thread and _interview_thread.is_alive():
         _interview_thread.join(timeout=3)
     _interview_thread = None
+    gc.collect()
 
 
 def pause_interview():
@@ -674,10 +689,14 @@ def _interview_worker():
     )
     session = get_session()
     _reset_asr_merge_buffer()
+    _last_gc_mono = time.monotonic()
 
     try:
         while not _stop_event.is_set():
             now = time.monotonic()
+            if now - _last_gc_mono > 60.0:
+                gc.collect()
+                _last_gc_mono = now
             _try_flush_asr_merge_buffer(get_config(), session, now, False)
             _try_flush_asr_question_group(get_config(), session, now, False)
 
@@ -817,7 +836,23 @@ def _process_question_parallel(
         user_for_llm = question_text
 
     with conversation_lock:
-        base_messages = list(get_session().get_conversation_messages_for_llm())
+        session_ref = get_session()
+        base_messages = list(session_ref.get_conversation_messages_for_llm())
+        last_qa = session_ref.get_last_qa()
+
+    if (
+        not image
+        and last_qa
+        and source in ("asr", "manual_text")
+        and classify_followup(question_text, last_qa.question, last_qa.answer)
+    ):
+        prev_answer_summary = last_qa.answer[:500]
+        user_for_llm = (
+            f"[\u8ffd\u95ee\u4e0a\u4e0b\u6587] \u4e0a\u4e00\u4e2a\u95ee\u9898\uff1a{last_qa.question}\n"
+            f"\u4f60\u4e0a\u6b21\u56de\u7b54\u7684\u8981\u70b9\uff1a{prev_answer_summary}\n\n"
+            f"\u73b0\u5728\u9762\u8bd5\u5b98\u8ffd\u95ee\uff1a{question_text}"
+        )
+
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
 
     display_question = question_text + (" [\U0001f4f7 \u9644\u56fe]" if image else "")

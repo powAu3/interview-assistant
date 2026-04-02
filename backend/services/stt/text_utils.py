@@ -388,3 +388,48 @@ def build_asr_question_group_text(texts: list[str], max_items: int = 4) -> str:
         f"主问题：{items[0]}\n\n"
         f"连续追问：\n{followups}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Follow-up detection (cross-turn)
+# ---------------------------------------------------------------------------
+
+_FOLLOWUP_CUES = re.compile(
+    r"(?:那|那么|那个|这个|刚才|刚刚|你刚说|上面|前面|接着|继续|"
+    r"展开|详细|具体|深入|补充|举个例子|比如说|为什么不|"
+    r"真的吗|确定吗|怎么说|啥意思|什么意思)",
+    re.IGNORECASE,
+)
+
+_PRONOUN_FOLLOWUP = re.compile(
+    r"^(?:那|那么|然后|所以|但是|不过|另外|还有|以及).*(?:呢|吗|么|吧|\?|？)$"
+)
+
+
+def classify_followup(
+    text: str,
+    prev_question: str,
+    prev_answer: str,
+) -> bool:
+    """Heuristically decide whether *text* is a follow-up to the previous Q&A."""
+    if not text or not prev_question:
+        return False
+    normalized = normalize_transcription_for_analysis(text)
+    if not normalized:
+        return False
+
+    if _FOLLOWUP_CUES.search(normalized):
+        return True
+
+    if len(normalized) < 15 and _PRONOUN_FOLLOWUP.match(normalized):
+        return True
+
+    if len(normalized) < 12 and not any(c in normalized for c in "？?"):
+        prev_norm = normalize_transcription_for_analysis(prev_question)
+        if prev_norm:
+            prev_keywords = set(re.findall(r"[\u4e00-\u9fff]{2,}", prev_norm))
+            cur_keywords = set(re.findall(r"[\u4e00-\u9fff]{2,}", normalized))
+            if prev_keywords and cur_keywords and cur_keywords & prev_keywords:
+                return True
+
+    return False
