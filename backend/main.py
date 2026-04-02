@@ -32,7 +32,7 @@ class _SuppressStealthScreenAccessLog(logging.Filter):
 async def lifespan(app: FastAPI):
     logging.getLogger("uvicorn.access").addFilter(_SuppressStealthScreenAccessLog())
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=500)
     ws.init_broadcast(loop, queue)
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     threading.Thread(target=_preload_stt, daemon=True).start()

@@ -36,7 +36,10 @@ def broadcast(data: dict):
     """Thread-safe broadcast to all connected WebSocket clients."""
     if _loop is None or _msg_queue is None:
         return
-    _loop.call_soon_threadsafe(_msg_queue.put_nowait, data)
+    try:
+        _loop.call_soon_threadsafe(_msg_queue.put_nowait, data)
+    except asyncio.QueueFull:
+        pass
 
 
 @router.websocket("/ws")

@@ -132,7 +132,7 @@ class AudioCapture:
     def __init__(self):
         self._stream: Optional[sd.InputStream] = None
         self._running = False
-        self._audio_queue: queue.Queue[np.ndarray] = queue.Queue()
+        self._audio_queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=300)
         self._callback: Optional[Callable[[np.ndarray], None]] = None
         self._lock = threading.Lock()
         # soundcard thread
@@ -248,7 +248,7 @@ class AudioCapture:
                 return
             self._callback = on_audio
             self._running = True
-            self._audio_queue = queue.Queue()
+            self._audio_queue = queue.Queue(maxsize=300)
             self._resample_state = [None]
             self._agc_peak = 0.0
             self._sc_stop.clear()
@@ -266,7 +266,12 @@ class AudioCapture:
             audio = audio.astype(np.float32)
         if self._use_agc:
             audio = self._apply_agc(audio)
-        self._audio_queue.put(audio)
+        if self._audio_queue.full():
+            try:
+                self._audio_queue.get_nowait()
+            except queue.Empty:
+                pass
+        self._audio_queue.put_nowait(audio)
         if self._callback:
             self._callback(audio)
 

@@ -27,6 +27,8 @@ class Session:
     created_at: float = field(default_factory=time.time)
 
     MAX_HISTORY = 20
+    MAX_TRANSCRIPTION_HISTORY = 200
+    MAX_QA_PAIRS = 80
     CONVERSATION_TURNS_FOR_LLM = 6
     MAX_CHARS_PER_MESSAGE = 2000
 
@@ -34,6 +36,8 @@ class Session:
         if text.strip():
             self.transcription_history.append(text.strip())
             self.current_transcription = text.strip()
+            if len(self.transcription_history) > self.MAX_TRANSCRIPTION_HISTORY:
+                self.transcription_history = self.transcription_history[-self.MAX_TRANSCRIPTION_HISTORY:]
 
     def add_user_message(self, content: Union[str, list]):
         self.conversation_history.append({"role": "user", "content": content})
@@ -59,6 +63,8 @@ class Session:
             model_name=model_name,
         )
         self.qa_pairs.append(qa)
+        if len(self.qa_pairs) > self.MAX_QA_PAIRS:
+            self.qa_pairs = self.qa_pairs[-self.MAX_QA_PAIRS:]
         return qa
 
     def get_conversation_messages(self) -> list[dict]:
@@ -81,6 +87,9 @@ class Session:
             else:
                 out.append(dict(msg))
         return out
+
+    def get_last_qa(self) -> Optional['QAPair']:
+        return self.qa_pairs[-1] if self.qa_pairs else None
 
     def get_recent_transcription(self, n: int = 10) -> str:
         recent = self.transcription_history[-n:]
