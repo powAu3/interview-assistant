@@ -63,6 +63,9 @@ class ConfigUpdate(BaseModel):
     assist_asr_interrupt_running: Optional[bool] = None
     assist_high_churn_short_answer: Optional[bool] = None
     screen_capture_region: Optional[str] = None
+    iflytek_stt_app_id: Optional[str] = None
+    iflytek_stt_api_key: Optional[str] = None
+    iflytek_stt_api_secret: Optional[str] = None
 
 
 @router.get("/config")
@@ -93,6 +96,9 @@ async def api_get_config():
         "doubao_stt_access_token": cfg.doubao_stt_access_token or "",
         "doubao_stt_resource_id": cfg.doubao_stt_resource_id or "",
         "doubao_stt_boosting_table_id": cfg.doubao_stt_boosting_table_id or "",
+        "iflytek_stt_app_id": cfg.iflytek_stt_app_id or "",
+        "iflytek_stt_api_key": cfg.iflytek_stt_api_key or "",
+        "iflytek_stt_api_secret": cfg.iflytek_stt_api_secret or "",
         "position": cfg.position,
         "language": cfg.language,
         "practice_audience": getattr(cfg, "practice_audience", "campus_intern"),
@@ -127,6 +133,38 @@ async def api_get_config():
     }
 
 
+_MASK_MARKER = "****"
+
+
+def _mask_api_key(key: str) -> str:
+    if not key or key in ("", "sk-your-api-key-here"):
+        return ""
+    if len(key) <= 8:
+        return key[:2] + _MASK_MARKER + key[-1:]
+    return key[:3] + _MASK_MARKER + key[-3:]
+
+
+@router.get("/config/models-full")
+async def api_get_models_full():
+    """Return all model fields with masked api_key for frontend editing."""
+    cfg = get_config()
+    return {
+        "models": [
+            {
+                "name": mdl.name,
+                "api_base_url": mdl.api_base_url,
+                "api_key": _mask_api_key(mdl.api_key),
+                "model": mdl.model,
+                "supports_think": mdl.supports_think,
+                "supports_vision": mdl.supports_vision,
+                "enabled": getattr(mdl, "enabled", True),
+                "has_key": bool(mdl.api_key and mdl.api_key not in ("", "sk-your-api-key-here")),
+            }
+            for mdl in cfg.models
+        ],
+    }
+
+
 @router.post("/config")
 async def api_update_config(body: ConfigUpdate):
     from core.config import ModelConfig
@@ -134,7 +172,22 @@ async def api_update_config(body: ConfigUpdate):
     d = body.model_dump(exclude_none=True)
     try:
         if "models" in d:
-            d["models"] = [ModelConfig(**x) if isinstance(x, dict) else x for x in d["models"]]
+            cfg = get_config()
+            raw_models = []
+            for i, x in enumerate(d["models"]):
+                if not isinstance(x, dict):
+                    continue
+                if _MASK_MARKER in (x.get("api_key") or ""):
+                    if i < len(cfg.models):
+                        x["api_key"] = cfg.models[i].api_key
+                    else:
+                        matched = next(
+                            (m for m in cfg.models if m.name == x.get("name") and m.model == x.get("model")),
+                            None,
+                        )
+                        x["api_key"] = matched.api_key if matched else ""
+                raw_models.append(ModelConfig(**x))
+            d["models"] = raw_models
             if not d["models"]:
                 raise HTTPException(400, "至少保留一个模型")
         if "max_parallel_answers" in d:
@@ -335,6 +388,46 @@ async def api_check_models_health():
 @router.get("/models/health")
 async def api_get_models_health():
     return {"health": _model_health}
+
+
+@router.post("/models/health/{index}")
+async def api_check_single_model_health(index: int):
+    """Check health of a single model by index (run in background thread)."""
+    cfg = get_config()
+    if index < 0 or index >= len(cfg.models):
+        raise HTTPException(400, f"模型 index {index} 超出范围")
+    threading.Thread(target=_check_single_model, args=(index,), daemon=True).start()
+    return {"ok": True}
+
+
+@router.post("/stt/test")
+async def api_stt_test():
+    """Test current STT engine connectivity with credential pre-checks."""
+    cfg = get_config()
+    if cfg.stt_provider == "doubao":
+        if not cfg.doubao_stt_access_token:
+            return {"ok": False, "detail": "豆包 Access Token 未配置"}
+        if not cfg.doubao_stt_app_id:
+            return {"ok": False, "detail": "豆包 App ID 未配置"}
+    elif cfg.stt_provider == "iflytek":
+        if not cfg.iflytek_stt_app_id:
+            return {"ok": False, "detail": "讯飞 APPID 未配置"}
+        if not cfg.iflytek_stt_api_key:
+            return {"ok": False, "detail": "讯飞 APIKey 未配置"}
+        if not cfg.iflytek_stt_api_secret:
+            return {"ok": False, "detail": "讯飞 APISecret 未配置"}
+    import numpy as _np
+    try:
+        engine = get_stt_engine()
+        sr = 16000
+        duration_sec = 1.5
+        silence = _np.zeros(int(sr * duration_sec), dtype=_np.float32)
+        result = engine.transcribe(silence, sample_rate=sr)
+        if result is None:
+            return {"ok": False, "detail": "引擎返回空结果，请检查配置"}
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
 
 
 @router.get("/token/stats")

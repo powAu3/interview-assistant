@@ -16,7 +16,7 @@ from core.session import get_session, reset_session  # noqa: E402
 from services.llm import build_system_prompt  # noqa: E402
 from services import stt  # noqa: E402
 
-assist_router = importlib.import_module("api.assist.router")
+assist_router = importlib.import_module("api.assist.pipeline")
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +87,7 @@ def test_auto_detect_group_flush_ignores_backchannel_and_submits_latest_group(
 ):
     session = reset_session()
     submitted: list[tuple] = []
-    monkeypatch.setattr(assist_router, "_submit_answer_task", lambda task: submitted.append(task))
+    monkeypatch.setattr(assist_router, "submit_answer_task", lambda task: submitted.append(task))
 
     cfg = _cfg()
     assist_router._handle_auto_detect_asr_text(
@@ -158,7 +158,7 @@ def test_pick_model_index_prefers_non_physical_busy_model_for_asr(
     monkeypatch.setattr(assist_router, "get_model_health", lambda index: None)
 
     task = ("最新问题", None, False, "conversation_mic", {"origin": "asr", "asr_turn_id": 2})
-    picked = assist_router._pick_model_index(task, busy=set(), avoid_models={2})
+    picked = assist_router.pick_model_index(task, busy=set(), avoid_models={2})
 
     assert picked == 0
 
@@ -201,7 +201,7 @@ def test_cancel_answer_work_clears_everything_and_optionally_session_history():
     assist_router._recent_asr_turn_monos = [1.0, 2.0]
     assist_router._answer_generation = 7
 
-    assist_router._cancel_answer_work(reset_session_data=False)
+    assist_router.cancel_answer_work(reset_session_data=False)
     assert assist_router._pending == []
     assert assist_router._pending_asr_group is None
     assert assist_router._in_flight_tasks == {}
@@ -210,7 +210,7 @@ def test_cancel_answer_work_clears_everything_and_optionally_session_history():
     assert getattr(get_session(), "transcription_history") == ["旧转写"]
     assert len(get_session().qa_pairs) == 1
 
-    assist_router._cancel_answer_work(reset_session_data=True)
+    assist_router.cancel_answer_work(reset_session_data=True)
     assert get_session().transcription_history == []
     assert get_session().qa_pairs == []
 

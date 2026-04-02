@@ -1,10 +1,9 @@
+"""Interview assist pipeline: ASR buffering, task dispatch, parallel answer workers."""
+
 import time
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Tuple
-
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
 from core.config import get_config
 from core.session import get_session, reset_session, conversation_lock
@@ -30,13 +29,14 @@ from services.llm import (
 from api.common import get_model_health
 from api.realtime.ws import broadcast
 
-router = APIRouter()
+# ---------------------------------------------------------------------------
+# Module state
+# ---------------------------------------------------------------------------
 
 _interview_thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
 _pause_event = threading.Event()
 
-# 取消：代数递增，所有在途流式任务中止
 _answer_generation = 0
 _gen_lock = threading.Lock()
 
@@ -58,20 +58,22 @@ _in_flight_tasks: dict[int, tuple[int, TaskPayload]] = {}
 _task_session_version = 0
 _latest_asr_turn_id = 0
 
-# 按提问顺序提交到 session
 _commit_buffer: dict[int, Callable[[], None]] = {}
 _skipped_commit_seqs: set[int] = set()
 _next_commit_seq = 0
 _next_submit_seq = 0
 _commit_lock = threading.Lock()
 
-# 实时辅助：多段 ASR 按时间窗合并后再写入转写 / 触发自动答题（减轻 VAD 碎句）
 _asr_merge_parts: list[str] = []
 _asr_merge_mono_first: Optional[float] = None
 _asr_merge_mono_last: Optional[float] = None
 _pending_asr_group: Optional[PendingASRGroup] = None
 _recent_asr_turn_monos: list[float] = []
 
+
+# ---------------------------------------------------------------------------
+# ASR merge / question grouping
+# ---------------------------------------------------------------------------
 
 def _reset_asr_merge_buffer():
     global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
@@ -112,13 +114,6 @@ def _record_asr_turn(now_mono: float):
         _recent_asr_turn_monos.append(now_mono)
 
 
-def _cancel_answer_work(reset_session_data: bool = False):
-    _bump_generation()
-    _reset_answer_state()
-    if reset_session_data:
-        reset_session()
-
-
 def _asr_confirm_window_sec(cfg) -> float:
     confirm = float(getattr(cfg, "assist_asr_confirm_window_sec", 0.45) or 0.0)
     return max(0.0, min(5.0, confirm))
@@ -148,6 +143,94 @@ def _get_latest_asr_turn_id() -> int:
 
 def _is_stale_inflight_asr_task(task: TaskPayload) -> bool:
     return _is_asr_task(task) and int(_task_meta(task).get("asr_turn_id", 0)) < _latest_asr_turn_id
+
+
+# ---------------------------------------------------------------------------
+# Generation control
+# ---------------------------------------------------------------------------
+
+def _bump_generation():
+    global _answer_generation
+    with _gen_lock:
+        _answer_generation += 1
+
+
+def _capture_generation() -> int:
+    with _gen_lock:
+        return _answer_generation
+
+
+def _reset_answer_state():
+    global _pending, _in_flight_tasks, _commit_buffer, _skipped_commit_seqs, _next_commit_seq, _task_session_version, _latest_asr_turn_id, _recent_asr_turn_monos
+    with _dispatch_lock:
+        _pending.clear()
+        _in_flight_tasks.clear()
+        _latest_asr_turn_id = 0
+        _recent_asr_turn_monos = []
+    with _commit_lock:
+        _commit_buffer.clear()
+        _skipped_commit_seqs.clear()
+        _next_commit_seq = _next_submit_seq
+    _task_session_version += 1
+    _reset_asr_merge_buffer()
+    _reset_pending_asr_group()
+
+
+def cancel_answer_work(reset_session_data: bool = False):
+    _bump_generation()
+    _reset_answer_state()
+    if reset_session_data:
+        reset_session()
+
+
+# ---------------------------------------------------------------------------
+# Model dispatch
+# ---------------------------------------------------------------------------
+
+def _key_ok(m) -> bool:
+    return bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here"))
+
+
+def _model_eligible(i: int, m, need_vision: bool) -> bool:
+    if not getattr(m, "enabled", True):
+        return False
+    if get_model_health(i) == "error":
+        return False
+    if not _key_ok(m):
+        return False
+    if need_vision and not m.supports_vision:
+        return False
+    return True
+
+
+def _prompt_mode_for_task(source: str, manual_input: bool) -> PromptMode:
+    if source.startswith("server_screen_"):
+        return PROMPT_MODE_SERVER_SCREEN
+    if manual_input:
+        return PROMPT_MODE_MANUAL_TEXT
+    return PROMPT_MODE_ASR_REALTIME
+
+
+def _priority_model_index(cfg) -> int:
+    n = len(cfg.models)
+    if n <= 0:
+        return 0
+    try:
+        am = cfg.get_active_model()
+    except Exception:
+        return max(0, min(int(cfg.active_model), n - 1))
+    for i, m in enumerate(cfg.models):
+        if m is am:
+            return i
+    return max(0, min(int(cfg.active_model), n - 1))
+
+
+def _dispatch_model_order(cfg) -> list[int]:
+    n = len(cfg.models)
+    if n == 0:
+        return []
+    p = _priority_model_index(cfg)
+    return [p] + [i for i in range(n) if i != p]
 
 
 def _dispatch_snapshot_locked() -> tuple[set[int], int]:
@@ -204,6 +287,87 @@ def _begin_asr_turn() -> int:
     return turn_id
 
 
+def pick_model_index(
+    task: TaskPayload,
+    busy: set[int],
+    avoid_models: Optional[set[int]] = None,
+) -> Optional[int]:
+    text, image, manual, source, meta = task
+    need_vision = bool(image)
+    cfg = get_config()
+    avoid = avoid_models or set()
+
+    def ok_basic(i: int, m) -> bool:
+        if i in busy:
+            return False
+        if not getattr(m, "enabled", True):
+            return False
+        if not _key_ok(m):
+            return False
+        if need_vision and not m.supports_vision:
+            return False
+        return True
+
+    order = _dispatch_model_order(cfg)
+    if avoid:
+        for i in order:
+            if i in avoid:
+                continue
+            m = cfg.models[i]
+            if not ok_basic(i, m):
+                continue
+            if get_model_health(i) == "error":
+                continue
+            return i
+        for i in order:
+            if i in avoid:
+                continue
+            m = cfg.models[i]
+            if ok_basic(i, m):
+                return i
+    for i in order:
+        m = cfg.models[i]
+        if not ok_basic(i, m):
+            continue
+        if get_model_health(i) == "error":
+            continue
+        return i
+    for i in order:
+        m = cfg.models[i]
+        if ok_basic(i, m):
+            return i
+    return None
+
+
+def _max_parallel_slots() -> int:
+    cfg = get_config()
+    n_ok = sum(1 for i, m in enumerate(cfg.models) if _model_eligible(i, m, False))
+    cap = max(1, getattr(cfg, "max_parallel_answers", 2))
+    return max(1, min(cap, max(n_ok, 1)))
+
+
+def submit_answer_task(task: TaskPayload):
+    global _next_submit_seq
+    if pick_model_index(task, set()) is None:
+        broadcast(
+            {
+                "type": "error",
+                "message": "\u6ca1\u6709\u53ef\u7528\u7684\u7b54\u9898\u6a21\u578b\uff1a\u8bf7\u81f3\u5c11\u542f\u7528\u4e00\u4e2a\u5df2\u914d\u7f6e API Key \u7684\u6a21\u578b\uff08\u8bc6\u56fe\u9898\u9700\u8bc6\u56fe\u6a21\u578b\uff09\u3002",
+            }
+        )
+        return
+    with _dispatch_lock:
+        seq = _next_submit_seq
+        _next_submit_seq += 1
+        tv = _task_session_version
+        _pending.append((task, seq, tv))
+    _try_dispatch()
+
+
+# ---------------------------------------------------------------------------
+# ASR question group handling
+# ---------------------------------------------------------------------------
+
 def _flush_asr_question_group_now(cfg, session) -> None:
     global _pending_asr_group
     group = _pending_asr_group
@@ -222,7 +386,7 @@ def _flush_asr_question_group_now(cfg, session) -> None:
     high_churn_short = _is_high_churn_asr_submission(cfg, now_mono)
     turn_id = _begin_asr_turn()
     _record_asr_turn(now_mono)
-    _submit_answer_task(
+    submit_answer_task(
         (
             question_text,
             None,
@@ -273,6 +437,10 @@ def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: 
         _pending_asr_group.source = source
         _pending_asr_group.has_promote = _pending_asr_group.has_promote or kind == "promote"
 
+
+# ---------------------------------------------------------------------------
+# ASR merge buffer
+# ---------------------------------------------------------------------------
 
 def _flush_asr_merge_buffer_now(cfg, session) -> None:
     global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
@@ -342,165 +510,9 @@ def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, forc
         _try_flush_asr_merge_buffer(cfg, session, now_mono, False)
 
 
-def _bump_generation():
-    global _answer_generation
-    with _gen_lock:
-        _answer_generation += 1
-
-
-def _capture_generation() -> int:
-    with _gen_lock:
-        return _answer_generation
-
-
-def _reset_answer_state():
-    global _pending, _in_flight_tasks, _commit_buffer, _skipped_commit_seqs, _next_commit_seq, _task_session_version, _latest_asr_turn_id, _recent_asr_turn_monos
-    with _dispatch_lock:
-        _pending.clear()
-        _in_flight_tasks.clear()
-        _latest_asr_turn_id = 0
-        _recent_asr_turn_monos = []
-    with _commit_lock:
-        _commit_buffer.clear()
-        _skipped_commit_seqs.clear()
-        _next_commit_seq = _next_submit_seq
-    _task_session_version += 1
-    _reset_asr_merge_buffer()
-    _reset_pending_asr_group()
-
-
-class ManualQuestion(BaseModel):
-    text: str
-    image: Optional[str] = None
-
-
-def _key_ok(m) -> bool:
-    return bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here"))
-
-
-def _model_eligible(i: int, m, need_vision: bool) -> bool:
-    if not getattr(m, "enabled", True):
-        return False
-    if get_model_health(i) == "error":
-        return False
-    if not _key_ok(m):
-        return False
-    if need_vision and not m.supports_vision:
-        return False
-    return True
-
-
-def _prompt_mode_for_task(source: str, manual_input: bool) -> PromptMode:
-    if source.startswith("server_screen_"):
-        return PROMPT_MODE_SERVER_SCREEN
-    if manual_input:
-        return PROMPT_MODE_MANUAL_TEXT
-    return PROMPT_MODE_ASR_REALTIME
-
-
-def _priority_model_index(cfg) -> int:
-    """与 get_active_model() 指向同一条模型配置，避免仅依赖 active_model 整数与列表不同步。"""
-    n = len(cfg.models)
-    if n <= 0:
-        return 0
-    try:
-        am = cfg.get_active_model()
-    except Exception:
-        return max(0, min(int(cfg.active_model), n - 1))
-    for i, m in enumerate(cfg.models):
-        if m is am:
-            return i
-    return max(0, min(int(cfg.active_model), n - 1))
-
-
-def _dispatch_model_order(cfg) -> list[int]:
-    """
-    实时辅助选路顺序：先顶栏「优先模型」(active_model)，再按配置里当前列表顺序尝试其余模型。
-    与多模型并行配合：优先模型空闲时尽量先用它；多路时其余路按列表顺序占槽。
-    """
-    n = len(cfg.models)
-    if n == 0:
-        return []
-    p = _priority_model_index(cfg)
-    return [p] + [i for i in range(n) if i != p]
-
-
-def _pick_model_index(
-    task: TaskPayload,
-    busy: set[int],
-    avoid_models: Optional[set[int]] = None,
-) -> Optional[int]:
-    text, image, manual, source, meta = task
-    need_vision = bool(image)
-    cfg = get_config()
-    avoid = avoid_models or set()
-
-    def ok_basic(i: int, m) -> bool:
-        if i in busy:
-            return False
-        if not getattr(m, "enabled", True):
-            return False
-        if not _key_ok(m):
-            return False
-        if need_vision and not m.supports_vision:
-            return False
-        return True
-
-    order = _dispatch_model_order(cfg)
-    if avoid:
-        for i in order:
-            if i in avoid:
-                continue
-            m = cfg.models[i]
-            if not ok_basic(i, m):
-                continue
-            if get_model_health(i) == "error":
-                continue
-            return i
-        for i in order:
-            if i in avoid:
-                continue
-            m = cfg.models[i]
-            if ok_basic(i, m):
-                return i
-    for i in order:
-        m = cfg.models[i]
-        if not ok_basic(i, m):
-            continue
-        if get_model_health(i) == "error":
-            continue
-        return i
-    for i in order:
-        m = cfg.models[i]
-        if ok_basic(i, m):
-            return i
-    return None
-
-
-def _max_parallel_slots() -> int:
-    cfg = get_config()
-    n_ok = sum(1 for i, m in enumerate(cfg.models) if _model_eligible(i, m, False))
-    cap = max(1, getattr(cfg, "max_parallel_answers", 2))
-    return max(1, min(cap, max(n_ok, 1)))
-
-
-def _submit_answer_task(task: TaskPayload):
-    global _next_submit_seq
-    if _pick_model_index(task, set()) is None:
-        broadcast(
-            {
-                "type": "error",
-                "message": "没有可用的答题模型：请至少启用一个已配置 API Key 的模型（识图题需识图模型）。",
-            }
-        )
-        return
-    with _dispatch_lock:
-        seq = _next_submit_seq
-        _next_submit_seq += 1
-        tv = _task_session_version
-        _pending.append((task, seq, tv))
-    _try_dispatch()
-
+# ---------------------------------------------------------------------------
+# Dispatch / worker
+# ---------------------------------------------------------------------------
 
 def _try_dispatch():
     while True:
@@ -523,7 +535,7 @@ def _try_dispatch():
                 avoid_models = None
                 if _is_asr_task(task):
                     avoid_models = physical_busy_models
-                mi = _pick_model_index(task, busy_models, avoid_models=avoid_models)
+                mi = pick_model_index(task, busy_models, avoid_models=avoid_models)
                 if mi is not None:
                     _pending.pop(idx)
                     model_idx = mi
@@ -568,156 +580,11 @@ def _flush_commit(seq: int, apply_fn: Callable[[], None]):
         _drain_commit_queue_locked()
 
 
-@router.post("/start")
-async def api_start(body: dict):
-    device_id = body.get("device_id")
-    if device_id is None:
-        raise HTTPException(400, "请选择音频设备")
-    try:
-        _start_nonblocking(int(device_id))
-        return {"ok": True}
-    except Exception as e:
-        raise HTTPException(500, str(e))
+# ---------------------------------------------------------------------------
+# Interview loop
+# ---------------------------------------------------------------------------
 
-
-@router.post("/stop")
-async def api_stop():
-    stop_interview_loop()
-    return {"ok": True}
-
-
-@router.post("/pause")
-async def api_pause():
-    session = get_session()
-    if not session.is_recording:
-        raise HTTPException(400, "面试未在进行中")
-    if _pause_event.is_set():
-        raise HTTPException(400, "已经处于暂停状态")
-    _pause_event.set()
-    audio_capture.stop()
-    session.is_paused = True
-    broadcast({"type": "paused", "value": True})
-    return {"ok": True}
-
-
-@router.post("/unpause")
-async def api_resume_interview(body: Optional[dict] = None):
-    session = get_session()
-    if not session.is_recording:
-        raise HTTPException(400, "面试未在进行中")
-    if not _pause_event.is_set():
-        raise HTTPException(400, "面试未处于暂停状态")
-    device_id = (body or {}).get("device_id")
-    if device_id is not None:
-        try:
-            session.last_device_id = int(device_id)
-        except (TypeError, ValueError):
-            raise HTTPException(400, "device_id 必须是整数")
-        for d in AudioCapture.list_devices():
-            if d["id"] == session.last_device_id:
-                session.capture_is_loopback = d["is_loopback"]
-                break
-    audio_capture.start(session.last_device_id)
-    _pause_event.clear()
-    session.is_paused = False
-    broadcast({"type": "paused", "value": False})
-    return {"ok": True}
-
-
-@router.post("/clear")
-async def api_clear():
-    _cancel_answer_work(reset_session_data=True)
-    broadcast({"type": "session_cleared"})
-    return {"ok": True}
-
-
-def _reset_pipeline_after_abort():
-    """取消后重置序号，避免未完成序号阻塞后续提交。"""
-    _cancel_answer_work(reset_session_data=False)
-
-
-@router.post("/ask/cancel")
-async def api_ask_cancel():
-    _bump_generation()
-    _reset_pipeline_after_abort()
-    return {"ok": True}
-
-
-@router.post("/ask")
-async def api_ask(body: ManualQuestion):
-    if not body.text.strip() and not body.image:
-        raise HTTPException(400, "问题不能为空")
-    text = body.text.strip() or "请分析这张图片中的题目，并给出面试回答"
-    src = "manual_image" if body.image else "manual_text"
-    _submit_answer_task((text, body.image, True, src, {"origin": "manual"}))
-    return {"ok": True}
-
-
-def _screen_region_label(region: str) -> str:
-    labels = {
-        "full": "主显示器全屏",
-        "left_half": "主显示器左半屏",
-        "right_half": "主显示器右半屏",
-        "top_half": "主显示器上半屏",
-        "bottom_half": "主显示器下半屏",
-    }
-    return labels.get(region, "主显示器左半屏")
-
-
-def _prompt_server_screen_code(language: str, region: str) -> str:
-    where = _screen_region_label(region)
-    return (
-        f"下图来自运行本后端的电脑「{where}」的实时画面，可能包含题目描述、输入输出约束或代码片段。\n\n"
-        f"请基于图中可见信息作答。若是编程题，代码请优先使用 {language}（SQL 题使用 sql）。\n\n"
-        "请尽量按以下顺序组织：题目理解、主方案代码、备选方案代码（1-2 个）、方案对比、思路与复杂度、测试用例设计。\n"
-        "如果关键信息看不清，请明确说明缺失项，不要编造；可在合理假设下给出最小可执行方案。"
-    )
-
-
-@router.post("/ask-from-server-screen")
-async def api_ask_from_server_screen():
-    """手机端等远程客户端触发：截取服务端本机主屏指定区域，送 VL 作答（手机仅 HTTP，不调用系统截图）。"""
-    from services.llm import has_vision_model
-    from services.capture import ScreenCaptureError, capture_primary_left_half_data_url
-
-    if not has_vision_model():
-        raise HTTPException(400, "请至少配置一个支持识图且已填写 API Key 的模型")
-    try:
-        data_url = capture_primary_left_half_data_url()
-    except ScreenCaptureError as e:
-        raise HTTPException(503, str(e))
-    cfg = get_config()
-    region = getattr(cfg, "screen_capture_region", "left_half") or "left_half"
-    text = _prompt_server_screen_code(cfg.language, region)
-    if _pick_model_index((text, data_url, True, "server_screen_left", {"origin": "server_screen"}), set()) is None:
-        raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
-    _cancel_answer_work(reset_session_data=False)
-    _submit_answer_task((text, data_url, True, "server_screen_left", {"origin": "server_screen"}))
-    return {"ok": True}
-
-
-@router.get("/session")
-async def api_session():
-    session = get_session()
-    return {
-        "is_recording": session.is_recording,
-        "is_paused": session.is_paused,
-        "transcriptions": session.transcription_history[-50:],
-        "qa_pairs": [
-            {
-                "id": qa.id,
-                "question": qa.question,
-                "answer": qa.answer,
-                "timestamp": qa.timestamp,
-                "source": getattr(qa, "source", "") or "",
-                "model_name": getattr(qa, "model_name", "") or "",
-            }
-            for qa in session.qa_pairs
-        ],
-    }
-
-
-def _start_nonblocking(device_id: int):
+def start_nonblocking(device_id: int):
     global _interview_thread
     stop_interview_loop()
     _stop_event.clear()
@@ -747,7 +614,7 @@ def stop_interview_loop():
     global _interview_thread
     _stop_event.set()
     _pause_event.clear()
-    _cancel_answer_work(reset_session_data=False)
+    cancel_answer_work(reset_session_data=False)
     audio_capture.stop()
     session = get_session()
     session.is_recording = False
@@ -759,6 +626,32 @@ def stop_interview_loop():
     _interview_thread = None
 
 
+def pause_interview():
+    _pause_event.set()
+    audio_capture.stop()
+    session = get_session()
+    session.is_paused = True
+    broadcast({"type": "paused", "value": True})
+
+
+def unpause_interview(device_id: Optional[int] = None):
+    session = get_session()
+    if device_id is not None:
+        session.last_device_id = int(device_id)
+        for d in AudioCapture.list_devices():
+            if d["id"] == session.last_device_id:
+                session.capture_is_loopback = d["is_loopback"]
+                break
+    audio_capture.start(session.last_device_id)
+    _pause_event.clear()
+    session.is_paused = False
+    broadcast({"type": "paused", "value": False})
+
+
+def is_paused() -> bool:
+    return _pause_event.is_set()
+
+
 def _interview_worker():
     cfg = get_config()
     engine = get_stt_engine()
@@ -768,7 +661,7 @@ def _interview_worker():
         try:
             engine.load_model()
         except Exception as e:
-            broadcast({"type": "error", "message": f"Whisper 模型加载失败: {e}"})
+            broadcast({"type": "error", "message": f"Whisper \u6a21\u578b\u52a0\u8f7d\u5931\u8d25: {e}"})
             broadcast({"type": "recording", "value": False})
             get_session().is_recording = False
             return
@@ -819,7 +712,7 @@ def _interview_worker():
                             get_config(), session, pub, time.monotonic(), False
                         )
                 except Exception as e:
-                    broadcast({"type": "error", "message": f"转写错误: {e}"})
+                    broadcast({"type": "error", "message": f"\u8f6c\u5199\u9519\u8bef: {e}"})
                 finally:
                     broadcast({"type": "transcribing", "value": False})
 
@@ -840,7 +733,7 @@ def _interview_worker():
             except Exception:
                 pass
     except Exception as e:
-        broadcast({"type": "error", "message": f"面试循环异常: {e}"})
+        broadcast({"type": "error", "message": f"\u9762\u8bd5\u5faa\u73af\u5f02\u5e38: {e}"})
         get_session().is_recording = False
         broadcast({"type": "recording", "value": False})
     finally:
@@ -856,6 +749,31 @@ def _interview_worker():
             )
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Answer generation worker
+# ---------------------------------------------------------------------------
+
+def _screen_region_label(region: str) -> str:
+    labels = {
+        "full": "\u4e3b\u663e\u793a\u5668\u5168\u5c4f",
+        "left_half": "\u4e3b\u663e\u793a\u5668\u5de6\u534a\u5c4f",
+        "right_half": "\u4e3b\u663e\u793a\u5668\u53f3\u534a\u5c4f",
+        "top_half": "\u4e3b\u663e\u793a\u5668\u4e0a\u534a\u5c4f",
+        "bottom_half": "\u4e3b\u663e\u793a\u5668\u4e0b\u534a\u5c4f",
+    }
+    return labels.get(region, "\u4e3b\u663e\u793a\u5668\u5de6\u534a\u5c4f")
+
+
+def prompt_server_screen_code(language: str, region: str) -> str:
+    where = _screen_region_label(region)
+    return (
+        f"\u4e0b\u56fe\u6765\u81ea\u8fd0\u884c\u672c\u540e\u7aef\u7684\u7535\u8111\u300c{where}\u300d\u7684\u5b9e\u65f6\u753b\u9762\uff0c\u53ef\u80fd\u5305\u542b\u9898\u76ee\u63cf\u8ff0\u3001\u8f93\u5165\u8f93\u51fa\u7ea6\u675f\u6216\u4ee3\u7801\u7247\u6bb5\u3002\n\n"
+        f"\u8bf7\u57fa\u4e8e\u56fe\u4e2d\u53ef\u89c1\u4fe1\u606f\u4f5c\u7b54\u3002\u82e5\u662f\u7f16\u7a0b\u9898\uff0c\u4ee3\u7801\u8bf7\u4f18\u5148\u4f7f\u7528 {language}\uff08SQL \u9898\u4f7f\u7528 sql\uff09\u3002\n\n"
+        "\u8bf7\u5c3d\u91cf\u6309\u4ee5\u4e0b\u987a\u5e8f\u7ec4\u7ec7\uff1a\u9898\u76ee\u7406\u89e3\u3001\u4e3b\u65b9\u6848\u4ee3\u7801\u3001\u5907\u9009\u65b9\u6848\u4ee3\u7801\uff081-2 \u4e2a\uff09\u3001\u65b9\u6848\u5bf9\u6bd4\u3001\u601d\u8def\u4e0e\u590d\u6742\u5ea6\u3001\u6d4b\u8bd5\u7528\u4f8b\u8bbe\u8ba1\u3002\n"
+        "\u5982\u679c\u5173\u952e\u4fe1\u606f\u770b\u4e0d\u6e05\uff0c\u8bf7\u660e\u786e\u8bf4\u660e\u7f3a\u5931\u9879\uff0c\u4e0d\u8981\u7f16\u9020\uff1b\u53ef\u5728\u5408\u7406\u5047\u8bbe\u4e0b\u7ed9\u51fa\u6700\u5c0f\u53ef\u6267\u884c\u65b9\u6848\u3002"
+    )
 
 
 def _process_question_parallel(
@@ -902,7 +820,7 @@ def _process_question_parallel(
         base_messages = list(get_session().get_conversation_messages_for_llm())
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
 
-    display_question = question_text + (" [📷 附图]" if image else "")
+    display_question = question_text + (" [\U0001f4f7 \u9644\u56fe]" if image else "")
     qa_id = f"qa-{seq}-{int(time.time() * 1000)}"
     broadcast(
         {
@@ -933,7 +851,7 @@ def _process_question_parallel(
                 full_answer += chunk_text
                 broadcast({"type": "answer_chunk", "id": qa_id, "chunk": chunk_text})
     except Exception as e:
-        err = f"\n\n[生成答案出错: {e}]"
+        err = f"\n\n[\u751f\u6210\u7b54\u6848\u51fa\u9519: {e}]"
         full_answer += err
         broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
 
@@ -942,7 +860,6 @@ def _process_question_parallel(
         _mark_seq_skipped(seq)
         return
 
-    # Post-generation quality gate: remove leaked thinking artifacts / unstable markdown.
     full_answer = postprocess_answer_for_mode(full_answer, prompt_mode)
 
     def _commit():
@@ -999,7 +916,6 @@ def _process_question_parallel(
 def _save_knowledge_record(question: str, answer: str):
     try:
         from services.storage.knowledge import save_record
-
         save_record("assist", question, answer)
     except Exception:
         pass

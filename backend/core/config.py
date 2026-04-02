@@ -51,6 +51,10 @@ class AppConfig(BaseModel):
     doubao_stt_resource_id: str = "volc.seedasr.sauc.duration"
     # 热词表 ID：在自学习平台上传热词文件后获得；有则传入请求，没有则不传
     doubao_stt_boosting_table_id: str = ""
+    # 讯飞语音听写（流式版 WebSocket）
+    iflytek_stt_app_id: str = ""
+    iflytek_stt_api_key: str = ""
+    iflytek_stt_api_secret: str = ""
 
     position: str = "后端开发"
     language: str = "Python"
@@ -156,6 +160,6 @@ LANGUAGE_OPTIONS = [
 PRACTICE_AUDIENCE_OPTIONS = ["campus_intern", "social"]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API
-STT_PROVIDER_OPTIONS = ["whisper", "doubao"]
+STT_PROVIDER_OPTIONS = ["whisper", "doubao", "iflytek"]
 # 电脑截图区域
 SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]
