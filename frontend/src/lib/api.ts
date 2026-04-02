@@ -51,6 +51,7 @@ export const api = {
     max_parallel_answers?: number
     active_model?: number
   }) => request('/api/config/models-layout', { method: 'POST', body: JSON.stringify(data) }),
+  getModelsFull: () => request<{ models: import('@/stores/configStore').ModelFullInfo[] }>('/api/config/models-full'),
   getOptions: () => request('/api/options'),
   getDevices: () => request('/api/devices'),
   uploadResume: async (file: File): Promise<ResumeUploadResult> => {
@@ -87,6 +88,9 @@ export const api = {
   ask: (text: string, image?: string) =>
     request('/api/ask', { method: 'POST', body: JSON.stringify({ text, image }) }),
   cancelAsk: () => request('/api/ask/cancel', { method: 'POST' }),
+  preflightScenarios: () => request<{ scenarios: { id: string; label: string; question: string; recommended: boolean }[] }>('/api/preflight/scenarios'),
+  preflightRun: (scenario_id: string, device_id?: number | null) =>
+    request('/api/preflight/run', { method: 'POST', body: JSON.stringify({ scenario_id, device_id: device_id ?? undefined }) }),
   /** 服务端截取本机主屏左半幅 + VL 写码（手机端用，不经过手机截图 API） */
   askFromServerScreen: () =>
     request('/api/ask-from-server-screen', { method: 'POST', body: '{}' }),
@@ -94,6 +98,8 @@ export const api = {
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
   /** 当前各模型健康状态（检测中/可用/不可用） */
   getModelsHealth: () => request<{ health: Record<string, string> }>('/api/models/health'),
+  checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
+  sttTest: () => request<{ ok: boolean; detail?: string }>('/api/stt/test', { method: 'POST' }),
 
   // Knowledge
   knowledgeSummary: () => request('/api/knowledge/summary'),
