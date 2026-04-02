@@ -30,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Inbox,
+  ArrowRight,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { isLightColorScheme } from '@/lib/colorScheme'
@@ -38,9 +39,12 @@ import {
   STAGE_LABELS,
   STAGE_ORDER,
   STAGE_HEADER_ICON,
+  STAGE_EMOJI,
   ONGOING_STAGES,
   TERMINAL_STAGES,
-  STAGE_CARD_LEFT_BORDER,
+  getStageTheme,
+  getCardLeftBorder,
+  nextStageAfter,
 } from './stageConfig'
 
 const dropAnimation = {
@@ -88,17 +92,16 @@ function filterApplications(apps: Application[], search: string): Application[] 
   )
 }
 
-/** 左侧轨 / 顶栏用的极短标签 */
 const RAIL_LABEL: Record<string, string> = {
-  applied: '投递',
-  written: '笔试',
-  interview1: '一面',
-  interview2: '二面',
-  interview3: '三面',
+  applied: '\u6295\u9012',
+  written: '\u7B14\u8BD5',
+  interview1: '\u4E00\u9762',
+  interview2: '\u4E8C\u9762',
+  interview3: '\u4E09\u9762',
   hr: 'HR',
   offer: 'Offer',
-  rejected: '挂',
-  withdrawn: '弃',
+  rejected: '\u6302',
+  withdrawn: '\u5F03',
 }
 
 function StageSelect({
@@ -112,32 +115,29 @@ function StageSelect({
   isLight: boolean
   onChange: (stage: string) => void
 }) {
-  const ongoing = [...ONGOING_STAGES]
-  const terminal = [...TERMINAL_STAGES]
-  const cls = `mt-2 w-full max-w-full rounded-lg border px-2 py-1.5 text-[11px] font-medium outline-none transition-colors ${
-    isLight
-      ? 'border-bg-hover bg-bg-primary text-text-primary focus:border-accent-blue/40 focus:ring-1 focus:ring-accent-blue/20'
-      : 'border-white/[0.1] bg-black/20 text-text-primary focus:border-accent-blue/40 focus:ring-1 focus:ring-accent-blue/25'
-  }`
   return (
     <select
-      className={cls}
+      className={`mt-2 w-full max-w-full rounded-lg border px-2 py-1.5 text-[11px] font-medium outline-none transition-colors ${
+        isLight
+          ? 'border-gray-200 bg-white text-gray-800 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'
+          : 'border-white/[0.1] bg-black/20 text-text-primary focus:border-accent-blue/40 focus:ring-1 focus:ring-accent-blue/25'
+      }`}
       value={value}
       disabled={disabled}
-      aria-label="阶段"
+      aria-label="\u9636\u6BB5"
       onChange={(e) => onChange(e.target.value)}
     >
-      <optgroup label="进行中">
-        {ongoing.map((s) => (
+      <optgroup label="\u8FDB\u884C\u4E2D">
+        {ONGOING_STAGES.map((s) => (
           <option key={s} value={s}>
-            {STAGE_LABELS[s] ?? s}
+            {STAGE_EMOJI[s]} {STAGE_LABELS[s] ?? s}
           </option>
         ))}
       </optgroup>
-      <optgroup label="已结束">
-        {terminal.map((s) => (
+      <optgroup label="\u5DF2\u7ED3\u675F">
+        {TERMINAL_STAGES.map((s) => (
           <option key={s} value={s}>
-            {STAGE_LABELS[s] ?? s}
+            {STAGE_EMOJI[s]} {STAGE_LABELS[s] ?? s}
           </option>
         ))}
       </optgroup>
@@ -151,12 +151,14 @@ function SortableKanbanCard({
   sortDisabled,
   busy,
   onStageChange,
+  index,
 }: {
   app: Application
   isLight: boolean
   sortDisabled: boolean
   busy: boolean
   onStageChange: (id: number, stage: string) => void
+  index: number
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: app.id,
@@ -166,20 +168,27 @@ function SortableKanbanCard({
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 50 : undefined,
+    animationDelay: `${index * 30}ms`,
   }
   const fu = app.next_followup_at
-  const leftBorder = STAGE_CARD_LEFT_BORDER[app.stage] ?? 'border-l-zinc-400/40'
+  const leftBorder = getCardLeftBorder(app.stage, isLight)
+  const theme = getStageTheme(app.stage, isLight)
+  const nextStage = nextStageAfter(app.stage)
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`
-        rounded-2xl border pl-2 pr-3 py-2.5 border-l-[3px] transition-shadow
+        kanban-card rounded-2xl border pl-2 pr-3 py-2.5 border-l-[3px] group/card
         ${leftBorder}
-        ${isLight ? 'border-bg-hover bg-bg-primary shadow-sm' : 'border-white/[0.07] bg-bg-secondary/90 shadow-md shadow-black/20'}
+        ${isLight
+          ? 'border-gray-200/80 bg-white shadow-sm'
+          : 'border-white/[0.07] bg-bg-secondary/90 shadow-md shadow-black/20'
+        }
+        ${theme.cardGlow}
         ${busy ? 'opacity-50 pointer-events-none' : ''}
-        ${isDragging ? 'opacity-40 ring-2 ring-accent-blue/30' : 'hover:shadow-md'}
+        ${isDragging ? 'opacity-40 ring-2 ring-accent-blue/30 scale-[1.02]' : ''}
       `}
     >
       <div className="flex gap-2">
@@ -187,11 +196,11 @@ function SortableKanbanCard({
           type="button"
           className={`
             mt-0.5 flex h-8 w-7 shrink-0 items-center justify-center self-start rounded-lg
-            touch-none cursor-grab active:cursor-grabbing outline-none
+            touch-none cursor-grab active:cursor-grabbing outline-none transition-colors
             ${sortDisabled || busy ? 'cursor-not-allowed opacity-30' : ''}
-            ${isLight ? 'text-text-muted hover:bg-bg-hover' : 'text-text-muted/60 hover:bg-white/[0.06]'}
+            ${isLight ? 'text-gray-400 hover:bg-gray-100' : 'text-text-muted/60 hover:bg-white/[0.06]'}
           `}
-          aria-label="拖动排序"
+          aria-label="\u62D6\u52A8\u6392\u5E8F"
           disabled={sortDisabled || busy}
           {...attributes}
           {...listeners}
@@ -201,42 +210,62 @@ function SortableKanbanCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             <span
-              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                isLight ? 'bg-accent-blue/10 text-accent-blue' : 'bg-accent-blue/15 text-accent-blue/90'
-              }`}
+              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors ${theme.iconBg} ${theme.iconText}`}
             >
               <Building2 className="w-4 h-4" strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-text-primary leading-snug line-clamp-2">{app.company}</p>
-              <p className="mt-0.5 flex items-start gap-1 text-[11px] text-text-secondary">
+              <p className={`text-[13px] font-semibold leading-snug line-clamp-2 ${isLight ? 'text-gray-900' : 'text-text-primary'}`}>
+                {app.company}
+              </p>
+              <p className={`mt-0.5 flex items-start gap-1 text-[11px] ${isLight ? 'text-gray-500' : 'text-text-secondary'}`}>
                 <Briefcase className="w-3 h-3 mt-0.5 shrink-0 opacity-60" />
-                <span className="line-clamp-2">{app.position || '岗位'}</span>
+                <span className="line-clamp-2">{app.position || '\u5C97\u4F4D'}</span>
               </p>
             </div>
           </div>
-          {app.city ? (
-            <div className="mt-1.5 flex items-center gap-1 pl-[2.5rem] text-[10px] text-text-muted">
-              <MapPin className="w-3 h-3 shrink-0 opacity-70" />
-              {app.city}
-            </div>
-          ) : null}
-          {fu != null ? (
-            <div
-              className={`mt-1.5 ml-[2.5rem] inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium ${
-                isLight ? 'bg-amber-500/12 text-amber-900' : 'bg-amber-500/15 text-amber-100/90'
-              }`}
-            >
-              <Calendar className="w-3 h-3 opacity-80" />
-              跟进 {dayjs.unix(Math.floor(fu)).format('M/D')}
-            </div>
-          ) : null}
-          <StageSelect
-            value={app.stage}
-            isLight={isLight}
-            disabled={busy}
-            onChange={(st) => onStageChange(app.id, st)}
-          />
+
+          <div className="flex items-center gap-2 mt-1.5 pl-[2.5rem] flex-wrap">
+            {app.city ? (
+              <span className={`inline-flex items-center gap-1 text-[10px] ${isLight ? 'text-gray-400' : 'text-text-muted'}`}>
+                <MapPin className="w-3 h-3 shrink-0 opacity-70" />
+                {app.city}
+              </span>
+            ) : null}
+            {fu != null ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                  isLight ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-amber-500/15 text-amber-100/90'
+                }`}
+              >
+                <Calendar className="w-3 h-3 opacity-80" />
+                {dayjs.unix(Math.floor(fu)).format('M/D')}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-1.5 mt-2 pl-[2.5rem]">
+            <StageSelect
+              value={app.stage}
+              isLight={isLight}
+              disabled={busy}
+              onChange={(st) => onStageChange(app.id, st)}
+            />
+            {nextStage && !busy && (
+              <button
+                type="button"
+                title={`\u79FB\u81F3 ${STAGE_LABELS[nextStage]}`}
+                onClick={() => onStageChange(app.id, nextStage)}
+                className={`mt-2 flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg border transition-all opacity-0 group-hover/card:opacity-100 ${
+                  isLight
+                    ? 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
+                    : 'border-white/10 bg-white/[0.04] text-text-muted hover:bg-accent-blue/15 hover:text-accent-blue hover:border-accent-blue/30'
+                }`}
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -261,43 +290,66 @@ function KanbanColumn({
   onStageChange: (id: number, stage: string) => void
 }) {
   const Icon = STAGE_HEADER_ICON[stage] ?? LayoutGrid
+  const theme = getStageTheme(stage, isLight)
   const list = useMemo(
     () => ids.map((id) => appMap.get(id)).filter(Boolean) as Application[],
     [ids, appMap],
   )
 
-  const barClass =
-    (STAGE_CARD_LEFT_BORDER[stage] ?? 'border-l-zinc-400/50').replace('border-l-', 'bg-') || 'bg-zinc-400/50'
-
   return (
     <div
       data-kanban-stage={stage}
       className={`
-        flex w-[min(100vw-2rem,280px)] shrink-0 snap-start flex-col rounded-2xl border overflow-hidden min-h-[min(480px,60vh)] max-h-[calc(100vh-200px)]
-        ${isLight ? 'border-bg-hover bg-bg-secondary/80' : 'border-white/[0.08] bg-bg-secondary/40'}
+        flex w-[min(100vw-2rem,280px)] shrink-0 snap-start flex-col rounded-2xl border overflow-hidden
+        min-h-[min(480px,60vh)] max-h-[calc(100vh-200px)] transition-shadow
+        ${isLight
+          ? 'border-gray-200 bg-gray-50/80 shadow-sm'
+          : 'border-white/[0.08] bg-bg-secondary/40 shadow-lg shadow-black/10'
+        }
       `}
     >
-      <div className={`h-1 w-full shrink-0 ${barClass}`} style={{ opacity: 0.85 }} />
+      {/* Stage color bar */}
+      <div className={`h-1.5 w-full shrink-0 bg-gradient-to-r ${theme.bar}`} />
+
+      {/* Column header */}
       <div
-        className={`flex items-center gap-2 border-b px-3 py-2.5 shrink-0 ${
-          isLight ? 'border-bg-hover bg-bg-tertiary/50' : 'border-white/[0.06] bg-black/20'
+        className={`flex items-center gap-2.5 border-b px-3 py-3 shrink-0 bg-gradient-to-b ${theme.headerBg} ${
+          isLight ? 'border-gray-200' : 'border-white/[0.06]'
         }`}
       >
         <div
-          className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-            isLight ? 'bg-bg-hover text-text-primary' : 'bg-white/[0.06] text-text-primary'
-          }`}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl ${theme.iconBg}`}
         >
-          <Icon className="w-4 h-4" strokeWidth={2} />
+          <Icon className={`w-[18px] h-[18px] ${theme.iconText}`} strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-xs font-bold text-text-primary truncate">{STAGE_LABELS[stage] ?? stage}</h3>
-          <p className="text-[10px] text-text-muted">{list.length} 条</p>
+          <h3 className={`text-xs font-bold truncate flex items-center gap-1.5 ${isLight ? 'text-gray-800' : 'text-text-primary'}`}>
+            <span>{STAGE_LABELS[stage] ?? stage}</span>
+            <span className="text-[10px] opacity-60">{STAGE_EMOJI[stage]}</span>
+          </h3>
+          <p className={`text-[10px] mt-0.5 ${isLight ? 'text-gray-400' : 'text-text-muted'}`}>
+            {list.length}{' \u6761\u8BB0\u5F55'}
+          </p>
         </div>
+        <span
+          className={`flex h-6 min-w-[1.5rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
+            list.length > 0
+              ? isLight
+                ? `${theme.iconBg} ${theme.iconText}`
+                : `${theme.iconBg} ${theme.iconText}`
+              : isLight
+                ? 'bg-gray-200 text-gray-400'
+                : 'bg-white/[0.06] text-text-muted/50'
+          }`}
+        >
+          {list.length}
+        </span>
       </div>
+
+      {/* Cards */}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2.5 [scrollbar-width:thin]">
         <SortableContext items={list.map((a) => a.id)} strategy={verticalListSortingStrategy} id={stage}>
-          {list.map((app) => (
+          {list.map((app, i) => (
             <SortableKanbanCard
               key={app.id}
               app={app}
@@ -305,13 +357,16 @@ function KanbanColumn({
               sortDisabled={sortDisabled}
               busy={busyId === app.id}
               onStageChange={onStageChange}
+              index={i}
             />
           ))}
         </SortableContext>
         {list.length === 0 && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center">
-            <Inbox className="w-8 h-8 text-text-muted/40" strokeWidth={1.5} />
-            <p className="text-[11px] text-text-muted">无匹配记录</p>
+            <div className={`rounded-2xl p-3 ${isLight ? 'bg-gray-100' : 'bg-white/[0.03]'}`}>
+              <Inbox className={`w-8 h-8 ${isLight ? 'text-gray-300' : 'text-text-muted/30'}`} strokeWidth={1.5} />
+            </div>
+            <p className={`text-[11px] ${isLight ? 'text-gray-400' : 'text-text-muted/60'}`}>{'\u65E0\u5339\u914D\u8BB0\u5F55'}</p>
           </div>
         )}
       </div>
@@ -320,17 +375,23 @@ function KanbanColumn({
 }
 
 function CardPreview({ app, isLight }: { app: Application; isLight: boolean }) {
-  const leftBorder = STAGE_CARD_LEFT_BORDER[app.stage] ?? 'border-l-zinc-400/40'
+  const leftBorder = getCardLeftBorder(app.stage, isLight)
+  const theme = getStageTheme(app.stage, isLight)
   return (
     <div
       className={`
         w-[260px] cursor-grabbing rounded-2xl border border-l-[3px] px-3 py-2.5 shadow-2xl
         ${leftBorder}
-        ${isLight ? 'border-bg-hover bg-bg-primary' : 'border-white/20 bg-[#1e1e2a]'}
+        ${isLight ? 'border-gray-200 bg-white' : 'border-white/20 bg-[#1e1e2a]'}
       `}
     >
-      <p className="text-[13px] font-semibold text-text-primary line-clamp-2">{app.company}</p>
-      <p className="mt-1 text-[11px] text-text-secondary line-clamp-1">{app.position || '岗位'}</p>
+      <div className="flex items-center gap-2">
+        <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${theme.iconBg}`}>
+          <Building2 className={`w-3 h-3 ${theme.iconText}`} />
+        </span>
+        <p className={`text-[13px] font-semibold line-clamp-1 ${isLight ? 'text-gray-900' : 'text-text-primary'}`}>{app.company}</p>
+      </div>
+      <p className={`mt-1 text-[11px] line-clamp-1 ${isLight ? 'text-gray-500' : 'text-text-secondary'}`}>{app.position || '\u5C97\u4F4D'}</p>
     </div>
   )
 }
@@ -369,12 +430,10 @@ export default function KanbanBoard({
   const filteredApps = useMemo(() => filterApplications(applications, search), [applications, search])
   const sortDisabled = search.trim().length > 0
 
-  /** 全量 id（提交排序 API 必须用完整列） */
   const fullColumnIds = useMemo(
     () => buildColumnIds(applications, visibleStages),
     [applications, visibleStages],
   )
-  /** 有搜索时只展示匹配卡片；排序已禁用 */
   const displayColumnIds = useMemo(
     () => (sortDisabled ? buildColumnIds(filteredApps, visibleStages) : fullColumnIds),
     [sortDisabled, filteredApps, visibleStages, fullColumnIds],
@@ -444,38 +503,44 @@ export default function KanbanBoard({
 
   const activeApp = activeId != null ? appMap.get(activeId) : undefined
 
+  const totalApps = applications.length
+
   return (
     <div
       className={`flex h-full min-h-0 gap-3 rounded-2xl border p-3 md:p-4 ${
-        isLight ? 'border-bg-hover bg-bg-secondary/60' : 'border-white/[0.07] bg-bg-primary/40'
+        isLight ? 'border-gray-200 bg-white/60' : 'border-white/[0.07] bg-bg-primary/40'
       }`}
     >
-      {/* 左侧阶段轨（桌面） */}
+      {/* Left stage rail (desktop) */}
       <nav
-        className={`hidden w-12 shrink-0 flex-col gap-1 md:flex ${isLight ? '' : 'border-r border-white/[0.06] pr-2'}`}
-        aria-label="阶段导航"
+        className={`hidden w-14 shrink-0 flex-col gap-1 md:flex ${
+          isLight ? 'border-r border-gray-200 pr-2' : 'border-r border-white/[0.06] pr-2'
+        }`}
+        aria-label="\u9636\u6BB5\u5BFC\u822A"
       >
         {visibleStages.map((st) => {
           const Icon = STAGE_HEADER_ICON[st] ?? LayoutGrid
           const n = displayColumnIds[st]?.length ?? 0
+          const theme = getStageTheme(st, isLight)
           return (
             <button
               key={st}
               type="button"
-              title={`${STAGE_LABELS[st] ?? st}（${n}）`}
+              title={`${STAGE_LABELS[st] ?? st}\uFF08${n}\uFF09`}
               onClick={() => scrollToStage(st)}
               className={`
                 relative flex flex-col items-center gap-0.5 rounded-xl py-2 text-[9px] font-bold transition-all
-                ${isLight ? 'text-text-muted hover:bg-bg-hover hover:text-text-primary' : 'text-text-muted/70 hover:bg-white/[0.06] hover:text-text-primary'}
+                ${isLight
+                  ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'
+                  : 'text-text-muted/70 hover:bg-white/[0.06] hover:text-text-primary'
+                }
               `}
             >
-              <Icon className="w-4 h-4 opacity-90" strokeWidth={2} />
+              <Icon className={`w-4 h-4 opacity-90 ${n > 0 ? theme.iconText : ''}`} strokeWidth={2} />
               <span className="scale-90">{RAIL_LABEL[st] ?? st.slice(0, 1)}</span>
               {n > 0 ? (
                 <span
-                  className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold ${
-                    isLight ? 'bg-accent-blue text-white' : 'bg-accent-blue/90 text-white'
-                  }`}
+                  className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-bold ${theme.dotColor} text-white shadow-sm`}
                 >
                   {n > 99 ? '99+' : n}
                 </span>
@@ -490,15 +555,17 @@ export default function KanbanBoard({
           <div className="flex items-center gap-3">
             <div
               className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                isLight ? 'bg-accent-blue/12 text-accent-blue' : 'bg-violet-500/20 text-violet-200'
+                isLight ? 'bg-blue-500/10 text-blue-600' : 'bg-violet-500/20 text-violet-200'
               }`}
             >
               <LayoutGrid className="w-5 h-5" strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-text-primary tracking-tight">求职管道</h2>
-              <p className="text-[10px] text-text-muted mt-0.5">
-                列内拖动手柄排序（{sortDisabled ? '搜索时已禁用排序' : '已启用'}）· 下拉框快速改阶段
+              <h2 className={`text-sm font-bold tracking-tight ${isLight ? 'text-gray-800' : 'text-text-primary'}`}>
+                {'\u6C42\u804C\u7BA1\u9053'}
+              </h2>
+              <p className={`text-[10px] mt-0.5 ${isLight ? 'text-gray-400' : 'text-text-muted'}`}>
+                {totalApps}{' \u6761\u8BB0\u5F55 \u00B7 '}{sortDisabled ? '\u641C\u7D22\u65F6\u5DF2\u7981\u7528\u6392\u5E8F' : '\u62D6\u52A8\u6392\u5E8F\u5DF2\u542F\u7528'}{' \u00B7 \u4E0B\u62C9\u6846\u5FEB\u901F\u6539\u9636\u6BB5'}
               </p>
             </div>
           </div>
@@ -507,16 +574,20 @@ export default function KanbanBoard({
               <button
                 type="button"
                 onClick={() => onShowTerminalStagesChange(true)}
-                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ring-1 ${
-                  isLight ? 'bg-red-500/10 text-red-800 ring-red-500/20' : 'bg-red-500/15 text-red-200 ring-red-400/25'
+                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ring-1 transition-colors ${
+                  isLight
+                    ? 'bg-red-50 text-red-600 ring-red-200 hover:bg-red-100'
+                    : 'bg-red-500/15 text-red-200 ring-red-400/25 hover:bg-red-500/25'
                 }`}
               >
-                {terminalApplicationsCount} 条在已结束 · 展开
+                {terminalApplicationsCount}{' \u6761\u5728\u5DF2\u7ED3\u675F \u00B7 \u5C55\u5F00'}
               </button>
             ) : null}
             <label
-              className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium ${
-                isLight ? 'border-bg-hover bg-bg-tertiary/80' : 'border-white/[0.08] bg-black/20'
+              className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                isLight
+                  ? 'border-gray-200 bg-white hover:bg-gray-50'
+                  : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.04]'
               }`}
             >
               <input
@@ -525,21 +596,21 @@ export default function KanbanBoard({
                 checked={showTerminalStages}
                 onChange={(e) => onShowTerminalStagesChange(e.target.checked)}
               />
-              显示已结束
+              {'\u663E\u793A\u5DF2\u7ED3\u675F'}
             </label>
-            <div className="flex rounded-xl border border-bg-hover p-0.5">
+            <div className={`flex rounded-xl border p-0.5 ${isLight ? 'border-gray-200' : 'border-bg-hover'}`}>
               <button
                 type="button"
-                aria-label="向左"
-                className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover"
+                aria-label="\u5411\u5DE6"
+                className={`rounded-lg p-1.5 transition-colors ${isLight ? 'text-gray-400 hover:bg-gray-100' : 'text-text-muted hover:bg-bg-hover'}`}
                 onClick={() => scrollBy(-320)}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 type="button"
-                aria-label="向右"
-                className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover"
+                aria-label="\u5411\u53F3"
+                className={`rounded-lg p-1.5 transition-colors ${isLight ? 'text-gray-400 hover:bg-gray-100' : 'text-text-muted hover:bg-bg-hover'}`}
                 onClick={() => scrollBy(320)}
               >
                 <ChevronRight className="w-4 h-4" />
@@ -548,20 +619,28 @@ export default function KanbanBoard({
           </div>
         </header>
 
-        {/* 移动端顶栏阶段 */}
-        <div className="flex gap-1 overflow-x-auto pb-1 md:hidden [scrollbar-width:none]">
-          {visibleStages.map((st) => (
-            <button
-              key={st}
-              type="button"
-              onClick={() => scrollToStage(st)}
-              className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold whitespace-nowrap ${
-                isLight ? 'bg-bg-tertiary border border-bg-hover' : 'bg-white/[0.06] border border-white/10'
-              }`}
-            >
-              {RAIL_LABEL[st]} · {displayColumnIds[st]?.length ?? 0}
-            </button>
-          ))}
+        {/* Mobile stage tabs */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 md:hidden [scrollbar-width:none]">
+          {visibleStages.map((st) => {
+            const n = displayColumnIds[st]?.length ?? 0
+            const theme = getStageTheme(st, isLight)
+            return (
+              <button
+                key={st}
+                type="button"
+                onClick={() => scrollToStage(st)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+                  isLight
+                    ? 'bg-white border border-gray-200 text-gray-600 shadow-sm'
+                    : 'bg-white/[0.06] border border-white/10 text-text-muted'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${theme.dotColor}`} />
+                {RAIL_LABEL[st]}
+                {n > 0 && <span className="opacity-60">{n}</span>}
+              </button>
+            )
+          })}
         </div>
 
         <DndContext

@@ -240,8 +240,7 @@ export default function JobTracker() {
                 <Sparkles className="w-3.5 h-3.5 text-amber-400/90" strokeWidth={2} />
               </h2>
               <p className="text-[11px] text-text-muted/90 mt-0.5 leading-relaxed max-w-md">
-                本地保存 · 表格 / 看板 · Offer 对比
-                <span className="text-text-muted/50">（仅桌面端）</span>
+                本地保存 · 表格 / 看板 · Offer 对比 · 拖拽排序
               </p>
             </div>
           </div>
