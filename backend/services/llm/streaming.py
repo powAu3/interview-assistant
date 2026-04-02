@@ -1,8 +1,11 @@
 """LLM client management, token tracking, and streaming generation."""
 
 import threading
+import json
+from types import SimpleNamespace
 from openai import OpenAI
 import openai
+import requests
 from typing import Callable, Generator, Optional
 from core.config import get_config
 from core.logger import get_logger
@@ -179,15 +182,83 @@ def _try_stream_with_model(model_cfg, full_messages, cfg):
     if think_params:
         extra_kwargs["extra_body"] = think_params
     extra_kwargs["stream_options"] = {"include_usage": True}
-    response = client.chat.completions.create(
-        model=model_cfg.model,
-        messages=full_messages,
-        temperature=cfg.temperature,
-        max_tokens=cfg.max_tokens,
-        stream=True,
-        **extra_kwargs,
-    )
-    return response
+    try:
+        response = client.chat.completions.create(
+            model=model_cfg.model,
+            messages=full_messages,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            stream=True,
+            **extra_kwargs,
+        )
+        return response
+    except TypeError as e:
+        # 某些环境中 openai-sdk + pydantic 组合会在解析流式响应时抛 by_alias 异常。
+        if "by_alias" not in str(e):
+            raise
+        _log.warning("SDK stream failed, fallback to HTTP stream model=%s err=%s", model_cfg.name, e)
+        return _stream_via_http(model_cfg, full_messages, cfg, think_params)
+
+
+def _stream_via_http(model_cfg, full_messages, cfg, think_params):
+    base = (model_cfg.api_base_url or "").rstrip("/")
+    url = f"{base}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {model_cfg.api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model_cfg.model,
+        "messages": full_messages,
+        "temperature": cfg.temperature,
+        "max_tokens": cfg.max_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if think_params:
+        payload.update(think_params)
+    with requests.post(url, headers=headers, json=payload, stream=True, timeout=60) as resp:
+        if resp.status_code >= 400:
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text
+            raise RuntimeError(f"HTTP {resp.status_code}: {str(body)[:200]}")
+        for raw_line in resp.iter_lines(decode_unicode=False):
+            if not raw_line:
+                continue
+            line = raw_line.decode("utf-8", errors="replace")
+            if not line:
+                continue
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                obj = json.loads(data)
+            except Exception:
+                continue
+            choices = obj.get("choices") or []
+            usage = obj.get("usage")
+            if choices:
+                delta_obj = choices[0].get("delta") or {}
+                delta = SimpleNamespace(
+                    content=delta_obj.get("content"),
+                    reasoning_content=delta_obj.get("reasoning_content"),
+                    reasoning=delta_obj.get("reasoning"),
+                )
+                chunk_choices = [SimpleNamespace(delta=delta)]
+            else:
+                chunk_choices = []
+            if usage:
+                usage_obj = SimpleNamespace(
+                    prompt_tokens=usage.get("prompt_tokens") or 0,
+                    completion_tokens=usage.get("completion_tokens") or 0,
+                )
+            else:
+                usage_obj = None
+            yield SimpleNamespace(choices=chunk_choices, usage=usage_obj)
 
 
 def chat_stream(

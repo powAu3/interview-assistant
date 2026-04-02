@@ -2,11 +2,11 @@ import socket
 import threading
 import time
 from typing import Optional
+import requests
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ValidationError
-from openai import OpenAI
 
 from core.config import (
     get_config, update_config,
@@ -28,6 +28,7 @@ from services.storage.resume_history import (
 router = APIRouter()
 
 _model_health: dict[int, str] = {}
+_model_health_detail: dict[int, str] = {}
 
 
 def get_model_health(index: int) -> Optional[str]:
@@ -144,6 +145,40 @@ def _mask_api_key(key: str) -> str:
     return key[:3] + _MASK_MARKER + key[-3:]
 
 
+def _resolve_masked_api_key(x: dict, index: int, old_models: list) -> str:
+    """前端用掩码占位符回传 api_key 时，从旧配置恢复真实密钥。
+
+    不能仅用列表下标：删除或重排模型后，下标与旧列表错位会把别人的 key 赋给当前行，
+    表现为「保存/测试连接」一直失败。
+    """
+    name = (x.get("name") or "").strip()
+    model_id = (x.get("model") or "").strip()
+    base = (x.get("api_base_url") or "").strip()
+
+    def triple_match(m) -> bool:
+        return (
+            (m.name or "").strip() == name
+            and (m.model or "").strip() == model_id
+            and (m.api_base_url or "").strip() == base
+        )
+
+    strict = [m for m in old_models if triple_match(m)]
+    if len(strict) == 1:
+        return strict[0].api_key or ""
+    if index < len(old_models) and triple_match(old_models[index]):
+        return old_models[index].api_key or ""
+    loose = [m for m in old_models if (m.name or "").strip() == name and (m.model or "").strip() == model_id]
+    if len(loose) == 1:
+        return loose[0].api_key or ""
+    if index < len(old_models):
+        return old_models[index].api_key or ""
+    matched = next(
+        (m for m in old_models if m.name == x.get("name") and m.model == x.get("model")),
+        None,
+    )
+    return (matched.api_key if matched else "") or ""
+
+
 @router.get("/config/models-full")
 async def api_get_models_full():
     """Return all model fields with masked api_key for frontend editing."""
@@ -178,14 +213,7 @@ async def api_update_config(body: ConfigUpdate):
                 if not isinstance(x, dict):
                     continue
                 if _MASK_MARKER in (x.get("api_key") or ""):
-                    if i < len(cfg.models):
-                        x["api_key"] = cfg.models[i].api_key
-                    else:
-                        matched = next(
-                            (m for m in cfg.models if m.name == x.get("name") and m.model == x.get("model")),
-                            None,
-                        )
-                        x["api_key"] = matched.api_key if matched else ""
+                    x["api_key"] = _resolve_masked_api_key(x, i, cfg.models)
                 raw_models.append(ModelConfig(**x))
             d["models"] = raw_models
             if not d["models"]:
@@ -345,26 +373,48 @@ def _check_single_model(index: int):
         return
     m = cfg.models[index]
     _model_health[index] = "checking"
+    _model_health_detail[index] = ""
     broadcast({"type": "model_health", "index": index, "status": "checking"})
 
     if not m.api_key or m.api_key in ("", "sk-your-api-key-here"):
         _model_health[index] = "error"
+        _model_health_detail[index] = "未配置 API Key"
         broadcast({"type": "model_health", "index": index, "status": "error", "detail": "未配置 API Key"})
         return
 
     try:
-        client = OpenAI(api_key=m.api_key, base_url=m.api_base_url, timeout=10)
-        resp = client.chat.completions.create(
-            model=m.model,
-            messages=[{"role": "user", "content": "hi"}],
-            max_tokens=1,
-            stream=False,
+        # SDK 在部分环境会抛出 pydantic by_alias 兼容异常；检测链路改为原始 HTTP 更稳。
+        base = (m.api_base_url or "").rstrip("/")
+        url = f"{base}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {m.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": m.model,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 1,
+            "stream": False,
+        }
+        r = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=12,
         )
+        if r.status_code >= 400:
+            try:
+                body = r.json()
+            except Exception:
+                body = r.text
+            raise RuntimeError(f"HTTP {r.status_code}: {str(body)[:120]}")
         _model_health[index] = "ok"
+        _model_health_detail[index] = ""
         broadcast({"type": "model_health", "index": index, "status": "ok"})
     except Exception as e:
         _model_health[index] = "error"
         detail = str(e)[:120]
+        _model_health_detail[index] = detail
         broadcast({"type": "model_health", "index": index, "status": "error", "detail": detail})
 
 
@@ -387,7 +437,7 @@ async def api_check_models_health():
 
 @router.get("/models/health")
 async def api_get_models_health():
-    return {"health": _model_health}
+    return {"health": _model_health, "detail": _model_health_detail}
 
 
 @router.post("/models/health/{index}")
