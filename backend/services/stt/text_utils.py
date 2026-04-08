@@ -338,7 +338,7 @@ def classify_asr_question_candidate(
         if sig >= need:
             return "candidate", normalized
         return "ignore", normalized
-    if sig >= max(5, need + 1):
+    if sig >= need:
         return "candidate", normalized
     return "ignore", normalized
 
@@ -364,7 +364,7 @@ def is_viable_asr_question_group(
     if len(cleaned_parts) >= 2:
         return True
     merged = "".join(cleaned_parts)
-    return transcription_significant_len(merged) >= max(6, int(min_significant_chars) + 1)
+    return transcription_significant_len(merged) >= max(3, int(min_significant_chars))
 
 
 def build_asr_question_group_text(texts: list[str], max_items: int = 4) -> str:

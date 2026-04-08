@@ -434,6 +434,8 @@ def _try_flush_asr_question_group(cfg, session, now_mono: float, force: bool = F
         _flush_asr_question_group_now(cfg, session)
     elif group.has_promote and since_last >= confirm:
         _flush_asr_question_group_now(cfg, session)
+    elif not group.has_promote and since_last >= confirm * 2:
+        _flush_asr_question_group_now(cfg, session)
 
 
 def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: float) -> None:
@@ -443,7 +445,9 @@ def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: 
         pub,
         getattr(cfg, "transcription_min_sig_chars", 2),
     )
-    if kind == "ignore" or not cleaned:
+    if not cleaned:
+        return
+    if kind == "ignore" and _pending_asr_group is None:
         return
     if _pending_asr_group is None:
         _pending_asr_group = PendingASRGroup(
