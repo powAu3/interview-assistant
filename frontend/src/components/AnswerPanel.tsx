@@ -350,7 +350,7 @@ export default function AnswerPanel() {
       </div>
 
       {showScrollToLatestFab && (
-        <div className="pointer-events-none absolute bottom-4 right-5 z-20 hidden md:block">
+        <div className="pointer-events-none absolute bottom-4 right-3 sm:right-5 z-20">
           <button
             type="button"
             onClick={scrollToLatest}

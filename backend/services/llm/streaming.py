@@ -55,6 +55,27 @@ RESUME_VISION_PROMPT = """以下是一份简历的页面图片（可能为扫描
 - 若某页无文字或无法识别，可输出空行或省略该页，不要编造内容。"""
 
 
+def _vision_via_http(model_cfg, messages: list[dict]) -> str:
+    """Raw HTTP fallback for vision calls when SDK has pydantic issues."""
+    base = (model_cfg.api_base_url or "").rstrip("/")
+    url = f"{base}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {model_cfg.api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model_cfg.model,
+        "messages": messages,
+        "max_tokens": 4096,
+        "temperature": 0,
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=120)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Vision HTTP {resp.status_code}: {resp.text[:200]}")
+    data = resp.json()
+    return (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+
+
 def vision_extract_text(image_base64_list: list[str]) -> str:
     cfg = get_config()
     model = None
@@ -64,27 +85,35 @@ def vision_extract_text(image_base64_list: list[str]) -> str:
             break
     if not model:
         raise ValueError(
-            "上传 PDF 简历需要先配置支持识图的模型。请在「设置」中选择并保存一个带「识图」的模型及 API Key 后再试；"
-            "或改为上传 DOCX / TXT 格式的简历。"
+            "\u4e0a\u4f20 PDF \u7b80\u5386\u9700\u8981\u5148\u914d\u7f6e\u652f\u6301\u8bc6\u56fe\u7684\u6a21\u578b\u3002"
+            "\u8bf7\u5728\u300c\u8bbe\u7f6e\u300d\u4e2d\u9009\u62e9\u5e76\u4fdd\u5b58\u4e00\u4e2a\u5e26\u300c\u8bc6\u56fe\u300d"
+            "\u7684\u6a21\u578b\u53ca API Key \u540e\u518d\u8bd5\uff1b"
+            "\u6216\u6539\u4e3a\u4e0a\u4f20 DOCX / TXT \u683c\u5f0f\u7684\u7b80\u5386\u3002"
         )
-    parts = [{"type": "text", "text": RESUME_VISION_PROMPT}]
+    parts: list[dict] = [{"type": "text", "text": RESUME_VISION_PROMPT}]
     for b64 in image_base64_list:
         if b64.startswith("data:"):
-            url = b64
+            img_url = b64
         else:
-            url = f"data:image/png;base64,{b64}"
-        parts.append({"type": "image_url", "image_url": {"url": url}})
+            img_url = f"data:image/png;base64,{b64}"
+        parts.append({"type": "image_url", "image_url": {"url": img_url}})
+    vision_messages = [{"role": "user", "content": parts}]
     client = get_client_for_model(model)
     try:
         r = client.chat.completions.create(
             model=model.model,
-            messages=[{"role": "user", "content": parts}],
+            messages=vision_messages,
             max_tokens=4096,
             temperature=0,
         )
         return (r.choices[0].message.content or "").strip()
+    except TypeError as e:
+        if "by_alias" not in str(e):
+            raise ValueError(f"\u8bc6\u56fe\u6a21\u578b\u89e3\u6790\u5931\u8d25: {e}") from e
+        _log.warning("Vision SDK failed (by_alias), fallback to HTTP: %s", e)
+        return _vision_via_http(model, vision_messages)
     except Exception as e:
-        raise ValueError(f"识图模型解析失败: {e}") from e
+        raise ValueError(f"\u8bc6\u56fe\u6a21\u578b\u89e3\u6790\u5931\u8d25: {e}") from e
 
 
 # ---------------------------------------------------------------------------

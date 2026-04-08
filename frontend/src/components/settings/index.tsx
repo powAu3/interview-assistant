@@ -58,7 +58,7 @@ export default function SettingsDrawer() {
 
   const tabs: { key: typeof settingsDrawerTab; label: string; icon: React.ReactNode }[] = [
     { key: 'general', label: '偏好', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
-    { key: 'config', label: '语音识别', icon: <Mic className="w-3.5 h-3.5" /> },
+    { key: 'config', label: '配置', icon: <Mic className="w-3.5 h-3.5" /> },
     { key: 'models', label: '模型', icon: <BrainCircuit className="w-3.5 h-3.5" /> },
   ]
 
@@ -67,11 +67,11 @@ export default function SettingsDrawer() {
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={toggleSettings} />
-      <div ref={drawerRef} className="fixed right-0 top-0 bottom-0 w-full sm:w-[440px] bg-bg-secondary z-50 shadow-2xl flex flex-col border-l border-bg-tertiary">
+      <div ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="fixed right-0 top-0 bottom-0 w-full sm:w-[440px] bg-bg-secondary z-50 shadow-2xl flex flex-col border-l border-bg-tertiary">
         {/* Header */}
         <div className="flex-shrink-0 border-b border-bg-tertiary px-3 pt-3 pb-0">
           <div className="flex items-center justify-between mb-3 px-1">
-            <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
+            <h2 id="settings-title" className="text-base font-semibold text-text-primary flex items-center gap-2">
               <Settings2 className="w-4.5 h-4.5 text-accent-blue" />
               设置中心
             </h2>

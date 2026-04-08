@@ -81,7 +81,7 @@ export default function TranscriptionPanel() {
               className="transcription-item px-3.5 py-2.5 rounded-lg bg-bg-tertiary/40 text-sm leading-relaxed text-text-primary"
               style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
             >
-              <span className="text-accent-blue font-semibold mr-1.5 text-xs uppercase tracking-wider">Q</span>
+              <span className="text-accent-blue/70 font-mono mr-1.5 text-[10px] select-none">{String(i + 1).padStart(2, '0')}</span>
               {text}
             </div>
           ))

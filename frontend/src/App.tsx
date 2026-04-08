@@ -237,7 +237,7 @@ export default function App() {
             <h1 className="text-sm font-bold hidden sm:block flex-shrink-0 tracking-tight">学习助手</h1>
           </div>
 
-          <div className="flex overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none">
+          <div className="flex overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none" role="tablist" aria-label="功能模块">
             {(
               [
                 ['assist', '实时辅助'],
@@ -247,7 +247,7 @@ export default function App() {
                 ['job-tracker', '\u6C42\u804C\u770B\u677F'] as const,
               ] as const
             ).map(([key, label]) => (
-              <button key={key} onClick={() => setAppMode(key)}
+              <button key={key} role="tab" aria-selected={appMode === key} onClick={() => setAppMode(key)}
                 className={`px-2.5 md:px-3 py-1.5 text-xs rounded-[10px] transition-all duration-200 whitespace-nowrap flex-shrink-0 font-medium ${appMode === key ? 'bg-accent-blue text-white shadow-sm shadow-accent-blue/20' : 'text-text-muted hover:text-text-primary hover:bg-bg-hover/50'}`}>
                 {label}
               </button>
@@ -337,12 +337,12 @@ export default function App() {
             <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
               onBlur={() => { if (customInput.trim()) handlePositionChange(customInput.trim()); setEditingPos(false) }}
               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingPos(false) }}
-              placeholder="输入岗位" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[100px] hidden sm:block" />
+              placeholder="输入岗位" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[80px] sm:w-[100px]" />
           ) : (
             <select value={config?.position ?? ''} onChange={(e) => {
               if (e.target.value === '__custom__') { setCustomInput(''); setEditingPos(true) }
               else handlePositionChange(e.target.value)
-            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[90px] md:max-w-[120px] hidden sm:block">
+            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[70px] sm:max-w-[90px] md:max-w-[120px]">
               {(options?.positions ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
               {config?.position && !(options?.positions ?? []).includes(config.position) && (
                 <option value={config.position}>{config.position}</option>
@@ -354,12 +354,12 @@ export default function App() {
             <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
               onBlur={() => { if (customInput.trim()) handleLanguageChange(customInput.trim()); setEditingLang(false) }}
               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingLang(false) }}
-              placeholder="输入语言" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[90px] hidden sm:block" />
+              placeholder="输入语言" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[70px] sm:w-[90px]" />
           ) : (
             <select value={config?.language ?? ''} onChange={(e) => {
               if (e.target.value === '__custom__') { setCustomInput(''); setEditingLang(true) }
               else handleLanguageChange(e.target.value)
-            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[80px] md:max-w-[100px] hidden sm:block">
+            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[60px] sm:max-w-[80px] md:max-w-[100px]">
               {(options?.languages ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
               {config?.language && !(options?.languages ?? []).includes(config.language) && (
                 <option value={config.language}>{config.language}</option>
@@ -504,20 +504,22 @@ export default function App() {
       {/* ── Job tracker ── */}
       {appMode === 'job-tracker' && <JobTracker />}
 
-      {fallbackToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
-          <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20">
-            <span className="text-accent-amber font-semibold">⚠</span>&nbsp; {fallbackToast.from} 不可用，切换到 {fallbackToast.to}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse gap-2 items-center" aria-live="polite">
+        {fallbackToast && (
+          <div className="animate-fade-up">
+            <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20">
+              <span className="text-accent-amber font-semibold">⚠</span>&nbsp; {fallbackToast.from} 不可用，切换到 {fallbackToast.to}
+            </div>
           </div>
-        </div>
-      )}
-      {toastMessage && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
-          <div className="glass border border-bg-hover/50 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 font-medium">
-            {toastMessage}
+        )}
+        {toastMessage && (
+          <div className="animate-fade-up">
+            <div className="glass border border-bg-hover/50 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 font-medium">
+              {toastMessage}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <SettingsDrawer />
     </div>

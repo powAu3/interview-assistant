@@ -249,7 +249,7 @@ export default function ControlBar() {
       {error && (
         <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto"><X className="w-3 h-3" /></button>
+          <button onClick={() => setError(null)} className="ml-auto" aria-label="关闭错误"><X className="w-3 h-3" /></button>
         </div>
       )}
 
@@ -294,6 +294,7 @@ export default function ControlBar() {
           }}
           className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue flex-1 min-w-0 max-w-[180px] md:max-w-[200px]"
           disabled={isRecording && !isPaused}
+          title={isRecording && !isPaused ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
         >
           {devices.some((d) => d.is_loopback) && (
             <optgroup label="🔊 系统音频 (推荐)">
@@ -424,7 +425,8 @@ export default function ControlBar() {
           )}
         </div>
         <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
-          className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-20 flex-shrink-0">
+          className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-20 flex-shrink-0"
+          aria-label="发送问题">
           <Send className="w-3.5 h-3.5" />
         </button>
       </div>

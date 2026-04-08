@@ -2,7 +2,7 @@ fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 websockets>=12.0
 python-multipart>=0.0.6
-openai>=1.12.0
+openai>=1.40.0
 requests>=2.28.0
 websocket-client>=1.6.0
 # PDF 简历：用 PyMuPDF 转图 + VL 模型识图（需在设置中配置识图模型）
@@ -10,7 +10,7 @@ pymupdf>=1.24.0
 sounddevice>=0.4.6
 numpy>=1.24.0
 faster-whisper>=1.0.0
-pydantic>=2.0.0
+pydantic>=2.5.0,<3.0
 qrcode>=7.4
 # 手机端「左屏审题」：服务端截取本机主屏左半部分
 mss>=9.0.0

@@ -20,6 +20,7 @@ from services.stt import (
     get_stt_engine,
     is_viable_asr_question_group,
     join_transcription_fragments,
+    transcribe_with_fallback,
     transcription_for_publish,
 )
 from services.llm import (
@@ -728,7 +729,7 @@ def _interview_worker():
                 broadcast({"type": "transcribing", "value": True})
                 try:
                     t0 = time.monotonic()
-                    text = engine.transcribe(
+                    text = transcribe_with_fallback(
                         speech_audio,
                         AudioCapture.SAMPLE_RATE,
                         position=cfg.position,
@@ -751,14 +752,13 @@ def _interview_worker():
                         )
                 except Exception as e:
                     _elog.error("ASR transcribe error: %s", e, exc_info=True)
-                    broadcast({"type": "error", "message": f"\u8f6c\u5199\u9519\u8bef: {e}"})
                 finally:
                     broadcast({"type": "transcribing", "value": False})
 
         remaining = vad.flush()
         if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
             try:
-                text = engine.transcribe(
+                text = transcribe_with_fallback(
                     remaining, AudioCapture.SAMPLE_RATE, position=cfg.position, language=cfg.language
                 )
                 min_sig = getattr(

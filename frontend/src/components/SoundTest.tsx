@@ -75,6 +75,7 @@ export default function SoundTest() {
   const [running, setRunning] = useState(false)
   const [steps, setSteps] = useState<Record<string, StepState>>({})
   const [done, setDone] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -109,6 +110,7 @@ export default function SoundTest() {
       }
       if (step === 'error') {
         setRunning(false)
+        setErrorMsg(detail || '\u8bd5\u97f3\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u8bbe\u5907\u548c\u914d\u7f6e')
         return
       }
       setSteps((prev) => ({
@@ -134,10 +136,12 @@ export default function SoundTest() {
     setRunning(true)
     setDone(false)
     setSteps({})
+    setErrorMsg(null)
     try {
       await api.preflightRun(selectedScenario, selectedDevice)
     } catch (e: any) {
       setRunning(false)
+      setErrorMsg(e?.message || '\u8bd5\u97f3\u8bf7\u6c42\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u670d\u52a1\u662f\u5426\u542f\u52a8')
     }
   }
 
@@ -232,6 +236,13 @@ export default function SoundTest() {
           </button>
         )}
       </div>
+
+      {errorMsg && (
+        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-2 rounded-lg mb-2">
+          <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       {/* Pipeline steps */}
       <div className="grid grid-cols-2 gap-2">

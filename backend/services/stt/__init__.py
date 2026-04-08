@@ -26,6 +26,7 @@ from .engines import (
 from .factory import (
     get_stt_engine,
     set_whisper_language,
+    transcribe_with_fallback,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "IflyitekSTT",
     "get_stt_engine",
     "set_whisper_language",
+    "transcribe_with_fallback",
 ]

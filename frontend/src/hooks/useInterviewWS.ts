@@ -135,6 +135,9 @@ export function useInterviewWS() {
       case 'model_fallback':
         s.setFallbackToast({ from: msg.from, to: msg.to, reason: msg.reason })
         break
+      case 'stt_fallback':
+        s.setFallbackToast({ from: `STT:${msg.from}`, to: `STT:${msg.to}`, reason: msg.reason })
+        break
       case 'resume_opt_start':
         s.setResumeOptLoading(true)
         s.resetResumeOpt()

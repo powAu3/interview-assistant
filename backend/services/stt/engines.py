@@ -187,13 +187,13 @@ class DoubaoSTT:
             ws = websocket.create_connection(
                 DOUBAO_ASR_WS_URL,
                 header=[f"{k}: {v}" for k, v in headers.items()],
-                timeout=30,
+                timeout=8,
             )
             ws.send_binary(first_frame)
             for frame in chunks:
                 ws.send_binary(frame)
             final_text = ""
-            ws.settimeout(15)
+            ws.settimeout(8)
             while True:
                 try:
                     raw = ws.recv()
@@ -414,7 +414,7 @@ class IflyitekSTT:
         FRAME_SIZE = 1280
         pcm_bytes = pcm.tobytes()
         try:
-            ws = websocket.create_connection(auth_url, timeout=15)
+            ws = websocket.create_connection(auth_url, timeout=8)
         except Exception as e:
             _log.error("Iflytek ASR connect failed: %s", e, exc_info=True)
             raise RuntimeError(f"讯飞 ASR 连接失败: {e}") from e
@@ -449,7 +449,7 @@ class IflyitekSTT:
             ws.send(json.dumps(last_payload))
 
             result_parts: list[str] = []
-            ws.settimeout(10)
+            ws.settimeout(8)
             while True:
                 try:
                     msg = ws.recv()
