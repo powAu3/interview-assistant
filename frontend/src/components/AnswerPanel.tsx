@@ -5,12 +5,11 @@ import { oneDark, oneLight, a11yDark } from 'react-syntax-highlighter/dist/esm/s
 import { Bot, Loader2, Copy, Check, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 import SoundTest from './SoundTest'
-import type { ColorSchemeId } from '@/lib/colorScheme'
+import { isLightColorScheme, type ColorSchemeId } from '@/lib/colorScheme'
 
 function prismThemeForScheme(id: ColorSchemeId) {
-  if (id === 'vscode-light-plus') return oneLight
   if (id === 'vscode-dark-hc') return a11yDark
-  return oneDark
+  return isLightColorScheme(id) ? oneLight : oneDark
 }
 
 function CopyButton({ text }: { text: string }) {

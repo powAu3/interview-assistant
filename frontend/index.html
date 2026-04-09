@@ -4,10 +4,22 @@
     <meta charset="UTF-8" />
     <script>
       (function () {
-        var k = 'ia-color-scheme'
-        var t = localStorage.getItem(k) || 'vscode-dark-plus'
-        if (['vscode-dark-plus', 'vscode-light-plus', 'vscode-dark-hc'].indexOf(t) < 0) t = 'vscode-dark-plus'
-        document.documentElement.setAttribute('data-theme', t)
+        try {
+          var key = 'ia-color-scheme'
+          var validThemes = [
+            'vscode-dark-plus',
+            'vscode-light-plus',
+            'vscode-dark-hc',
+            'command-center',
+            'editorial-glass',
+            'stealth-cyber',
+          ]
+          var theme = localStorage.getItem(key) || 'vscode-dark-plus'
+          if (validThemes.indexOf(theme) < 0) theme = 'vscode-dark-plus'
+          document.documentElement.setAttribute('data-theme', theme)
+        } catch {
+          document.documentElement.setAttribute('data-theme', 'vscode-dark-plus')
+        }
       })()
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

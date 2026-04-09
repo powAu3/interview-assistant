@@ -4,7 +4,12 @@ import {
   COLOR_SCHEME_STORAGE_KEY,
   readStoredColorScheme,
   applyColorSchemeToDocument,
+  applyStoredColorSchemeToDocument,
 } from '@/lib/colorScheme'
+import {
+  INTERVIEW_OVERLAY_STORAGE_KEYS,
+  type InterviewOverlayMode,
+} from '@/lib/interviewOverlay'
 
 const ANSWER_LAYOUT_KEY = 'ia_answer_panel_layout'
 
@@ -20,6 +25,67 @@ function readAnswerPanelLayout(): 'cards' | 'stream' {
     /* ignore */
   }
   return 'cards'
+}
+function readInterviewOverlayEnabled(): boolean {
+  try {
+    return localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.enabled) === '1'
+  } catch {
+    return false
+  }
+}
+
+function readInterviewOverlayMode(): InterviewOverlayMode {
+  try {
+    const v = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.mode)
+    if (v === 'panel' || v === 'lyrics') return v
+  } catch {
+    /* ignore */
+  }
+  return 'panel'
+}
+
+function readInterviewOverlayOpacity(): number {
+  try {
+    const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.opacity)
+    const value = raw == null ? 0.82 : Number(raw)
+    if (Number.isFinite(value)) return Math.min(1, Math.max(0.35, value))
+  } catch {
+    /* ignore */
+  }
+  return 0.82
+}
+
+function readInterviewOverlayLyricLines(): number {
+  try {
+    const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricLines)
+    const value = raw == null ? 2 : Number(raw)
+    if (Number.isFinite(value)) return Math.min(4, Math.max(1, Math.round(value)))
+  } catch {
+    /* ignore */
+  }
+  return 2
+}
+
+function readInterviewOverlayLyricFontSize(): number {
+  try {
+    const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricFontSize)
+    const value = raw == null ? 23 : Number(raw)
+    if (Number.isFinite(value)) return Math.min(40, Math.max(16, Math.round(value)))
+  } catch {
+    /* ignore */
+  }
+  return 23
+}
+
+function readInterviewOverlayLyricWidth(): number {
+  try {
+    const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricWidth)
+    const value = raw == null ? 760 : Number(raw)
+    if (Number.isFinite(value)) return Math.min(1200, Math.max(420, Math.round(value)))
+  } catch {
+    /* ignore */
+  }
+  return 760
 }
 
 export interface ModelInfo {
@@ -141,6 +207,13 @@ interface InterviewState {
   answerPanelLayout: 'cards' | 'stream'
   /** 界面配色（VS Code 风格，见 index.css data-theme） */
   colorScheme: ColorSchemeId
+  /** 面试悬浮提示窗（Electron Beta） */
+  interviewOverlayEnabled: boolean
+  interviewOverlayMode: InterviewOverlayMode
+  interviewOverlayOpacity: number
+  interviewOverlayLyricLines: number
+  interviewOverlayLyricFontSize: number
+  interviewOverlayLyricWidth: number
   modelHealth: Record<number, 'checking' | 'ok' | 'error'>
   tokenUsage: {
     prompt: number
@@ -200,6 +273,13 @@ interface InterviewState {
   setSettingsDrawerTab: (tab: 'general' | 'config' | 'models') => void
   setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
   setColorScheme: (id: ColorSchemeId) => void
+  setInterviewOverlayEnabled: (enabled: boolean) => void
+  setInterviewOverlayMode: (mode: InterviewOverlayMode) => void
+  setInterviewOverlayOpacity: (opacity: number) => void
+  setInterviewOverlayLyricLines: (lines: number) => void
+  setInterviewOverlayLyricFontSize: (size: number) => void
+  setInterviewOverlayLyricWidth: (width: number) => void
+  syncInterviewOverlayPrefs: () => void
   clearSession: () => void
   setModelHealth: (index: number, status: 'checking' | 'ok' | 'error') => void
   setTokenUsage: (usage: InterviewState['tokenUsage']) => void
@@ -269,6 +349,12 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   settingsDrawerTab: 'general',
   answerPanelLayout: readAnswerPanelLayout(),
   colorScheme: readStoredColorScheme(),
+  interviewOverlayEnabled: readInterviewOverlayEnabled(),
+  interviewOverlayMode: readInterviewOverlayMode(),
+  interviewOverlayOpacity: readInterviewOverlayOpacity(),
+  interviewOverlayLyricLines: readInterviewOverlayLyricLines(),
+  interviewOverlayLyricFontSize: readInterviewOverlayLyricFontSize(),
+  interviewOverlayLyricWidth: readInterviewOverlayLyricWidth(),
   modelHealth: {},
   tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
   fallbackToast: null,
@@ -399,6 +485,73 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     applyColorSchemeToDocument(id)
     set({ colorScheme: id })
   },
+  setInterviewOverlayEnabled: (enabled) => {
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.enabled, enabled ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayEnabled: enabled })
+  },
+  setInterviewOverlayMode: (mode) => {
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.mode, mode)
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayMode: mode })
+  },
+  setInterviewOverlayOpacity: (opacity) => {
+    const next = Math.min(1, Math.max(0.35, opacity))
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.opacity, String(next))
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayOpacity: next })
+  },
+  setInterviewOverlayLyricLines: (lines) => {
+    const next = Math.min(4, Math.max(1, Math.round(lines)))
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricLines, String(next))
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayLyricLines: next })
+  },
+  setInterviewOverlayLyricFontSize: (size) => {
+    const next = Math.min(40, Math.max(16, Math.round(size)))
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricFontSize, String(next))
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayLyricFontSize: next })
+  },
+  setInterviewOverlayLyricWidth: (width) => {
+    const next = Math.min(1200, Math.max(420, Math.round(width)))
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricWidth, String(next))
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayLyricWidth: next })
+  },
+  syncInterviewOverlayPrefs: () =>
+    set({
+      interviewOverlayEnabled: readInterviewOverlayEnabled(),
+      interviewOverlayMode: readInterviewOverlayMode(),
+      interviewOverlayOpacity: readInterviewOverlayOpacity(),
+      interviewOverlayLyricLines: readInterviewOverlayLyricLines(),
+      interviewOverlayLyricFontSize: readInterviewOverlayLyricFontSize(),
+      interviewOverlayLyricWidth: readInterviewOverlayLyricWidth(),
+    }),
   clearSession: () =>
     set({ transcriptions: [], qaPairs: [], currentStreamingId: null, streamingIds: [], isPaused: false }),
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
@@ -457,4 +610,4 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     }),
 }))
 
-applyColorSchemeToDocument(readStoredColorScheme())
+applyStoredColorSchemeToDocument()

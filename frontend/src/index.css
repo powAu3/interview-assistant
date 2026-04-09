@@ -19,12 +19,18 @@ body,
   font-family: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
 }
 
+body.overlay-window,
+body.overlay-window #root {
+  background: transparent !important;
+}
+
 code, pre, .font-mono {
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
 }
 
 /* ========== 主题变量（与 tailwind.config 中 rgb(var(--c-*) / <alpha>) 对应）========== */
 
+:root,
 [data-theme='vscode-dark-plus'] {
   --c-bg-primary: 15 15 18;
   --c-bg-secondary: 26 26 36;
@@ -50,6 +56,18 @@ code, pre, .font-mono {
   --c-code-header-bg: 17 26 46;
   --c-code-inline-bg: 27 36 56;
   --c-code-inline-fg: 219 234 254;
+  --c-surface-panel: 22 25 38;
+  --c-surface-elevated: 29 33 49;
+  --c-surface-glass: 23 28 44;
+  --c-border-subtle: 62 77 104;
+  --c-border-strong: 99 115 146;
+  --c-console-shell-bg: 10 16 28;
+  --c-console-header-bg: 18 25 44;
+  --c-timeline-rail: 87 102 132;
+  --c-overlay-backdrop: 14 18 29;
+  --c-overlay-border: 129 140 248;
+  --c-lyric-shell-bg: 21 26 41;
+  --c-lyric-shell-border: 129 140 248;
 }
 
 [data-theme='vscode-light-plus'] {
@@ -77,6 +95,18 @@ code, pre, .font-mono {
   --c-code-header-bg: 237 241 245;
   --c-code-inline-bg: 234 242 250;
   --c-code-inline-fg: 12 99 141;
+  --c-surface-panel: 248 248 248;
+  --c-surface-elevated: 255 255 255;
+  --c-surface-glass: 249 250 252;
+  --c-border-subtle: 207 214 223;
+  --c-border-strong: 150 163 180;
+  --c-console-shell-bg: 250 252 255;
+  --c-console-header-bg: 235 241 248;
+  --c-timeline-rail: 187 198 214;
+  --c-overlay-backdrop: 255 255 255;
+  --c-overlay-border: 0 92 197;
+  --c-lyric-shell-bg: 247 250 253;
+  --c-lyric-shell-border: 125 170 224;
 }
 
 [data-theme='vscode-dark-hc'] {
@@ -104,6 +134,135 @@ code, pre, .font-mono {
   --c-code-header-bg: 20 20 20;
   --c-code-inline-bg: 30 30 30;
   --c-code-inline-fg: 255 255 200;
+  --c-surface-panel: 6 6 6;
+  --c-surface-elevated: 16 16 16;
+  --c-surface-glass: 10 10 10;
+  --c-border-subtle: 128 128 128;
+  --c-border-strong: 255 255 255;
+  --c-console-shell-bg: 0 0 0;
+  --c-console-header-bg: 18 18 18;
+  --c-timeline-rail: 255 198 0;
+  --c-overlay-backdrop: 0 0 0;
+  --c-overlay-border: 255 198 0;
+  --c-lyric-shell-bg: 5 5 5;
+  --c-lyric-shell-border: 255 255 255;
+}
+
+[data-theme='command-center'] {
+  --c-bg-primary: 6 12 20;
+  --c-bg-secondary: 10 20 31;
+  --c-bg-tertiary: 17 32 48;
+  --c-bg-hover: 23 42 62;
+  --c-text-primary: 223 239 255;
+  --c-text-secondary: 139 182 214;
+  --c-text-muted: 93 129 158;
+  --c-accent-blue: 56 189 248;
+  --c-accent-green: 74 222 128;
+  --c-accent-red: 248 113 113;
+  --c-accent-amber: 251 191 36;
+  --c-scrollbar-thumb: 33 71 101;
+  --c-scrollbar-thumb-hover: 49 103 145;
+  --c-selection-bg: 56 189 248;
+  --c-selection-fg: 3 10 18;
+  --c-md-code-bg: 16 29 43;
+  --c-md-pre-bg: 5 14 24;
+  --c-md-pre-border: 29 66 92;
+  --c-md-strong: 223 239 255;
+  --c-md-blockquote: 148 190 220;
+  --c-code-shell-bg: 4 14 24;
+  --c-code-header-bg: 10 26 40;
+  --c-code-inline-bg: 18 40 58;
+  --c-code-inline-fg: 186 230 253;
+  --c-surface-panel: 9 18 28;
+  --c-surface-elevated: 15 27 40;
+  --c-surface-glass: 12 23 35;
+  --c-border-subtle: 47 86 121;
+  --c-border-strong: 78 150 204;
+  --c-console-shell-bg: 5 13 22;
+  --c-console-header-bg: 11 28 43;
+  --c-timeline-rail: 62 117 158;
+  --c-overlay-backdrop: 7 15 24;
+  --c-overlay-border: 56 189 248;
+  --c-lyric-shell-bg: 10 19 30;
+  --c-lyric-shell-border: 251 191 36;
+}
+
+[data-theme='editorial-glass'] {
+  --c-bg-primary: 248 246 241;
+  --c-bg-secondary: 240 236 229;
+  --c-bg-tertiary: 231 226 217;
+  --c-bg-hover: 220 214 203;
+  --c-text-primary: 32 31 36;
+  --c-text-secondary: 92 88 96;
+  --c-text-muted: 129 122 130;
+  --c-accent-blue: 43 92 169;
+  --c-accent-green: 58 123 89;
+  --c-accent-red: 158 63 77;
+  --c-accent-amber: 183 129 52;
+  --c-scrollbar-thumb: 181 172 165;
+  --c-scrollbar-thumb-hover: 154 145 139;
+  --c-selection-bg: 43 92 169;
+  --c-selection-fg: 255 255 255;
+  --c-md-code-bg: 234 231 225;
+  --c-md-pre-bg: 247 245 240;
+  --c-md-pre-border: 215 206 196;
+  --c-md-strong: 32 31 36;
+  --c-md-blockquote: 97 91 98;
+  --c-code-shell-bg: 244 241 236;
+  --c-code-header-bg: 231 227 220;
+  --c-code-inline-bg: 228 234 241;
+  --c-code-inline-fg: 56 89 138;
+  --c-surface-panel: 251 249 244;
+  --c-surface-elevated: 255 255 252;
+  --c-surface-glass: 255 255 255;
+  --c-border-subtle: 205 197 188;
+  --c-border-strong: 145 137 129;
+  --c-console-shell-bg: 246 242 235;
+  --c-console-header-bg: 233 229 221;
+  --c-timeline-rail: 189 177 164;
+  --c-overlay-backdrop: 250 247 241;
+  --c-overlay-border: 43 92 169;
+  --c-lyric-shell-bg: 255 252 248;
+  --c-lyric-shell-border: 183 129 52;
+}
+
+[data-theme='stealth-cyber'] {
+  --c-bg-primary: 6 7 10;
+  --c-bg-secondary: 11 15 18;
+  --c-bg-tertiary: 18 24 28;
+  --c-bg-hover: 24 34 39;
+  --c-text-primary: 217 230 226;
+  --c-text-secondary: 125 153 146;
+  --c-text-muted: 83 106 100;
+  --c-accent-blue: 45 212 191;
+  --c-accent-green: 163 230 53;
+  --c-accent-red: 248 113 113;
+  --c-accent-amber: 250 204 21;
+  --c-scrollbar-thumb: 52 71 66;
+  --c-scrollbar-thumb-hover: 77 101 95;
+  --c-selection-bg: 45 212 191;
+  --c-selection-fg: 5 8 8;
+  --c-md-code-bg: 15 24 22;
+  --c-md-pre-bg: 7 12 11;
+  --c-md-pre-border: 26 47 41;
+  --c-md-strong: 230 244 239;
+  --c-md-blockquote: 134 166 158;
+  --c-code-shell-bg: 4 11 10;
+  --c-code-header-bg: 10 20 18;
+  --c-code-inline-bg: 15 30 27;
+  --c-code-inline-fg: 153 246 228;
+  --c-surface-panel: 9 13 15;
+  --c-surface-elevated: 14 19 22;
+  --c-surface-glass: 12 17 19;
+  --c-border-subtle: 40 63 58;
+  --c-border-strong: 68 123 112;
+  --c-console-shell-bg: 4 10 9;
+  --c-console-header-bg: 8 18 16;
+  --c-timeline-rail: 56 94 85;
+  --c-overlay-backdrop: 8 13 14;
+  --c-overlay-border: 45 212 191;
+  --c-lyric-shell-bg: 9 15 15;
+  --c-lyric-shell-border: 163 230 53;
 }
 
 /* 文本选中：保证各主题下对比度足够，不依赖字体（仅改颜色） */
@@ -405,4 +564,85 @@ code, pre, .font-mono {
   border-color: rgb(var(--c-accent-blue) / 0.3);
   color: rgb(var(--c-accent-blue));
   transform: translateY(-1px);
+}
+
+/* ========== Shared themed surface primitives ========== */
+.ia-console-panel {
+  border: 1px solid rgb(var(--c-border-subtle) / 0.9);
+  background:
+    linear-gradient(180deg, rgb(var(--c-console-shell-bg) / 0.98) 0%, rgb(var(--c-surface-panel) / 0.96) 100%);
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.ia-console-topbar {
+  border-bottom: 1px solid rgb(var(--c-border-subtle) / 0.85);
+  background:
+    linear-gradient(180deg, rgb(var(--c-console-header-bg) / 0.96) 0%, rgb(var(--c-surface-glass) / 0.82) 100%);
+}
+
+.ia-header-shell {
+  border-bottom: 1px solid rgb(var(--c-border-subtle) / 0.8);
+  background:
+    linear-gradient(180deg, rgb(var(--c-surface-elevated) / 0.96) 0%, rgb(var(--c-surface-panel) / 0.9) 100%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.12);
+}
+
+.ia-timeline-item {
+  position: relative;
+  border: 1px solid rgb(var(--c-border-subtle) / 0.6);
+  background: linear-gradient(180deg, rgb(var(--c-surface-panel) / 0.9) 0%, rgb(var(--c-bg-secondary) / 0.82) 100%);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.08);
+}
+
+.ia-timeline-item::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(var(--c-accent-blue) / 0.75) 0%, rgb(var(--c-timeline-rail) / 0.45) 100%);
+}
+
+.ia-timeline-index {
+  color: rgb(var(--c-text-muted));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ia-overlay-header {
+  border-bottom: 1px solid rgb(var(--c-border-subtle) / 0.72);
+  background: linear-gradient(180deg, rgb(var(--c-console-header-bg) / 0.9) 0%, rgb(var(--c-surface-glass) / 0.72) 100%);
+}
+
+.ia-overlay-shell {
+  border: 1px solid rgb(var(--c-overlay-border) / 0.72);
+  background:
+    linear-gradient(180deg, rgb(var(--c-overlay-backdrop) / 0.88) 0%, rgb(var(--c-surface-glass) / 0.68) 100%);
+  box-shadow:
+    0 24px 64px rgb(0 0 0 / 0.26),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+
+.ia-lyric-shell {
+  border: 1px solid rgb(var(--c-lyric-shell-border) / 0.55);
+  background:
+    linear-gradient(180deg, rgb(var(--c-lyric-shell-bg) / 0.88) 0%, rgb(var(--c-overlay-backdrop) / 0.72) 100%);
+  box-shadow:
+    0 18px 44px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+  backdrop-filter: blur(16px) saturate(1.08);
+  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+}
+
+.ia-overlay-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.ia-overlay-content {
+  -webkit-app-region: no-drag;
 }
