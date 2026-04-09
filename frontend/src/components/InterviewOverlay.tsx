@@ -81,13 +81,8 @@ export default function InterviewOverlay() {
     applyStoredColorSchemeToDocument()
     return () => {
       document.body.classList.remove('overlay-window')
-      document.body.style.opacity = ''
     }
   }, [])
-
-  useEffect(() => {
-    document.body.style.opacity = String(interviewOverlayOpacity)
-  }, [interviewOverlayOpacity])
 
   useEffect(() => {
     syncInterviewOverlayPrefs()
@@ -146,53 +141,43 @@ export default function InterviewOverlay() {
 
   if (interviewOverlayMode === 'lyrics') {
     return (
-      <div className="h-screen w-screen bg-transparent p-3 flex items-start justify-center">
+      <div className="h-screen w-screen bg-transparent p-2 flex items-start justify-center ia-overlay-drag">
         <div
-          className="ia-overlay-shell ia-lyric-shell w-full rounded-[28px] text-text-primary"
-          style={{ maxWidth: `${interviewOverlayLyricWidth}px` }}
+          className="w-full px-4 py-3 space-y-1.5"
+          style={{ maxWidth: `${interviewOverlayLyricWidth}px`, opacity: interviewOverlayOpacity }}
         >
-          <div className="ia-overlay-drag ia-overlay-header flex items-center gap-2 px-4 py-2.5 text-[11px] uppercase tracking-[0.24em] text-text-secondary">
-            <Captions className="w-3.5 h-3.5" />
-            Dual-Cam Lyrics
-            <span className="ml-auto rounded-full border border-bg-hover/20 px-2 py-0.5 text-[10px] tracking-normal text-text-muted">
-              Drag
-            </span>
-          </div>
-          <div className="px-5 pb-5 pt-1 space-y-2 min-h-[84px]">
-            {lyricLines.length > 0 ? (
-              lyricLines.map((line, index) => (
-                <p
-                  key={`${index}-${line}`}
-                  className={`font-semibold tracking-[0.01em] ${index === lyricLines.length - 1 ? 'text-text-primary' : 'text-text-secondary'}`}
-                  style={{ fontSize: `${interviewOverlayLyricFontSize}px`, lineHeight: 1.28 }}
-                >
-                  {line}
-                  {isStreaming && index === lyricLines.length - 1 ? (
-                    <span className="inline-block w-2 h-2 ml-2 rounded-full bg-accent-green animate-pulse align-middle" />
-                  ) : null}
-                </p>
-              ))
-            ) : (
-              <div className="flex items-center gap-2 text-text-secondary text-sm leading-relaxed min-h-[58px]">
-                {isRecording ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                <span>{waitingHint}</span>
-              </div>
-            )}
-          </div>
+          {lyricLines.length > 0 ? (
+            lyricLines.map((line, index) => (
+              <p
+                key={`${index}-${line}`}
+                className={`font-semibold tracking-[0.01em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${index === lyricLines.length - 1 ? 'text-text-primary' : 'text-text-secondary'}`}
+                style={{ fontSize: `${interviewOverlayLyricFontSize}px`, lineHeight: 1.32 }}
+              >
+                {line}
+                {isStreaming && index === lyricLines.length - 1 ? (
+                  <span className="inline-block w-2 h-2 ml-2 rounded-full bg-accent-green animate-pulse align-middle" />
+                ) : null}
+              </p>
+            ))
+          ) : (
+            <p className="text-text-secondary text-sm">
+              {isRecording ? '等待识别到问题…' : '开始面试后自动显示'}
+            </p>
+          )}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen w-screen bg-transparent p-4 flex items-start justify-end">
-      <div className="ia-overlay-shell w-full max-w-[460px] rounded-[26px] text-text-primary">
-        <div className="ia-overlay-drag ia-overlay-header flex items-center gap-2 px-4 py-3 text-[11px] uppercase tracking-[0.24em] text-text-secondary">
+    <div className="h-screen w-screen bg-transparent p-4 flex items-start justify-end ia-overlay-drag">
+      <div
+        className="ia-overlay-shell w-full max-w-[460px] rounded-[26px] text-text-primary"
+        style={{ opacity: interviewOverlayOpacity }}
+      >
+        <div className="ia-overlay-header flex items-center gap-2 px-4 py-3 text-[11px] uppercase tracking-[0.24em] text-text-secondary">
           <MessageSquareQuote className="w-3.5 h-3.5" />
           Interview Prompt
-          <span className="ml-auto rounded-full border border-bg-hover/20 px-2 py-0.5 text-[10px] tracking-normal text-text-muted">
-            Drag
-          </span>
         </div>
 
         <div className="px-4 py-4 space-y-4 ia-overlay-content text-sm leading-relaxed">

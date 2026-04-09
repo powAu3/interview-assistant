@@ -36,15 +36,21 @@ export default function App() {
 
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
+    const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
     window.electronAPI.syncOverlayWindow({
       enabled: interviewOverlayEnabled,
-      visible: interviewOverlayEnabled && isRecording && appMode === 'assist',
+      visible: overlayVisible,
       mode: interviewOverlayMode,
       opacity: interviewOverlayOpacity,
       lyricLines: interviewOverlayLyricLines,
       lyricFontSize: interviewOverlayLyricFontSize,
       lyricWidth: interviewOverlayLyricWidth,
     }).catch(() => {})
+    if (overlayVisible) {
+      window.electronAPI.hideWindow?.()
+    } else if (interviewOverlayEnabled && !isRecording) {
+      window.electronAPI.showWindow?.()
+    }
   }, [
     appMode, interviewOverlayEnabled, interviewOverlayLyricLines,
     interviewOverlayLyricFontSize, interviewOverlayLyricWidth,
