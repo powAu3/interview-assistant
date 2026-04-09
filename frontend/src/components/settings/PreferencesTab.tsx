@@ -254,7 +254,7 @@ export default function PreferencesTab() {
             <Field label={`窗口不透明度: ${Math.round(interviewOverlayOpacity * 100)}%`}>
               <input
                 type="range"
-                min={35}
+                min={0}
                 max={100}
                 value={Math.round(interviewOverlayOpacity * 100)}
                 onChange={(e) => setInterviewOverlayOpacity(Number(e.target.value) / 100)}

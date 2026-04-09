@@ -504,7 +504,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     set({ interviewOverlayMode: mode })
   },
   setInterviewOverlayOpacity: (opacity) => {
-    const next = Math.min(1, Math.max(0.35, opacity))
+    const next = Math.min(1, Math.max(0, opacity))
     try {
       localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.opacity, String(next))
     } catch {

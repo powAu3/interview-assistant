@@ -49,16 +49,21 @@ export default function App() {
       lyricFontSize: interviewOverlayLyricFontSize,
       lyricWidth: interviewOverlayLyricWidth,
     }).catch(() => {})
-    if (overlayVisible) {
-      window.electronAPI.hideWindow?.()
-    } else if (interviewOverlayEnabled && !isRecording) {
-      window.electronAPI.showWindow?.()
-    }
   }, [
     appMode, interviewOverlayEnabled, interviewOverlayLyricLines,
     interviewOverlayLyricFontSize, interviewOverlayLyricWidth,
     interviewOverlayMode, interviewOverlayOpacity, isRecording,
   ])
+
+  useEffect(() => {
+    if (!window.electronAPI?.hideWindow) return
+    const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
+    if (overlayVisible) {
+      window.electronAPI.hideWindow()
+    } else if (interviewOverlayEnabled && !isRecording) {
+      window.electronAPI.showWindow?.()
+    }
+  }, [appMode, interviewOverlayEnabled, isRecording])
 
   useEffect(() => {
     if (!window.electronAPI?.onOverlayState) return
