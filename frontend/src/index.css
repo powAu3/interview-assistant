@@ -648,6 +648,5 @@ code, pre, .font-mono {
 }
 
 .ia-overlay-resize {
-  -webkit-app-region: no-drag;
   cursor: default;
 }

@@ -17,6 +17,9 @@
           var theme = localStorage.getItem(key) || 'vscode-dark-plus'
           if (validThemes.indexOf(theme) < 0) theme = 'vscode-dark-plus'
           document.documentElement.setAttribute('data-theme', theme)
+          if (location.search.indexOf('overlay=1') !== -1) {
+            document.documentElement.style.background = 'transparent'
+          }
         } catch {
           document.documentElement.setAttribute('data-theme', 'vscode-dark-plus')
         }
@@ -28,6 +31,7 @@
   </head>
   <body class="bg-bg-primary text-text-primary">
     <div id="root"></div>
+    <script>if(location.search.indexOf('overlay=1')!==-1){document.body.style.background='transparent';document.body.className='';}</script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

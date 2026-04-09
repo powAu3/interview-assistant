@@ -237,7 +237,7 @@ export default function InterviewOverlay() {
       >
         <div
           ref={scrollRef}
-          className="px-3 py-2 space-y-1 ia-overlay-content leading-relaxed"
+          className="px-3 py-2 space-y-1 leading-relaxed"
           style={{ overflowY: 'auto', maxHeight: '100vh' }}
         >
           <div
