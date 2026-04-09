@@ -120,6 +120,12 @@ cd interview-assistant
 
 pip install -r backend/requirements.txt
 
+# 安装并构建前端
+cd frontend
+npm install
+npm run build
+cd ..
+
 cp backend/config.example.json backend/config.json
 # 编辑 backend/config.json，填入你的模型 API Key
 ```
