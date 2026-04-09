@@ -1,6 +1,6 @@
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 
-export function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+export function Section({ title, icon, children }: { title: React.ReactNode; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-3">
       <h3 className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">

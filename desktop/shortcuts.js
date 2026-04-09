@@ -29,6 +29,13 @@ const DEFAULT_SHORTCUTS = {
     label: '服务端截图审题',
     category: '实时辅助',
   },
+  toggleInterviewOverlay: {
+    action: 'toggleInterviewOverlay',
+    key: 'CommandOrControl+O',
+    defaultKey: 'CommandOrControl+O',
+    label: '显示/隐藏悬浮窗',
+    category: '实时辅助',
+  },
 };
 
 const SUPPORTED_KEYS = new Set([

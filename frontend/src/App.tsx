@@ -13,35 +13,80 @@ import KnowledgeMap from '@/components/KnowledgeMap'
 import ResumeOptimizer from '@/components/ResumeOptimizer'
 import JobTracker from '@/components/JobTracker'
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      hideWindow: () => Promise<void>
-      showWindow: () => Promise<void>
-      getShortcuts: () => Promise<Record<string, { action: string; key: string; defaultKey: string; label: string; category: string; status?: string }>>
-      updateShortcuts: (shortcuts: Array<{ action: string; key: string }>) => Promise<{ ok: boolean; error?: string; shortcuts: Record<string, unknown> }>
-      resetShortcuts: () => Promise<{ ok: boolean; error?: string; shortcuts: Record<string, unknown> }>
-      toggleAlwaysOnTop: () => Promise<boolean>
-      toggleContentProtection: () => Promise<boolean>
-      getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
-    }
-  }
-}
-
 export default function App() {
   useInterviewWS()
-  const { config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading } =
+  const {
+    config,
+    setConfig,
+    setDevices,
+    setOptions,
+    toggleSettings,
+    openConfigDrawer,
+    openModelsDrawer,
+    sttLoaded,
+    sttLoading,
+    isRecording,
+    interviewOverlayEnabled,
+    interviewOverlayMode,
+    interviewOverlayOpacity,
+    interviewOverlayLyricLines,
+    interviewOverlayLyricFontSize,
+    interviewOverlayLyricWidth,
+    setInterviewOverlayEnabled,
+    setInterviewOverlayMode,
+    setInterviewOverlayOpacity,
+    setInterviewOverlayLyricLines,
+    setInterviewOverlayLyricFontSize,
+    setInterviewOverlayLyricWidth,
+  } =
     useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
   const [appMode, setAppMode] = useState<
     'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
   >('assist')
-  const [isElectronApp, setIsElectronApp] = useState(false)
 
   useEffect(() => {
-    setIsElectronApp(typeof window !== 'undefined' && !!window.electronAPI)
-  }, [])
+    if (!window.electronAPI?.syncOverlayWindow) return
+    window.electronAPI.syncOverlayWindow({
+      enabled: interviewOverlayEnabled,
+      visible: interviewOverlayEnabled && isRecording && appMode === 'assist',
+      mode: interviewOverlayMode,
+      opacity: interviewOverlayOpacity,
+      lyricLines: interviewOverlayLyricLines,
+      lyricFontSize: interviewOverlayLyricFontSize,
+      lyricWidth: interviewOverlayLyricWidth,
+    }).catch(() => {})
+  }, [
+    appMode,
+    interviewOverlayEnabled,
+    interviewOverlayLyricLines,
+    interviewOverlayLyricFontSize,
+    interviewOverlayLyricWidth,
+    interviewOverlayMode,
+    interviewOverlayOpacity,
+    isRecording,
+  ])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onOverlayState) return
+    window.electronAPI.onOverlayState((payload) => {
+      setInterviewOverlayEnabled(payload.enabled)
+      setInterviewOverlayMode(payload.mode)
+      setInterviewOverlayOpacity(payload.opacity)
+      setInterviewOverlayLyricLines(payload.lyricLines)
+      setInterviewOverlayLyricFontSize(payload.lyricFontSize)
+      setInterviewOverlayLyricWidth(payload.lyricWidth)
+    })
+    return () => window.electronAPI?.removeOverlayStateListener?.()
+  }, [
+    setInterviewOverlayEnabled,
+    setInterviewOverlayLyricFontSize,
+    setInterviewOverlayLyricLines,
+    setInterviewOverlayLyricWidth,
+    setInterviewOverlayMode,
+    setInterviewOverlayOpacity,
+  ])
 
   // job-tracker is now available on both web and Electron
   const [editingPos, setEditingPos] = useState(false)

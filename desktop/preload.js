@@ -9,4 +9,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
   toggleContentProtection: () => ipcRenderer.invoke('toggle-content-protection'),
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
+  syncOverlayWindow: (payload) => ipcRenderer.invoke('sync-overlay-window', payload),
+  getOverlayState: () => ipcRenderer.invoke('get-overlay-state'),
+  onOverlayState: (listener) => {
+    ipcRenderer.removeAllListeners('overlay-state');
+    ipcRenderer.on('overlay-state', (_event, payload) => listener(payload));
+  },
+  removeOverlayStateListener: () => ipcRenderer.removeAllListeners('overlay-state'),
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, ipcMain, screen } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -41,10 +41,105 @@ const PORT = parseInt(process.env.PORT || '18080', 10);
 const SERVER_URL = `http://127.0.0.1:${PORT}`;
 
 let mainWindow = null;
+let overlayWindow = null;
 let tray = null;
 let pythonProcess = null;
 let isQuitting = false;
 let shortcuts = {};
+let overlayPositionSaveTimer = null;
+let lastOverlayState = {
+  enabled: false,
+  visible: false,
+  mode: 'panel',
+  opacity: 0.82,
+  lyricLines: 2,
+  lyricFontSize: 23,
+  lyricWidth: 760,
+};
+
+const OVERLAY_PRESETS = {
+  panel: { width: 480, height: 320, minWidth: 380, minHeight: 220, resizable: false },
+  lyrics: { width: 760, height: 160, minWidth: 420, minHeight: 120, resizable: false },
+};
+
+function getOverlayStateFilePath() {
+  return path.join(app.getPath('userData'), 'overlay-window.json');
+}
+
+function loadOverlayWindowState() {
+  try {
+    const raw = fs.readFileSync(getOverlayStateFilePath(), 'utf8');
+    const data = JSON.parse(raw);
+    if (data && typeof data === 'object') return data;
+  } catch {
+    /* ignore */
+  }
+  return { positions: {} };
+}
+
+function saveOverlayWindowState(data) {
+  try {
+    fs.writeFileSync(getOverlayStateFilePath(), JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    console.warn('saveOverlayWindowState failed:', error);
+  }
+}
+
+function computeLyricWindowSize(state = lastOverlayState) {
+  const width = Math.max(420, Math.min(1200, Math.round(Number(state.lyricWidth) || 760)));
+  const lineCount = Math.max(1, Math.min(4, Math.round(Number(state.lyricLines) || 2)));
+  const fontSize = Math.max(16, Math.min(40, Math.round(Number(state.lyricFontSize) || 23)));
+  const height = Math.max(120, Math.round(fontSize * lineCount * 1.55 + 78));
+  return { width, height };
+}
+
+function getOverlayPreset(mode = 'panel', state = lastOverlayState) {
+  if (mode === 'lyrics') {
+    const { width, height } = computeLyricWindowSize(state);
+    return { width, height, minWidth: 420, minHeight: 120, resizable: false };
+  }
+  return OVERLAY_PRESETS.panel;
+}
+
+function getStoredOverlayPosition(mode = 'panel') {
+  const preset = getOverlayPreset(mode);
+  const saved = loadOverlayWindowState();
+  const pos = saved?.positions?.[mode];
+  if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return null;
+  const displays = screen.getAllDisplays();
+  const fitsSomeDisplay = displays.some((display) => {
+    const area = display.workArea;
+    return (
+      pos.x >= area.x - 40
+      && pos.x <= area.x + area.width - 80
+      && pos.y >= area.y - 40
+      && pos.y <= area.y + area.height - 60
+    );
+  });
+  if (fitsSomeDisplay) return { x: pos.x, y: pos.y };
+  const primary = screen.getPrimaryDisplay().workArea;
+  return {
+    x: primary.x + Math.max(16, Math.round((primary.width - preset.width) / 2)),
+    y: primary.y + Math.max(16, Math.round((primary.height - preset.height) * 0.18)),
+  };
+}
+
+function persistOverlayPosition(mode = 'panel') {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const bounds = overlayWindow.getBounds();
+  const saved = loadOverlayWindowState();
+  saved.positions = saved.positions || {};
+  saved.positions[mode] = { x: bounds.x, y: bounds.y };
+  saveOverlayWindowState(saved);
+}
+
+function schedulePersistOverlayPosition(mode = 'panel') {
+  if (overlayPositionSaveTimer) clearTimeout(overlayPositionSaveTimer);
+  overlayPositionSaveTimer = setTimeout(() => {
+    overlayPositionSaveTimer = null;
+    persistOverlayPosition(mode);
+  }, 180);
+}
 
 function createTrayIcon() {
   const size = 16;
@@ -156,6 +251,96 @@ function createWindow() {
       e.preventDefault();
       mainWindow.hide();
     });
+  }
+}
+
+function applyOverlayPreset(mode = 'panel') {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const preset = getOverlayPreset(mode);
+  const bounds = overlayWindow.getBounds();
+  const storedPos = getStoredOverlayPosition(mode);
+  overlayWindow.setResizable(Boolean(preset.resizable));
+  overlayWindow.setMinimumSize(preset.minWidth, preset.minHeight);
+  overlayWindow.setBounds({
+    x: storedPos?.x ?? bounds.x,
+    y: storedPos?.y ?? bounds.y,
+    width: preset.width,
+    height: preset.height,
+  });
+  overlayWindow._overlayMode = mode;
+}
+
+function createOverlayWindow(mode = 'panel') {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    applyOverlayPreset(mode);
+    return overlayWindow;
+  }
+
+  const preset = getOverlayPreset(mode);
+  const storedPos = getStoredOverlayPosition(mode);
+  overlayWindow = new BrowserWindow({
+    width: preset.width,
+    height: preset.height,
+    ...(storedPos ? storedPos : {}),
+    minWidth: preset.minWidth,
+    minHeight: preset.minHeight,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: preset.resizable,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hiddenInMissionControl: true,
+    show: false,
+    focusable: true,
+    title: `${APP_DISPLAY_NAME} Overlay`,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  overlayWindow.setContentProtection(true);
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  overlayWindow._overlayMode = mode;
+  overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
+  overlayWindow.webContents.on('did-finish-load', () => {
+    if (lastOverlayState) {
+      overlayWindow?.webContents.send('overlay-state', lastOverlayState);
+    }
+  });
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+  overlayWindow.on('moved', () => {
+    const currentMode = overlayWindow?._overlayMode || lastOverlayState.mode || 'panel';
+    schedulePersistOverlayPosition(currentMode);
+  });
+
+  return overlayWindow;
+}
+
+function sendOverlayState(payload) {
+  lastOverlayState = payload;
+  [mainWindow, overlayWindow].forEach((win) => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('overlay-state', payload);
+  });
+}
+
+function showOverlayWindow() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (process.platform === 'darwin' || process.platform === 'win32') {
+    overlayWindow.showInactive();
+  } else {
+    overlayWindow.show();
   }
 }
 
@@ -325,6 +510,23 @@ const shortcutCallbacks = {
       console.error('askFromServerScreen failed:', error);
     }
   },
+  toggleInterviewOverlay: () => {
+    const nextEnabled = !Boolean(lastOverlayState.enabled);
+    const nextState = {
+      ...lastOverlayState,
+      enabled: nextEnabled,
+      visible: nextEnabled,
+    };
+    sendOverlayState(nextState);
+    if (!nextEnabled) {
+      if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
+      return;
+    }
+    const win = createOverlayWindow(nextState.mode);
+    applyOverlayPreset(nextState.mode);
+    if (nextState.visible) showOverlayWindow();
+    else if (win && !win.isDestroyed()) win.hide();
+  },
 };
 
 ipcMain.handle('hide-window', () => mainWindow?.hide());
@@ -362,6 +564,32 @@ ipcMain.handle('get-window-state', () => ({
   contentProtection: mainWindow?._contentProtection !== false,
   visible: mainWindow?.isVisible() ?? false,
 }));
+ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
+  const state = {
+    enabled: Boolean(payload.enabled),
+    visible: Boolean(payload.visible),
+    mode: payload.mode === 'lyrics' ? 'lyrics' : 'panel',
+    opacity: Math.max(0.35, Math.min(1, Number(payload.opacity) || 0.82)),
+    lyricLines: Math.max(1, Math.min(4, Math.round(Number(payload.lyricLines) || 2))),
+    lyricFontSize: Math.max(16, Math.min(40, Math.round(Number(payload.lyricFontSize) || 23))),
+    lyricWidth: Math.max(420, Math.min(1200, Math.round(Number(payload.lyricWidth) || 760))),
+  };
+
+  if (!state.enabled) {
+    lastOverlayState = state;
+    sendOverlayState(state);
+    if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
+    return { ok: true, visible: false };
+  }
+
+  const win = createOverlayWindow(state.mode);
+  applyOverlayPreset(state.mode);
+  sendOverlayState(state);
+  if (state.visible) showOverlayWindow();
+  else win.hide();
+  return { ok: true, visible: state.visible };
+});
+ipcMain.handle('get-overlay-state', () => lastOverlayState);
 
 function createAppMenu() {
   if (process.platform !== 'darwin') return;
@@ -429,6 +657,14 @@ app.on('activate', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  if (overlayPositionSaveTimer) {
+    clearTimeout(overlayPositionSaveTimer);
+    overlayPositionSaveTimer = null;
+  }
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.destroy();
+    overlayWindow = null;
+  }
   if (pythonProcess) {
     pythonProcess.kill('SIGTERM');
     pythonProcess = null;

@@ -46,6 +46,7 @@ test('load and save shortcut config roundtrip', () => {
   const shortcuts = createShortcutState({
     askFromServerScreen: { key: 'CommandOrControl+/' },
     hardClearSession: { key: 'CommandOrControl+.' },
+    toggleInterviewOverlay: { key: 'CommandOrControl+O' },
   });
 
   saveShortcutConfig(app, shortcuts);
@@ -53,5 +54,6 @@ test('load and save shortcut config roundtrip', () => {
 
   assert.equal(loaded.askFromServerScreen.key, 'CommandOrControl+/');
   assert.equal(loaded.hardClearSession.key, 'CommandOrControl+.');
+  assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+O');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
 });

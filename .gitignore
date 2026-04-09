@@ -70,3 +70,4 @@ temp/
 *.backup
 
 CODE_REVIEW.md
+.omx/
