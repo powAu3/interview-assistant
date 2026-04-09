@@ -341,6 +341,27 @@ export default function PreferencesTab() {
                 </Field>
               </>
             )}
+            <Field label="简短回答">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config?.assist_high_churn_short_answer ?? false}
+                  onChange={async (e) => {
+                    try {
+                      await api.updateConfig({ assist_high_churn_short_answer: e.target.checked })
+                      useInterviewStore.getState().setConfig(await api.getConfig())
+                    } catch {}
+                  }}
+                  className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
+                />
+                <span className="text-xs text-text-secondary">
+                  {config?.assist_high_churn_short_answer ? '简短模式' : '详细模式'}
+                </span>
+              </label>
+              <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
+                开启后回答更短更精炼，适合快速切题的面试
+              </p>
+            </Field>
           </>
         )}
       </Section>

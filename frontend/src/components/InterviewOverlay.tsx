@@ -233,15 +233,12 @@ export default function InterviewOverlay() {
           fontSize: `${interviewOverlayPanelFontSize}px`,
           minWidth: '180px',
           maxWidth: '100vw',
-          maxHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
         }}
       >
         <div
           ref={scrollRef}
           className="px-3 py-2 space-y-1 ia-overlay-content leading-relaxed"
-          style={{ overflowY: 'auto', flex: 1 }}
+          style={{ overflowY: 'auto', maxHeight: '100vh' }}
         >
           <div
             className="truncate"
