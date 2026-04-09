@@ -60,12 +60,13 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI?.onOverlayState) return
     window.electronAPI.onOverlayState((payload) => {
-      setInterviewOverlayEnabled(payload.enabled)
-      setInterviewOverlayMode(payload.mode)
-      setInterviewOverlayOpacity(payload.opacity)
-      setInterviewOverlayLyricLines(payload.lyricLines)
-      setInterviewOverlayLyricFontSize(payload.lyricFontSize)
-      setInterviewOverlayLyricWidth(payload.lyricWidth)
+      const s = useInterviewStore.getState()
+      if (payload.enabled !== s.interviewOverlayEnabled) setInterviewOverlayEnabled(payload.enabled)
+      if (payload.mode !== s.interviewOverlayMode) setInterviewOverlayMode(payload.mode)
+      if (Math.abs(payload.opacity - s.interviewOverlayOpacity) > 0.005) setInterviewOverlayOpacity(payload.opacity)
+      if (payload.lyricLines !== s.interviewOverlayLyricLines) setInterviewOverlayLyricLines(payload.lyricLines)
+      if (payload.lyricFontSize !== s.interviewOverlayLyricFontSize) setInterviewOverlayLyricFontSize(payload.lyricFontSize)
+      if (payload.lyricWidth !== s.interviewOverlayLyricWidth) setInterviewOverlayLyricWidth(payload.lyricWidth)
     })
     return () => window.electronAPI?.removeOverlayStateListener?.()
   }, [
