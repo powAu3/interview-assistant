@@ -7,6 +7,7 @@ interface OverlayPayload {
   opacity: number
   panelFontSize: number
   panelWidth: number
+  panelShowBg: boolean
   lyricLines: number
   lyricFontSize: number
   lyricWidth: number

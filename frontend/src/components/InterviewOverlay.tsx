@@ -51,6 +51,7 @@ export default function InterviewOverlay() {
     interviewOverlayOpacity,
     interviewOverlayPanelFontSize,
     interviewOverlayPanelWidth,
+    interviewOverlayPanelShowBg,
     interviewOverlayLyricLines,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricWidth,
@@ -61,6 +62,7 @@ export default function InterviewOverlay() {
     setInterviewOverlayOpacity,
     setInterviewOverlayPanelFontSize,
     setInterviewOverlayPanelWidth,
+    setInterviewOverlayPanelShowBg,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricWidth,
@@ -100,6 +102,7 @@ export default function InterviewOverlay() {
         setInterviewOverlayOpacity(payload.opacity)
         setInterviewOverlayPanelFontSize(payload.panelFontSize)
         setInterviewOverlayPanelWidth(payload.panelWidth)
+        setInterviewOverlayPanelShowBg(payload.panelShowBg)
         setInterviewOverlayLyricLines(payload.lyricLines)
         setInterviewOverlayLyricFontSize(payload.lyricFontSize)
         setInterviewOverlayLyricWidth(payload.lyricWidth)
@@ -125,6 +128,7 @@ export default function InterviewOverlay() {
       setInterviewOverlayOpacity(payload.opacity)
       setInterviewOverlayPanelFontSize(payload.panelFontSize)
       setInterviewOverlayPanelWidth(payload.panelWidth)
+      setInterviewOverlayPanelShowBg(payload.panelShowBg)
       setInterviewOverlayLyricLines(payload.lyricLines)
       setInterviewOverlayLyricFontSize(payload.lyricFontSize)
       setInterviewOverlayLyricWidth(payload.lyricWidth)
@@ -145,12 +149,14 @@ export default function InterviewOverlay() {
     setInterviewOverlayOpacity,
     setInterviewOverlayPanelFontSize,
     setInterviewOverlayPanelWidth,
+    setInterviewOverlayPanelShowBg,
     syncInterviewOverlayPrefs,
   ])
 
   const waitingHint = isRecording ? '等待识别到问题…' : '开始面试后会自动出现'
 
   const panelRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const handlePanelResize = useCallback(() => {
     const el = panelRef.current
     if (!el) return
@@ -165,6 +171,11 @@ export default function InterviewOverlay() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [handlePanelResize])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [answerText])
 
   if (!interviewOverlayEnabled) {
     return <div className="h-screen w-screen bg-transparent" />
@@ -207,25 +218,49 @@ export default function InterviewOverlay() {
     )
   }
 
+  const panelShellClass = interviewOverlayPanelShowBg
+    ? 'ia-overlay-shell rounded-xl ia-overlay-resize text-text-primary'
+    : 'ia-overlay-resize text-white'
+
   return (
     <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 0 }}>
       <div
         ref={panelRef}
-        className="ia-overlay-shell rounded-xl text-text-primary ia-overlay-resize"
+        className={panelShellClass}
         style={{
           opacity: interviewOverlayOpacity,
           width: `${interviewOverlayPanelWidth}px`,
           fontSize: `${interviewOverlayPanelFontSize}px`,
           minWidth: '180px',
           maxWidth: '100vw',
+          maxHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <div className="px-3 py-2 space-y-1 ia-overlay-content leading-relaxed">
-          <div className="text-text-secondary/60 truncate" style={{ fontSize: `${Math.max(8, interviewOverlayPanelFontSize - 2)}px` }}>
+        <div
+          ref={scrollRef}
+          className="px-3 py-2 space-y-1 ia-overlay-content leading-relaxed"
+          style={{ overflowY: 'auto', flex: 1 }}
+        >
+          <div
+            className="truncate"
+            style={{
+              fontSize: `${Math.max(8, interviewOverlayPanelFontSize - 2)}px`,
+              color: interviewOverlayPanelShowBg ? undefined : 'rgba(200,200,200,0.7)',
+              textShadow: interviewOverlayPanelShowBg ? undefined : '0 1px 3px rgba(0,0,0,0.6)',
+            }}
+          >
             <Mic className="inline w-3 h-3 mr-1 align-[-2px]" />
             {latestQa?.question?.trim() || waitingHint}
           </div>
-          <div className="whitespace-pre-wrap break-words text-text-primary">
+          <div
+            className="whitespace-pre-wrap break-words"
+            style={{
+              color: interviewOverlayPanelShowBg ? undefined : '#fff',
+              textShadow: interviewOverlayPanelShowBg ? undefined : '0 1px 4px rgba(0,0,0,0.7)',
+            }}
+          >
             {isStreaming && <Loader2 className="inline w-3 h-3 mr-1 animate-spin align-[-2px] text-accent-green" />}
             {answerText || (latestQa ? '正在组织回答…' : waitingHint)}
           </div>

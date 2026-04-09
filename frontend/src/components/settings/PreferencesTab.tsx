@@ -32,6 +32,7 @@ export default function PreferencesTab() {
     interviewOverlayOpacity,
     interviewOverlayPanelFontSize,
     interviewOverlayPanelWidth,
+    interviewOverlayPanelShowBg,
     interviewOverlayLyricLines,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricWidth,
@@ -41,6 +42,7 @@ export default function PreferencesTab() {
     setInterviewOverlayOpacity,
     setInterviewOverlayPanelFontSize,
     setInterviewOverlayPanelWidth,
+    setInterviewOverlayPanelShowBg,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricWidth,
@@ -278,6 +280,17 @@ export default function PreferencesTab() {
                     onChange={(e) => setInterviewOverlayPanelFontSize(Number(e.target.value))}
                     className="w-full max-w-[200px]"
                   />
+                </Field>
+                <Field label="显示背景框">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={interviewOverlayPanelShowBg}
+                      onChange={(e) => setInterviewOverlayPanelShowBg(e.target.checked)}
+                      className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
+                    />
+                    <span className="text-xs text-text-secondary">{interviewOverlayPanelShowBg ? '有背景' : '纯文字'}</span>
+                  </label>
                 </Field>
                 <p className="text-[11px] text-text-muted leading-relaxed">面板宽度可在悬浮窗右侧边缘拖拽调整</p>
               </>

@@ -649,7 +649,7 @@ code, pre, .font-mono {
 
 .ia-overlay-resize {
   resize: horizontal;
-  overflow: auto;
+  overflow: hidden;
   -webkit-app-region: no-drag;
   cursor: default;
 }

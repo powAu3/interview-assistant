@@ -66,6 +66,16 @@ function readInterviewOverlayPanelFontSize(): number {
   return 13
 }
 
+function readInterviewOverlayPanelShowBg(): boolean {
+  try {
+    const v = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.panelShowBg)
+    if (v === '0') return false
+  } catch {
+    /* ignore */
+  }
+  return true
+}
+
 function readInterviewOverlayPanelWidth(): number {
   try {
     const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.panelWidth)
@@ -245,6 +255,7 @@ interface InterviewState {
   interviewOverlayOpacity: number
   interviewOverlayPanelFontSize: number
   interviewOverlayPanelWidth: number
+  interviewOverlayPanelShowBg: boolean
   interviewOverlayLyricLines: number
   interviewOverlayLyricFontSize: number
   interviewOverlayLyricWidth: number
@@ -313,6 +324,7 @@ interface InterviewState {
   setInterviewOverlayOpacity: (opacity: number) => void
   setInterviewOverlayPanelFontSize: (size: number) => void
   setInterviewOverlayPanelWidth: (width: number) => void
+  setInterviewOverlayPanelShowBg: (show: boolean) => void
   setInterviewOverlayLyricLines: (lines: number) => void
   setInterviewOverlayLyricFontSize: (size: number) => void
   setInterviewOverlayLyricWidth: (width: number) => void
@@ -392,6 +404,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   interviewOverlayOpacity: readInterviewOverlayOpacity(),
   interviewOverlayPanelFontSize: readInterviewOverlayPanelFontSize(),
   interviewOverlayPanelWidth: readInterviewOverlayPanelWidth(),
+  interviewOverlayPanelShowBg: readInterviewOverlayPanelShowBg(),
   interviewOverlayLyricLines: readInterviewOverlayLyricLines(),
   interviewOverlayLyricFontSize: readInterviewOverlayLyricFontSize(),
   interviewOverlayLyricWidth: readInterviewOverlayLyricWidth(),
@@ -574,6 +587,15 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
     set({ interviewOverlayPanelWidth: next })
   },
+  setInterviewOverlayPanelShowBg: (show) => {
+    try {
+      localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.panelShowBg, show ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
+    set({ interviewOverlayPanelShowBg: show })
+  },
   setInterviewOverlayLyricLines: (lines) => {
     const next = Math.min(8, Math.max(1, Math.round(lines)))
     try {
@@ -621,6 +643,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       interviewOverlayOpacity: readInterviewOverlayOpacity(),
       interviewOverlayPanelFontSize: readInterviewOverlayPanelFontSize(),
       interviewOverlayPanelWidth: readInterviewOverlayPanelWidth(),
+      interviewOverlayPanelShowBg: readInterviewOverlayPanelShowBg(),
       interviewOverlayLyricLines: readInterviewOverlayLyricLines(),
       interviewOverlayLyricFontSize: readInterviewOverlayLyricFontSize(),
       interviewOverlayLyricWidth: readInterviewOverlayLyricWidth(),

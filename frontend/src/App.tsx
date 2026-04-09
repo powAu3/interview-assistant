@@ -19,10 +19,10 @@ export default function App() {
     config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
     isRecording,
     interviewOverlayEnabled, interviewOverlayMode, interviewOverlayOpacity,
-    interviewOverlayPanelFontSize, interviewOverlayPanelWidth,
+    interviewOverlayPanelFontSize, interviewOverlayPanelWidth, interviewOverlayPanelShowBg,
     interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
     setInterviewOverlayEnabled, setInterviewOverlayMode, setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth,
+    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth, setInterviewOverlayPanelShowBg,
     setInterviewOverlayLyricLines, setInterviewOverlayLyricFontSize, setInterviewOverlayLyricWidth, setInterviewOverlayLyricColor,
   } = useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
@@ -49,6 +49,7 @@ export default function App() {
       opacity: interviewOverlayOpacity,
       panelFontSize: interviewOverlayPanelFontSize,
       panelWidth: interviewOverlayPanelWidth,
+      panelShowBg: interviewOverlayPanelShowBg,
       lyricLines: interviewOverlayLyricLines,
       lyricFontSize: interviewOverlayLyricFontSize,
       lyricWidth: interviewOverlayLyricWidth,
@@ -58,7 +59,7 @@ export default function App() {
     appMode, interviewOverlayEnabled,
     interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
     interviewOverlayMode, interviewOverlayOpacity,
-    interviewOverlayPanelFontSize, interviewOverlayPanelWidth,
+    interviewOverlayPanelFontSize, interviewOverlayPanelWidth, interviewOverlayPanelShowBg,
     isRecording,
   ])
 
@@ -81,6 +82,7 @@ export default function App() {
       setInterviewOverlayOpacity(payload.opacity)
       setInterviewOverlayPanelFontSize(payload.panelFontSize)
       setInterviewOverlayPanelWidth(payload.panelWidth)
+      setInterviewOverlayPanelShowBg(payload.panelShowBg)
       setInterviewOverlayLyricLines(payload.lyricLines)
       setInterviewOverlayLyricFontSize(payload.lyricFontSize)
       setInterviewOverlayLyricWidth(payload.lyricWidth)
@@ -91,7 +93,7 @@ export default function App() {
     setInterviewOverlayEnabled, setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricLines, setInterviewOverlayLyricWidth, setInterviewOverlayLyricColor,
     setInterviewOverlayMode, setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth,
+    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth, setInterviewOverlayPanelShowBg,
   ])
 
   // job-tracker is now available on both web and Electron
