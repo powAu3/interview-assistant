@@ -52,9 +52,13 @@ let lastOverlayState = {
   visible: false,
   mode: 'panel',
   opacity: 0.82,
+  panelFontSize: 13,
+  panelWidth: 420,
+  panelShowBg: true,
   lyricLines: 2,
   lyricFontSize: 23,
   lyricWidth: 760,
+  lyricColor: '#ffffff',
 };
 
 const OVERLAY_PRESETS = {
@@ -87,9 +91,9 @@ function saveOverlayWindowState(data) {
 
 function computeLyricWindowSize(state = lastOverlayState) {
   const width = Math.max(420, Math.min(1200, Math.round(Number(state.lyricWidth) || 760)));
-  const lineCount = Math.max(1, Math.min(4, Math.round(Number(state.lyricLines) || 2)));
-  const fontSize = Math.max(16, Math.min(40, Math.round(Number(state.lyricFontSize) || 23)));
-  const height = Math.max(120, Math.round(fontSize * lineCount * 1.55 + 78));
+  const lineCount = Math.max(1, Math.min(8, Math.round(Number(state.lyricLines) || 2)));
+  const fontSize = Math.max(1, Math.round(Number(state.lyricFontSize) || 23));
+  const height = Math.max(60, Math.round(fontSize * lineCount * 1.55 + 40));
   return { width, height };
 }
 
@@ -309,10 +313,16 @@ function createOverlayWindow(mode = 'panel') {
   overlayWindow.setAlwaysOnTop(true, 'screen-saver', 1);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow._overlayMode = mode;
+  overlayWindow._overlayReady = false;
   overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
   overlayWindow.webContents.on('did-finish-load', () => {
+    overlayWindow._overlayReady = true;
     if (lastOverlayState) {
       overlayWindow?.webContents.send('overlay-state', lastOverlayState);
+    }
+    if (overlayWindow._pendingShow) {
+      overlayWindow._pendingShow = false;
+      showOverlayWindow();
     }
   });
 
@@ -337,6 +347,10 @@ function sendOverlayState(payload) {
 
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (!overlayWindow._overlayReady) {
+    overlayWindow._pendingShow = true;
+    return;
+  }
   if (process.platform === 'darwin' || process.platform === 'win32') {
     overlayWindow.showInactive();
   } else {
@@ -569,10 +583,14 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     enabled: Boolean(payload.enabled),
     visible: Boolean(payload.visible),
     mode: payload.mode === 'lyrics' ? 'lyrics' : 'panel',
-    opacity: Math.max(0.35, Math.min(1, Number(payload.opacity) || 0.82)),
-    lyricLines: Math.max(1, Math.min(4, Math.round(Number(payload.lyricLines) || 2))),
-    lyricFontSize: Math.max(16, Math.min(40, Math.round(Number(payload.lyricFontSize) || 23))),
+    opacity: Math.max(0, Math.min(1, Number(payload.opacity) || 0)),
+    panelFontSize: Math.max(1, Math.round(Number(payload.panelFontSize) || 13)),
+    panelWidth: Math.max(180, Math.round(Number(payload.panelWidth) || 420)),
+    panelShowBg: payload.panelShowBg !== false,
+    lyricLines: Math.max(1, Math.min(8, Math.round(Number(payload.lyricLines) || 2))),
+    lyricFontSize: Math.max(1, Math.round(Number(payload.lyricFontSize) || 23)),
     lyricWidth: Math.max(420, Math.min(1200, Math.round(Number(payload.lyricWidth) || 760))),
+    lyricColor: typeof payload.lyricColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.lyricColor) ? payload.lyricColor : '#ffffff',
   };
 
   if (!state.enabled) {
@@ -586,7 +604,7 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   applyOverlayPreset(state.mode);
   sendOverlayState(state);
   if (state.visible) showOverlayWindow();
-  else win.hide();
+  else if (win && !win.isDestroyed()) win.hide();
   return { ok: true, visible: state.visible };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
