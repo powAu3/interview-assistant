@@ -3,6 +3,11 @@ const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('enable-transparent-visuals');
+}
 const {
   ShortcutStatus,
   createShortcutState,
@@ -299,7 +304,7 @@ function createOverlayWindow(mode = 'panel') {
     alwaysOnTop: true,
     hiddenInMissionControl: true,
     show: false,
-    focusable: true,
+    focusable: false,
     title: `${APP_DISPLAY_NAME} Overlay`,
     backgroundColor: '#00000000',
     webPreferences: {
@@ -316,14 +321,17 @@ function createOverlayWindow(mode = 'panel') {
   overlayWindow._overlayReady = false;
   overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
   overlayWindow.webContents.on('did-finish-load', () => {
-    overlayWindow._overlayReady = true;
     if (lastOverlayState) {
       overlayWindow?.webContents.send('overlay-state', lastOverlayState);
     }
-    if (overlayWindow._pendingShow) {
-      overlayWindow._pendingShow = false;
-      showOverlayWindow();
-    }
+    setTimeout(() => {
+      if (!overlayWindow || overlayWindow.isDestroyed()) return;
+      overlayWindow._overlayReady = true;
+      if (overlayWindow._pendingShow) {
+        overlayWindow._pendingShow = false;
+        showOverlayWindow();
+      }
+    }, process.platform === 'win32' ? 120 : 0);
   });
 
   overlayWindow.on('closed', () => {
