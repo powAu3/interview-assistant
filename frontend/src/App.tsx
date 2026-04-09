@@ -19,9 +19,11 @@ export default function App() {
     config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
     isRecording,
     interviewOverlayEnabled, interviewOverlayMode, interviewOverlayOpacity,
-    interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth,
+    interviewOverlayPanelFontSize, interviewOverlayPanelWidth,
+    interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
     setInterviewOverlayEnabled, setInterviewOverlayMode, setInterviewOverlayOpacity,
-    setInterviewOverlayLyricLines, setInterviewOverlayLyricFontSize, setInterviewOverlayLyricWidth,
+    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth,
+    setInterviewOverlayLyricLines, setInterviewOverlayLyricFontSize, setInterviewOverlayLyricWidth, setInterviewOverlayLyricColor,
   } = useInterviewStore()
   const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
@@ -45,14 +47,19 @@ export default function App() {
       visible: overlayVisible,
       mode: interviewOverlayMode,
       opacity: interviewOverlayOpacity,
+      panelFontSize: interviewOverlayPanelFontSize,
+      panelWidth: interviewOverlayPanelWidth,
       lyricLines: interviewOverlayLyricLines,
       lyricFontSize: interviewOverlayLyricFontSize,
       lyricWidth: interviewOverlayLyricWidth,
+      lyricColor: interviewOverlayLyricColor,
     }).catch(() => {})
   }, [
-    appMode, interviewOverlayEnabled, interviewOverlayLyricLines,
-    interviewOverlayLyricFontSize, interviewOverlayLyricWidth,
-    interviewOverlayMode, interviewOverlayOpacity, isRecording,
+    appMode, interviewOverlayEnabled,
+    interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
+    interviewOverlayMode, interviewOverlayOpacity,
+    interviewOverlayPanelFontSize, interviewOverlayPanelWidth,
+    isRecording,
   ])
 
   useEffect(() => {
@@ -72,15 +79,19 @@ export default function App() {
       setInterviewOverlayEnabled(payload.enabled)
       setInterviewOverlayMode(payload.mode)
       setInterviewOverlayOpacity(payload.opacity)
+      setInterviewOverlayPanelFontSize(payload.panelFontSize)
+      setInterviewOverlayPanelWidth(payload.panelWidth)
       setInterviewOverlayLyricLines(payload.lyricLines)
       setInterviewOverlayLyricFontSize(payload.lyricFontSize)
       setInterviewOverlayLyricWidth(payload.lyricWidth)
+      setInterviewOverlayLyricColor(payload.lyricColor)
     })
     return () => window.electronAPI?.removeOverlayStateListener?.()
   }, [
     setInterviewOverlayEnabled, setInterviewOverlayLyricFontSize,
-    setInterviewOverlayLyricLines, setInterviewOverlayLyricWidth,
+    setInterviewOverlayLyricLines, setInterviewOverlayLyricWidth, setInterviewOverlayLyricColor,
     setInterviewOverlayMode, setInterviewOverlayOpacity,
+    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth,
   ])
 
   // job-tracker is now available on both web and Electron

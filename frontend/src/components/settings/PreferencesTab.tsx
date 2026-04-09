@@ -30,15 +30,21 @@ export default function PreferencesTab() {
     interviewOverlayEnabled,
     interviewOverlayMode,
     interviewOverlayOpacity,
+    interviewOverlayPanelFontSize,
+    interviewOverlayPanelWidth,
     interviewOverlayLyricLines,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricWidth,
+    interviewOverlayLyricColor,
     setInterviewOverlayEnabled,
     setInterviewOverlayMode,
     setInterviewOverlayOpacity,
+    setInterviewOverlayPanelFontSize,
+    setInterviewOverlayPanelWidth,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricWidth,
+    setInterviewOverlayLyricColor,
   } = useInterviewStore()
 
   const [scrollBottomPx, setScrollBottomPx] = useState(40)
@@ -251,7 +257,7 @@ export default function PreferencesTab() {
                 ))}
               </div>
             </Field>
-            <Field label={`窗口不透明度: ${Math.round(interviewOverlayOpacity * 100)}%`}>
+            <Field label={`不透明度: ${Math.round(interviewOverlayOpacity * 100)}%`}>
               <input
                 type="range"
                 min={0}
@@ -261,6 +267,31 @@ export default function PreferencesTab() {
                 className="w-full max-w-[200px]"
               />
             </Field>
+            {interviewOverlayMode === 'panel' && (
+              <>
+                <Field label={`字号: ${interviewOverlayPanelFontSize}px`}>
+                  <input
+                    type="range"
+                    min={10}
+                    max={24}
+                    value={interviewOverlayPanelFontSize}
+                    onChange={(e) => setInterviewOverlayPanelFontSize(Number(e.target.value))}
+                    className="w-full max-w-[200px]"
+                  />
+                </Field>
+                <Field label={`面板宽度: ${interviewOverlayPanelWidth}px`}>
+                  <input
+                    type="range"
+                    min={280}
+                    max={800}
+                    step={10}
+                    value={interviewOverlayPanelWidth}
+                    onChange={(e) => setInterviewOverlayPanelWidth(Number(e.target.value))}
+                    className="w-full max-w-[200px]"
+                  />
+                </Field>
+              </>
+            )}
             {interviewOverlayMode === 'lyrics' && (
               <>
                 <Field label={`行数: ${interviewOverlayLyricLines}`}>
@@ -293,6 +324,17 @@ export default function PreferencesTab() {
                     onChange={(e) => setInterviewOverlayLyricWidth(Number(e.target.value))}
                     className="w-full max-w-[200px]"
                   />
+                </Field>
+                <Field label="字体颜色">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={interviewOverlayLyricColor}
+                      onChange={(e) => setInterviewOverlayLyricColor(e.target.value)}
+                      className="w-7 h-7 rounded border border-bg-hover cursor-pointer bg-transparent p-0"
+                    />
+                    <span className="text-xs text-text-secondary font-mono">{interviewOverlayLyricColor}</span>
+                  </div>
                 </Field>
               </>
             )}

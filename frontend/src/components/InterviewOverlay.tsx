@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Captions, Loader2, MessageSquareQuote, Mic } from 'lucide-react'
+import { Loader2, Mic } from 'lucide-react'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { applyStoredColorSchemeToDocument, COLOR_SCHEME_STORAGE_KEY } from '@/lib/colorScheme'
 import {
@@ -49,16 +49,22 @@ export default function InterviewOverlay() {
     interviewOverlayEnabled,
     interviewOverlayMode,
     interviewOverlayOpacity,
+    interviewOverlayPanelFontSize,
+    interviewOverlayPanelWidth,
     interviewOverlayLyricLines,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricWidth,
+    interviewOverlayLyricColor,
     syncInterviewOverlayPrefs,
     setInterviewOverlayEnabled,
     setInterviewOverlayMode,
     setInterviewOverlayOpacity,
+    setInterviewOverlayPanelFontSize,
+    setInterviewOverlayPanelWidth,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricWidth,
+    setInterviewOverlayLyricColor,
   } = useInterviewStore()
 
   const latestQa = useMemo(() => {
@@ -92,9 +98,12 @@ export default function InterviewOverlay() {
         setInterviewOverlayEnabled(payload.enabled)
         setInterviewOverlayMode(payload.mode)
         setInterviewOverlayOpacity(payload.opacity)
+        setInterviewOverlayPanelFontSize(payload.panelFontSize)
+        setInterviewOverlayPanelWidth(payload.panelWidth)
         setInterviewOverlayLyricLines(payload.lyricLines)
         setInterviewOverlayLyricFontSize(payload.lyricFontSize)
         setInterviewOverlayLyricWidth(payload.lyricWidth)
+        setInterviewOverlayLyricColor(payload.lyricColor)
       })
       .catch((error) => {
         warnInterviewOverlaySyncIssue('failed to read overlay state during bootstrap', error)
@@ -114,9 +123,12 @@ export default function InterviewOverlay() {
       setInterviewOverlayEnabled(payload.enabled)
       setInterviewOverlayMode(payload.mode)
       setInterviewOverlayOpacity(payload.opacity)
+      setInterviewOverlayPanelFontSize(payload.panelFontSize)
+      setInterviewOverlayPanelWidth(payload.panelWidth)
       setInterviewOverlayLyricLines(payload.lyricLines)
       setInterviewOverlayLyricFontSize(payload.lyricFontSize)
       setInterviewOverlayLyricWidth(payload.lyricWidth)
+      setInterviewOverlayLyricColor(payload.lyricColor)
     })
 
     return () => {
@@ -128,8 +140,11 @@ export default function InterviewOverlay() {
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricWidth,
+    setInterviewOverlayLyricColor,
     setInterviewOverlayMode,
     setInterviewOverlayOpacity,
+    setInterviewOverlayPanelFontSize,
+    setInterviewOverlayPanelWidth,
     syncInterviewOverlayPrefs,
   ])
 
@@ -140,18 +155,24 @@ export default function InterviewOverlay() {
   }
 
   if (interviewOverlayMode === 'lyrics') {
+    const dimColor = interviewOverlayLyricColor + '99'
     return (
-      <div className="h-screen w-screen bg-transparent p-2 flex items-start justify-center ia-overlay-drag">
+      <div className="h-screen w-screen bg-transparent p-1 flex items-start justify-center ia-overlay-drag">
         <div
-          className="w-full px-4 py-3 space-y-1.5"
+          className="w-full space-y-0.5"
           style={{ maxWidth: `${interviewOverlayLyricWidth}px`, opacity: interviewOverlayOpacity }}
         >
           {lyricLines.length > 0 ? (
             lyricLines.map((line, index) => (
               <p
                 key={`${index}-${line}`}
-                className={`font-semibold tracking-[0.01em] drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] ${index === lyricLines.length - 1 ? 'text-text-primary' : 'text-text-secondary'}`}
-                style={{ fontSize: `${interviewOverlayLyricFontSize}px`, lineHeight: 1.32 }}
+                className="font-semibold tracking-[0.01em]"
+                style={{
+                  fontSize: `${interviewOverlayLyricFontSize}px`,
+                  lineHeight: 1.32,
+                  color: index === lyricLines.length - 1 ? interviewOverlayLyricColor : dimColor,
+                  textShadow: '0 1px 4px rgba(0,0,0,0.7)',
+                }}
               >
                 {line}
                 {isStreaming && index === lyricLines.length - 1 ? (
@@ -160,7 +181,7 @@ export default function InterviewOverlay() {
               </p>
             ))
           ) : (
-            <p className="text-text-secondary text-sm">
+            <p style={{ color: dimColor, fontSize: '13px' }}>
               {isRecording ? '等待识别到问题…' : '开始面试后自动显示'}
             </p>
           )}
@@ -170,33 +191,21 @@ export default function InterviewOverlay() {
   }
 
   return (
-    <div className="h-screen w-screen bg-transparent p-4 flex items-start justify-end ia-overlay-drag">
+    <div className="h-screen w-screen bg-transparent p-2 flex items-start justify-end ia-overlay-drag">
       <div
-        className="ia-overlay-shell w-full max-w-[460px] rounded-[26px] text-text-primary"
-        style={{ opacity: interviewOverlayOpacity }}
+        className="ia-overlay-shell w-full rounded-xl text-text-primary"
+        style={{ opacity: interviewOverlayOpacity, maxWidth: `${interviewOverlayPanelWidth}px`, fontSize: `${interviewOverlayPanelFontSize}px` }}
       >
-        <div className="ia-overlay-header flex items-center gap-2 px-4 py-3 text-[11px] uppercase tracking-[0.24em] text-text-secondary">
-          <MessageSquareQuote className="w-3.5 h-3.5" />
-          Interview Prompt
-        </div>
+        <div className="px-3 py-2 space-y-1.5 ia-overlay-content leading-relaxed">
+          <div className="text-text-secondary/60 truncate" style={{ fontSize: `${Math.max(10, interviewOverlayPanelFontSize - 2)}px` }}>
+            <Mic className="inline w-3 h-3 mr-1 align-[-2px]" />
+            {latestQa?.question?.trim() || waitingHint}
+          </div>
 
-        <div className="px-4 py-4 space-y-4 ia-overlay-content text-sm leading-relaxed">
-          <section className="space-y-2">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-accent-blue/80">Ask</div>
-            <div className="rounded-2xl border border-accent-blue/20 bg-bg-primary/12 px-3.5 py-3 text-text-primary min-h-[72px]">
-              {latestQa?.question?.trim() || waitingHint}
-            </div>
-          </section>
-
-          <section className="space-y-2">
-            <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-accent-green/80">
-              <span>Answer</span>
-              {isStreaming ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-            </div>
-            <div className="rounded-2xl border border-accent-green/20 bg-bg-primary/12 px-3.5 py-3 text-text-primary min-h-[120px] whitespace-pre-wrap break-words">
-              {answerText || (latestQa ? '正在组织回答…' : waitingHint)}
-            </div>
-          </section>
+          <div className="whitespace-pre-wrap break-words text-text-primary">
+            {isStreaming && <Loader2 className="inline w-3 h-3 mr-1 animate-spin align-[-2px] text-accent-green" />}
+            {answerText || (latestQa ? '正在组织回答…' : waitingHint)}
+          </div>
         </div>
       </div>
     </div>

@@ -1,5 +1,18 @@
 export {}
 
+interface OverlayPayload {
+  enabled: boolean
+  visible: boolean
+  mode: 'panel' | 'lyrics'
+  opacity: number
+  panelFontSize: number
+  panelWidth: number
+  lyricLines: number
+  lyricFontSize: number
+  lyricWidth: number
+  lyricColor: string
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -11,33 +24,9 @@ declare global {
       toggleAlwaysOnTop: () => Promise<boolean>
       toggleContentProtection: () => Promise<boolean>
       getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
-      syncOverlayWindow?: (payload: {
-        enabled: boolean
-        visible: boolean
-        mode: 'panel' | 'lyrics'
-        opacity: number
-        lyricLines: number
-        lyricFontSize: number
-        lyricWidth: number
-      }) => Promise<{ ok: boolean; visible: boolean }>
-      getOverlayState?: () => Promise<{
-        enabled: boolean
-        visible: boolean
-        mode: 'panel' | 'lyrics'
-        opacity: number
-        lyricLines: number
-        lyricFontSize: number
-        lyricWidth: number
-      } | null>
-      onOverlayState?: (callback: (payload: {
-        enabled: boolean
-        visible: boolean
-        mode: 'panel' | 'lyrics'
-        opacity: number
-        lyricLines: number
-        lyricFontSize: number
-        lyricWidth: number
-      }) => void) => void
+      syncOverlayWindow?: (payload: OverlayPayload) => Promise<{ ok: boolean; visible: boolean }>
+      getOverlayState?: () => Promise<OverlayPayload | null>
+      onOverlayState?: (callback: (payload: OverlayPayload) => void) => void
       removeOverlayStateListener?: () => void
     }
   }
