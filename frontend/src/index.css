@@ -646,3 +646,10 @@ code, pre, .font-mono {
 .ia-overlay-content {
   -webkit-app-region: no-drag;
 }
+
+.ia-overlay-resize {
+  resize: horizontal;
+  overflow: auto;
+  -webkit-app-region: no-drag;
+  cursor: default;
+}

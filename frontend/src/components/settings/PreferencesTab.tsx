@@ -272,24 +272,14 @@ export default function PreferencesTab() {
                 <Field label={`字号: ${interviewOverlayPanelFontSize}px`}>
                   <input
                     type="range"
-                    min={10}
-                    max={24}
+                    min={1}
+                    max={48}
                     value={interviewOverlayPanelFontSize}
                     onChange={(e) => setInterviewOverlayPanelFontSize(Number(e.target.value))}
                     className="w-full max-w-[200px]"
                   />
                 </Field>
-                <Field label={`面板宽度: ${interviewOverlayPanelWidth}px`}>
-                  <input
-                    type="range"
-                    min={280}
-                    max={800}
-                    step={10}
-                    value={interviewOverlayPanelWidth}
-                    onChange={(e) => setInterviewOverlayPanelWidth(Number(e.target.value))}
-                    className="w-full max-w-[200px]"
-                  />
-                </Field>
+                <p className="text-[11px] text-text-muted leading-relaxed">面板宽度可在悬浮窗右侧边缘拖拽调整</p>
               </>
             )}
             {interviewOverlayMode === 'lyrics' && (
@@ -298,7 +288,7 @@ export default function PreferencesTab() {
                   <input
                     type="range"
                     min={1}
-                    max={4}
+                    max={8}
                     value={interviewOverlayLyricLines}
                     onChange={(e) => setInterviewOverlayLyricLines(Number(e.target.value))}
                     className="w-full max-w-[200px]"
@@ -307,8 +297,8 @@ export default function PreferencesTab() {
                 <Field label={`字号: ${interviewOverlayLyricFontSize}px`}>
                   <input
                     type="range"
-                    min={16}
-                    max={40}
+                    min={1}
+                    max={72}
                     value={interviewOverlayLyricFontSize}
                     onChange={(e) => setInterviewOverlayLyricFontSize(Number(e.target.value))}
                     className="w-full max-w-[200px]"

@@ -59,7 +59,7 @@ function readInterviewOverlayPanelFontSize(): number {
   try {
     const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.panelFontSize)
     const value = raw == null ? 13 : Number(raw)
-    if (Number.isFinite(value)) return Math.min(24, Math.max(10, Math.round(value)))
+    if (Number.isFinite(value)) return Math.max(1, Math.round(value))
   } catch {
     /* ignore */
   }
@@ -81,7 +81,7 @@ function readInterviewOverlayLyricLines(): number {
   try {
     const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricLines)
     const value = raw == null ? 2 : Number(raw)
-    if (Number.isFinite(value)) return Math.min(4, Math.max(1, Math.round(value)))
+    if (Number.isFinite(value)) return Math.min(8, Math.max(1, Math.round(value)))
   } catch {
     /* ignore */
   }
@@ -92,7 +92,7 @@ function readInterviewOverlayLyricFontSize(): number {
   try {
     const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricFontSize)
     const value = raw == null ? 23 : Number(raw)
-    if (Number.isFinite(value)) return Math.min(40, Math.max(16, Math.round(value)))
+    if (Number.isFinite(value)) return Math.max(1, Math.round(value))
   } catch {
     /* ignore */
   }
@@ -555,7 +555,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     set({ interviewOverlayOpacity: next })
   },
   setInterviewOverlayPanelFontSize: (size) => {
-    const next = Math.min(24, Math.max(10, Math.round(size)))
+    const next = Math.max(1, Math.round(size))
     try {
       localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.panelFontSize, String(next))
     } catch {
@@ -575,7 +575,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     set({ interviewOverlayPanelWidth: next })
   },
   setInterviewOverlayLyricLines: (lines) => {
-    const next = Math.min(4, Math.max(1, Math.round(lines)))
+    const next = Math.min(8, Math.max(1, Math.round(lines)))
     try {
       localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricLines, String(next))
     } catch {
@@ -585,7 +585,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     set({ interviewOverlayLyricLines: next })
   },
   setInterviewOverlayLyricFontSize: (size) => {
-    const next = Math.min(40, Math.max(16, Math.round(size)))
+    const next = Math.max(1, Math.round(size))
     try {
       localStorage.setItem(INTERVIEW_OVERLAY_STORAGE_KEYS.lyricFontSize, String(next))
     } catch {
