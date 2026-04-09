@@ -34,8 +34,11 @@ export default function App() {
     setIsElectronApp(typeof window !== 'undefined' && !!window.electronAPI)
   }, [])
 
+  const overlaySyncUntilRef = useRef(0)
+
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
+    overlaySyncUntilRef.current = Date.now() + 500
     const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
     window.electronAPI.syncOverlayWindow({
       enabled: interviewOverlayEnabled,
@@ -60,13 +63,13 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI?.onOverlayState) return
     window.electronAPI.onOverlayState((payload) => {
-      const s = useInterviewStore.getState()
-      if (payload.enabled !== s.interviewOverlayEnabled) setInterviewOverlayEnabled(payload.enabled)
-      if (payload.mode !== s.interviewOverlayMode) setInterviewOverlayMode(payload.mode)
-      if (Math.abs(payload.opacity - s.interviewOverlayOpacity) > 0.005) setInterviewOverlayOpacity(payload.opacity)
-      if (payload.lyricLines !== s.interviewOverlayLyricLines) setInterviewOverlayLyricLines(payload.lyricLines)
-      if (payload.lyricFontSize !== s.interviewOverlayLyricFontSize) setInterviewOverlayLyricFontSize(payload.lyricFontSize)
-      if (payload.lyricWidth !== s.interviewOverlayLyricWidth) setInterviewOverlayLyricWidth(payload.lyricWidth)
+      if (Date.now() < overlaySyncUntilRef.current) return
+      setInterviewOverlayEnabled(payload.enabled)
+      setInterviewOverlayMode(payload.mode)
+      setInterviewOverlayOpacity(payload.opacity)
+      setInterviewOverlayLyricLines(payload.lyricLines)
+      setInterviewOverlayLyricFontSize(payload.lyricFontSize)
+      setInterviewOverlayLyricWidth(payload.lyricWidth)
     })
     return () => window.electronAPI?.removeOverlayStateListener?.()
   }, [
