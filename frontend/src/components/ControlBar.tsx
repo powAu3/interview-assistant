@@ -203,15 +203,15 @@ export default function ControlBar() {
   }
 
   return (
-    <div className="control-bar px-3 md:px-5 py-2.5 flex-shrink-0 space-y-1.5">
+    <div className="ia-console-panel control-bar flex-shrink-0 space-y-2.5 rounded-[24px] px-3 py-3 md:px-4 md:py-3">
       {showColdStartHint && (
-        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 rounded-2xl border border-accent-amber/20 bg-accent-amber/10 px-3 py-2 text-xs text-accent-amber">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
           <span>请先选择音频设备，再点击「开始」开始面试。</span>
         </div>
       )}
       {!wsConnected && (
-        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 rounded-2xl border border-accent-amber/20 bg-accent-amber/10 px-3 py-2 text-xs text-accent-amber">
           <span>连接已断开，</span>
           <button type="button" onClick={() => window.location.reload()} className="text-accent-blue hover:underline font-medium">
             点击重试
@@ -219,13 +219,13 @@ export default function ControlBar() {
         </div>
       )}
       {allModelsUnavailable && (
-        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 rounded-2xl border border-accent-red/20 bg-accent-red/10 px-3 py-2 text-xs text-accent-red">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
           <span>所有模型不可用，请检查 API 与网络。</span>
         </div>
       )}
       {!hasLoopback && platformInfo?.needs_virtual_device && (
-        <div className="flex items-start gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-2 rounded-lg">
+        <div className="flex items-start gap-2 rounded-2xl border border-accent-amber/20 bg-accent-amber/10 px-3 py-2 text-xs text-accent-amber">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <div>
             <span className="font-medium">未检测到系统音频设备。</span>
@@ -235,19 +235,19 @@ export default function ControlBar() {
         </div>
       )}
       {selectedDevice !== null && !selectedIsLoopback && hasLoopback && (
-        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 rounded-2xl border border-accent-amber/20 bg-accent-amber/10 px-3 py-2 text-xs text-accent-amber">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
           <span>你选择的是麦克风，建议选择带 ⟳ 标记的系统音频设备</span>
         </div>
       )}
       {lastWSError && (
-        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 rounded-2xl border border-accent-red/20 bg-accent-red/10 px-3 py-2 text-xs text-accent-red">
           <span>{lastWSError}</span>
           <button onClick={() => setLastWSError(null)} className="ml-auto" aria-label="关闭"><X className="w-3 h-3" /></button>
         </div>
       )}
       {error && (
-        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 rounded-2xl border border-accent-red/20 bg-accent-red/10 px-3 py-2 text-xs text-accent-red">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="ml-auto" aria-label="关闭错误"><X className="w-3 h-3" /></button>
         </div>
@@ -258,10 +258,10 @@ export default function ControlBar() {
         const activeModel = config?.models?.[config.active_model]
         const supportsVision = activeModel?.supports_vision ?? false
         return (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-bg-tertiary/50 rounded-lg">
-            <img src={pastedImage} alt="screenshot" className="h-12 max-w-[200px] rounded object-contain border border-bg-hover" />
+          <div className="flex items-center gap-3 rounded-[22px] border border-accent-blue/15 bg-bg-tertiary/30 px-3 py-2.5">
+            <img src={pastedImage} alt="screenshot" className="h-12 max-w-[200px] rounded-xl object-contain border border-bg-hover" />
             <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-text-muted">已粘贴截图</span>
+              <span className="text-xs font-medium text-text-primary">已粘贴截图</span>
               {!supportsVision && (
                 <span className="text-[10px] text-accent-amber">当前模型不支持图片，将仅发送文字</span>
               )}
@@ -275,7 +275,7 @@ export default function ControlBar() {
 
       {/* 移动端：录制中时显示状态指示条 */}
       {isRecording && (
-        <div className={`flex md:hidden items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium ${isPaused ? 'bg-accent-amber/15 text-accent-amber' : 'bg-accent-green/15 text-accent-green'}`}>
+        <div className={`flex md:hidden items-center justify-between rounded-2xl px-3 py-2 text-xs font-medium ${isPaused ? 'bg-accent-amber/15 text-accent-amber' : 'bg-accent-green/15 text-accent-green'}`}>
           <div className="flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-accent-amber' : 'bg-accent-green animate-pulse'}`} />
             <span>{isPaused ? '已暂停' : '录制中'}</span>
@@ -283,64 +283,100 @@ export default function ControlBar() {
         </div>
       )}
 
-      {/* 主控制行 */}
-      <div className="flex items-center gap-2">
-        <select
-          value={selectedDevice ?? ''}
-          onChange={async (e) => {
-            const newId = Number(e.target.value)
-            setSelectedDevice(newId)
-            // 暂停中切换设备：只更新选中的设备，不自动恢复，让用户手动点"继续"
-          }}
-          className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue flex-1 min-w-0 max-w-[180px] md:max-w-[200px]"
-          disabled={isRecording && !isPaused}
-          title={isRecording && !isPaused ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
-        >
-          {devices.some((d) => d.is_loopback) && (
-            <optgroup label="🔊 系统音频 (推荐)">
-              {devices.filter((d) => d.is_loopback).map((d) => (
-                <option key={d.id} value={d.id}>{d.name} ⟳</option>
-              ))}
-            </optgroup>
-          )}
-          <optgroup label="🎤 麦克风">
-            {devices.filter((d) => !d.is_loopback).map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </optgroup>
-        </select>
+      <div className="rounded-[22px] border border-accent-blue/15 bg-bg-tertiary/12 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.06)]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Primary controls</p>
+            <p className="text-xs text-text-secondary">采集设备与会话控制保持在最前面</p>
+          </div>
+          <div className="rounded-full border border-bg-hover/60 bg-bg-tertiary/25 px-3 py-1 text-[11px] font-medium text-text-secondary">
+            {isRecording ? (isPaused ? '录制已暂停' : '录制进行中') : '待机状态'}
+          </div>
+        </div>
 
-        {isRecording ? (
-          <>
-            {isPaused ? (
-              <button onClick={handleResume} disabled={loading}
-                className="flex items-center gap-1.5 px-3.5 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}>
-                <PlayCircle className="w-3.5 h-3.5" />
-                <span>继续</span>
-              </button>
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+              Capture device
+            </label>
+            <select
+              value={selectedDevice ?? ''}
+              onChange={async (e) => {
+                const newId = Number(e.target.value)
+                setSelectedDevice(newId)
+                // 暂停中切换设备：只更新选中的设备，不自动恢复，让用户手动点"继续"
+              }}
+              className="w-full min-w-0 rounded-xl border border-bg-hover bg-bg-tertiary px-3 py-3 text-xs text-text-primary focus:border-accent-blue focus:outline-none"
+              disabled={isRecording && !isPaused}
+              title={isRecording && !isPaused ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
+            >
+              {devices.some((d) => d.is_loopback) && (
+                <optgroup label="🔊 系统音频 (推荐)">
+                  {devices.filter((d) => d.is_loopback).map((d) => (
+                    <option key={d.id} value={d.id}>{d.name} ⟳</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="🎤 麦克风">
+                {devices.filter((d) => !d.is_loopback).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            {isRecording ? (
+              <>
+                {isPaused ? (
+                  <button
+                    onClick={handleResume}
+                    disabled={loading}
+                    className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-all duration-150 disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}
+                  >
+                    <PlayCircle className="w-3.5 h-3.5" />
+                    <span>继续录制</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handlePause}
+                    disabled={loading}
+                    className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition-all duration-150 disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}
+                  >
+                    <Pause className="w-3.5 h-3.5" />
+                    <span>暂停录制</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleStop}
+                  disabled={loading}
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold btn-danger disabled:opacity-50"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  <span>结束面试</span>
+                </button>
+              </>
             ) : (
-              <button onClick={handlePause} disabled={loading}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs font-semibold rounded-xl transition-all duration-150 disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
-                <Pause className="w-3.5 h-3.5" />
-                <span>暂停</span>
+              <button
+                onClick={handleStart}
+                disabled={loading || selectedDevice === null}
+                className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-semibold btn-primary disabled:opacity-50"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>开始面试</span>
               </button>
             )}
-            <button onClick={handleStop} disabled={loading}
-              className="flex items-center gap-1.5 px-3.5 py-2 btn-danger text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
-              <Square className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">结束面试</span>
-            </button>
-          </>
-        ) : (
-          <button onClick={handleStart} disabled={loading || selectedDevice === null}
-            className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
-            <Play className="w-3.5 h-3.5" />
-            <span>开始面试</span>
-          </button>
-        )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-[22px] border border-bg-hover/50 bg-bg-tertiary/10 px-3 py-2.5">
+        <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">Secondary</span>
 
         <div
-          className={`hidden md:inline-flex items-stretch flex-shrink-0 rounded-lg border bg-bg-tertiary overflow-visible ${
+          className={`hidden md:inline-flex items-stretch flex-shrink-0 rounded-xl border bg-bg-tertiary/50 overflow-visible ${
             resumeUploading || resumeFile || config?.has_resume
               ? 'border-bg-hover'
               : 'border-dashed border-bg-hover/90'
@@ -348,12 +384,12 @@ export default function ControlBar() {
         >
           <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
           {resumeUploading ? (
-            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs text-text-muted rounded-l-lg">
+            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs text-text-muted rounded-l-xl">
               <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
               <span className="hidden sm:inline">解析中…</span>
             </div>
           ) : resumeFile || config?.has_resume ? (
-            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs rounded-l-lg min-w-0 max-w-[200px]">
+            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs rounded-l-xl min-w-0 max-w-[220px]">
               <FileText className="w-3.5 h-3.5 text-accent-green flex-shrink-0" />
               <span className="text-text-secondary truncate hidden sm:inline">{resumeFile || config?.resume_active_filename || '简历已上传'}</span>
               <button type="button" onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline hidden sm:inline flex-shrink-0">
@@ -365,19 +401,19 @@ export default function ControlBar() {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1 pl-2 pr-1 py-2 text-text-secondary text-xs transition-colors rounded-l-lg hover:bg-bg-hover/60"
+              className="flex items-center gap-1 pl-2 pr-1 py-2 text-text-secondary text-xs transition-colors rounded-l-xl hover:bg-bg-hover/60"
             >
               <Upload className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="hidden sm:inline whitespace-nowrap">简历</span>
             </button>
           )}
-          <div className="w-px shrink-0 bg-bg-hover/70 self-stretch my-1" aria-hidden />
+          <div className="my-1 w-px shrink-0 self-stretch bg-bg-hover/70" aria-hidden />
           <ResumeHistoryPopover />
         </div>
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}
-            className="flex items-center gap-1 px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+            className="flex items-center gap-1 rounded-xl bg-accent-amber/15 px-3 py-2 text-xs text-accent-amber transition-colors hover:bg-accent-amber/25 disabled:opacity-50"
             title="取消全部正在生成的回答">
             {cancellingAsk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">
@@ -386,13 +422,12 @@ export default function ControlBar() {
           </button>
         )}
         <button onClick={handleClear} disabled={clearing}
-          className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50">
+          className="flex items-center gap-1 rounded-xl bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-hover disabled:opacity-50">
           {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
           <span className="hidden sm:inline">{clearing ? '清空中' : '清空内容'}</span>
         </button>
       </div>
 
-      {/* 快捷提示词 */}
       {quickPrompts.length > 0 && (
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
           <Zap className="w-3 h-3 text-accent-amber flex-shrink-0" />
@@ -409,26 +444,38 @@ export default function ControlBar() {
         </div>
       )}
 
-      {/* 手动提问输入行 */}
-      <div className="flex items-center gap-1.5">
-        <div className="relative flex-1">
-          <input ref={inputRef} type="text" value={manualQuestion}
-            onChange={(e) => setManualQuestion(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={() => { isComposingRef.current = true }}
-            onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
-            onPaste={handlePaste}
-            placeholder={pastedImage ? "可添加文字说明（可选），Enter 发送" : "输入问题，Enter 发送…"}
-            className="w-full bg-bg-tertiary/60 text-text-primary text-xs rounded-xl px-3.5 py-2.5 border border-bg-hover/50 focus:outline-none focus:border-accent-blue/50 focus:ring-1 focus:ring-accent-blue/20 placeholder:text-text-muted/60 pr-8 transition-all duration-200" />
-          {pastedImage && (
-            <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
-          )}
+      <div className="rounded-[22px] border border-accent-blue/15 bg-bg-tertiary/12 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.05)]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Ask / follow-up</p>
+            <p className="text-xs text-text-secondary">手动追问与截图审题保持主操作权重</p>
+          </div>
+          <div className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1 text-[11px] font-medium text-accent-blue">
+            Enter 发送
+          </div>
         </div>
-        <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
-          className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-20 flex-shrink-0"
-          aria-label="发送问题">
-          <Send className="w-3.5 h-3.5" />
-        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input ref={inputRef} type="text" value={manualQuestion}
+              onChange={(e) => setManualQuestion(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={() => { isComposingRef.current = true }}
+              onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
+              onPaste={handlePaste}
+              placeholder={pastedImage ? "可添加文字说明（可选），Enter 发送" : "输入问题，Enter 发送…"}
+              className="w-full rounded-xl border border-bg-hover/50 bg-bg-tertiary/60 px-3.5 py-3 text-xs text-text-primary transition-all duration-200 placeholder:text-text-muted/60 pr-8 focus:border-accent-blue/50 focus:outline-none focus:ring-1 focus:ring-accent-blue/20" />
+            {pastedImage && (
+              <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
+            )}
+          </div>
+          <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
+            className="flex min-h-[46px] items-center gap-1.5 rounded-xl px-4 py-3 text-xs font-semibold btn-primary disabled:opacity-20 flex-shrink-0"
+            aria-label="发送问题">
+            <Send className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">发送追问</span>
+          </button>
+        </div>
       </div>
     </div>
   )
