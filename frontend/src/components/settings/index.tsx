@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, lazy, Suspense } from 'react'
 import {
   X,
   LayoutGrid,
@@ -9,8 +9,9 @@ import {
 import { useInterviewStore } from '@/stores/configStore'
 import { INPUT_FIELD_STYLE } from './shared'
 import PreferencesTab from './PreferencesTab'
-import SpeechTab from './SpeechTab'
-import ModelsTab from './ModelsTab'
+
+const SpeechTab = lazy(() => import('./SpeechTab'))
+const ModelsTab = lazy(() => import('./ModelsTab'))
 
 export default function SettingsDrawer() {
   const {
@@ -66,7 +67,7 @@ export default function SettingsDrawer() {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={toggleSettings} />
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={toggleSettings} />
       <div ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="fixed right-0 top-0 bottom-0 w-full sm:w-[440px] bg-bg-secondary z-50 shadow-2xl flex flex-col border-l border-bg-tertiary">
         {/* Header */}
         <div className="flex-shrink-0 border-b border-bg-tertiary px-3 pt-3 pb-0">
@@ -111,15 +112,11 @@ export default function SettingsDrawer() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div className={settingsDrawerTab !== 'general' ? 'hidden' : ''}>
-            <PreferencesTab />
-          </div>
-          <div className={settingsDrawerTab !== 'config' ? 'hidden' : ''}>
-            <SpeechTab />
-          </div>
-          <div className={settingsDrawerTab !== 'models' ? 'hidden' : ''}>
-            <ModelsTab />
-          </div>
+          <Suspense fallback={<div className="flex items-center justify-center py-12 text-text-muted text-sm">加载中…</div>}>
+            {settingsDrawerTab === 'general' && <PreferencesTab />}
+            {settingsDrawerTab === 'config' && <SpeechTab />}
+            {settingsDrawerTab === 'models' && <ModelsTab />}
+          </Suspense>
         </div>
       </div>
 
