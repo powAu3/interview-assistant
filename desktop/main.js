@@ -524,10 +524,6 @@ const shortcutCallbacks = {
   askFromServerScreen: async () => {
     try {
       await postBackend('/api/ask-from-server-screen');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-      }
     } catch (error) {
       console.error('askFromServerScreen failed:', error);
     }
