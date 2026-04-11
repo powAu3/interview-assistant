@@ -27,6 +27,7 @@ from services.llm import (
     PROMPT_MODE_ASR_REALTIME,
     PROMPT_MODE_MANUAL_TEXT,
     PROMPT_MODE_SERVER_SCREEN,
+    PROMPT_MODE_WRITTEN_EXAM,
     PromptMode,
     build_system_prompt,
     chat_stream_single_model,
@@ -210,8 +211,10 @@ def _model_eligible(i: int, m, need_vision: bool) -> bool:
     return True
 
 
-def _prompt_mode_for_task(source: str, manual_input: bool) -> PromptMode:
+def _prompt_mode_for_task(source: str, manual_input: bool, written_exam: bool = False) -> PromptMode:
     if source.startswith("server_screen_"):
+        if written_exam:
+            return PROMPT_MODE_WRITTEN_EXAM
         return PROMPT_MODE_SERVER_SCREEN
     if manual_input:
         return PROMPT_MODE_MANUAL_TEXT
@@ -844,7 +847,8 @@ def _process_question_parallel(
             return True
         return False
 
-    prompt_mode: PromptMode = _prompt_mode_for_task(source, manual_input)
+    written_exam = bool(getattr(cfg, "written_exam_mode", False))
+    prompt_mode: PromptMode = _prompt_mode_for_task(source, manual_input, written_exam=written_exam)
     system_prompt = build_system_prompt(
         manual_input=manual_input,
         mode=prompt_mode,

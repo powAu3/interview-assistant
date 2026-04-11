@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   AlignVerticalSpaceAround,
   Monitor,
+  PenLine,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
@@ -364,6 +365,52 @@ export default function PreferencesTab() {
             </Field>
           </>
         )}
+      </Section>
+
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            <PenLine className="w-3.5 h-3.5" />
+            笔试模式
+            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent-amber/20 text-accent-amber leading-none">BETA</span>
+          </span>
+        }
+      >
+        <Field label={
+          <span className="flex items-center gap-1.5">
+            启用笔试模式
+            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent-amber/20 text-accent-amber leading-none">BETA</span>
+          </span>
+        }>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config?.written_exam_mode ?? false}
+              onChange={async (e) => {
+                try {
+                  await api.updateConfig({ written_exam_mode: e.target.checked })
+                  useInterviewStore.getState().setConfig(await api.getConfig())
+                } catch {}
+              }}
+              className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
+            />
+            <span className="text-xs text-text-secondary">
+              {config?.written_exam_mode ? '已开启' : '已关闭'}
+            </span>
+          </label>
+        </Field>
+        <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-lg p-2.5 space-y-1.5">
+          <p className="text-[11px] text-text-secondary leading-relaxed">
+            <span className="font-medium text-accent-blue">配合截图快捷键使用</span>
+            ：按下截图快捷键后，自动识别题目类型并给出最精简的答案。
+          </p>
+          <ul className="text-[11px] text-text-muted leading-relaxed space-y-0.5 pl-3 list-disc">
+            <li>选择题 → 直接输出答案字母（如 A、ABD）</li>
+            <li>编程题 → 直接输出完整可提交代码</li>
+            <li>填空题 → 直接输出填空内容</li>
+            <li>不输出分析过程、不说废话</li>
+          </ul>
+        </div>
       </Section>
 
       <NetworkQRCode />

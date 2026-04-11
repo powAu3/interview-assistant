@@ -7,10 +7,12 @@ from core.config import get_config
 PROMPT_MODE_ASR_REALTIME = "asr_realtime"
 PROMPT_MODE_MANUAL_TEXT = "manual_text"
 PROMPT_MODE_SERVER_SCREEN = "server_screen_code"
+PROMPT_MODE_WRITTEN_EXAM = "written_exam"
 PromptMode = Literal[
     "asr_realtime",
     "manual_text",
     "server_screen_code",
+    "written_exam",
 ]
 
 
@@ -229,6 +231,37 @@ def _server_screen_prompt_body(language: str, language_lower: str, screen_region
     )
 
 
+def _written_exam_prompt_body(language: str, language_lower: str, screen_region: str) -> str:
+    region_label = _screen_region_label(screen_region)
+    return (
+        "\n场景：笔试/机考模式——截图中是笔试题目，需要最快速度给出可直接提交的答案。\n"
+        f"截图区域提示：{region_label}。\n\n"
+        "核心原则：不说废话，不做铺垫，不输出分析过程，直接给答案。\n\n"
+        "题型判定与输出规则：\n\n"
+        "【选择题（单选/多选/判断）】\n"
+        "- 只输出答案字母/选项，格式：答案：A 或 答案：ABD 或 答案：正确/错误\n"
+        "- 如果能一眼看出答案，只给答案行，不要任何解释；\n"
+        "- 如果题目有歧义或需要简短说明，答案行后最多追加 1 句话（不超过 30 字）。\n\n"
+        "【填空题】\n"
+        "- 只输出填空内容，格式：第1空：xxx，第2空：xxx\n"
+        "- 不要重复题干，不要解释。\n\n"
+        "【编程题/算法题/SQL题】\n"
+        "- 直接输出完整可运行代码，不要思路分析、不要复杂度分析、不要测试用例；\n"
+        f"- 非 SQL 代码使用 ```{language_lower}，SQL 使用 ```sql；\n"
+        "- 代码必须完整可提交（含必要的 import、类定义、函数签名）；\n"
+        "- 如果题目要求特定函数签名，严格遵守；\n"
+        "- 只在代码上方用 1 行注释写核心思路（如：// 双指针 O(n)），不要多写。\n\n"
+        "【简答题/论述题】\n"
+        "- 用最精炼的要点回答，控制在 3-5 条，每条 1 句话；\n"
+        "- 不要写开头语、总结语。\n\n"
+        "绝对禁止：\n"
+        "- 禁止输出"让我分析一下""首先我们来看"等开场白；\n"
+        "- 禁止输出题目理解、思路分析、方案对比、测试用例设计等额外内容；\n"
+        "- 禁止输出 Markdown 标题（#）和分隔线（---）；\n"
+        "- 禁止重复题干内容。\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Answer post-processing
 # ---------------------------------------------------------------------------
@@ -300,12 +333,11 @@ def build_system_prompt(
     resume_section = _resume_reference_section(cfg.resume_text)
     lang_lower = cfg.language.lower()
     prefix = _base_prompt_prefix(cfg.position, cfg.language, resume_section)
-    if mode == PROMPT_MODE_SERVER_SCREEN:
-        body = _server_screen_prompt_body(
-            cfg.language,
-            lang_lower,
-            _normalize_screen_region(screen_region or getattr(cfg, "screen_capture_region", "left_half")),
-        )
+    region = _normalize_screen_region(screen_region or getattr(cfg, "screen_capture_region", "left_half"))
+    if mode == PROMPT_MODE_WRITTEN_EXAM:
+        body = _written_exam_prompt_body(cfg.language, lang_lower, region)
+    elif mode == PROMPT_MODE_SERVER_SCREEN:
+        body = _server_screen_prompt_body(cfg.language, lang_lower, region)
     elif mode == PROMPT_MODE_MANUAL_TEXT:
         body = _manual_text_prompt_body(cfg.language, lang_lower)
     else:

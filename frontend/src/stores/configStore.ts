@@ -191,6 +191,8 @@ export interface AppConfig {
   assist_high_churn_short_answer?: boolean
   /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
   screen_capture_region?: string
+  /** 笔试模式：截屏后选择题直接出答案，编程题直接出代码 */
+  written_exam_mode?: boolean
 }
 
 export interface QAPair {

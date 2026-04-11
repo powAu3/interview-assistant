@@ -88,6 +88,8 @@ class AppConfig(BaseModel):
     assist_high_churn_short_answer: bool = False
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
     screen_capture_region: str = "left_half"
+    # 笔试模式：截屏后选择题直接输出答案，编程题直接输出代码，不做分析
+    written_exam_mode: bool = False
 
     @model_validator(mode="after")
     def _ensure_valid_models(self):
