@@ -52,6 +52,8 @@ export default function InterviewOverlay() {
     interviewOverlayPanelFontSize,
     interviewOverlayPanelWidth,
     interviewOverlayPanelShowBg,
+    interviewOverlayPanelFontColor,
+    interviewOverlayPanelHeight,
     interviewOverlayLyricLines,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricWidth,
@@ -63,6 +65,8 @@ export default function InterviewOverlay() {
     setInterviewOverlayPanelFontSize,
     setInterviewOverlayPanelWidth,
     setInterviewOverlayPanelShowBg,
+    setInterviewOverlayPanelFontColor,
+    setInterviewOverlayPanelHeight,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricWidth,
@@ -103,6 +107,8 @@ export default function InterviewOverlay() {
         setInterviewOverlayPanelFontSize(payload.panelFontSize)
         setInterviewOverlayPanelWidth(payload.panelWidth)
         setInterviewOverlayPanelShowBg(payload.panelShowBg)
+        setInterviewOverlayPanelFontColor(payload.panelFontColor)
+        setInterviewOverlayPanelHeight(payload.panelHeight)
         setInterviewOverlayLyricLines(payload.lyricLines)
         setInterviewOverlayLyricFontSize(payload.lyricFontSize)
         setInterviewOverlayLyricWidth(payload.lyricWidth)
@@ -129,6 +135,8 @@ export default function InterviewOverlay() {
       setInterviewOverlayPanelFontSize(payload.panelFontSize)
       setInterviewOverlayPanelWidth(payload.panelWidth)
       setInterviewOverlayPanelShowBg(payload.panelShowBg)
+      setInterviewOverlayPanelFontColor(payload.panelFontColor)
+      setInterviewOverlayPanelHeight(payload.panelHeight)
       setInterviewOverlayLyricLines(payload.lyricLines)
       setInterviewOverlayLyricFontSize(payload.lyricFontSize)
       setInterviewOverlayLyricWidth(payload.lyricWidth)
@@ -148,6 +156,8 @@ export default function InterviewOverlay() {
     setInterviewOverlayMode,
     setInterviewOverlayOpacity,
     setInterviewOverlayPanelFontSize,
+    setInterviewOverlayPanelFontColor,
+    setInterviewOverlayPanelHeight,
     setInterviewOverlayPanelWidth,
     setInterviewOverlayPanelShowBg,
     syncInterviewOverlayPrefs,
@@ -219,8 +229,8 @@ export default function InterviewOverlay() {
   }
 
   const panelShellClass = interviewOverlayPanelShowBg
-    ? 'ia-overlay-shell rounded-xl ia-overlay-resize text-text-primary'
-    : 'ia-overlay-resize text-white'
+    ? 'ia-overlay-shell rounded-xl ia-overlay-resize'
+    : 'ia-overlay-resize'
 
   return (
     <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 0 }}>
@@ -230,7 +240,9 @@ export default function InterviewOverlay() {
         style={{
           opacity: interviewOverlayOpacity,
           width: `${interviewOverlayPanelWidth}px`,
+          height: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : undefined,
           fontSize: `${interviewOverlayPanelFontSize}px`,
+          color: interviewOverlayPanelShowBg ? interviewOverlayPanelFontColor : interviewOverlayPanelFontColor,
           minWidth: '180px',
           maxWidth: '100vw',
         }}
@@ -238,13 +250,13 @@ export default function InterviewOverlay() {
         <div
           ref={scrollRef}
           className="px-3 py-2 space-y-1 leading-relaxed"
-          style={{ overflowY: 'auto', maxHeight: '100vh' }}
+          style={{ overflowY: 'auto', maxHeight: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : '100vh' }}
         >
           <div
             className="truncate"
             style={{
               fontSize: `${Math.max(8, interviewOverlayPanelFontSize - 2)}px`,
-              color: interviewOverlayPanelShowBg ? undefined : 'rgba(200,200,200,0.7)',
+              opacity: 0.7,
               textShadow: interviewOverlayPanelShowBg ? undefined : '0 1px 3px rgba(0,0,0,0.6)',
             }}
           >
@@ -254,7 +266,6 @@ export default function InterviewOverlay() {
           <div
             className="whitespace-pre-wrap break-words"
             style={{
-              color: interviewOverlayPanelShowBg ? undefined : '#fff',
               textShadow: interviewOverlayPanelShowBg ? undefined : '0 1px 4px rgba(0,0,0,0.7)',
             }}
           >

@@ -11,6 +11,8 @@ export const INTERVIEW_OVERLAY_STORAGE_KEYS = {
   lyricWidth: 'ia_interview_overlay_lyric_width',
   lyricColor: 'ia_interview_overlay_lyric_color',
   panelShowBg: 'ia_interview_overlay_panel_show_bg',
+  panelFontColor: 'ia_interview_overlay_panel_font_color',
+  panelHeight: 'ia_interview_overlay_panel_height',
 } as const
 
 export const INTERVIEW_OVERLAY_STORAGE_KEY_SET = new Set<string>(Object.values(INTERVIEW_OVERLAY_STORAGE_KEYS))

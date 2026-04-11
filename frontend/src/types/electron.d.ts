@@ -8,6 +8,8 @@ interface OverlayPayload {
   panelFontSize: number
   panelWidth: number
   panelShowBg: boolean
+  panelFontColor: string
+  panelHeight: number
   lyricLines: number
   lyricFontSize: number
   lyricWidth: number

@@ -34,6 +34,8 @@ export default function PreferencesTab() {
     interviewOverlayPanelFontSize,
     interviewOverlayPanelWidth,
     interviewOverlayPanelShowBg,
+    interviewOverlayPanelFontColor,
+    interviewOverlayPanelHeight,
     interviewOverlayLyricLines,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricWidth,
@@ -44,6 +46,8 @@ export default function PreferencesTab() {
     setInterviewOverlayPanelFontSize,
     setInterviewOverlayPanelWidth,
     setInterviewOverlayPanelShowBg,
+    setInterviewOverlayPanelFontColor,
+    setInterviewOverlayPanelHeight,
     setInterviewOverlayLyricLines,
     setInterviewOverlayLyricFontSize,
     setInterviewOverlayLyricWidth,
@@ -292,6 +296,29 @@ export default function PreferencesTab() {
                     />
                     <span className="text-xs text-text-secondary">{interviewOverlayPanelShowBg ? '有背景' : '纯文字'}</span>
                   </label>
+                </Field>
+                <Field label="字体颜色">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={interviewOverlayPanelFontColor}
+                      onChange={(e) => setInterviewOverlayPanelFontColor(e.target.value)}
+                      className="w-7 h-7 rounded border border-bg-hover cursor-pointer bg-transparent p-0"
+                    />
+                    <span className="text-xs text-text-secondary font-mono">{interviewOverlayPanelFontColor}</span>
+                  </div>
+                </Field>
+                <Field label={`面板高度: ${interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : '自适应'}`}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1200}
+                    step={10}
+                    value={interviewOverlayPanelHeight}
+                    onChange={(e) => setInterviewOverlayPanelHeight(Number(e.target.value))}
+                    className="w-full max-w-[200px]"
+                  />
+                  <p className="text-[10px] text-text-muted leading-tight">0 = 自适应内容高度</p>
                 </Field>
                 <p className="text-[11px] text-text-muted leading-relaxed">面板宽度可在悬浮窗右侧边缘拖拽调整</p>
               </>
