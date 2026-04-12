@@ -295,7 +295,11 @@ def chat_stream(
     system_prompt: Optional[str] = None,
     abort_check: Optional[Callable[[], bool]] = None,
 ) -> Generator[tuple[str, str], None, None]:
-    """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'."""
+    """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'.
+
+    TODO: add override_think_mode param (like chat_stream_single_model) if
+    this function is ever used for written-exam tasks.
+    """
     from api.realtime.ws import broadcast
 
     cfg = get_config()
@@ -362,9 +366,12 @@ def chat_stream_single_model(
     messages: list[dict],
     system_prompt: Optional[str] = None,
     abort_check: Optional[Callable[[], bool]] = None,
+    override_think_mode: Optional[bool] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """仅使用指定模型流式输出，不做跨模型降级（供并行答题）。"""
     cfg = get_config()
+    if override_think_mode is not None:
+        cfg = cfg.model_copy(update={"think_mode": override_think_mode})
     clean_messages = _sanitize_messages(messages, model_cfg.supports_vision)
     full_messages: list = []
     if system_prompt:

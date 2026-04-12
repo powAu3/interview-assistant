@@ -214,6 +214,8 @@ export interface AppConfig {
   screen_capture_region?: string
   /** 笔试模式：截屏后选择题直接出答案，编程题直接出代码 */
   written_exam_mode?: boolean
+  /** 笔试模式下是否开启深度思考 */
+  written_exam_think?: boolean
 }
 
 export interface QAPair {

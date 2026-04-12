@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { Loader2, Mic } from 'lucide-react'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { applyStoredColorSchemeToDocument, COLOR_SCHEME_STORAGE_KEY } from '@/lib/colorScheme'
@@ -165,6 +165,31 @@ export default function InterviewOverlay() {
 
   const waitingHint = isRecording ? '等待识别到问题…' : '开始面试后会自动出现'
 
+  const dragOrigin = useRef<{ x: number; y: number } | null>(null)
+
+  const onDragStart = useCallback((e: ReactMouseEvent) => {
+    if ((e.target as HTMLElement).closest('.ia-overlay-content')) return
+    e.preventDefault()
+    dragOrigin.current = { x: e.screenX, y: e.screenY }
+    window.electronAPI?.overlayDragStart?.()
+
+    const onMove = (ev: globalThis.MouseEvent) => {
+      if (!dragOrigin.current) return
+      const dx = ev.screenX - dragOrigin.current.x
+      const dy = ev.screenY - dragOrigin.current.y
+      dragOrigin.current = { x: ev.screenX, y: ev.screenY }
+      window.electronAPI?.moveOverlayWindow?.(dx, dy)
+    }
+    const onUp = () => {
+      dragOrigin.current = null
+      window.electronAPI?.overlayDragEnd?.()
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
   const panelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const handlePanelResize = useCallback(() => {
@@ -195,7 +220,7 @@ export default function InterviewOverlay() {
     const dimColor = interviewOverlayLyricColor + '99'
     const hasContent = lyricLines.length > 0
     return (
-      <div className="h-screen w-screen bg-transparent flex items-start justify-center ia-overlay-drag" style={{ padding: 0 }}>
+      <div className="h-screen w-screen bg-transparent flex items-start justify-center ia-overlay-drag" style={{ padding: 0 }} onMouseDown={onDragStart}>
         {hasContent ? (
           <div style={{ maxWidth: `${interviewOverlayLyricWidth}px`, opacity: interviewOverlayOpacity, width: '100%' }}>
             {lyricLines.map((line, index) => (
@@ -233,7 +258,7 @@ export default function InterviewOverlay() {
     : 'ia-overlay-resize'
 
   return (
-    <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 0 }}>
+    <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 0 }} onMouseDown={onDragStart}>
       <div
         ref={panelRef}
         className={panelShellClass}
@@ -242,7 +267,7 @@ export default function InterviewOverlay() {
           width: `${interviewOverlayPanelWidth}px`,
           height: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : undefined,
           fontSize: `${interviewOverlayPanelFontSize}px`,
-          color: interviewOverlayPanelShowBg ? interviewOverlayPanelFontColor : interviewOverlayPanelFontColor,
+          color: interviewOverlayPanelFontColor,
           minWidth: '180px',
           maxWidth: '100vw',
         }}

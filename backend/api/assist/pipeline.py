@@ -848,6 +848,7 @@ def _process_question_parallel(
         return False
 
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
+    written_exam_think = bool(getattr(cfg, "written_exam_think", False))
     prompt_mode: PromptMode = _prompt_mode_for_task(source, manual_input, written_exam=written_exam)
     system_prompt = build_system_prompt(
         manual_input=manual_input,
@@ -908,11 +909,13 @@ def _process_question_parallel(
     gen_start = time.monotonic()
     first_token_mono: Optional[float] = None
     try:
+        think_override = written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM else None
         for chunk_type, chunk_text in chat_stream_single_model(
             model_cfg,
             messages_for_llm,
             system_prompt=system_prompt,
             abort_check=aborted,
+            override_think_mode=think_override,
         ):
             if aborted():
                 break

@@ -65,6 +65,7 @@ class ConfigUpdate(BaseModel):
     assist_high_churn_short_answer: Optional[bool] = None
     screen_capture_region: Optional[str] = None
     written_exam_mode: Optional[bool] = None
+    written_exam_think: Optional[bool] = None
     iflytek_stt_app_id: Optional[str] = None
     iflytek_stt_api_key: Optional[str] = None
     iflytek_stt_api_secret: Optional[str] = None
@@ -125,6 +126,7 @@ async def api_get_config():
         "assist_high_churn_short_answer": bool(getattr(cfg, "assist_high_churn_short_answer", False)),
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "written_exam_mode": bool(getattr(cfg, "written_exam_mode", False)),
+        "written_exam_think": bool(getattr(cfg, "written_exam_think", False)),
         "has_resume": bool(cfg.resume_text),
         "resume_active_history_id": resume_active_history_id,
         "resume_active_filename": (

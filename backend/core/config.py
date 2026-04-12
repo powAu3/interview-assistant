@@ -90,6 +90,8 @@ class AppConfig(BaseModel):
     screen_capture_region: str = "left_half"
     # 笔试模式：截屏后选择题直接输出答案，编程题直接输出代码，不做分析
     written_exam_mode: bool = False
+    # 笔试模式下是否开启 think（深度思考），默认关闭以加快响应
+    written_exam_think: bool = False
 
     @model_validator(mode="after")
     def _ensure_valid_models(self):

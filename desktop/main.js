@@ -51,6 +51,7 @@ let tray = null;
 let pythonProcess = null;
 let isQuitting = false;
 let shortcuts = {};
+let _overlayDragging = false;
 let overlayPositionSaveTimer = null;
 let lastOverlayState = {
   enabled: false,
@@ -306,7 +307,7 @@ function createOverlayWindow(mode = 'panel') {
     alwaysOnTop: true,
     hiddenInMissionControl: true,
     show: false,
-    focusable: false,
+    focusable: true,
     title: `${APP_DISPLAY_NAME} Overlay`,
     backgroundColor: '#00000000',
     webPreferences: {
@@ -342,6 +343,13 @@ function createOverlayWindow(mode = 'panel') {
   overlayWindow.on('moved', () => {
     const currentMode = overlayWindow?._overlayMode || lastOverlayState.mode || 'panel';
     schedulePersistOverlayPosition(currentMode);
+  });
+  overlayWindow.on('focus', () => {
+    setTimeout(() => {
+      if (!_overlayDragging && overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.blur();
+      }
+    }, 100);
   });
 
   return overlayWindow;
@@ -616,6 +624,16 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   return { ok: true, visible: state.visible };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
+ipcMain.handle('move-overlay-window', (_event, dx, dy) => {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const [x, y] = overlayWindow.getPosition();
+  overlayWindow.setPosition(x + Math.round(dx), y + Math.round(dy));
+});
+ipcMain.on('overlay-drag-start', () => { _overlayDragging = true; });
+ipcMain.on('overlay-drag-end', () => {
+  _overlayDragging = false;
+  if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.blur();
+});
 
 function createAppMenu() {
   if (process.platform !== 'darwin') return;

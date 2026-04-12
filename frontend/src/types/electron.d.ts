@@ -28,6 +28,9 @@ declare global {
       toggleContentProtection: () => Promise<boolean>
       getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
       syncOverlayWindow?: (payload: OverlayPayload) => Promise<{ ok: boolean; visible: boolean }>
+      moveOverlayWindow?: (dx: number, dy: number) => Promise<void>
+      overlayDragStart?: () => void
+      overlayDragEnd?: () => void
       getOverlayState?: () => Promise<OverlayPayload | null>
       onOverlayState?: (callback: (payload: OverlayPayload) => void) => void
       removeOverlayStateListener?: () => void

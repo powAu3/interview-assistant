@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleContentProtection: () => ipcRenderer.invoke('toggle-content-protection'),
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
   syncOverlayWindow: (payload) => ipcRenderer.invoke('sync-overlay-window', payload),
+  moveOverlayWindow: (dx, dy) => ipcRenderer.invoke('move-overlay-window', dx, dy),
+  overlayDragStart: () => ipcRenderer.send('overlay-drag-start'),
+  overlayDragEnd: () => ipcRenderer.send('overlay-drag-end'),
   getOverlayState: () => ipcRenderer.invoke('get-overlay-state'),
   onOverlayState: (listener) => {
     ipcRenderer.removeAllListeners('overlay-state');

@@ -7,6 +7,7 @@ import {
   AlignVerticalSpaceAround,
   Monitor,
   PenLine,
+  ChevronDown,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
@@ -15,6 +16,41 @@ import { Section, Field } from './shared'
 import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
+
+function Collapsible({ title, icon, defaultOpen = false, badge, children }: {
+  title: string; icon?: React.ReactNode; defaultOpen?: boolean; badge?: React.ReactNode; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="border border-bg-hover/60 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider hover:bg-bg-tertiary/30 transition-colors"
+      >
+        {icon}
+        {title}
+        {badge}
+        <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-3 pb-3 space-y-3">{children}</div>}
+    </div>
+  )
+}
+
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
+      />
+      <span className="text-xs text-text-secondary">{label}</span>
+    </label>
+  )
+}
 
 export default function PreferencesTab() {
   const {
@@ -83,9 +119,11 @@ export default function PreferencesTab() {
   }
 
   const sttLabel = config?.stt_provider === 'doubao' ? '豆包' : config?.stt_provider === 'iflytek' ? '讯飞' : 'Whisper'
+  const hasScreenCapture = (options?.screen_capture_regions?.length ?? 0) > 0
 
   return (
-    <div className="p-5 space-y-5 pb-8">
+    <div className="p-5 space-y-4 pb-8">
+      {/* ── 系统状态 ── */}
       {platformInfo?.needs_virtual_device && (
         <div className="bg-accent-amber/10 border border-accent-amber/30 rounded-lg p-3 text-xs space-y-2">
           <div className="flex items-start gap-2">
@@ -94,7 +132,6 @@ export default function PreferencesTab() {
           </div>
         </div>
       )}
-
       <div className="flex items-center gap-2 text-xs px-1">
         <div className={`w-2 h-2 rounded-full ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
         <span className="text-text-secondary">
@@ -102,148 +139,51 @@ export default function PreferencesTab() {
         </span>
       </div>
 
-      <Section title="配色方案" icon={<Palette className="w-3.5 h-3.5" />}>
-        <p className="text-[11px] text-text-muted -mt-1 leading-relaxed">
-          参考 VS Code 主题，仅切换背景、文字与代码高亮。
-        </p>
-        <div className="grid grid-cols-1 gap-2">
-          {COLOR_SCHEME_OPTIONS.map((opt) => (
+      {/* ── 1. 答案展示（常用，保持展开） ── */}
+      <Section title="答案展示">
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { key: 'cards' as const, icon: LayoutGrid, label: '卡片', hint: '独立框，框内滚动' },
+            { key: 'stream' as const, icon: AlignVerticalSpaceAround, label: '流式', hint: '通读，无高度限制' },
+          ]).map(({ key, icon: Icon, label, hint }) => (
             <button
-              key={opt.id}
+              key={key}
               type="button"
-              onClick={() => {
-                setColorScheme(opt.id)
-                useInterviewStore.getState().setToastMessage(`已切换为 ${opt.label}`)
-              }}
-              className={`flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
-                colorScheme === opt.id
+              onClick={() => setAnswerPanelLayout(key)}
+              className={`flex flex-col items-start gap-1.5 p-2.5 rounded-xl border text-left transition-all ${
+                answerPanelLayout === key
                   ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
                   : 'border-bg-hover bg-bg-tertiary/30 hover:border-bg-hover'
               }`}
             >
-              <span className="text-sm font-medium text-text-primary flex items-center gap-2">
-                <Palette className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />
-                {opt.label}
-              </span>
-              <span className="text-[10px] text-text-muted leading-snug pl-6">{opt.hint}</span>
+              <Icon className={`w-4 h-4 ${answerPanelLayout === key ? 'text-accent-blue' : 'text-text-muted'}`} />
+              <span className="text-xs font-medium text-text-primary">{label}</span>
+              <span className="text-[10px] text-text-muted leading-snug">{hint}</span>
             </button>
           ))}
         </div>
-      </Section>
-
-      <Section title="答案展示方式">
-        <p className="text-[11px] text-text-muted -mt-1">多路模型同时生成时，流式模式下各路答案自上而下依次排开。</p>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setAnswerPanelLayout('cards')}
-            className={`flex flex-col items-start gap-2 p-3 rounded-xl border text-left transition-all ${
-              answerPanelLayout === 'cards'
-                ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
-                : 'border-bg-hover bg-bg-tertiary/30 hover:border-bg-hover'
-            }`}
-          >
-            <LayoutGrid className={`w-5 h-5 ${answerPanelLayout === 'cards' ? 'text-accent-blue' : 'text-text-muted'}`} />
-            <span className="text-sm font-medium text-text-primary">卡片</span>
-            <span className="text-[10px] text-text-muted leading-snug">每题答案独立框，框内滚动</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setAnswerPanelLayout('stream')}
-            className={`flex flex-col items-start gap-2 p-3 rounded-xl border text-left transition-all ${
-              answerPanelLayout === 'stream'
-                ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
-                : 'border-bg-hover bg-bg-tertiary/30 hover:border-bg-hover'
-            }`}
-          >
-            <AlignVerticalSpaceAround className={`w-5 h-5 ${answerPanelLayout === 'stream' ? 'text-accent-blue' : 'text-text-muted'}`} />
-            <span className="text-sm font-medium text-text-primary">流式</span>
-            <span className="text-[10px] text-text-muted leading-snug">自上而下通读，无单框高度限制</span>
-          </button>
-        </div>
-        <div className="mt-3 space-y-1.5">
-          <label className="text-xs text-text-secondary">流式跟滚阈值（像素）</label>
-          <p className="text-[10px] text-text-muted leading-snug">
-            输出流式答案时，若当前已接近底部则自动滚到底；数值越小越容易停在中段（4～400）。
-          </p>
-          <input
-            type="number"
-            min={4}
-            max={400}
-            value={scrollBottomPx}
-            onChange={(e) => setScrollBottomPx(Number(e.target.value) || 40)}
-            onBlur={async () => {
-              const v = Math.max(4, Math.min(400, scrollBottomPx || 40))
-              setScrollBottomPx(v)
+        <Field label="简短回答">
+          <Toggle
+            checked={config?.assist_high_churn_short_answer ?? false}
+            onChange={async (v) => {
               try {
-                await api.updateConfig({ answer_autoscroll_bottom_px: v })
+                await api.updateConfig({ assist_high_churn_short_answer: v })
                 useInterviewStore.getState().setConfig(await api.getConfig())
-                useInterviewStore.getState().setToastMessage('跟滚阈值已保存')
-              } catch (e: unknown) {
-                useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '保存失败')
-              }
+              } catch {}
             }}
-            className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
+            label={config?.assist_high_churn_short_answer ? '简短模式' : '详细模式'}
           />
-        </div>
-      </Section>
-
-      {config && (options?.screen_capture_regions?.length ?? 0) > 0 && (
-        <Section title="电脑截图区域">
-          <p className="text-[10px] text-text-muted mb-2 leading-snug">
-            手机端「截屏审题」时，服务端截取主显示器的范围。
-          </p>
-          <select
-            value={config.screen_capture_region ?? 'left_half'}
-            onChange={async (e) => {
-              const v = e.target.value
-              try {
-                await api.updateConfig({ screen_capture_region: v })
-                useInterviewStore.getState().setConfig(await api.getConfig())
-                useInterviewStore.getState().setToastMessage('截图区域已保存')
-              } catch (err) {
-                useInterviewStore.getState().setToastMessage(err instanceof Error ? err.message : '保存失败')
-              }
-            }}
-            className="input-field w-full max-w-[200px]"
-          >
-            {options!.screen_capture_regions!.map((r) => (
-              <option key={r} value={r}>
-                {r === 'full' ? '全屏' : r === 'left_half' ? '左半屏' : r === 'right_half' ? '右半屏' : r === 'top_half' ? '上半屏' : '下半屏'}
-              </option>
-            ))}
-          </select>
-        </Section>
-      )}
-
-      {/* practice_audience moved here from SpeechTab */}
-      <Section title="模拟面试维度" icon={<LayoutGrid className="w-3.5 h-3.5" />}>
-        <Field label="候选人维度" hint="影响练习模式的出题与点评风格">
-          <select value={practiceAudience}
-            onChange={(e) => setPracticeAudience(e.target.value)}
-            className="input-field">
-            {(options?.practice_audiences ?? ['campus_intern', 'social']).map((v) => (
-              <option key={v} value={v}>{v === 'social' ? '社招' : '校招（实习）'}</option>
-            ))}
-          </select>
+          <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">开启后回答更短更精炼</p>
         </Field>
       </Section>
 
-      <Section title="面试悬浮提示窗" icon={<Monitor className="w-3.5 h-3.5" />}>
-        <p className="text-[11px] text-text-muted -mt-1 leading-relaxed">
-          Electron 桌面端实验功能：面试时在屏幕边缘显示浮窗，支持面板或歌词两种模式。
-        </p>
-        <Field label="启用悬浮窗">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={interviewOverlayEnabled}
-              onChange={(e) => setInterviewOverlayEnabled(e.target.checked)}
-              className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
-            />
-            <span className="text-xs text-text-secondary">{interviewOverlayEnabled ? '已开启' : '已关闭'}</span>
-          </label>
-        </Field>
+      {/* ── 2. 悬浮提示窗（含截图区域、笔试模式） ── */}
+      <Collapsible title="悬浮提示窗" icon={<Monitor className="w-3.5 h-3.5" />}>
+        <Toggle
+          checked={interviewOverlayEnabled}
+          onChange={(v) => setInterviewOverlayEnabled(v)}
+          label={interviewOverlayEnabled ? '已开启' : '已关闭'}
+        />
         {interviewOverlayEnabled && (
           <>
             <Field label="显示模式">
@@ -265,180 +205,189 @@ export default function PreferencesTab() {
               </div>
             </Field>
             <Field label={`不透明度: ${Math.round(interviewOverlayOpacity * 100)}%`}>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={Math.round(interviewOverlayOpacity * 100)}
-                onChange={(e) => setInterviewOverlayOpacity(Number(e.target.value) / 100)}
-                className="w-full max-w-[200px]"
-              />
+              <input type="range" min={0} max={100} value={Math.round(interviewOverlayOpacity * 100)}
+                onChange={(e) => setInterviewOverlayOpacity(Number(e.target.value) / 100)} className="w-full max-w-[200px]" />
             </Field>
             {interviewOverlayMode === 'panel' && (
               <>
                 <Field label={`字号: ${interviewOverlayPanelFontSize}px`}>
-                  <input
-                    type="range"
-                    min={1}
-                    max={48}
-                    value={interviewOverlayPanelFontSize}
-                    onChange={(e) => setInterviewOverlayPanelFontSize(Number(e.target.value))}
-                    className="w-full max-w-[200px]"
-                  />
+                  <input type="range" min={1} max={48} value={interviewOverlayPanelFontSize}
+                    onChange={(e) => setInterviewOverlayPanelFontSize(Number(e.target.value))} className="w-full max-w-[200px]" />
                 </Field>
-                <Field label="显示背景框">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={interviewOverlayPanelShowBg}
-                      onChange={(e) => setInterviewOverlayPanelShowBg(e.target.checked)}
-                      className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
-                    />
-                    <span className="text-xs text-text-secondary">{interviewOverlayPanelShowBg ? '有背景' : '纯文字'}</span>
-                  </label>
+                <div className="flex items-center gap-4">
+                  <Field label="背景框">
+                    <Toggle checked={interviewOverlayPanelShowBg} onChange={(v) => setInterviewOverlayPanelShowBg(v)}
+                      label={interviewOverlayPanelShowBg ? '有' : '无'} />
+                  </Field>
+                  <Field label="字体颜色">
+                    <div className="flex items-center gap-1.5">
+                      <input type="color" value={interviewOverlayPanelFontColor}
+                        onChange={(e) => setInterviewOverlayPanelFontColor(e.target.value)}
+                        className="w-6 h-6 rounded border border-bg-hover cursor-pointer bg-transparent p-0" />
+                      <span className="text-[10px] text-text-muted font-mono">{interviewOverlayPanelFontColor}</span>
+                    </div>
+                  </Field>
+                </div>
+                <Field label={`高度: ${interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : '自适应'}`}>
+                  <input type="range" min={0} max={1200} step={10} value={interviewOverlayPanelHeight}
+                    onChange={(e) => setInterviewOverlayPanelHeight(Number(e.target.value))} className="w-full max-w-[200px]" />
                 </Field>
-                <Field label="字体颜色">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={interviewOverlayPanelFontColor}
-                      onChange={(e) => setInterviewOverlayPanelFontColor(e.target.value)}
-                      className="w-7 h-7 rounded border border-bg-hover cursor-pointer bg-transparent p-0"
-                    />
-                    <span className="text-xs text-text-secondary font-mono">{interviewOverlayPanelFontColor}</span>
-                  </div>
-                </Field>
-                <Field label={`面板高度: ${interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : '自适应'}`}>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1200}
-                    step={10}
-                    value={interviewOverlayPanelHeight}
-                    onChange={(e) => setInterviewOverlayPanelHeight(Number(e.target.value))}
-                    className="w-full max-w-[200px]"
-                  />
-                  <p className="text-[10px] text-text-muted leading-tight">0 = 自适应内容高度</p>
-                </Field>
-                <p className="text-[11px] text-text-muted leading-relaxed">面板宽度可在悬浮窗右侧边缘拖拽调整</p>
               </>
             )}
             {interviewOverlayMode === 'lyrics' && (
               <>
-                <Field label={`行数: ${interviewOverlayLyricLines}`}>
-                  <input
-                    type="range"
-                    min={1}
-                    max={8}
-                    value={interviewOverlayLyricLines}
-                    onChange={(e) => setInterviewOverlayLyricLines(Number(e.target.value))}
-                    className="w-full max-w-[200px]"
-                  />
-                </Field>
-                <Field label={`字号: ${interviewOverlayLyricFontSize}px`}>
-                  <input
-                    type="range"
-                    min={1}
-                    max={72}
-                    value={interviewOverlayLyricFontSize}
-                    onChange={(e) => setInterviewOverlayLyricFontSize(Number(e.target.value))}
-                    className="w-full max-w-[200px]"
-                  />
-                </Field>
-                <Field label={`宽度: ${interviewOverlayLyricWidth}px`}>
-                  <input
-                    type="range"
-                    min={420}
-                    max={1200}
-                    step={20}
-                    value={interviewOverlayLyricWidth}
-                    onChange={(e) => setInterviewOverlayLyricWidth(Number(e.target.value))}
-                    className="w-full max-w-[200px]"
-                  />
-                </Field>
-                <Field label="字体颜色">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={interviewOverlayLyricColor}
-                      onChange={(e) => setInterviewOverlayLyricColor(e.target.value)}
-                      className="w-7 h-7 rounded border border-bg-hover cursor-pointer bg-transparent p-0"
-                    />
-                    <span className="text-xs text-text-secondary font-mono">{interviewOverlayLyricColor}</span>
-                  </div>
-                </Field>
+                <div className="flex items-center gap-4">
+                  <Field label={`行数: ${interviewOverlayLyricLines}`}>
+                    <input type="range" min={1} max={8} value={interviewOverlayLyricLines}
+                      onChange={(e) => setInterviewOverlayLyricLines(Number(e.target.value))} className="w-24" />
+                  </Field>
+                  <Field label={`字号: ${interviewOverlayLyricFontSize}px`}>
+                    <input type="range" min={1} max={72} value={interviewOverlayLyricFontSize}
+                      onChange={(e) => setInterviewOverlayLyricFontSize(Number(e.target.value))} className="w-24" />
+                  </Field>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Field label={`宽度: ${interviewOverlayLyricWidth}px`}>
+                    <input type="range" min={420} max={1200} step={20} value={interviewOverlayLyricWidth}
+                      onChange={(e) => setInterviewOverlayLyricWidth(Number(e.target.value))} className="w-24" />
+                  </Field>
+                  <Field label="字体颜色">
+                    <div className="flex items-center gap-1.5">
+                      <input type="color" value={interviewOverlayLyricColor}
+                        onChange={(e) => setInterviewOverlayLyricColor(e.target.value)}
+                        className="w-6 h-6 rounded border border-bg-hover cursor-pointer bg-transparent p-0" />
+                      <span className="text-[10px] text-text-muted font-mono">{interviewOverlayLyricColor}</span>
+                    </div>
+                  </Field>
+                </div>
               </>
             )}
-            <Field label="简短回答">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config?.assist_high_churn_short_answer ?? false}
+
+            {/* 截图区域 */}
+            {config && hasScreenCapture && (
+              <Field label="截图区域" hint="手机端「截屏审题」时，服务端截取主显示器的范围">
+                <select
+                  value={config.screen_capture_region ?? 'left_half'}
                   onChange={async (e) => {
                     try {
-                      await api.updateConfig({ assist_high_churn_short_answer: e.target.checked })
+                      await api.updateConfig({ screen_capture_region: e.target.value })
                       useInterviewStore.getState().setConfig(await api.getConfig())
                     } catch {}
                   }}
-                  className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
+                  className="input-field w-full max-w-[200px]"
+                >
+                  {options!.screen_capture_regions!.map((r) => (
+                    <option key={r} value={r}>
+                      {r === 'full' ? '全屏' : r === 'left_half' ? '左半屏' : r === 'right_half' ? '右半屏' : r === 'top_half' ? '上半屏' : '下半屏'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+
+            {/* 笔试模式 */}
+            {config && hasScreenCapture && (
+              <div className="border-t border-bg-hover/40 pt-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <PenLine className="w-3.5 h-3.5 text-text-muted" />
+                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">笔试模式</span>
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent-amber/20 text-accent-amber leading-none">BETA</span>
+                </div>
+                <Toggle
+                  checked={config?.written_exam_mode ?? false}
+                  onChange={async (v) => {
+                    try {
+                      await api.updateConfig({ written_exam_mode: v })
+                      useInterviewStore.getState().setConfig(await api.getConfig())
+                    } catch {}
+                  }}
+                  label={config?.written_exam_mode ? '已开启' : '已关闭'}
                 />
-                <span className="text-xs text-text-secondary">
-                  {config?.assist_high_churn_short_answer ? '简短模式' : '详细模式'}
-                </span>
-              </label>
-              <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
-                开启后回答更短更精炼，适合快速切题的面试
-              </p>
-            </Field>
+                {config?.written_exam_mode && (
+                  <>
+                    <Field label="深度思考 (Think)">
+                      <Toggle
+                        checked={config?.written_exam_think ?? false}
+                        onChange={async (v) => {
+                          try {
+                            await api.updateConfig({ written_exam_think: v })
+                            useInterviewStore.getState().setConfig(await api.getConfig())
+                          } catch {}
+                        }}
+                        label={config?.written_exam_think ? '已开启（更准但更慢）' : '已关闭（更快）'}
+                      />
+                      <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
+                        开启后模型会先推理再作答，编程题准确率更高，但响应变慢。需模型支持 think。
+                      </p>
+                    </Field>
+                    <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-lg p-2.5 space-y-1">
+                      <p className="text-[11px] text-text-secondary leading-relaxed">
+                        <span className="font-medium text-accent-blue">配合截图快捷键使用</span>
+                      </p>
+                      <ul className="text-[10px] text-text-muted leading-relaxed space-y-0.5 pl-3 list-disc">
+                        <li>选择题 → 直接输出答案（如 A.Redis）</li>
+                        <li>编程题 → 直接输出完整可提交代码</li>
+                        <li>填空题 → 直接输出填空内容</li>
+                      </ul>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
-      </Section>
+      </Collapsible>
 
-      <Section
-        title={
-          <span className="flex items-center gap-2">
-            <PenLine className="w-3.5 h-3.5" />
-            笔试模式
-            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent-amber/20 text-accent-amber leading-none">BETA</span>
-          </span>
-        }
-      >
-        <Field label={
-          <span className="flex items-center gap-1.5">
-            启用笔试模式
-            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent-amber/20 text-accent-amber leading-none">BETA</span>
-          </span>
-        }>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={config?.written_exam_mode ?? false}
-              onChange={async (e) => {
-                try {
-                  await api.updateConfig({ written_exam_mode: e.target.checked })
-                  useInterviewStore.getState().setConfig(await api.getConfig())
-                } catch {}
-              }}
-              className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0"
-            />
-            <span className="text-xs text-text-secondary">
-              {config?.written_exam_mode ? '已开启' : '已关闭'}
-            </span>
-          </label>
+      {/* ── 3. 外观与高级 ── */}
+      <Collapsible title="外观与高级" icon={<Palette className="w-3.5 h-3.5" />}>
+        <Field label="配色方案">
+          <div className="grid grid-cols-1 gap-1.5">
+            {COLOR_SCHEME_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  setColorScheme(opt.id)
+                  useInterviewStore.getState().setToastMessage(`已切换为 ${opt.label}`)
+                }}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left transition-all ${
+                  colorScheme === opt.id
+                    ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
+                    : 'border-bg-hover bg-bg-tertiary/30 hover:border-bg-hover'
+                }`}
+              >
+                <Palette className="w-3 h-3 text-accent-blue flex-shrink-0" />
+                <span className="text-xs font-medium text-text-primary">{opt.label}</span>
+                <span className="text-[10px] text-text-muted ml-auto">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
         </Field>
-        <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-lg p-2.5 space-y-1.5">
-          <p className="text-[11px] text-text-secondary leading-relaxed">
-            <span className="font-medium text-accent-blue">配合截图快捷键使用</span>
-            ：按下截图快捷键后，自动识别题目类型并给出最精简的答案。
-          </p>
-          <ul className="text-[11px] text-text-muted leading-relaxed space-y-0.5 pl-3 list-disc">
-            <li>选择题 → 直接输出答案字母（如 A、ABD）</li>
-            <li>编程题 → 直接输出完整可提交代码</li>
-            <li>填空题 → 直接输出填空内容</li>
-            <li>不输出分析过程、不说废话</li>
-          </ul>
-        </div>
-      </Section>
+        <Field label="候选人维度" hint="影响练习模式的出题与点评风格">
+          <select value={practiceAudience}
+            onChange={(e) => setPracticeAudience(e.target.value)}
+            className="input-field">
+            {(options?.practice_audiences ?? ['campus_intern', 'social']).map((v) => (
+              <option key={v} value={v}>{v === 'social' ? '社招' : '校招（实习）'}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="流式跟滚阈值（像素）" hint="距底部小于该值时自动滚到底（4～400）">
+          <input
+            type="number" min={4} max={400} value={scrollBottomPx}
+            onChange={(e) => setScrollBottomPx(Number(e.target.value) || 40)}
+            onBlur={async () => {
+              const v = Math.max(4, Math.min(400, scrollBottomPx || 40))
+              setScrollBottomPx(v)
+              try {
+                await api.updateConfig({ answer_autoscroll_bottom_px: v })
+                useInterviewStore.getState().setConfig(await api.getConfig())
+              } catch {}
+            }}
+            className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
+          />
+        </Field>
+      </Collapsible>
 
       <NetworkQRCode />
       <QuickPromptsEditor />
