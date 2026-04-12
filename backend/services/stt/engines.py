@@ -4,6 +4,7 @@ import gzip
 import json
 import re
 import struct
+import time
 import uuid
 import numpy as np
 import threading
@@ -187,13 +188,16 @@ class DoubaoSTT:
             ws = websocket.create_connection(
                 DOUBAO_ASR_WS_URL,
                 header=[f"{k}: {v}" for k, v in headers.items()],
-                timeout=8,
+                timeout=10,
             )
             ws.send_binary(first_frame)
-            for frame in chunks:
+            time.sleep(0.05)
+            for i, frame in enumerate(chunks):
                 ws.send_binary(frame)
+                if i % 10 == 9:
+                    time.sleep(0.02)
             final_text = ""
-            ws.settimeout(8)
+            ws.settimeout(12)
             while True:
                 try:
                     raw = ws.recv()
