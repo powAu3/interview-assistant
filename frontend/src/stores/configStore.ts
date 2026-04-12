@@ -533,7 +533,9 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       }
     })
   },
-  setInitData: (data) =>
+  setInitData: (data) => {
+    _chunkBuffer.clear()
+    if (_chunkFlushTimer !== null) { clearTimeout(_chunkFlushTimer); _chunkFlushTimer = null }
     set({
       transcriptions: data.transcriptions ?? [],
       qaPairs: (data.qa_pairs ?? []).map((qa: Partial<QAPair> & { id: string; question: string; answer: string }) => ({
@@ -544,10 +546,13 @@ export const useInterviewStore = create<InterviewState>((set) => ({
         questionSource: (qa as any).source ?? qa.questionSource,
         modelLabel: (qa as any).model_name ?? qa.modelLabel,
       })),
+      currentStreamingId: null,
+      streamingIds: [],
       isRecording: data.is_recording ?? false,
       isPaused: data.is_paused ?? false,
       sttLoaded: data.stt_loaded ?? false,
-    }),
+    })
+  },
   setSttStatus: (loaded, loading) => set({ sttLoaded: loaded, sttLoading: loading }),
   toggleSettings: () =>
     set((s) => {

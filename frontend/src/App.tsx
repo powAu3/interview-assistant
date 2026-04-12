@@ -37,10 +37,7 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
     overlaySyncUntilRef.current = Date.now() + 500
-    const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
     window.electronAPI.syncOverlayWindow({
-      enabled: interviewOverlayEnabled,
-      visible: overlayVisible,
       mode: interviewOverlayMode,
       opacity: interviewOverlayOpacity,
       panelFontSize: interviewOverlayPanelFontSize,
@@ -54,20 +51,26 @@ export default function App() {
       lyricColor: interviewOverlayLyricColor,
     }).catch(() => {})
   }, [
-    appMode, interviewOverlayEnabled,
     interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
     interviewOverlayMode, interviewOverlayOpacity,
     interviewOverlayPanelFontSize, interviewOverlayPanelWidth, interviewOverlayPanelShowBg,
     interviewOverlayPanelFontColor, interviewOverlayPanelHeight,
-    isRecording,
   ])
+
+  const mainHiddenByOverlayRef = useRef(false)
 
   useEffect(() => {
     if (!window.electronAPI?.hideWindow) return
     const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
     if (overlayVisible) {
-      window.electronAPI.hideWindow()
-    } else {
+      window.electronAPI.getWindowState?.().then((state) => {
+        if (state?.visible) {
+          mainHiddenByOverlayRef.current = true
+          window.electronAPI!.hideWindow()
+        }
+      }).catch(() => {})
+    } else if (mainHiddenByOverlayRef.current) {
+      mainHiddenByOverlayRef.current = false
       window.electronAPI.showWindow?.()
     }
   }, [appMode, interviewOverlayEnabled, isRecording])

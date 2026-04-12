@@ -600,9 +600,7 @@ ipcMain.handle('get-window-state', () => ({
   visible: mainWindow?.isVisible() ?? false,
 }));
 ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
-  const state = {
-    enabled: Boolean(payload.enabled),
-    visible: Boolean(payload.visible),
+  const style = {
     mode: payload.mode === 'lyrics' ? 'lyrics' : 'panel',
     opacity: Math.max(0, Math.min(1, Number(payload.opacity) || 0)),
     panelFontSize: Math.max(1, Math.round(Number(payload.panelFontSize) || 13)),
@@ -616,18 +614,23 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     lyricColor: typeof payload.lyricColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.lyricColor) ? payload.lyricColor : '#ffffff',
   };
 
+  const state = { ...lastOverlayState, ...style };
+  const modeChanged = lastOverlayState.mode !== state.mode;
+
+  lastOverlayState = state;
+  sendOverlayState(state);
+
   if (!state.enabled) {
-    lastOverlayState = state;
-    sendOverlayState(state);
     if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
     return { ok: true, visible: false };
   }
 
-  const win = createOverlayWindow(state.mode);
-  applyOverlayPreset(state.mode);
-  sendOverlayState(state);
-  if (state.visible) showOverlayWindow();
-  else if (win && !win.isDestroyed()) win.hide();
+  if (modeChanged) {
+    const win = createOverlayWindow(state.mode);
+    applyOverlayPreset(state.mode);
+    if (state.visible) showOverlayWindow();
+    else if (win && !win.isDestroyed()) win.hide();
+  }
   return { ok: true, visible: state.visible };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
