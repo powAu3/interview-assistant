@@ -1,4 +1,4 @@
-export type ShortcutAction = 'hideOrShowWindow' | 'hardClearSession' | 'askFromServerScreen'
+export type ShortcutAction = 'hideOrShowWindow' | 'hardClearSession' | 'askFromServerScreen' | 'toggleInterviewOverlay' | 'moveOverlayToMouse'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
 
 export type ShortcutConfig = {
@@ -32,6 +32,22 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     key: 'CommandOrControl+/',
     defaultKey: 'CommandOrControl+/',
     label: '服务端截图审题',
+    category: '实时辅助',
+    status: 'available',
+  },
+  toggleInterviewOverlay: {
+    action: 'toggleInterviewOverlay',
+    key: 'CommandOrControl+O',
+    defaultKey: 'CommandOrControl+O',
+    label: '显示/隐藏悬浮窗',
+    category: '实时辅助',
+    status: 'available',
+  },
+  moveOverlayToMouse: {
+    action: 'moveOverlayToMouse',
+    key: 'CommandOrControl+M',
+    defaultKey: 'CommandOrControl+M',
+    label: '移动悬浮窗到鼠标位置',
     category: '实时辅助',
     status: 'available',
   },

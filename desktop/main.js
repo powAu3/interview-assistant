@@ -555,10 +555,9 @@ const shortcutCallbacks = {
   moveOverlayToMouse: () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
-    const [w, h] = overlayWindow.getSize();
     overlayWindow.setPosition(
-      Math.round(cursor.x - w / 2),
-      Math.round(cursor.y - h / 2),
+      Math.round(cursor.x + 16),
+      Math.round(cursor.y + 16),
     );
     const mode = overlayWindow._overlayMode || lastOverlayState.mode || 'panel';
     schedulePersistOverlayPosition(mode);

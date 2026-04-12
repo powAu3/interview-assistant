@@ -57,7 +57,7 @@ export default function GlobalShortcutsEditor() {
 
   if (!window.electronAPI?.getShortcuts) return null
 
-  const items: ShortcutAction[] = ['hideOrShowWindow', 'hardClearSession', 'askFromServerScreen']
+  const items: ShortcutAction[] = ['hideOrShowWindow', 'hardClearSession', 'askFromServerScreen', 'toggleInterviewOverlay', 'moveOverlayToMouse']
 
   const resetDefaults = async () => {
     if (!window.electronAPI?.resetShortcuts) return
