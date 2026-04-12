@@ -32,12 +32,6 @@ export default function App() {
   const [appMode, setAppMode] = useState<
     'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
   >('assist')
-  const [isElectronApp, setIsElectronApp] = useState(false)
-
-  useEffect(() => {
-    setIsElectronApp(typeof window !== 'undefined' && !!window.electronAPI)
-  }, [])
-
   const overlaySyncUntilRef = useRef(0)
 
   useEffect(() => {
@@ -73,7 +67,7 @@ export default function App() {
     const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
     if (overlayVisible) {
       window.electronAPI.hideWindow()
-    } else if (interviewOverlayEnabled && !isRecording) {
+    } else {
       window.electronAPI.showWindow?.()
     }
   }, [appMode, interviewOverlayEnabled, isRecording])

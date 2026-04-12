@@ -514,7 +514,10 @@ async def api_models_layout(body: dict):
     mp = body.get("max_parallel_answers")
     updates: dict = {"models": [m.model_dump() for m in models]}
     if mp is not None:
-        updates["max_parallel_answers"] = max(1, min(8, int(mp)))
+        try:
+            updates["max_parallel_answers"] = max(1, min(8, int(mp)))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="max_parallel_answers must be an integer")
     active = cfg.active_model
     client_active = body.get("active_model")
     # 前端在重排后传入新列表中的优先模型下标，避免同名同 endpoint 模型时 next() 匹配到错误项

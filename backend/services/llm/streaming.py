@@ -311,7 +311,7 @@ def chat_stream(
     full_messages.extend(clean_messages)
     models_to_try = [active_model]
     for i, m in enumerate(cfg.models):
-        if i != cfg.active_model and m.api_key and m.api_key not in ("", "sk-your-api-key-here"):
+        if i != cfg.active_model and m.enabled and m.api_key and m.api_key not in ("", "sk-your-api-key-here"):
             models_to_try.append(m)
 
     last_error = None

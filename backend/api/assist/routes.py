@@ -34,7 +34,11 @@ async def api_start(body: dict):
     if device_id is None:
         raise HTTPException(400, "\u8bf7\u9009\u62e9\u97f3\u9891\u8bbe\u5907")
     try:
-        start_nonblocking(int(device_id))
+        dev = int(device_id)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "device_id 必须是整数")
+    try:
+        start_nonblocking(dev)
         return {"ok": True}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -131,8 +135,13 @@ async def api_preflight_run(body: dict):
     from .sound_test import start_preflight
     scenario_id = body.get("scenario_id", "self_intro")
     device_id = body.get("device_id")
+    if device_id is not None:
+        try:
+            device_id = int(device_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "device_id 必须是整数")
     ok = start_preflight(
-        device_id=int(device_id) if device_id is not None else None,
+        device_id=device_id,
         scenario_id=scenario_id,
     )
     if not ok:

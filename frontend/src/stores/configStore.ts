@@ -518,7 +518,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
         ),
       }
     }),
-  cancelAnswer: (id) =>
+  cancelAnswer: (id) => {
+    _chunkBuffer.delete(id)
     set((s) => {
       const next = s.streamingIds.filter((x) => x !== id)
       return {
@@ -528,7 +529,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
           qa.id === id ? { ...qa, answer: '[已取消]', isThinking: false } : qa,
         ),
       }
-    }),
+    })
+  },
   setInitData: (data) =>
     set({
       transcriptions: data.transcriptions ?? [],
@@ -694,8 +696,11 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       interviewOverlayLyricWidth: readInterviewOverlayLyricWidth(),
       interviewOverlayLyricColor: readInterviewOverlayLyricColor(),
     }),
-  clearSession: () =>
-    set({ transcriptions: [], qaPairs: [], currentStreamingId: null, streamingIds: [], isPaused: false }),
+  clearSession: () => {
+    _chunkBuffer.clear()
+    if (_chunkFlushTimer !== null) { clearTimeout(_chunkFlushTimer); _chunkFlushTimer = null }
+    set({ transcriptions: [], qaPairs: [], currentStreamingId: null, streamingIds: [], isPaused: false })
+  },
   setModelHealth: (index, status) => set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
   setTokenUsage: (usage) =>
     set({

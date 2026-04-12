@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
   syncOverlayWindow: (payload) => ipcRenderer.invoke('sync-overlay-window', payload),
   moveOverlayWindow: (dx, dy) => ipcRenderer.invoke('move-overlay-window', dx, dy),
-  overlayDragStart: () => ipcRenderer.send('overlay-drag-start'),
+  overlayDragStart: () => ipcRenderer.sendSync('overlay-drag-start'),
   overlayDragEnd: () => ipcRenderer.send('overlay-drag-end'),
   getOverlayState: () => ipcRenderer.invoke('get-overlay-state'),
   onOverlayState: (listener) => {

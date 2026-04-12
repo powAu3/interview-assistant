@@ -52,6 +52,7 @@ let pythonProcess = null;
 let isQuitting = false;
 let shortcuts = {};
 let _overlayDragging = false;
+let _blurTimer = null;
 let overlayPositionSaveTimer = null;
 let lastOverlayState = {
   enabled: false,
@@ -345,11 +346,13 @@ function createOverlayWindow(mode = 'panel') {
     schedulePersistOverlayPosition(currentMode);
   });
   overlayWindow.on('focus', () => {
-    setTimeout(() => {
+    if (_blurTimer) clearTimeout(_blurTimer);
+    _blurTimer = setTimeout(() => {
+      _blurTimer = null;
       if (!_overlayDragging && overlayWindow && !overlayWindow.isDestroyed()) {
         overlayWindow.blur();
       }
-    }, 100);
+    }, 150);
   });
 
   return overlayWindow;
@@ -629,9 +632,14 @@ ipcMain.handle('move-overlay-window', (_event, dx, dy) => {
   const [x, y] = overlayWindow.getPosition();
   overlayWindow.setPosition(x + Math.round(dx), y + Math.round(dy));
 });
-ipcMain.on('overlay-drag-start', () => { _overlayDragging = true; });
+ipcMain.on('overlay-drag-start', (event) => {
+  _overlayDragging = true;
+  if (_blurTimer) { clearTimeout(_blurTimer); _blurTimer = null; }
+  event.returnValue = true;
+});
 ipcMain.on('overlay-drag-end', () => {
   _overlayDragging = false;
+  if (_blurTimer) { clearTimeout(_blurTimer); _blurTimer = null; }
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.blur();
 });
 

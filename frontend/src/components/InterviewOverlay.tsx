@@ -166,6 +166,11 @@ export default function InterviewOverlay() {
   const waitingHint = isRecording ? '等待识别到问题…' : '开始面试后会自动出现'
 
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => { dragCleanupRef.current?.() }
+  }, [])
 
   const onDragStart = useCallback((e: ReactMouseEvent) => {
     if ((e.target as HTMLElement).closest('.ia-overlay-content')) return
@@ -180,14 +185,16 @@ export default function InterviewOverlay() {
       dragOrigin.current = { x: ev.screenX, y: ev.screenY }
       window.electronAPI?.moveOverlayWindow?.(dx, dy)
     }
-    const onUp = () => {
+    const cleanup = () => {
       dragOrigin.current = null
+      dragCleanupRef.current = null
       window.electronAPI?.overlayDragEnd?.()
       window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('mouseup', cleanup)
     }
+    dragCleanupRef.current = cleanup
     window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mouseup', cleanup)
   }, [])
 
   const panelRef = useRef<HTMLDivElement>(null)
