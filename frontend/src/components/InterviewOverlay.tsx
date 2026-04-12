@@ -175,6 +175,7 @@ export default function InterviewOverlay() {
   const onDragStart = useCallback((e: ReactMouseEvent) => {
     if ((e.target as HTMLElement).closest('.ia-overlay-content')) return
     e.preventDefault()
+    dragCleanupRef.current?.()
     dragOrigin.current = { x: e.screenX, y: e.screenY }
     window.electronAPI?.overlayDragStart?.()
 
@@ -302,7 +303,7 @@ export default function InterviewOverlay() {
             }}
           >
             {isStreaming && <Loader2 className="inline w-3 h-3 mr-1 animate-spin align-[-2px] text-accent-green" />}
-            {answerText || (latestQa ? '正在组织回答…' : waitingHint)}
+            {answerText || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : waitingHint)}
           </div>
         </div>
       </div>

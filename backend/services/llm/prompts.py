@@ -254,7 +254,7 @@ def _written_exam_prompt_body(language: str, language_lower: str, screen_region:
         "编程题/算法题/SQL题:\n",
         "- 先在脑中用题目给出的示例(或自构的边界用例)走一遍逻辑, 确认无误后再输出代码;\n",
         "- 直接输出完整可运行代码, 不要思路分析、不要复杂度分析;\n",
-        "- 非SQL代码使用 ```%s, SQL使用 ```sql;\n" % language_lower,
+        "- 非SQL代码使用 ```%s 代码块, SQL使用 ```sql 代码块;\n" % language_lower,
         "- 代码必须完整可提交(含必要的import、类定义、函数签名);\n",
         "- 如果题目要求特定函数签名, 严格遵守;\n",
         "- 只在代码上方用1行注释写核心思路(如: // 双指针 O(n)), 不要多写;\n",

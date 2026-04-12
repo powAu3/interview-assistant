@@ -498,7 +498,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     _chunkBuffer.set(id, buf)
     _scheduleChunkFlush(set)
   },
-  finalizeAnswer: (id, question, answer, thinkContent, modelName) =>
+  finalizeAnswer: (id, question, answer, thinkContent, modelName) => {
+    _chunkBuffer.delete(id)
     set((s) => {
       const next = s.streamingIds.filter((x) => x !== id)
       return {
@@ -517,7 +518,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
             : qa,
         ),
       }
-    }),
+    })
+  },
   cancelAnswer: (id) => {
     _chunkBuffer.delete(id)
     set((s) => {

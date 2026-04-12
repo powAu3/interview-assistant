@@ -257,14 +257,6 @@ function createWindow() {
   mainWindow.on('close', () => {
     isQuitting = true;
   });
-
-  // Windows 下最小化也隐藏到托盘
-  if (process.platform === 'win32') {
-    mainWindow.on('minimize', (e) => {
-      e.preventDefault();
-      mainWindow.hide();
-    });
-  }
 }
 
 function applyOverlayPreset(mode = 'panel') {
@@ -340,6 +332,8 @@ function createOverlayWindow(mode = 'panel') {
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
+    _overlayDragging = false;
+    if (_blurTimer) { clearTimeout(_blurTimer); _blurTimer = null; }
   });
   overlayWindow.on('moved', () => {
     const currentMode = overlayWindow?._overlayMode || lastOverlayState.mode || 'panel';
@@ -557,6 +551,17 @@ const shortcutCallbacks = {
     applyOverlayPreset(nextState.mode);
     if (nextState.visible) showOverlayWindow();
     else if (win && !win.isDestroyed()) win.hide();
+  },
+  moveOverlayToMouse: () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const [w, h] = overlayWindow.getSize();
+    overlayWindow.setPosition(
+      Math.round(cursor.x - w / 2),
+      Math.round(cursor.y - h / 2),
+    );
+    const mode = overlayWindow._overlayMode || lastOverlayState.mode || 'panel';
+    schedulePersistOverlayPosition(mode);
   },
 };
 

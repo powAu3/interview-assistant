@@ -906,6 +906,7 @@ def _process_question_parallel(
 
     full_answer = ""
     full_think = ""
+    _exam_think_notified = False
     gen_start = time.monotonic()
     first_token_mono: Optional[float] = None
     try:
@@ -923,7 +924,12 @@ def _process_question_parallel(
                 first_token_mono = time.monotonic()
             if chunk_type == "think":
                 full_think += chunk_text
-                broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": chunk_text})
+                if prompt_mode == PROMPT_MODE_WRITTEN_EXAM:
+                    if not _exam_think_notified:
+                        _exam_think_notified = True
+                        broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": "思考中..."})
+                else:
+                    broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": chunk_text})
             else:
                 full_answer += chunk_text
                 broadcast({"type": "answer_chunk", "id": qa_id, "chunk": chunk_text})

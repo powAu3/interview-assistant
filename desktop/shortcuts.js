@@ -36,6 +36,13 @@ const DEFAULT_SHORTCUTS = {
     label: '显示/隐藏悬浮窗',
     category: '实时辅助',
   },
+  moveOverlayToMouse: {
+    action: 'moveOverlayToMouse',
+    key: 'CommandOrControl+M',
+    defaultKey: 'CommandOrControl+M',
+    label: '移动悬浮窗到鼠标位置',
+    category: '实时辅助',
+  },
 };
 
 const SUPPORTED_KEYS = new Set([
