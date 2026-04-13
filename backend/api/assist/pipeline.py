@@ -6,6 +6,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Tuple
 
+from core.background import BoundedTaskWorker
 from core.config import get_config
 from core.logger import get_interview_logger, get_logger
 from core.session import get_session, reset_session, conversation_lock
@@ -77,6 +78,7 @@ _asr_merge_mono_first: Optional[float] = None
 _asr_merge_mono_last: Optional[float] = None
 _pending_asr_group: Optional[PendingASRGroup] = None
 _recent_asr_turn_monos: list[float] = []
+_knowledge_worker: Optional[BoundedTaskWorker] = None
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +191,32 @@ def cancel_answer_work(reset_session_data: bool = False):
     _reset_answer_state()
     if reset_session_data:
         reset_session()
+
+
+def init_background_workers():
+    global _knowledge_worker
+    if _knowledge_worker is None:
+        _knowledge_worker = BoundedTaskWorker(
+            "assist.knowledge_worker",
+            _save_knowledge_record,
+            maxsize=64,
+        )
+    _knowledge_worker.start()
+
+
+def shutdown_background_workers():
+    global _knowledge_worker
+    if _knowledge_worker is None:
+        return
+    _knowledge_worker.stop()
+
+
+def _submit_knowledge_record(question: str, answer: str) -> bool:
+    worker = _knowledge_worker
+    if worker is None:
+        _save_knowledge_record(question, answer)
+        return True
+    return worker.submit(question, answer)
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +384,7 @@ def _max_parallel_slots() -> int:
     return max(1, min(cap, max(n_ok, 1)))
 
 
-def submit_answer_task(task: TaskPayload):
+def submit_answer_task(task: TaskPayload) -> bool:
     global _next_submit_seq
     if pick_model_index(task, set()) is None:
         broadcast(
@@ -365,13 +393,14 @@ def submit_answer_task(task: TaskPayload):
                 "message": "\u6ca1\u6709\u53ef\u7528\u7684\u7b54\u9898\u6a21\u578b\uff1a\u8bf7\u81f3\u5c11\u542f\u7528\u4e00\u4e2a\u5df2\u914d\u7f6e API Key \u7684\u6a21\u578b\uff08\u8bc6\u56fe\u9898\u9700\u8bc6\u56fe\u6a21\u578b\uff09\u3002",
             }
         )
-        return
+        return False
     with _dispatch_lock:
         seq = _next_submit_seq
         _next_submit_seq += 1
         tv = _task_session_version
         _pending.append((task, seq, tv))
     _try_dispatch()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -997,11 +1026,8 @@ def _process_question_parallel(
                     "by_model": stats.get("by_model", {}),
                 }
             )
-            threading.Thread(
-                target=_save_knowledge_record,
-                args=(question_text, full_answer),
-                daemon=True,
-            ).start()
+            if not _submit_knowledge_record(question_text, full_answer):
+                _elog.warning("KNOWLEDGE_ENQUEUE_DROP id=%s question=%r", qa_id, question_text[:80])
         except Exception:
             broadcast({"type": "answer_cancelled", "id": qa_id})
 
