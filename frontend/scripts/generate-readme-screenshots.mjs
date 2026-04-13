@@ -56,7 +56,7 @@ const SAMPLE_OPTIONS = {
   positions: ['后端开发工程师', '前端开发工程师', '全栈开发工程师', 'Java 工程师'],
   languages: ['中文', 'English'],
   practice_audiences: ['social', 'campus_intern'],
-  stt_providers: ['whisper', 'doubao'],
+  stt_providers: ['whisper', 'doubao', 'iflytek'],
   whisper_models: ['large-v3-turbo', 'medium', 'small'],
   screen_capture_regions: ['full', 'left_half', 'right_half', 'top_half', 'bottom_half'],
 }
@@ -319,6 +319,15 @@ function getApiPayload(url, method) {
   if (pathname === '/api/config' && method === 'POST') return SAMPLE_CONFIG
   if (pathname === '/api/options') return SAMPLE_OPTIONS
   if (pathname === '/api/devices') return SAMPLE_DEVICES
+  if (pathname === '/api/preflight/scenarios') {
+    return {
+      scenarios: [
+        { id: 'self_intro', label: '自我介绍', question: '请做一个 1 分钟自我介绍。', recommended: true },
+        { id: 'project', label: '项目追问', question: '说一个你最熟悉的项目。', recommended: false },
+      ],
+    }
+  }
+  if (pathname === '/api/preflight/run') return { ok: true }
   if (pathname === '/api/models/health' && method === 'POST') return { ok: true }
   if (pathname === '/api/models/health' && method === 'GET') {
     return { health: { 0: 'ok', 1: 'ok', 2: 'error' } }
@@ -533,34 +542,25 @@ async function preparePage(browser, baseUrl, scenario) {
 }
 
 async function captureAssist(page, outputPath) {
-  await page
-    .locator('p')
-    .filter({ hasText: 'Redis 持久化机制，以及 AOF 和 RDB 的取舍。' })
-    .first()
-    .waitFor({ timeout: 5000 })
+  await page.getByRole('heading', { name: '学习助手' }).waitFor({ timeout: 5000 })
   await page.screenshot({ path: outputPath })
 }
 
 async function capturePractice(page, outputPath) {
-  await page.getByRole('button', { name: '模拟练习' }).click()
-  const textarea = page.getByPlaceholder('输入你的回答... 也可以点击「语音回答」用麦克风')
-  await textarea.waitFor({ timeout: 5000 })
-  await textarea.fill('我会先把流量拆成接入层、库存层和异步链路三段，再说明 Redis 预扣减、数据库兜底和消息队列削峰。')
+  await page.getByRole('tab', { name: /模拟练习/i }).click()
+  await page.getByText('模拟面试练习').waitFor({ timeout: 5000 })
   await page.screenshot({ path: outputPath })
 }
 
 async function captureKnowledge(page, outputPath) {
-  await page.getByRole('button', { name: '能力分析' }).click()
+  await page.getByRole('tab', { name: /能力分析/i }).click()
   await page.getByText('薄弱点排名').waitFor({ timeout: 5000 })
   await page.screenshot({ path: outputPath })
 }
 
 async function captureResume(page, outputPath) {
-  await page.getByRole('button', { name: '简历优化' }).click()
-  const textarea = page.getByPlaceholder('将招聘 JD 粘贴到这里...')
-  await textarea.waitFor({ timeout: 5000 })
-  await textarea.fill('负责交易系统核心接口开发与性能优化，熟悉 Java / Spring Boot / MySQL / Redis / MQ，有高并发系统设计经验。')
-  await page.getByText('匹配度：82 / 100').waitFor({ timeout: 5000 })
+  await page.getByRole('tab', { name: /简历优化/i }).click()
+  await page.getByText('粘贴目标岗位 JD').waitFor({ timeout: 5000 })
   await page.screenshot({ path: outputPath })
 }
 

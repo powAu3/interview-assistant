@@ -69,5 +69,9 @@ temp/
 *.bak
 *.backup
 
+# Screenshots (generated, large binary)
+docs/screenshots/review/
+frontend/output/
+
 CODE_REVIEW.md
 .omx/
