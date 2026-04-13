@@ -99,7 +99,9 @@ async def api_ask(body: ManualQuestion):
         raise HTTPException(400, "\u95ee\u9898\u4e0d\u80fd\u4e3a\u7a7a")
     text = body.text.strip() or "\u8bf7\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u4e2d\u7684\u9898\u76ee\uff0c\u5e76\u7ed9\u51fa\u9762\u8bd5\u56de\u7b54"
     src = "manual_image" if body.image else "manual_text"
-    submit_answer_task((text, body.image, True, src, {"origin": "manual"}))
+    queued = submit_answer_task((text, body.image, True, src, {"origin": "manual"}))
+    if not queued:
+        raise HTTPException(503, "没有可用的答题模型，请先启用并配置至少一个模型")
     return {"ok": True}
 
 
@@ -120,7 +122,9 @@ async def api_ask_from_server_screen():
     if pick_model_index((text, data_url, True, "server_screen_left", {"origin": "server_screen"}), set()) is None:
         raise HTTPException(400, "\u6ca1\u6709\u53ef\u7528\u7684\u8bc6\u56fe\u6a21\u578b\uff0c\u8bf7\u68c0\u67e5\u542f\u7528\u72b6\u6001\u4e0e API Key")
     cancel_answer_work(reset_session_data=False)
-    submit_answer_task((text, data_url, True, "server_screen_left", {"origin": "server_screen"}))
+    queued = submit_answer_task((text, data_url, True, "server_screen_left", {"origin": "server_screen"}))
+    if not queued:
+        raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")
     return {"ok": True}
 
 

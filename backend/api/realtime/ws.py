@@ -15,12 +15,14 @@ router = APIRouter()
 ws_clients: set[WebSocket] = set()
 _loop: Optional[asyncio.AbstractEventLoop] = None
 _msg_queue: Optional[asyncio.Queue] = None
+_broadcast_drop_count = 0
 
 
 def init_broadcast(loop: asyncio.AbstractEventLoop, queue: asyncio.Queue):
-    global _loop, _msg_queue
+    global _loop, _msg_queue, _broadcast_drop_count
     _loop = loop
     _msg_queue = queue
+    _broadcast_drop_count = 0
 
 
 async def ws_dispatcher():
@@ -39,10 +41,23 @@ def broadcast(data: dict):
     """Thread-safe broadcast to all connected WebSocket clients."""
     if _loop is None or _msg_queue is None:
         return
+    _loop.call_soon_threadsafe(_enqueue_broadcast, data)
+
+
+def _enqueue_broadcast(data: dict):
+    global _broadcast_drop_count
+    if _msg_queue is None:
+        return
     try:
-        _loop.call_soon_threadsafe(_msg_queue.put_nowait, data)
+        _msg_queue.put_nowait(data)
     except asyncio.QueueFull:
-        pass
+        _broadcast_drop_count += 1
+        if _broadcast_drop_count == 1 or _broadcast_drop_count % 25 == 0:
+            _log.warning(
+                "WS broadcast queue full; dropped=%d type=%s",
+                _broadcast_drop_count,
+                data.get("type"),
+            )
 
 
 @router.websocket("/ws")

@@ -21,6 +21,15 @@ _log = get_logger("app.main")
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
 
+def _is_path_within_dir(base_dir: str, candidate_path: str) -> bool:
+    try:
+        base_abs = os.path.abspath(base_dir)
+        candidate_abs = os.path.abspath(candidate_path)
+        return os.path.commonpath([base_abs, candidate_abs]) == base_abs
+    except ValueError:
+        return False
+
+
 class _SuppressStealthScreenAccessLog(logging.Filter):
     """手机「左屏审题」请求不写 access 日志，减少终端刷新导致 macOS 把终端抢到前台。"""
 
@@ -50,10 +59,12 @@ async def lifespan(app: FastAPI):
     queue: asyncio.Queue = asyncio.Queue(maxsize=500)
     ws.init_broadcast(loop, queue)
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
+    assist.init_background_workers()
     threading.Thread(target=_preload_stt, daemon=True).start()
     yield
     _log.info("SHUTDOWN cleaning up")
     assist.stop_interview_loop()
+    assist.shutdown_background_workers()
     dispatch_task.cancel()
 
 
@@ -94,9 +105,8 @@ if os.path.isdir(FRONTEND_DIR):
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         # Prevent path traversal: resolve to realpath and ensure under FRONTEND_DIR
-        safe_dir = os.path.abspath(FRONTEND_DIR)
         file_path = os.path.abspath(os.path.join(FRONTEND_DIR, full_path))
-        if not file_path.startswith(safe_dir):
+        if not _is_path_within_dir(FRONTEND_DIR, file_path):
             return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
         if os.path.isfile(file_path):
             return FileResponse(file_path)

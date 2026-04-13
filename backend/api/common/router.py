@@ -307,7 +307,7 @@ async def api_upload_resume(file: UploadFile = File(...)):
         raise HTTPException(400, "未选择文件")
     content = await file.read()
     try:
-        return add_upload(content, file.filename)
+        return await run_in_threadpool(add_upload, content, file.filename)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
