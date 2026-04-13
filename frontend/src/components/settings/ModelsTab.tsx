@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useInterviewStore, type ModelFullInfo } from '@/stores/configStore'
 import { api } from '@/lib/api'
-import { Section, Field, GradientCard, StatusBadge } from './shared'
+import { Field, GradientCard, StatusBadge } from './shared'
 
 const EMPTY_MODEL: ModelFullInfo = {
   name: '',
@@ -33,19 +33,30 @@ const EMPTY_MODEL: ModelFullInfo = {
   has_key: false,
 }
 
+interface ModelRow {
+  id: string
+  originalIndex: number
+  model: ModelFullInfo
+}
+
+function toModelRow(model: ModelFullInfo, index: number): ModelRow {
+  return {
+    id: `${index}:${model.name}:${model.model}:${model.api_base_url}`,
+    originalIndex: index,
+    model,
+  }
+}
+
 export default function ModelsTab() {
   const { config, modelHealth } = useInterviewStore()
 
-  const [models, setModels] = useState<ModelFullInfo[]>([])
+  const [modelRows, setModelRows] = useState<ModelRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
   const [keyEdited, setKeyEdited] = useState<Record<number, boolean>>({})
   const [testingIdx, setTestingIdx] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, 'ok' | 'error' | 'checking'>>({})
-
-  const [order, setOrder] = useState<number[]>([])
-  const [enabledList, setEnabledList] = useState<boolean[]>([])
   const [maxP, setMaxP] = useState(2)
   const [laySaving, setLaySaving] = useState(false)
   const [healthChecking, setHealthChecking] = useState(false)
@@ -65,14 +76,16 @@ export default function ModelsTab() {
       Object.entries(health ?? {}).forEach(([k, v]) => {
         if (v === 'ok' || v === 'error' || v === 'checking') setH(Number(k), v)
       })
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [])
 
   const loadModels = useCallback(async () => {
     setLoading(true)
     try {
       const { models: full } = await api.getModelsFull()
-      setModels(full)
+      setModelRows(full.map(toModelRow))
       setKeyEdited({})
       setTestResults({})
       if (full.length === 0) setExpandedIdx(-1)
@@ -83,12 +96,12 @@ export default function ModelsTab() {
     }
   }, [])
 
-  useEffect(() => { void loadModels() }, [loadModels])
+  useEffect(() => {
+    void loadModels()
+  }, [loadModels])
 
   useEffect(() => {
     if (!config?.models?.length) return
-    setOrder(config.models.map((_, i) => i))
-    setEnabledList(config.models.map((m) => m.enabled !== false))
     setMaxP(Math.min(8, Math.max(1, config.max_parallel_answers ?? 2)))
     setLlmForm({
       temperature: config.temperature,
@@ -99,20 +112,29 @@ export default function ModelsTab() {
   }, [config, syncHealthFromServer])
 
   const updateModel = (idx: number, patch: Partial<ModelFullInfo>) => {
-    setModels((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)))
+    setModelRows((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, model: { ...row.model, ...patch } } : row)),
+    )
   }
 
   const addModel = () => {
-    setModels((prev) => [...prev, { ...EMPTY_MODEL }])
-    setExpandedIdx(models.length)
+    setModelRows((prev) => [
+      ...prev,
+      {
+        id: `new-${Date.now()}-${prev.length}`,
+        originalIndex: prev.length,
+        model: { ...EMPTY_MODEL },
+      },
+    ])
+    setExpandedIdx(modelRows.length)
   }
 
   const removeModel = (idx: number) => {
-    if (models.length <= 1) {
+    if (modelRows.length <= 1) {
       useInterviewStore.getState().setToastMessage('至少保留一个模型')
       return
     }
-    setModels((prev) => prev.filter((_, i) => i !== idx))
+    setModelRows((prev) => prev.filter((_, i) => i !== idx))
     setExpandedIdx(null)
     setKeyEdited((prev) => {
       const next: Record<number, boolean> = {}
@@ -125,29 +147,43 @@ export default function ModelsTab() {
     })
   }
 
-  const handleSaveModels = async () => {
-    const invalid = models.find((m) => !m.name.trim())
+  const buildModelPayload = () =>
+    modelRows.map(({ model: m }) => ({
+      name: m.name.trim(),
+      api_base_url: m.api_base_url.trim() || 'https://api.openai.com/v1',
+      api_key: m.api_key,
+      model: m.model.trim() || 'gpt-4o-mini',
+      supports_think: m.supports_think,
+      supports_vision: m.supports_vision,
+      enabled: m.enabled,
+    }))
+
+  const resolveActiveIndex = () => {
+    const activeOriginalIndex = config?.active_model ?? 0
+    const nextActiveIndex = modelRows.findIndex((row) => row.originalIndex === activeOriginalIndex)
+    return nextActiveIndex >= 0 ? nextActiveIndex : 0
+  }
+
+  const handleSaveModels = async (includeLayout: boolean = false) => {
+    const invalid = modelRows.find((row) => !row.model.name.trim())
     if (invalid) {
       useInterviewStore.getState().setToastMessage('模型名称不能为空')
-      return
+      return false
     }
     setSaving(true)
     try {
-      const payload = models.map((m) => ({
-        name: m.name.trim(),
-        api_base_url: m.api_base_url.trim() || 'https://api.openai.com/v1',
-        api_key: m.api_key,
-        model: m.model.trim() || 'gpt-4o-mini',
-        supports_think: m.supports_think,
-        supports_vision: m.supports_vision,
-        enabled: m.enabled,
-      }))
-      await api.updateConfig({ models: payload })
+      await api.updateConfig({
+        models: buildModelPayload(),
+        active_model: resolveActiveIndex(),
+        ...(includeLayout ? { max_parallel_answers: maxP } : {}),
+      })
       useInterviewStore.getState().setConfig(await api.getConfig())
-      useInterviewStore.getState().setToastMessage('模型配置已保存')
+      useInterviewStore.getState().setToastMessage(includeLayout ? '已保存排序与并行设置' : '模型配置已保存')
       await loadModels()
+      return true
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
+      return false
     } finally {
       setSaving(false)
     }
@@ -157,7 +193,11 @@ export default function ModelsTab() {
     setTestingIdx(idx)
     setTestResults((prev) => ({ ...prev, [idx]: 'checking' }))
     try {
-      await handleSaveModels()
+      const saved = await handleSaveModels()
+      if (!saved) {
+        setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
+        return
+      }
       await api.checkSingleModelHealth(idx)
       const deadline = Date.now() + 20000
       while (Date.now() < deadline) {
@@ -179,9 +219,11 @@ export default function ModelsTab() {
 
   const runHealthCheck = async () => {
     setHealthChecking(true)
-    const n = config?.models?.length ?? 0
-    for (let i = 0; i < n; i++) useInterviewStore.getState().setModelHealth(i, 'checking')
     try {
+      const saved = await handleSaveModels()
+      if (!saved) return
+      const n = useInterviewStore.getState().config?.models?.length ?? 0
+      for (let i = 0; i < n; i++) useInterviewStore.getState().setModelHealth(i, 'checking')
       await api.checkModelsHealth()
       const deadline = Date.now() + 25000
       while (Date.now() < deadline) {
@@ -200,33 +242,34 @@ export default function ModelsTab() {
   }
 
   const saveLayout = async () => {
-    if (!config?.models?.length) return
+    if (!modelRows.length) return
     setLaySaving(true)
     try {
-      const prevActive = config.active_model ?? 0
-      const newActive = Math.max(0, order.indexOf(prevActive))
-      await api.modelsLayout({
-        order,
-        enabled: order.map((i) => enabledList[i] ?? true),
-        max_parallel_answers: maxP,
-        active_model: newActive,
-      })
-      useInterviewStore.getState().setConfig(await api.getConfig())
-      useInterviewStore.getState().setToastMessage('已保存排序与并行设置')
-      await syncHealthFromServer()
-    } catch (e: any) {
-      useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
+      const saved = await handleSaveModels(true)
+      if (saved) await syncHealthFromServer()
     } finally {
       setLaySaving(false)
     }
   }
 
-  const moveToTop = (j: number) => {
-    if (j <= 0) return
-    setOrder((o) => { const x = o[j]; return [x, ...o.filter((_, i) => i !== j)] })
+  const moveToTop = (idx: number) => {
+    if (idx <= 0) return
+    setModelRows((rows) => {
+      const next = [...rows]
+      const [item] = next.splice(idx, 1)
+      next.unshift(item)
+      return next
+    })
   }
-  const moveToBottom = (j: number) => {
-    setOrder((o) => { if (j >= o.length - 1) return o; const x = o[j]; return [...o.filter((_, i) => i !== j), x] })
+
+  const moveToBottom = (idx: number) => {
+    setModelRows((rows) => {
+      if (idx >= rows.length - 1) return rows
+      const next = [...rows]
+      const [item] = next.splice(idx, 1)
+      next.push(item)
+      return next
+    })
   }
 
   const onDragStart = (e: React.DragEvent, listIndex: number) => {
@@ -240,7 +283,12 @@ export default function ModelsTab() {
     const from = parseInt(e.dataTransfer.getData('text/plain'), 10)
     setDragFrom(null)
     if (Number.isNaN(from) || from === dropIndex) return
-    setOrder((o) => { const next = [...o]; const [item] = next.splice(from, 1); next.splice(dropIndex, 0, item); return next })
+    setModelRows((rows) => {
+      const next = [...rows]
+      const [item] = next.splice(from, 1)
+      next.splice(dropIndex, 0, item)
+      return next
+    })
   }
 
   const handleSaveLlm = async () => {
@@ -260,12 +308,11 @@ export default function ModelsTab() {
     return <div className="flex items-center justify-center py-12 text-text-muted text-sm">加载中…</div>
   }
 
-  const nModels = config?.models?.length ?? 0
+  const nModels = modelRows.length
   const parallelOptions = Array.from({ length: Math.min(8, Math.max(nModels, 1)) }, (_, i) => i + 1)
 
   return (
     <div className="p-5 space-y-5 pb-8">
-      {/* === Part 1: Model CRUD === */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
@@ -281,7 +328,7 @@ export default function ModelsTab() {
         </button>
       </div>
 
-      {models.length === 0 && (
+      {modelRows.length === 0 && (
         <div className="rounded-xl border-2 border-dashed border-accent-amber/40 bg-accent-amber/5 p-6 text-center space-y-3">
           <Cpu className="w-8 h-8 text-accent-amber mx-auto" />
           <p className="text-sm text-text-primary font-medium">尚未配置任何模型</p>
@@ -290,7 +337,7 @@ export default function ModelsTab() {
       )}
 
       <div className="space-y-2">
-        {models.map((m, idx) => {
+        {modelRows.map(({ model: m }, idx) => {
           const isExpanded = expandedIdx === idx
           const keyHasValue = m.has_key && !keyEdited[idx]
           const keyNewlyFilled = keyEdited[idx] && m.api_key.trim().length > 0
@@ -299,7 +346,7 @@ export default function ModelsTab() {
           const tr = testResults[idx]
 
           return (
-            <GradientCard key={idx} className={`transition-all duration-200 ${isExpanded ? 'ring-1 ring-accent-blue/30' : ''}`}>
+            <GradientCard key={m.name + idx} className={`transition-all duration-200 ${isExpanded ? 'ring-1 ring-accent-blue/30' : ''}`}>
               <button
                 type="button"
                 className="w-full flex items-center gap-3 px-4 py-3 text-left"
@@ -330,7 +377,6 @@ export default function ModelsTab() {
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-text-muted flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0" />}
               </button>
 
-              {/* Animated expand */}
               <div className={`grid transition-all duration-200 ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
                 <div className="overflow-hidden">
                   <div className="px-4 pb-4 space-y-3 border-t border-bg-hover/50 pt-3">
@@ -347,14 +393,16 @@ export default function ModelsTab() {
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-text-secondary">API Key</label>
-                      <input type="password"
+                      <input
+                        type="password"
                         value={keyEdited[idx] ? m.api_key : ''}
                         onChange={(e) => {
                           setKeyEdited((prev) => ({ ...prev, [idx]: true }))
                           updateModel(idx, { api_key: e.target.value })
                         }}
                         placeholder={m.has_key ? '已配置（输入新值覆盖）' : '填入你的 API Key'}
-                        className="input-field" />
+                        className="input-field"
+                      />
                       {m.has_key && !keyEdited[idx] && (
                         <p className="text-[10px] text-emerald-400 flex items-center gap-1">
                           <Check className="w-3 h-3" />
@@ -395,7 +443,7 @@ export default function ModelsTab() {
                         {testingIdx === idx ? '测试中…' : '测试连接'}
                       </button>
                       {tr && <StatusBadge status={tr} label={tr === 'ok' ? '可用' : tr === 'checking' ? '检测中…' : '不可用'} />}
-                      <button type="button" onClick={() => removeModel(idx)} disabled={models.length <= 1}
+                      <button type="button" onClick={() => removeModel(idx)} disabled={modelRows.length <= 1}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-accent-red hover:bg-accent-red/10 transition-colors disabled:opacity-30 disabled:pointer-events-none">
                         <Trash2 className="w-3.5 h-3.5" />
                         删除
@@ -409,16 +457,15 @@ export default function ModelsTab() {
         })}
       </div>
 
-      {models.length > 0 && (
-        <button type="button" onClick={handleSaveModels} disabled={saving}
+      {modelRows.length > 0 && (
+        <button type="button" onClick={() => void handleSaveModels()} disabled={saving}
           className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50">
           <Save className="w-4 h-4" />
           {saving ? '保存中…' : '保存模型列表'}
         </button>
       )}
 
-      {/* === Part 2: Order / Parallel / Health === */}
-      {config?.models && config.models.length > 0 && (
+      {modelRows.length > 0 && (
         <GradientCard className="overflow-hidden">
           <div className="px-4 py-3 border-b border-bg-hover/60 flex items-start justify-between gap-3">
             <div>
@@ -436,15 +483,14 @@ export default function ModelsTab() {
           </div>
 
           <div className="p-3 space-y-2">
-            {order.map((origIdx, j) => {
-              const m = config.models![origIdx]
-              if (!m) return null
-              const st = modelHealth[origIdx]
+            {modelRows.map((row, j) => {
+              const m = row.model
+              const st = modelHealth[row.originalIndex]
               const err = st === 'error'
               const ok = st === 'ok'
-              const on = enabledList[origIdx] !== false
+              const on = m.enabled !== false
               return (
-                <div key={`${origIdx}-${j}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, j)}
+                <div key={row.id} onDragOver={onDragOver} onDrop={(e) => onDrop(e, j)}
                   className={`group flex items-stretch gap-2 rounded-xl border transition-all duration-150 ${
                     dragFrom === j ? 'border-accent-blue/50 bg-accent-blue/5 scale-[1.02]' : 'border-bg-hover/70 bg-bg-primary/40 hover:border-bg-hover'
                   } ${!on ? 'opacity-55' : ''}`}>
@@ -464,7 +510,7 @@ export default function ModelsTab() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <button type="button" role="switch" aria-checked={on}
-                        onClick={() => setEnabledList((prev) => { const n = [...prev]; n[origIdx] = !n[origIdx]; return n })}
+                        onClick={() => updateModel(j, { enabled: !on })}
                         className={`relative h-6 w-10 rounded-full transition-colors ${on ? 'bg-accent-green/80' : 'bg-bg-hover'}`}>
                         <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
                       </button>
@@ -480,7 +526,7 @@ export default function ModelsTab() {
                       className="p-1.5 rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary disabled:opacity-25 disabled:pointer-events-none" title="置顶">
                       <ArrowUpToLine className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => moveToBottom(j)} disabled={j >= order.length - 1}
+                    <button type="button" onClick={() => moveToBottom(j)} disabled={j >= modelRows.length - 1}
                       className="p-1.5 rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary disabled:opacity-25 disabled:pointer-events-none" title="置底">
                       <ArrowDownToLine className="w-4 h-4" />
                     </button>
@@ -515,7 +561,6 @@ export default function ModelsTab() {
         </GradientCard>
       )}
 
-      {/* === Part 3: LLM Params === */}
       <GradientCard className="p-4 space-y-3">
         <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
           <Sparkles className="w-4 h-4 text-accent-blue" />

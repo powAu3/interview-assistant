@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { Loader2, Mic } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { applyStoredColorSchemeToDocument, COLOR_SCHEME_STORAGE_KEY } from '@/lib/colorScheme'
 import {
@@ -8,7 +8,7 @@ import {
 } from '@/lib/interviewOverlay'
 import { useInterviewStore } from '@/stores/configStore'
 
-function compactAnswerText(text: string): string {
+function compactAnswerText(text: string) {
   return text
     .replace(/```[\s\S]*?```/g, ' 代码片段 ')
     .replace(/`([^`]+)`/g, '$1')
@@ -21,7 +21,6 @@ function compactAnswerText(text: string): string {
 function splitLyricLines(text: string, maxLines: number): string[] {
   const normalized = compactAnswerText(text)
   if (!normalized) return []
-
   const segments = normalized
     .split(/\n+|(?<=[。！？；;!?])\s*|(?<=[，、,:：])\s*/)
     .map((part) => part.trim())
@@ -30,9 +29,7 @@ function splitLyricLines(text: string, maxLines: number): string[] {
   const lines = (segments.length > 0 ? segments : [normalized]).flatMap((segment) => {
     if (segment.length <= 28) return [segment]
     const chunks: string[] = []
-    for (let i = 0; i < segment.length; i += 28) {
-      chunks.push(segment.slice(i, i + 28))
-    }
+    for (let i = 0; i < segment.length; i += 28) chunks.push(segment.slice(i, i + 28))
     return chunks
   })
 
@@ -81,8 +78,14 @@ export default function InterviewOverlay() {
     }
     return qaPairs[qaPairs.length - 1] ?? null
   }, [qaPairs, streamingIds])
+
+  const waitingHint = isRecording ? '等待识别到问题…' : '开始面试后会自动出现'
+  const questionText = latestQa?.question?.trim() || waitingHint
+  const answerText =
+    latestQa?.answer === '[已取消]'
+      ? '上一条回答已取消'
+      : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : waitingHint)
   const isStreaming = latestQa ? streamingIds.includes(latestQa.id) : false
-  const answerText = latestQa?.answer === '[已取消]' ? '上一条回答已取消' : latestQa?.answer?.trim() || ''
   const lyricLines = useMemo(
     () => splitLyricLines(answerText, interviewOverlayLyricLines),
     [answerText, interviewOverlayLyricLines],
@@ -163,13 +166,11 @@ export default function InterviewOverlay() {
     syncInterviewOverlayPrefs,
   ])
 
-  const waitingHint = isRecording ? '等待识别到问题…' : '开始面试后会自动出现'
-
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    return () => { dragCleanupRef.current?.() }
+    return () => dragCleanupRef.current?.()
   }, [])
 
   const onDragStart = useCallback((e: ReactMouseEvent) => {
@@ -193,55 +194,35 @@ export default function InterviewOverlay() {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', cleanup)
     }
+
     dragCleanupRef.current = cleanup
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', cleanup)
   }, [])
-
-  const panelRef = useRef<HTMLDivElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const handlePanelResize = useCallback(() => {
-    const el = panelRef.current
-    if (!el) return
-    const w = el.offsetWidth
-    if (w !== interviewOverlayPanelWidth) setInterviewOverlayPanelWidth(w)
-  }, [interviewOverlayPanelWidth, setInterviewOverlayPanelWidth])
-
-  useEffect(() => {
-    const el = panelRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => handlePanelResize())
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [handlePanelResize])
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [answerText])
 
   if (!interviewOverlayEnabled) {
     return <div className="h-screen w-screen bg-transparent" />
   }
 
   if (interviewOverlayMode === 'lyrics') {
-    const dimColor = interviewOverlayLyricColor + '99'
-    const hasContent = lyricLines.length > 0
+    const secondaryColor = `${interviewOverlayLyricColor}99`
     return (
       <div className="h-screen w-screen bg-transparent flex items-start justify-center ia-overlay-drag" style={{ padding: 0 }} onMouseDown={onDragStart}>
-        {hasContent ? (
-          <div style={{ maxWidth: `${interviewOverlayLyricWidth}px`, opacity: interviewOverlayOpacity, width: '100%' }}>
-            {lyricLines.map((line, index) => (
+        <div
+          className="w-full px-4 py-1.5"
+          style={{ maxWidth: `${interviewOverlayLyricWidth}px`, opacity: interviewOverlayOpacity }}
+        >
+          {lyricLines.length > 0 ? (
+            lyricLines.map((line, index) => (
               <p
                 key={`${index}-${line}`}
                 style={{
                   margin: 0,
-                  padding: 0,
                   fontWeight: 600,
                   letterSpacing: '0.01em',
                   fontSize: `${interviewOverlayLyricFontSize}px`,
-                  lineHeight: 1.32,
-                  color: index === lyricLines.length - 1 ? interviewOverlayLyricColor : dimColor,
+                  lineHeight: 1.26,
+                  color: index === lyricLines.length - 1 ? interviewOverlayLyricColor : secondaryColor,
                   textShadow: '0 1px 4px rgba(0,0,0,0.7)',
                 }}
               >
@@ -250,60 +231,56 @@ export default function InterviewOverlay() {
                   <span className="inline-block w-2 h-2 ml-2 rounded-full bg-accent-green animate-pulse align-middle" />
                 ) : null}
               </p>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: dimColor, fontSize: '13px', margin: 0, opacity: interviewOverlayOpacity }}>
-            {isRecording ? '等待识别到问题…' : '开始面试后自动显示'}
-          </p>
-        )}
+            ))
+          ) : (
+            <p style={{ color: secondaryColor, fontSize: '13px', margin: 0 }}>
+              {waitingHint}
+            </p>
+          )}
+        </div>
       </div>
     )
   }
 
-  const panelShellClass = interviewOverlayPanelShowBg
-    ? 'ia-overlay-shell rounded-xl ia-overlay-resize'
-    : 'ia-overlay-resize'
+  const shellClassName = interviewOverlayPanelShowBg
+    ? 'ia-overlay-shell rounded-xl'
+    : 'rounded-xl border border-white/10 bg-black/10 backdrop-blur-[6px]'
 
   return (
-    <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 0 }} onMouseDown={onDragStart}>
+    <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 12 }} onMouseDown={onDragStart}>
       <div
-        ref={panelRef}
-        className={panelShellClass}
-        style={{
+          className={shellClassName}
+          style={{
           opacity: interviewOverlayOpacity,
           width: `${interviewOverlayPanelWidth}px`,
           height: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : undefined,
-          fontSize: `${interviewOverlayPanelFontSize}px`,
           color: interviewOverlayPanelFontColor,
-          minWidth: '180px',
+          minWidth: '220px',
           maxWidth: '100vw',
         }}
       >
+        <div className="ia-overlay-header flex items-center gap-1.5 px-2.5 py-1 text-[8px] uppercase tracking-[0.12em] text-text-muted/55">
+          <span>overlay</span>
+          {isStreaming ? <Loader2 className="ml-auto w-3 h-3 animate-spin text-accent-green" /> : null}
+        </div>
         <div
-          ref={scrollRef}
-          className="px-3 py-2 space-y-1 leading-relaxed ia-overlay-content"
-          style={{ overflowY: 'auto', maxHeight: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : '100vh' }}
+          className="ia-overlay-content px-2.5 py-2 space-y-2"
+          style={{
+            fontSize: `${interviewOverlayPanelFontSize}px`,
+            overflowY: 'auto',
+            maxHeight: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight - 36}px` : '100vh',
+          }}
         >
-          <div
-            className="truncate"
-            style={{
-              fontSize: `${Math.max(8, interviewOverlayPanelFontSize - 2)}px`,
-              opacity: 0.7,
-              textShadow: interviewOverlayPanelShowBg ? undefined : '0 1px 3px rgba(0,0,0,0.6)',
-            }}
-          >
-            <Mic className="inline w-3 h-3 mr-1 align-[-2px]" />
-            {latestQa?.question?.trim() || waitingHint}
+          <div className="rounded-md border border-bg-hover/12 bg-bg-primary/8 px-2.5 py-1.5 leading-relaxed">
+            <span className="mr-1.5 text-[10px] font-medium text-text-muted/60">问题：</span>
+            <span style={{ fontSize: `${Math.max(interviewOverlayPanelFontSize - 1, 11)}px` }}>{questionText}</span>
           </div>
           <div
-            className="whitespace-pre-wrap break-words"
-            style={{
-              textShadow: interviewOverlayPanelShowBg ? undefined : '0 1px 4px rgba(0,0,0,0.7)',
-            }}
+            className="rounded-md border border-bg-hover/12 bg-bg-primary/8 px-2.5 py-1.75 leading-relaxed whitespace-pre-wrap break-words"
+            style={{ fontSize: `${Math.max(interviewOverlayPanelFontSize + 1, 13)}px`, lineHeight: 1.5 }}
           >
-            {isStreaming && <Loader2 className="inline w-3 h-3 mr-1 animate-spin align-[-2px] text-accent-green" />}
-            {answerText || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : waitingHint)}
+            <span className="mr-1.5 text-[10px] font-medium text-text-muted/60">回答：</span>
+            {answerText}
           </div>
         </div>
       </div>

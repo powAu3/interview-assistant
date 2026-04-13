@@ -227,18 +227,6 @@ export default function App() {
     }
   }
 
-  if (initError) {
-    return (
-      <div className="h-full flex items-center justify-center bg-bg-primary">
-        <div className="text-center space-y-3 p-8">
-          <p className="text-accent-red text-sm">连接后端失败</p>
-          <p className="text-text-muted text-xs">{initError}</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-accent-blue text-white text-xs rounded-lg">重试</button>
-        </div>
-      </div>
-    )
-  }
-
   const options = useInterviewStore((s) => s.options)
   const activeModel = config?.models?.[config.active_model]
   const modelHealth = useInterviewStore((s) => s.modelHealth)
@@ -274,6 +262,18 @@ export default function App() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  if (initError) {
+    return (
+      <div className="h-full flex items-center justify-center bg-bg-primary">
+        <div className="text-center space-y-3 p-8">
+          <p className="text-accent-red text-sm">连接后端失败</p>
+          <p className="text-text-muted text-xs">{initError}</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-accent-blue text-white text-xs rounded-lg">重试</button>
+        </div>
+      </div>
+    )
+  }
 
   const healthDot = (idx: number) => {
     const status = modelHealth[idx]

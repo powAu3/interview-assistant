@@ -87,6 +87,8 @@ export default function ControlBar() {
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const hasLoopback = devices.some((d) => d.is_loopback)
+  const activeModel = config?.models?.[config.active_model]
+  const activeModelSupportsVision = activeModel?.supports_vision ?? false
 
   useEffect(() => {
     if (devices.length === 0) {
@@ -167,6 +169,10 @@ export default function ControlBar() {
 
   const handleAsk = async () => {
     if (!manualQuestion.trim() && !pastedImage) return
+    if (pastedImage && !activeModelSupportsVision) {
+      setError(`当前模型「${activeModel?.name ?? '未命名模型'}」不支持图片识别，请切换到带 👁 标记的模型后再发送截图`)
+      return
+    }
     try {
       await api.ask(manualQuestion.trim(), pastedImage || undefined)
       setManualQuestion('')
@@ -255,15 +261,13 @@ export default function ControlBar() {
 
       {/* Image preview */}
       {pastedImage && (() => {
-        const activeModel = config?.models?.[config.active_model]
-        const supportsVision = activeModel?.supports_vision ?? false
         return (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-bg-tertiary/50 rounded-lg">
             <img src={pastedImage} alt="screenshot" className="h-12 max-w-[200px] rounded object-contain border border-bg-hover" />
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-text-muted">已粘贴截图</span>
-              {!supportsVision && (
-                <span className="text-[10px] text-accent-amber">当前模型不支持图片，将仅发送文字</span>
+              {!activeModelSupportsVision && (
+                <span className="text-[10px] text-accent-amber">当前模型不支持图片，请切换到带 👁 标记的模型后再发送</span>
               )}
             </div>
             <button onClick={() => setPastedImage(null)} className="text-text-muted hover:text-accent-red ml-auto">
