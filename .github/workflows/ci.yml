@@ -27,17 +27,19 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
+      - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          # sounddevice / faster-whisper / mss need system audio/display libs;
-          # skip them in CI — they are runtime-only and not needed for unit tests.
-          grep -vE '^(sounddevice|faster-whisper|mss|pymupdf)' requirements.txt > requirements-ci.txt
+          # faster-whisper needs large model downloads; skip in CI.
+          grep -vE '^faster-whisper' requirements.txt > requirements-ci.txt
           pip install -r requirements-ci.txt
           pip install pytest httpx
 
       - name: Lint — syntax check
-        run: python -m py_compile main.py
+        run: python -m py_compile main.py api/assist/pipeline.py api/common/router.py
 
       - name: Run unit tests
         run: |
