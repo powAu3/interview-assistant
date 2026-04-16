@@ -43,7 +43,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          python -m pytest tests/test_api_contracts.py tests/test_wave1_backend_concurrency.py -q --tb=short
+          python -m pytest tests/test_api_contracts.py tests/test_wave1_backend_concurrency.py tests/test_session_integration.py tests/test_assist_asr_interrupt.py tests/test_preflight_real_audio.py -q --tb=short
 
   # ── Frontend ─────────────────────────────────────────────
   frontend:

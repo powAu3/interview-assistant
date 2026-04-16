@@ -90,6 +90,7 @@ export const api = {
   preflightScenarios: () => request<{ scenarios: { id: string; label: string; question: string; recommended: boolean }[] }>('/api/preflight/scenarios'),
   preflightRun: (scenario_id: string, device_id?: number | null) =>
     request('/api/preflight/run', { method: 'POST', body: JSON.stringify({ scenario_id, device_id: device_id ?? undefined }) }),
+  preflightStatus: () => request('/api/preflight/status'),
   /** 服务端截取本机主屏左半幅 + VL 写码（手机端用，不经过手机截图 API） */
   askFromServerScreen: () =>
     request('/api/ask-from-server-screen', { method: 'POST', body: '{}' }),

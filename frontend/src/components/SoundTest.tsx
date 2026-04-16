@@ -25,6 +25,8 @@ interface StepState {
   detail: string
   answer?: string
   question?: string
+  transcript?: string
+  expected_phrase?: string
 }
 
 interface Scenario {
@@ -35,10 +37,12 @@ interface Scenario {
 }
 
 const STEP_META: { key: string; label: string; icon: typeof Mic }[] = [
-  { key: 'audio', label: '\u97F3\u9891\u8BBE\u5907', icon: AudioWaveform },
-  { key: 'stt', label: '\u8BED\u97F3\u8BC6\u522B', icon: Mic },
-  { key: 'llm', label: 'LLM \u6A21\u578B', icon: Brain },
-  { key: 'ws', label: '\u5B9E\u65F6\u63A8\u9001', icon: Wifi },
+  { key: 'playback', label: '播放测试音频', icon: AudioWaveform },
+  { key: 'capture', label: '捕获输入音频', icon: Mic },
+  { key: 'stt', label: '语音识别', icon: Mic },
+  { key: 'match', label: '短句匹配', icon: CheckCircle2 },
+  { key: 'llm', label: 'LLM 模型', icon: Brain },
+  { key: 'ws', label: '实时推送', icon: Wifi },
 ]
 
 function StatusIcon({ status }: { status: StepStatus }) {
@@ -103,10 +107,22 @@ export default function SoundTest() {
     try {
       const msg = JSON.parse(event.data)
       if (msg.type !== 'preflight_step') return
-      const { step, status, detail, answer, question } = msg
+      const { step, status, detail, answer, question, transcript, expected_phrase } = msg
       if (step === 'done') {
         setDone(true)
         setRunning(false)
+        void api.preflightStatus().then((status) => {
+          if (status?.captured_transcript || status?.expected_phrase) {
+            setSteps((prev) => ({
+              ...prev,
+              match: {
+                ...(prev.match ?? { status: 'idle', detail: '' }),
+                transcript: status.captured_transcript ?? prev.match?.transcript,
+                expected_phrase: status.expected_phrase ?? prev.match?.expected_phrase,
+              },
+            }))
+          }
+        }).catch(() => {})
         return
       }
       if (step === 'error') {
@@ -116,7 +132,7 @@ export default function SoundTest() {
       }
       setSteps((prev) => ({
         ...prev,
-        [step]: { status, detail, answer, question },
+        [step]: { status, detail, answer, question, transcript, expected_phrase },
       }))
     } catch {}
   }, [])
@@ -158,6 +174,8 @@ export default function SoundTest() {
 
   const llmAnswer = steps['llm']?.answer
   const llmQuestion = steps['llm']?.question
+  const transcript = steps['match']?.transcript ?? steps['stt']?.transcript
+  const expectedPhrase = steps['match']?.expected_phrase
   const selected = scenarios.find((s) => s.id === selectedScenario)
 
   const hasAnyResult = Object.keys(steps).length > 0
@@ -174,7 +192,7 @@ export default function SoundTest() {
             <Sparkles className="w-3 h-3 text-accent-amber/80" />
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
-            {'\u5F00\u59CB\u9762\u8BD5\u524D\uFF0C\u68C0\u67E5\u97F3\u9891 \u2192 STT \u2192 LLM \u2192 \u5B9E\u65F6\u63A8\u9001\u662F\u5426\u7545\u901A'}
+            {'开始面试前，播放固定测试短句并检查 播放 → 捕获 → STT → LLM → 实时推送 是否畅通'}
           </p>
         </div>
       </div>
@@ -190,7 +208,7 @@ export default function SoundTest() {
           >
             <span className="flex items-center gap-1.5 truncate">
               {selected?.recommended && <Star className="w-3 h-3 text-accent-amber fill-accent-amber" />}
-              {selected?.label ?? '\u9009\u62E9\u6D4B\u8BD5\u573A\u666F'}
+              {selected?.label ?? '选择 LLM 检测场景'}
             </span>
             <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
@@ -284,6 +302,19 @@ export default function SoundTest() {
         })}
       </div>
 
+      {expectedPhrase && (
+        <div className="mt-3 rounded-xl border border-accent-blue/20 bg-accent-blue/5 p-3 animate-fade-up space-y-1">
+          <p className="text-[10px] font-semibold text-accent-blue">固定测试短句</p>
+          <p className="text-xs text-text-primary leading-relaxed">{expectedPhrase}</p>
+          {transcript && (
+            <>
+              <p className="text-[10px] font-semibold text-text-muted pt-1">识别结果</p>
+              <p className="text-xs text-text-primary leading-relaxed">{transcript}</p>
+            </>
+          )}
+        </div>
+      )}
+
       {/* LLM answer preview */}
       {llmAnswer && (
         <div className="mt-3 rounded-xl border border-accent-green/20 bg-accent-green/5 p-3 animate-fade-up">
@@ -323,8 +354,9 @@ export default function SoundTest() {
 
       {/* Model info hint */}
       {!hasAnyResult && config && (
-        <div className="mt-3 flex items-center gap-2 text-[10px] text-text-muted/70 px-1">
-          <span>{'\u5F53\u524D: '}{config.stt_provider} + {config.models?.[config.active_model]?.name ?? 'N/A'}</span>
+        <div className="mt-3 space-y-1 text-[10px] text-text-muted/70 px-1">
+          <div>{'当前: '}{config.stt_provider} + {config.models?.[config.active_model]?.name ?? 'N/A'}</div>
+          <div>{selectedDevice != null && devices.find((d) => d.id === selectedDevice)?.is_loopback ? '推荐使用系统音频设备进行真实链路检测' : '当前将使用默认设备进行真实链路检测'}</div>
         </div>
       )}
     </div>

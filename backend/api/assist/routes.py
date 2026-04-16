@@ -149,8 +149,14 @@ async def api_preflight_run(body: dict):
         scenario_id=scenario_id,
     )
     if not ok:
-        raise HTTPException(409, "\u94FE\u8DEF\u68C0\u6D4B\u5DF2\u5728\u8FD0\u884C\u4E2D")
+        raise HTTPException(409, "链路检测已在运行中")
     return {"ok": True}
+
+
+@router.get("/preflight/status")
+async def api_preflight_status():
+    from .sound_test import get_preflight_status
+    return get_preflight_status()
 
 
 @router.get("/session")

@@ -13,6 +13,8 @@ import threading
 import platform
 import queue
 import time
+import wave
+from pathlib import Path
 from typing import Callable, Optional
 
 import sounddevice as sd
@@ -440,3 +442,23 @@ class VADBuffer:
 
 
 audio_capture = AudioCapture()
+
+
+def load_wav_file(path: str | Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), 'rb') as wf:
+        sr = wf.getframerate()
+        channels = wf.getnchannels()
+        width = wf.getsampwidth()
+        frames = wf.readframes(wf.getnframes())
+    if width != 2:
+        raise RuntimeError('仅支持 16-bit PCM WAV 测试音频')
+    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    if channels > 1:
+        audio = audio.reshape(-1, channels).mean(axis=1)
+    return audio.astype(np.float32), sr
+
+
+def play_audio_file(path: str | Path):
+    audio, sr = load_wav_file(path)
+    sd.play(audio, sr)
+    sd.wait()
