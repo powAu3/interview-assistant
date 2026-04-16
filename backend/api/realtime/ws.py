@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from core.session import get_session
+from core.session import snapshot_session
 from services.stt import get_stt_engine
 
 _log = logging.getLogger("ws")
@@ -66,25 +66,15 @@ async def websocket_endpoint(ws: WebSocket):
     ws_clients.add(ws)
     _log.info("WS connect clients=%d", len(ws_clients))
     try:
-        session = get_session()
+        snapshot = snapshot_session()
         engine = get_stt_engine()
         await ws.send_json({
             "type": "init",
-            "is_recording": session.is_recording,
-            "is_paused": session.is_paused,
+            "is_recording": snapshot["is_recording"],
+            "is_paused": snapshot["is_paused"],
             "stt_loaded": engine.is_loaded,
-            "transcriptions": session.transcription_history[-50:],
-            "qa_pairs": [
-                {
-                    "id": qa.id,
-                    "question": qa.question,
-                    "answer": qa.answer,
-                    "timestamp": qa.timestamp,
-                    "source": getattr(qa, "source", "") or "",
-                    "model_name": getattr(qa, "model_name", "") or "",
-                }
-                for qa in session.qa_pairs
-            ],
+            "transcriptions": snapshot["transcriptions"],
+            "qa_pairs": snapshot["qa_pairs"],
         })
         while True:
             data = await ws.receive_text()

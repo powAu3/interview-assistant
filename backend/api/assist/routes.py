@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.config import get_config
-from core.session import get_session
+from core.session import get_session, snapshot_session
 from .pipeline import (
     cancel_answer_work,
     is_paused,
@@ -155,20 +155,4 @@ async def api_preflight_run(body: dict):
 
 @router.get("/session")
 async def api_session():
-    session = get_session()
-    return {
-        "is_recording": session.is_recording,
-        "is_paused": session.is_paused,
-        "transcriptions": session.transcription_history[-50:],
-        "qa_pairs": [
-            {
-                "id": qa.id,
-                "question": qa.question,
-                "answer": qa.answer,
-                "timestamp": qa.timestamp,
-                "source": getattr(qa, "source", "") or "",
-                "model_name": getattr(qa, "model_name", "") or "",
-            }
-            for qa in session.qa_pairs
-        ],
-    }
+    return snapshot_session()

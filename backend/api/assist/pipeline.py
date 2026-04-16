@@ -190,7 +190,8 @@ def cancel_answer_work(reset_session_data: bool = False):
     _bump_generation()
     _reset_answer_state()
     if reset_session_data:
-        reset_session()
+        with conversation_lock:
+            reset_session()
 
 
 def init_background_workers():
@@ -657,10 +658,11 @@ def start_nonblocking(device_id: int):
     audio_capture.start(device_id)
 
     session = get_session()
-    session.is_recording = True
-    session.is_paused = False
-    session.last_device_id = device_id
-    session.capture_is_loopback = capture_is_loopback
+    with conversation_lock:
+        session.is_recording = True
+        session.is_paused = False
+        session.last_device_id = device_id
+        session.capture_is_loopback = capture_is_loopback
     _ilog.info("INTERVIEW_START device=%s loopback=%s", device_id, capture_is_loopback)
     broadcast({"type": "recording", "value": True})
     broadcast({"type": "paused", "value": False})
@@ -676,10 +678,11 @@ def stop_interview_loop():
     cancel_answer_work(reset_session_data=False)
     audio_capture.stop()
     session = get_session()
-    session.is_recording = False
-    session.is_paused = False
-    if len(session.transcription_history) > 30:
-        session.transcription_history = session.transcription_history[-30:]
+    with conversation_lock:
+        session.is_recording = False
+        session.is_paused = False
+        if len(session.transcription_history) > 30:
+            session.transcription_history = session.transcription_history[-30:]
     broadcast({"type": "recording", "value": False})
     broadcast({"type": "paused", "value": False})
     if _interview_thread and _interview_thread.is_alive():
@@ -693,21 +696,27 @@ def pause_interview():
     _pause_event.set()
     audio_capture.stop()
     session = get_session()
-    session.is_paused = True
+    with conversation_lock:
+        session.is_paused = True
     broadcast({"type": "paused", "value": True})
 
 
 def unpause_interview(device_id: Optional[int] = None):
     session = get_session()
+    capture_is_loopback = session.capture_is_loopback
+    next_device_id = session.last_device_id
     if device_id is not None:
-        session.last_device_id = int(device_id)
+        next_device_id = int(device_id)
         for d in AudioCapture.list_devices():
-            if d["id"] == session.last_device_id:
-                session.capture_is_loopback = d["is_loopback"]
+            if d["id"] == next_device_id:
+                capture_is_loopback = d["is_loopback"]
                 break
-    audio_capture.start(session.last_device_id)
+    audio_capture.start(next_device_id)
     _pause_event.clear()
-    session.is_paused = False
+    with conversation_lock:
+        session.last_device_id = next_device_id
+        session.capture_is_loopback = capture_is_loopback
+        session.is_paused = False
     broadcast({"type": "paused", "value": False})
 
 
@@ -726,7 +735,8 @@ def _interview_worker():
         except Exception as e:
             broadcast({"type": "error", "message": f"Whisper \u6a21\u578b\u52a0\u8f7d\u5931\u8d25: {e}"})
             broadcast({"type": "recording", "value": False})
-            get_session().is_recording = False
+            with conversation_lock:
+                get_session().is_recording = False
             return
     broadcast({"type": "stt_status", "loaded": True, "loading": False})
 
@@ -810,7 +820,8 @@ def _interview_worker():
     except Exception as e:
         _elog.error("Interview worker crashed: %s", e, exc_info=True)
         broadcast({"type": "error", "message": f"\u9762\u8bd5\u5faa\u73af\u5f02\u5e38: {e}"})
-        get_session().is_recording = False
+        with conversation_lock:
+            get_session().is_recording = False
         broadcast({"type": "recording", "value": False})
     finally:
         try:
@@ -985,20 +996,21 @@ def _process_question_parallel(
             return
         session = get_session()
         try:
-            if image:
-                content: list = [{"type": "text", "text": question_text}]
-                content.append({"type": "image_url", "image_url": {"url": image}})
-                session.add_user_message(content)
-            else:
-                session.add_user_message(question_text)
-            session.add_assistant_message(full_answer)
-            session.add_qa(
-                display_question,
-                full_answer,
-                qa_id=qa_id,
-                source=source,
-                model_name=model_cfg.name,
-            )
+            with conversation_lock:
+                if image:
+                    content: list = [{"type": "text", "text": question_text}]
+                    content.append({"type": "image_url", "image_url": {"url": image}})
+                    session.add_user_message(content)
+                else:
+                    session.add_user_message(question_text)
+                session.add_assistant_message(full_answer)
+                session.add_qa(
+                    display_question,
+                    full_answer,
+                    qa_id=qa_id,
+                    source=source,
+                    model_name=model_cfg.name,
+                )
             stats = get_token_stats()
             _ilog.info(
                 "ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms "

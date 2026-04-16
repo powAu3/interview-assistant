@@ -1,7 +1,7 @@
 import time
 import threading
 from typing import Optional, Union
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass
@@ -106,6 +106,24 @@ class Session:
         self.current_transcription = ""
         self.is_recording = False
         self.is_paused = False
+        self.last_device_id = 0
+        self.capture_is_loopback = True
+        self.created_at = time.time()
+
+    def snapshot(self) -> dict:
+        return {
+            "is_recording": self.is_recording,
+            "is_paused": self.is_paused,
+            "transcriptions": list(self.transcription_history[-50:]),
+            "qa_pairs": [
+                {
+                    **asdict(qa),
+                    "source": getattr(qa, "source", "") or "",
+                    "model_name": getattr(qa, "model_name", "") or "",
+                }
+                for qa in self.qa_pairs
+            ],
+        }
 
 
 _session: Optional[Session] = None
@@ -122,8 +140,14 @@ def get_session() -> Session:
         return _session
 
 
+def snapshot_session() -> dict:
+    with conversation_lock:
+        session = get_session()
+        return session.snapshot()
+
+
 def reset_session() -> Session:
-    global _session
-    with _lock:
-        _session = Session()
-        return _session
+    with conversation_lock:
+        session = get_session()
+        session.clear()
+        return session
