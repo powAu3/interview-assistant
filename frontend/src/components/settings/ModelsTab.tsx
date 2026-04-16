@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useInterviewStore, type ModelFullInfo } from '@/stores/configStore'
 import { api } from '@/lib/api'
+import { updateConfigAndRefresh } from '@/lib/configSync'
 import { Field, GradientCard, StatusBadge } from './shared'
 
 const EMPTY_MODEL: ModelFullInfo = {
@@ -172,12 +173,11 @@ export default function ModelsTab() {
     }
     setSaving(true)
     try {
-      await api.updateConfig({
+      await updateConfigAndRefresh({
         models: buildModelPayload(),
         active_model: resolveActiveIndex(),
         ...(includeLayout ? { max_parallel_answers: maxP } : {}),
       })
-      useInterviewStore.getState().setConfig(await api.getConfig())
       useInterviewStore.getState().setToastMessage(includeLayout ? '已保存排序与并行设置' : '模型配置已保存')
       await loadModels()
       return true
@@ -294,8 +294,7 @@ export default function ModelsTab() {
   const handleSaveLlm = async () => {
     setLlmSaving(true)
     try {
-      await api.updateConfig(llmForm)
-      useInterviewStore.getState().setConfig(await api.getConfig())
+      await updateConfigAndRefresh(llmForm)
       useInterviewStore.getState().setToastMessage('LLM 参数已保存')
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')

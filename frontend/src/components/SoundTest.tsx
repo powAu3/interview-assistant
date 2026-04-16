@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
+import { buildWsUrl } from '@/lib/backendUrl'
 
 type StepStatus = 'idle' | 'running' | 'pass' | 'fail' | 'warn' | 'skip'
 
@@ -121,8 +122,7 @@ export default function SoundTest() {
   }, [])
 
   useEffect(() => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
+    const ws = new WebSocket(buildWsUrl('/ws'))
     ws.onmessage = handleMessage
     return () => { ws.close() }
   }, [handleMessage])

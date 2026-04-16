@@ -3,6 +3,7 @@ import { Play, Square, Mic, Send, RotateCcw, FileText, Upload, ChevronRight, Tro
 import ReactMarkdown from 'react-markdown'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
+import { refreshConfig } from '@/lib/configSync'
 
 const CATEGORY_LABELS: Record<string, string> = {
   project: '📁 项目经历',
@@ -340,7 +341,7 @@ function UploadResumeButton() {
     setUploading(true)
     try {
       const res = await api.uploadResume(file)
-      useInterviewStore.getState().setConfig(await api.getConfig())
+      await refreshConfig()
       if (res.parsed) {
         useInterviewStore.getState().setToastMessage('简历已解析并选用')
       } else {

@@ -15,8 +15,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   overlayDragEnd: () => ipcRenderer.send('overlay-drag-end'),
   getOverlayState: () => ipcRenderer.invoke('get-overlay-state'),
   onOverlayState: (listener) => {
-    ipcRenderer.removeAllListeners('overlay-state');
-    ipcRenderer.on('overlay-state', (_event, payload) => listener(payload));
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('overlay-state', wrapped);
+    return () => ipcRenderer.removeListener('overlay-state', wrapped);
   },
-  removeOverlayStateListener: () => ipcRenderer.removeAllListeners('overlay-state'),
+  removeOverlayStateListener: (listener) => {
+    if (listener) ipcRenderer.removeListener('overlay-state', listener);
+  },
 });

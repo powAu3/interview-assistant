@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
+import { buildWsUrl } from '@/lib/backendUrl'
 
 export function useInterviewWS() {
   const wsRef = useRef<WebSocket | null>(null)
@@ -11,8 +12,7 @@ export function useInterviewWS() {
       wsRef.current?.readyState === WebSocket.OPEN
       || wsRef.current?.readyState === WebSocket.CONNECTING
     ) return
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
+    const ws = new WebSocket(buildWsUrl('/ws'))
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -139,7 +139,6 @@ export function useInterviewWS() {
         s.setFallbackToast({ from: `STT:${msg.from}`, to: `STT:${msg.to}`, reason: msg.reason })
         break
       case 'resume_opt_start':
-        s.setResumeOptLoading(true)
         s.resetResumeOpt()
         s.setResumeOptLoading(true)
         break

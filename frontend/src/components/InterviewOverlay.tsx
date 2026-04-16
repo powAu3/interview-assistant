@@ -7,6 +7,7 @@ import {
   warnInterviewOverlaySyncIssue,
 } from '@/lib/interviewOverlay'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 function compactAnswerText(text: string) {
   return text
@@ -39,36 +40,23 @@ function splitLyricLines(text: string, maxLines: number): string[] {
 export default function InterviewOverlay() {
   useInterviewWS()
 
-  const {
-    qaPairs,
-    streamingIds,
-    isRecording,
-    interviewOverlayEnabled,
-    interviewOverlayMode,
-    interviewOverlayOpacity,
-    interviewOverlayPanelFontSize,
-    interviewOverlayPanelWidth,
-    interviewOverlayPanelShowBg,
-    interviewOverlayPanelFontColor,
-    interviewOverlayPanelHeight,
-    interviewOverlayLyricLines,
-    interviewOverlayLyricFontSize,
-    interviewOverlayLyricWidth,
-    interviewOverlayLyricColor,
-    syncInterviewOverlayPrefs,
-    setInterviewOverlayEnabled,
-    setInterviewOverlayMode,
-    setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize,
-    setInterviewOverlayPanelWidth,
-    setInterviewOverlayPanelShowBg,
-    setInterviewOverlayPanelFontColor,
-    setInterviewOverlayPanelHeight,
-    setInterviewOverlayLyricLines,
-    setInterviewOverlayLyricFontSize,
-    setInterviewOverlayLyricWidth,
-    setInterviewOverlayLyricColor,
-  } = useInterviewStore()
+  const qaPairs = useInterviewStore((s) => s.qaPairs)
+  const streamingIds = useInterviewStore((s) => s.streamingIds)
+  const isRecording = useInterviewStore((s) => s.isRecording)
+  const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
+  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
+  const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
+  const interviewOverlayPanelFontSize = useUiPrefsStore((s) => s.interviewOverlayPanelFontSize)
+  const interviewOverlayPanelWidth = useUiPrefsStore((s) => s.interviewOverlayPanelWidth)
+  const interviewOverlayPanelShowBg = useUiPrefsStore((s) => s.interviewOverlayPanelShowBg)
+  const interviewOverlayPanelFontColor = useUiPrefsStore((s) => s.interviewOverlayPanelFontColor)
+  const interviewOverlayPanelHeight = useUiPrefsStore((s) => s.interviewOverlayPanelHeight)
+  const interviewOverlayLyricLines = useUiPrefsStore((s) => s.interviewOverlayLyricLines)
+  const interviewOverlayLyricFontSize = useUiPrefsStore((s) => s.interviewOverlayLyricFontSize)
+  const interviewOverlayLyricWidth = useUiPrefsStore((s) => s.interviewOverlayLyricWidth)
+  const interviewOverlayLyricColor = useUiPrefsStore((s) => s.interviewOverlayLyricColor)
+  const syncInterviewOverlayPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
+  const applyInterviewOverlayState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
 
   const latestQa = useMemo(() => {
     if (streamingIds.length > 0) {
@@ -104,18 +92,7 @@ export default function InterviewOverlay() {
     window.electronAPI?.getOverlayState?.()
       .then((payload) => {
         if (!payload) return
-        setInterviewOverlayEnabled(payload.enabled)
-        setInterviewOverlayMode(payload.mode)
-        setInterviewOverlayOpacity(payload.opacity)
-        setInterviewOverlayPanelFontSize(payload.panelFontSize)
-        setInterviewOverlayPanelWidth(payload.panelWidth)
-        setInterviewOverlayPanelShowBg(payload.panelShowBg)
-        setInterviewOverlayPanelFontColor(payload.panelFontColor)
-        setInterviewOverlayPanelHeight(payload.panelHeight)
-        setInterviewOverlayLyricLines(payload.lyricLines)
-        setInterviewOverlayLyricFontSize(payload.lyricFontSize)
-        setInterviewOverlayLyricWidth(payload.lyricWidth)
-        setInterviewOverlayLyricColor(payload.lyricColor)
+        applyInterviewOverlayState(payload)
       })
       .catch((error) => {
         warnInterviewOverlaySyncIssue('failed to read overlay state during bootstrap', error)
@@ -131,40 +108,15 @@ export default function InterviewOverlay() {
     }
 
     window.addEventListener('storage', onStorage)
-    window.electronAPI?.onOverlayState?.((payload) => {
-      setInterviewOverlayEnabled(payload.enabled)
-      setInterviewOverlayMode(payload.mode)
-      setInterviewOverlayOpacity(payload.opacity)
-      setInterviewOverlayPanelFontSize(payload.panelFontSize)
-      setInterviewOverlayPanelWidth(payload.panelWidth)
-      setInterviewOverlayPanelShowBg(payload.panelShowBg)
-      setInterviewOverlayPanelFontColor(payload.panelFontColor)
-      setInterviewOverlayPanelHeight(payload.panelHeight)
-      setInterviewOverlayLyricLines(payload.lyricLines)
-      setInterviewOverlayLyricFontSize(payload.lyricFontSize)
-      setInterviewOverlayLyricWidth(payload.lyricWidth)
-      setInterviewOverlayLyricColor(payload.lyricColor)
+    const removeOverlayListener = window.electronAPI?.onOverlayState?.((payload) => {
+      applyInterviewOverlayState(payload)
     })
 
     return () => {
       window.removeEventListener('storage', onStorage)
-      window.electronAPI?.removeOverlayStateListener?.()
+      removeOverlayListener?.()
     }
-  }, [
-    setInterviewOverlayEnabled,
-    setInterviewOverlayLyricFontSize,
-    setInterviewOverlayLyricLines,
-    setInterviewOverlayLyricWidth,
-    setInterviewOverlayLyricColor,
-    setInterviewOverlayMode,
-    setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize,
-    setInterviewOverlayPanelFontColor,
-    setInterviewOverlayPanelHeight,
-    setInterviewOverlayPanelWidth,
-    setInterviewOverlayPanelShowBg,
-    syncInterviewOverlayPrefs,
-  ])
+  }, [applyInterviewOverlayState, syncInterviewOverlayPrefs])
 
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)

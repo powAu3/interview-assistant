@@ -1,8 +1,7 @@
-/** 部署到子路径或反向代理时可通过环境变量 VITE_API_BASE 指定 API 根路径，如 '' 或 '/api' */
-const BASE = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE ?? ''
+import { buildApiUrl } from './backendUrl'
 
 async function request<T = any>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${url}`, {
+  const res = await fetch(buildApiUrl(url), {
     headers: { 'Content-Type': 'application/json', ...opts?.headers },
     ...opts,
   })
@@ -57,7 +56,7 @@ export const api = {
   uploadResume: async (file: File): Promise<ResumeUploadResult> => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${BASE}/api/resume`, { method: 'POST', body: fd })
+    const res = await fetch(buildApiUrl('/api/resume'), { method: 'POST', body: fd })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
       throw new Error(err.detail)

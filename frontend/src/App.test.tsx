@@ -49,18 +49,39 @@ describe('App bootstrap', () => {
       isPaused: false,
       wsConnected: true,
     } as any)
-    apiMock.getConfig.mockRejectedValue(new Error('backend down'))
+    apiMock.getConfig.mockResolvedValue({
+      models: [{ name: 'demo', supports_vision: false }],
+      active_model: 0,
+      api_key_set: true,
+      think_mode: false,
+      stt_provider: 'whisper',
+    })
     apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
     apiMock.getOptions.mockResolvedValue({ positions: [], languages: [] })
     apiMock.checkModelsHealth.mockResolvedValue(undefined)
   })
 
-  it('renders the init error view when bootstrap fails', async () => {
+  it('renders the init error view when config bootstrap fails', async () => {
+    apiMock.getConfig.mockRejectedValue(new Error('backend down'))
+
     render(<App />)
 
     await waitFor(() => {
       expect(screen.getByText('连接后端失败')).toBeInTheDocument()
     })
     expect(screen.getByText('backend down')).toBeInTheDocument()
+  })
+
+  it('keeps rendering the app when non-critical bootstrap requests fail', async () => {
+    apiMock.getDevices.mockRejectedValue(new Error('devices down'))
+    apiMock.getOptions.mockRejectedValue(new Error('options down'))
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '实时辅助' })).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('连接后端失败')).not.toBeInTheDocument()
   })
 })

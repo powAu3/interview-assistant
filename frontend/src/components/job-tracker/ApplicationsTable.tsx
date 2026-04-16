@@ -12,6 +12,7 @@ import dayjs from 'dayjs'
 import { Trash2, Briefcase } from 'lucide-react'
 import type { Application, Offer } from './types'
 import { ONGOING_STAGES, STAGE_LABELS, STAGE_ORDER, TERMINAL_STAGES } from './stageConfig'
+import { filterApplicationsBySearch } from './search'
 
 const columnHelper = createColumnHelper<Application>()
 
@@ -155,17 +156,7 @@ export default function ApplicationsTable({
   const [sorting, setSorting] = useState<SortingState>([{ id: 'updated_at', desc: true }])
   const [pinning] = useState<ColumnPinningState>({ left: ['company'] })
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return applications
-    return applications.filter(
-      (a) =>
-        a.company.toLowerCase().includes(q) ||
-        a.position.toLowerCase().includes(q) ||
-        a.city.toLowerCase().includes(q) ||
-        a.notes.toLowerCase().includes(q),
-    )
-  }, [applications, search])
+  const filtered = useMemo(() => filterApplicationsBySearch(applications, search), [applications, search])
 
   const patch = useCallback(
     (id: number, p: Partial<Application>) => {

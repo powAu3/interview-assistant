@@ -1,15 +1,18 @@
 import { useState, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import { api } from '@/lib/api'
+import { refreshConfig } from '@/lib/configSync'
 import { FileSearch, Upload, FileText, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { ResumeHistoryPanel } from '@/components/ResumeHistory'
 
 export default function ResumeOptimizer() {
   const [jdText, setJdText] = useState('')
-  const { config, setConfig, resumeOptStreaming, resumeOptResult, resumeOptLoading, setToastMessage, colorScheme } =
+  const { config, resumeOptStreaming, resumeOptResult, resumeOptLoading, setToastMessage } =
     useInterviewStore()
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const lightMarkdown = isLightColorScheme(colorScheme)
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -24,7 +27,7 @@ export default function ResumeOptimizer() {
     setUploadError(null)
     try {
       const res = await api.uploadResume(file)
-      setConfig(await api.getConfig())
+      await refreshConfig()
       if (res.parsed) {
         setToastMessage('简历已解析并选用')
         setUploadError(null)
@@ -41,7 +44,7 @@ export default function ResumeOptimizer() {
 
   const handleRemoveResume = async () => {
     await api.deleteResume()
-    setConfig(await api.getConfig())
+    await refreshConfig()
   }
 
   const handleAnalyze = async () => {

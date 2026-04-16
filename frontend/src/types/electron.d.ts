@@ -1,20 +1,6 @@
-export {}
+import type { OverlayStatePayload } from '@/lib/interviewOverlay'
 
-interface OverlayPayload {
-  enabled: boolean
-  visible: boolean
-  mode: 'panel' | 'lyrics'
-  opacity: number
-  panelFontSize: number
-  panelWidth: number
-  panelShowBg: boolean
-  panelFontColor: string
-  panelHeight: number
-  lyricLines: number
-  lyricFontSize: number
-  lyricWidth: number
-  lyricColor: string
-}
+export {}
 
 declare global {
   interface Window {
@@ -27,13 +13,13 @@ declare global {
       toggleAlwaysOnTop: () => Promise<boolean>
       toggleContentProtection: () => Promise<boolean>
       getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
-      syncOverlayWindow?: (payload: Partial<OverlayPayload>) => Promise<{ ok: boolean; visible: boolean }>
+      syncOverlayWindow?: (payload: Partial<OverlayStatePayload>) => Promise<{ ok: boolean; visible: boolean }>
       moveOverlayWindow?: (dx: number, dy: number) => Promise<void>
       overlayDragStart?: () => void
       overlayDragEnd?: () => void
-      getOverlayState?: () => Promise<OverlayPayload | null>
-      onOverlayState?: (callback: (payload: OverlayPayload) => void) => void
-      removeOverlayStateListener?: () => void
+      getOverlayState?: () => Promise<(OverlayStatePayload & { visible: boolean }) | null>
+      onOverlayState?: (callback: (payload: OverlayStatePayload) => void) => (() => void)
+      removeOverlayStateListener?: (listener?: (...args: unknown[]) => void) => void
     }
   }
 }

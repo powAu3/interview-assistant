@@ -1,5 +1,20 @@
 export type InterviewOverlayMode = 'panel' | 'lyrics'
 
+export interface OverlayStatePayload {
+  enabled: boolean
+  mode: InterviewOverlayMode
+  opacity: number
+  panelFontSize: number
+  panelWidth: number
+  panelShowBg: boolean
+  panelFontColor: string
+  panelHeight: number
+  lyricLines: number
+  lyricFontSize: number
+  lyricWidth: number
+  lyricColor: string
+}
+
 export const INTERVIEW_OVERLAY_STORAGE_KEYS = {
   enabled: 'ia_interview_overlay_enabled',
   mode: 'ia_interview_overlay_mode',

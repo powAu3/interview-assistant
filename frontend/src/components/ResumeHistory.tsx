@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ChevronDown, Loader2, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
 import { api, type ResumeHistoryDetail, type ResumeHistoryItem } from '@/lib/api'
+import { refreshConfig } from '@/lib/configSync'
 import { useInterviewStore } from '@/stores/configStore'
 
 function formatShort(ts: number) {
@@ -37,7 +38,6 @@ function ResumeHistoryDetailModal({
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
-  const setConfig = useInterviewStore((s) => s.setConfig)
 
   useEffect(() => {
     if (entryId == null) {
@@ -77,7 +77,7 @@ function ResumeHistoryDetailModal({
       setEditing(false)
       setDetail((d) => (d ? { ...d, summary: text } : d))
       onSaved?.()
-      setConfig(await api.getConfig())
+      await refreshConfig()
     } catch (e: unknown) {
       setToastMessage(e instanceof Error ? e.message : '保存失败')
     } finally {
@@ -290,7 +290,6 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
   const [busyId, setBusyId] = useState<number | null>(null)
   const [maxN, setMaxN] = useState(10)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const setConfig = useInterviewStore((s) => s.setConfig)
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
 
   const refresh = useCallback(async () => {
@@ -324,7 +323,7 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
     setBusyId(id)
     try {
       await api.resumeHistoryApply(id)
-      setConfig(await api.getConfig())
+      await refreshConfig()
       setToastMessage('已选用该简历')
       await refresh()
       setOpen(false)
@@ -341,7 +340,7 @@ export function ResumeHistoryPopover({ className = '' }: { className?: string })
     setBusyId(id)
     try {
       await api.resumeHistoryDelete(id)
-      setConfig(await api.getConfig())
+      await refreshConfig()
       setToastMessage('已删除')
       await refresh()
     } catch (e: unknown) {
@@ -410,7 +409,6 @@ export function ResumeHistoryPanel() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [maxN, setMaxN] = useState(10)
-  const setConfig = useInterviewStore((s) => s.setConfig)
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
 
   const refresh = useCallback(async () => {
@@ -434,7 +432,7 @@ export function ResumeHistoryPanel() {
     setBusyId(id)
     try {
       await api.resumeHistoryApply(id)
-      setConfig(await api.getConfig())
+      await refreshConfig()
       setToastMessage('已选用该简历')
       await refresh()
     } catch (e: unknown) {
@@ -450,7 +448,7 @@ export function ResumeHistoryPanel() {
     setBusyId(id)
     try {
       await api.resumeHistoryDelete(id)
-      setConfig(await api.getConfig())
+      await refreshConfig()
       setToastMessage('已删除')
       await refresh()
     } catch (e: unknown) {

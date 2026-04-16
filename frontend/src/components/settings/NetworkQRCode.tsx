@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { Smartphone } from 'lucide-react'
 import QRCode from 'qrcode'
 import { GradientCard } from './shared'
+import { buildApiUrl } from '@/lib/backendUrl'
 
 export default function NetworkQRCode() {
   const [qrSrc, setQrSrc] = useState<string | null>(null)
   const [networkUrl, setNetworkUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/network-info')
+    fetch(buildApiUrl('/api/network-info'))
       .then(r => r.json())
       .then(async (data) => {
         setNetworkUrl(data.url)

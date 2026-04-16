@@ -32,9 +32,10 @@ import {
   Inbox,
   ArrowRight,
 } from 'lucide-react'
-import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import type { Application } from './types'
+import { filterApplicationsBySearch } from './search'
 import {
   STAGE_LABELS,
   STAGE_ORDER,
@@ -79,17 +80,6 @@ function buildColumnIds(apps: Application[], visibleStages: string[]): Record<st
     out[s] = sortAppsInColumn(byStage.get(s) ?? []).map((x) => x.id)
   }
   return out
-}
-
-function filterApplications(apps: Application[], search: string): Application[] {
-  const q = search.trim().toLowerCase()
-  if (!q) return apps
-  return apps.filter(
-    (a) =>
-      a.company.toLowerCase().includes(q) ||
-      a.position.toLowerCase().includes(q) ||
-      a.city.toLowerCase().includes(q),
-  )
 }
 
 const RAIL_LABEL: Record<string, string> = {
@@ -415,7 +405,7 @@ export default function KanbanBoard({
   onShowTerminalStagesChange,
   terminalApplicationsCount,
 }: Props) {
-  const colorScheme = useInterviewStore((s) => s.colorScheme)
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const isLight = isLightColorScheme(colorScheme)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -427,7 +417,7 @@ export default function KanbanBoard({
     [showTerminalStages],
   )
 
-  const filteredApps = useMemo(() => filterApplications(applications, search), [applications, search])
+  const filteredApps = useMemo(() => filterApplicationsBySearch(applications, search), [applications, search])
   const sortDisabled = search.trim().length > 0
 
   const fullColumnIds = useMemo(

@@ -1,36 +1,10 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark, oneLight, a11yDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Bot, Loader2, Copy, Check, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
+import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
-import SoundTest from './SoundTest'
-import type { ColorSchemeId } from '@/lib/colorScheme'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-function prismThemeForScheme(id: ColorSchemeId) {
-  if (id === 'vscode-light-plus') return oneLight
-  if (id === 'vscode-dark-hc') return a11yDark
-  return oneDark
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-bg-hover text-text-muted hover:text-text-primary transition-colors text-[11px]"
-      title="复制代码"
-    >
-      {copied ? <Check className="w-3.5 h-3.5 text-accent-green" /> : <Copy className="w-3.5 h-3.5" />}
-      <span>{copied ? '已复制' : '复制'}</span>
-    </button>
-  )
-}
+const SoundTest = lazy(() => import('./SoundTest'))
+const AnswerMarkdownContent = lazy(() => import('./AnswerMarkdownContent'))
 
 function ThinkBlock({ content, isThinking, streamLayout }: { content: string; isThinking: boolean; streamLayout?: boolean }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -86,65 +60,13 @@ const SOURCE_LABELS: Record<string, string> = {
   server_screen_left: '服务端截图审题',
 }
 
-function useMarkdownComponents(colorScheme: ColorSchemeId) {
-  const prismStyle = prismThemeForScheme(colorScheme)
-  return useMemo(
-    () => ({
-      code({ className, children, ...props }: { className?: string; children?: React.ReactNode } & Record<string, unknown>) {
-        const match = /language-(\w+)/.exec(className || '')
-        const codeStr = String(children).replace(/\n$/, '')
-        if (match) {
-          const lang = match[1].toLowerCase()
-          return (
-            <div className="code-block-shell my-3 rounded-xl overflow-hidden">
-              <div className="code-block-head flex items-center justify-between px-3 py-2">
-                <span className="text-[11px] uppercase tracking-wide text-accent-blue font-semibold">{lang}</span>
-                <CopyButton text={codeStr} />
-              </div>
-              <SyntaxHighlighter
-                style={prismStyle}
-                language={lang}
-                PreTag="div"
-                customStyle={{
-                  margin: 0,
-                  borderRadius: 0,
-                  fontSize: '0.82rem',
-                  lineHeight: 1.55,
-                  background: 'rgb(var(--c-code-shell-bg))',
-                  padding: '0.9rem 1rem',
-                }}
-                codeTagProps={{ style: { fontFamily: 'JetBrains Mono, Consolas, monospace' } }}
-                wrapLongLines={false}
-              >
-                {codeStr}
-              </SyntaxHighlighter>
-            </div>
-          )
-        }
-        return (
-          <code
-            className="px-1.5 py-0.5 rounded-md border border-accent-blue/25"
-            style={{
-              background: 'rgb(var(--c-code-inline-bg))',
-              color: 'rgb(var(--c-code-inline-fg))',
-            }}
-            {...props}
-          >
-            {children}
-          </code>
-        )
-      },
-    }),
-    [prismStyle, colorScheme],
-  )
-}
-
 export default function AnswerPanel() {
-  const { qaPairs, streamingIds, config, toggleSettings, answerPanelLayout, colorScheme } = useInterviewStore()
+  const { qaPairs, streamingIds, config, toggleSettings } = useInterviewStore()
+  const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const stream = answerPanelLayout === 'stream'
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const mdComponents = useMarkdownComponents(colorScheme)
 
   const scrollThreshold = Math.max(4, Math.min(400, config?.answer_autoscroll_bottom_px ?? 40))
   const [nearBottom, setNearBottom] = useState(true)
@@ -206,9 +128,9 @@ export default function AnswerPanel() {
             <span className="inline-block w-2 h-4 bg-accent-green ml-0.5 animate-pulse-dot rounded-full align-middle" />
           </div>
         ) : (
-          <div className={`markdown-body text-sm text-text-primary leading-relaxed ${stream ? 'max-w-none' : ''}`}>
-            <ReactMarkdown components={mdComponents as any}>{qa.answer}</ReactMarkdown>
-          </div>
+          <Suspense fallback={<div className="text-sm text-text-muted">渲染答案中…</div>}>
+            <AnswerMarkdownContent answer={qa.answer} colorScheme={colorScheme} stream={stream} />
+          </Suspense>
         )
       ) : isStreaming && !qa.isThinking ? (
         <div className="flex items-center gap-2 text-text-muted text-sm">
@@ -260,7 +182,11 @@ export default function AnswerPanel() {
         </div>
 
         {/* Sound Test - only show when idle (not recording) */}
-        {isIdle && <SoundTest />}
+        {isIdle && (
+          <Suspense fallback={<div className="text-xs text-text-muted">加载链路检测中…</div>}>
+            <SoundTest />
+          </Suspense>
+        )}
       </div>
     )
   }

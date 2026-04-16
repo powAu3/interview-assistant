@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   LayoutGrid,
   Plus,
@@ -12,10 +12,12 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import ApplicationsTable from './job-tracker/ApplicationsTable'
-import KanbanBoard from './job-tracker/KanbanBoard'
-import OfferCompareModal from './job-tracker/OfferCompareModal'
-import OfferEditModal from './job-tracker/OfferEditModal'
+
+const KanbanBoard = lazy(() => import('./job-tracker/KanbanBoard'))
+const OfferCompareModal = lazy(() => import('./job-tracker/OfferCompareModal'))
+const OfferEditModal = lazy(() => import('./job-tracker/OfferEditModal'))
 import type { Application, Offer, Stage } from './job-tracker/types'
 import { parseApplication, parseOffer } from './job-tracker/types'
 import { isLightColorScheme } from '@/lib/colorScheme'
@@ -25,7 +27,7 @@ const SHOW_TERMINAL_STORAGE_KEY = 'ia-jobtracker-show-terminal'
 
 export default function JobTracker() {
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
-  const colorScheme = useInterviewStore((s) => s.colorScheme)
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const isLight = isLightColorScheme(colorScheme)
   const [applications, setApplications] = useState<Application[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
@@ -365,27 +367,37 @@ export default function JobTracker() {
             search={search}
           />
         ) : (
-          <KanbanBoard
-            applications={applications}
-            onStageChange={onStageChange}
-            onReorderInStage={onReorderInStage}
-            search={search}
-            showTerminalStages={showTerminalStages}
-            onShowTerminalStagesChange={setShowTerminalStages}
-            terminalApplicationsCount={terminalApplicationsCount}
-          />
+          <Suspense fallback={<div className="flex items-center justify-center h-48 text-text-muted text-sm">加载看板中…</div>}>
+            <KanbanBoard
+              applications={applications}
+              onStageChange={onStageChange}
+              onReorderInStage={onReorderInStage}
+              search={search}
+              showTerminalStages={showTerminalStages}
+              onShowTerminalStagesChange={setShowTerminalStages}
+              terminalApplicationsCount={terminalApplicationsCount}
+            />
+          </Suspense>
         )}
       </div>
 
-      <OfferEditModal
-        open={offerModalApp != null}
-        application={offerModalApp}
-        offer={offerForModal}
-        onClose={() => setOfferModalApp(null)}
-        onSave={saveOffer}
-      />
+      {offerModalApp != null && (
+        <Suspense fallback={null}>
+          <OfferEditModal
+            open={offerModalApp != null}
+            application={offerModalApp}
+            offer={offerForModal}
+            onClose={() => setOfferModalApp(null)}
+            onSave={saveOffer}
+          />
+        </Suspense>
+      )}
 
-      <OfferCompareModal open={compareOpen} items={compareItems} onClose={() => setCompareOpen(false)} />
+      {compareOpen && (
+        <Suspense fallback={null}>
+          <OfferCompareModal open={compareOpen} items={compareItems} onClose={() => setCompareOpen(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }

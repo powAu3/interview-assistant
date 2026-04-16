@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
+import { updateConfigAndRefresh } from '@/lib/configSync'
 import { Section, Field, GradientCard, StatusBadge } from './shared'
 import SttGuideCard from './SttGuideCard'
 
@@ -69,8 +70,7 @@ export default function SpeechTab() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.updateConfig(form)
-      useInterviewStore.getState().setConfig(await api.getConfig())
+      await updateConfigAndRefresh(form)
       useInterviewStore.getState().setToastMessage('语音配置已保存')
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')

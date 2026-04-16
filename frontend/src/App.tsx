@@ -1,105 +1,34 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { Settings, SlidersHorizontal, MonitorSmartphone } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
+import { useAppBootstrap } from '@/hooks/useAppBootstrap'
+import { useOverlayWindowSync } from '@/hooks/useOverlayWindowSync'
+import { useAssistSplit } from '@/hooks/useAssistSplit'
 import { api } from '@/lib/api'
+import { updateConfigAndRefresh } from '@/lib/configSync'
 import TranscriptionPanel from '@/components/TranscriptionPanel'
 import AnswerPanel from '@/components/AnswerPanel'
 import ControlBar from '@/components/ControlBar'
 import SettingsDrawer from '@/components/SettingsDrawer'
-import PracticeMode from '@/components/PracticeMode'
-import KnowledgeMap from '@/components/KnowledgeMap'
-import ResumeOptimizer from '@/components/ResumeOptimizer'
-import JobTracker from '@/components/JobTracker'
+const PracticeMode = lazy(() => import('@/components/PracticeMode'))
+const KnowledgeMap = lazy(() => import('@/components/KnowledgeMap'))
+const ResumeOptimizer = lazy(() => import('@/components/ResumeOptimizer'))
+const JobTracker = lazy(() => import('@/components/JobTracker'))
 
 export default function App() {
   useInterviewWS()
   const {
-    config, setConfig, setDevices, setOptions, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
+    config, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
     isRecording,
-    interviewOverlayEnabled, interviewOverlayMode, interviewOverlayOpacity,
-    interviewOverlayPanelFontSize, interviewOverlayPanelWidth, interviewOverlayPanelShowBg,
-    interviewOverlayPanelFontColor, interviewOverlayPanelHeight,
-    interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
-    setInterviewOverlayEnabled, setInterviewOverlayMode, setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth, setInterviewOverlayPanelShowBg,
-    setInterviewOverlayPanelFontColor, setInterviewOverlayPanelHeight,
-    setInterviewOverlayLyricLines, setInterviewOverlayLyricFontSize, setInterviewOverlayLyricWidth, setInterviewOverlayLyricColor,
   } = useInterviewStore()
-  const [initError, setInitError] = useState<string | null>(null)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
   const [appMode, setAppMode] = useState<
     'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
   >('assist')
-  const overlaySyncUntilRef = useRef(0)
-
-  useEffect(() => {
-    if (!window.electronAPI?.syncOverlayWindow) return
-    overlaySyncUntilRef.current = Date.now() + 500
-    window.electronAPI.syncOverlayWindow({
-      mode: interviewOverlayMode,
-      opacity: interviewOverlayOpacity,
-      panelFontSize: interviewOverlayPanelFontSize,
-      panelWidth: interviewOverlayPanelWidth,
-      panelShowBg: interviewOverlayPanelShowBg,
-      panelFontColor: interviewOverlayPanelFontColor,
-      panelHeight: interviewOverlayPanelHeight,
-      lyricLines: interviewOverlayLyricLines,
-      lyricFontSize: interviewOverlayLyricFontSize,
-      lyricWidth: interviewOverlayLyricWidth,
-      lyricColor: interviewOverlayLyricColor,
-    }).catch(() => {})
-  }, [
-    interviewOverlayLyricLines, interviewOverlayLyricFontSize, interviewOverlayLyricWidth, interviewOverlayLyricColor,
-    interviewOverlayMode, interviewOverlayOpacity,
-    interviewOverlayPanelFontSize, interviewOverlayPanelWidth, interviewOverlayPanelShowBg,
-    interviewOverlayPanelFontColor, interviewOverlayPanelHeight,
-  ])
-
-  const mainHiddenByOverlayRef = useRef(false)
-
-  useEffect(() => {
-    if (!window.electronAPI?.hideWindow) return
-    const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
-    if (overlayVisible) {
-      window.electronAPI.getWindowState?.().then((state) => {
-        if (state?.visible) {
-          mainHiddenByOverlayRef.current = true
-          window.electronAPI!.hideWindow()
-        }
-      }).catch(() => {})
-    } else if (mainHiddenByOverlayRef.current) {
-      mainHiddenByOverlayRef.current = false
-      window.electronAPI.showWindow?.()
-    }
-  }, [appMode, interviewOverlayEnabled, isRecording])
-
-  useEffect(() => {
-    if (!window.electronAPI?.onOverlayState) return
-    window.electronAPI.onOverlayState((payload) => {
-      if (Date.now() < overlaySyncUntilRef.current) return
-      setInterviewOverlayEnabled(payload.enabled)
-      setInterviewOverlayMode(payload.mode)
-      setInterviewOverlayOpacity(payload.opacity)
-      setInterviewOverlayPanelFontSize(payload.panelFontSize)
-      setInterviewOverlayPanelWidth(payload.panelWidth)
-      setInterviewOverlayPanelShowBg(payload.panelShowBg)
-      setInterviewOverlayPanelFontColor(payload.panelFontColor)
-      setInterviewOverlayPanelHeight(payload.panelHeight)
-      setInterviewOverlayLyricLines(payload.lyricLines)
-      setInterviewOverlayLyricFontSize(payload.lyricFontSize)
-      setInterviewOverlayLyricWidth(payload.lyricWidth)
-      setInterviewOverlayLyricColor(payload.lyricColor)
-    })
-    return () => window.electronAPI?.removeOverlayStateListener?.()
-  }, [
-    setInterviewOverlayEnabled, setInterviewOverlayLyricFontSize,
-    setInterviewOverlayLyricLines, setInterviewOverlayLyricWidth, setInterviewOverlayLyricColor,
-    setInterviewOverlayMode, setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize, setInterviewOverlayPanelWidth, setInterviewOverlayPanelShowBg,
-    setInterviewOverlayPanelFontColor, setInterviewOverlayPanelHeight,
-  ])
+  useOverlayWindowSync(isRecording, appMode)
 
   // job-tracker is now available on both web and Electron
   const [editingPos, setEditingPos] = useState(false)
@@ -107,73 +36,15 @@ export default function App() {
   const [customInput, setCustomInput] = useState('')
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
 
-  /** md+ 实时辅助：左右分栏比例（%），持久化 localStorage */
-  const ASSIST_SPLIT_KEY = 'ia_assist_split_pct'
-  const assistSplitContainerRef = useRef<HTMLDivElement>(null)
-  const assistSplitDragging = useRef(false)
-  const assistSplitPctRef = useRef(32)
-  const [assistSplitPct, setAssistSplitPct] = useState(32)
-  const persistAssistSplit = (nextPct: number) => {
-    try {
-      localStorage.setItem(ASSIST_SPLIT_KEY, String(Math.round(nextPct * 10) / 10))
-    } catch {
-      /* ignore */
-    }
-  }
-  useEffect(() => {
-    assistSplitPctRef.current = assistSplitPct
-  }, [assistSplitPct])
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(ASSIST_SPLIT_KEY)
-      if (raw == null) return
-      const v = parseFloat(raw)
-      if (Number.isFinite(v)) {
-        const c = Math.min(62, Math.max(24, v))
-        assistSplitPctRef.current = c
-        setAssistSplitPct(c)
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [])
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!assistSplitDragging.current || !assistSplitContainerRef.current) return
-      const r = assistSplitContainerRef.current.getBoundingClientRect()
-      if (r.width < 80) return
-      const p = ((e.clientX - r.left) / r.width) * 100
-      const c = Math.min(62, Math.max(24, p))
-      assistSplitPctRef.current = c
-      setAssistSplitPct(c)
-    }
-    const onUp = () => {
-      if (!assistSplitDragging.current) return
-      assistSplitDragging.current = false
-      document.body.style.removeProperty('cursor')
-      document.body.style.removeProperty('user-select')
-      persistAssistSplit(assistSplitPctRef.current)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    window.addEventListener('blur', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      window.removeEventListener('blur', onUp)
-    }
-  }, [])
+  const {
+    assistSplitContainerRef,
+    assistSplitDragging,
+    assistSplitPct,
+    assistSplitPctRef,
+    persistAssistSplitPct,
+  } = useAssistSplit()
 
-
-  useEffect(() => {
-    Promise.all([
-      api.getConfig().then(setConfig),
-      api.getDevices().then((d) => setDevices(d.devices, d.platform)),
-      api.getOptions().then(setOptions),
-    ]).then(() => {
-      api.checkModelsHealth().catch(() => {})
-    }).catch((e) => setInitError(e.message))
-  }, [])
+  const { initError } = useAppBootstrap()
 
   useEffect(() => {
     if (!window.electronAPI?.getShortcuts) return
@@ -194,25 +65,21 @@ export default function App() {
   const handlePositionChange = async (val: string) => {
     const v = val.trim()
     if (v && v !== config?.position) {
-      await api.updateConfig({ position: v })
-      setConfig(await api.getConfig())
+      await updateConfigAndRefresh({ position: v })
     }
   }
   const handleLanguageChange = async (val: string) => {
     const v = val.trim()
     if (v && v !== config?.language) {
-      await api.updateConfig({ language: v })
-      setConfig(await api.getConfig())
+      await updateConfigAndRefresh({ language: v })
     }
   }
   const handleModelChange = async (active_model: number) => {
-    await api.updateConfig({ active_model })
-    setConfig(await api.getConfig())
+    await updateConfigAndRefresh({ active_model })
     useInterviewStore.getState().setToastMessage('已设为优先答题模型（实时辅助优先占用该路）')
   }
   const handleThinkToggle = async () => {
-    await api.updateConfig({ think_mode: !config?.think_mode })
-    setConfig(await api.getConfig())
+    await updateConfigAndRefresh({ think_mode: !config?.think_mode })
   }
 
   const handleServerScreenAsk = async () => {
@@ -493,8 +360,7 @@ export default function App() {
                 e.preventDefault()
                 const c = 32
                 assistSplitPctRef.current = c
-                setAssistSplitPct(c)
-                persistAssistSplit(c)
+                persistAssistSplitPct(c)
               }}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -502,15 +368,13 @@ export default function App() {
                   const delta = e.key === 'ArrowLeft' ? -2 : 2
                   const c = Math.min(62, Math.max(24, assistSplitPctRef.current + delta))
                   assistSplitPctRef.current = c
-                  setAssistSplitPct(c)
-                  persistAssistSplit(c)
+                  persistAssistSplitPct(c)
                 }
                 if (e.key === 'Home' || e.key === 'End') {
                   e.preventDefault()
                   const c = e.key === 'Home' ? 24 : 62
                   assistSplitPctRef.current = c
-                  setAssistSplitPct(c)
-                  persistAssistSplit(c)
+                  persistAssistSplitPct(c)
                 }
               }}
             >
@@ -551,16 +415,32 @@ export default function App() {
       )}
 
       {/* ── Practice Mode ── */}
-      {appMode === 'practice' && <PracticeMode />}
+      {appMode === 'practice' && (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-text-muted">加载模拟练习中…</div>}>
+          <PracticeMode />
+        </Suspense>
+      )}
 
       {/* ── Knowledge Map ── */}
-      {appMode === 'knowledge' && <KnowledgeMap />}
+      {appMode === 'knowledge' && (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-text-muted">加载能力分析中…</div>}>
+          <KnowledgeMap />
+        </Suspense>
+      )}
 
       {/* ── Resume Optimizer ── */}
-      {appMode === 'resume-opt' && <ResumeOptimizer />}
+      {appMode === 'resume-opt' && (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-text-muted">加载简历优化中…</div>}>
+          <ResumeOptimizer />
+        </Suspense>
+      )}
 
       {/* ── Job tracker ── */}
-      {appMode === 'job-tracker' && <JobTracker />}
+      {appMode === 'job-tracker' && (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-text-muted">加载求职看板中…</div>}>
+          <JobTracker />
+        </Suspense>
+      )}
 
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse gap-2 items-center" aria-live="polite">
         {fallbackToast && (

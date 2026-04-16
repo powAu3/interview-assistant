@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
+import { refreshConfig } from '@/lib/configSync'
 import { ResumeHistoryPopover } from '@/components/ResumeHistory'
 
 const DEFAULT_QUICK_PROMPTS = [
@@ -193,7 +194,7 @@ export default function ControlBar() {
     try {
       const res = await api.uploadResume(file)
       setResumeFile(file.name)
-      useInterviewStore.getState().setConfig(await api.getConfig())
+      await refreshConfig()
       if (res.parsed) {
         setToastMessage('简历已解析并选用')
       } else {
@@ -205,7 +206,7 @@ export default function ControlBar() {
   }
   const handleRemoveResume = async () => {
     await api.deleteResume(); setResumeFile(null)
-    useInterviewStore.getState().setConfig(await api.getConfig())
+    await refreshConfig()
   }
 
   return (

@@ -10,7 +10,9 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
+import { updateConfigAndRefresh } from '@/lib/configSync'
 import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
 import { Section, Field } from './shared'
 import NetworkQRCode from './NetworkQRCode'
@@ -59,36 +61,36 @@ export default function PreferencesTab() {
     platformInfo,
     sttLoaded,
     sttLoading,
-    answerPanelLayout,
-    setAnswerPanelLayout,
-    colorScheme,
-    setColorScheme,
     setSettingsDrawerTab,
-    interviewOverlayEnabled,
-    interviewOverlayMode,
-    interviewOverlayOpacity,
-    interviewOverlayPanelFontSize,
-    interviewOverlayPanelWidth,
-    interviewOverlayPanelShowBg,
-    interviewOverlayPanelFontColor,
-    interviewOverlayPanelHeight,
-    interviewOverlayLyricLines,
-    interviewOverlayLyricFontSize,
-    interviewOverlayLyricWidth,
-    interviewOverlayLyricColor,
-    setInterviewOverlayEnabled,
-    setInterviewOverlayMode,
-    setInterviewOverlayOpacity,
-    setInterviewOverlayPanelFontSize,
-    setInterviewOverlayPanelWidth,
-    setInterviewOverlayPanelShowBg,
-    setInterviewOverlayPanelFontColor,
-    setInterviewOverlayPanelHeight,
-    setInterviewOverlayLyricLines,
-    setInterviewOverlayLyricFontSize,
-    setInterviewOverlayLyricWidth,
-    setInterviewOverlayLyricColor,
   } = useInterviewStore()
+  const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
+  const setAnswerPanelLayout = useUiPrefsStore((s) => s.setAnswerPanelLayout)
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
+  const setColorScheme = useUiPrefsStore((s) => s.setColorScheme)
+  const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
+  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
+  const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
+  const interviewOverlayPanelFontSize = useUiPrefsStore((s) => s.interviewOverlayPanelFontSize)
+  const interviewOverlayPanelWidth = useUiPrefsStore((s) => s.interviewOverlayPanelWidth)
+  const interviewOverlayPanelShowBg = useUiPrefsStore((s) => s.interviewOverlayPanelShowBg)
+  const interviewOverlayPanelFontColor = useUiPrefsStore((s) => s.interviewOverlayPanelFontColor)
+  const interviewOverlayPanelHeight = useUiPrefsStore((s) => s.interviewOverlayPanelHeight)
+  const interviewOverlayLyricLines = useUiPrefsStore((s) => s.interviewOverlayLyricLines)
+  const interviewOverlayLyricFontSize = useUiPrefsStore((s) => s.interviewOverlayLyricFontSize)
+  const interviewOverlayLyricWidth = useUiPrefsStore((s) => s.interviewOverlayLyricWidth)
+  const interviewOverlayLyricColor = useUiPrefsStore((s) => s.interviewOverlayLyricColor)
+  const setInterviewOverlayEnabled = useUiPrefsStore((s) => s.setInterviewOverlayEnabled)
+  const setInterviewOverlayMode = useUiPrefsStore((s) => s.setInterviewOverlayMode)
+  const setInterviewOverlayOpacity = useUiPrefsStore((s) => s.setInterviewOverlayOpacity)
+  const setInterviewOverlayPanelFontSize = useUiPrefsStore((s) => s.setInterviewOverlayPanelFontSize)
+  const setInterviewOverlayPanelWidth = useUiPrefsStore((s) => s.setInterviewOverlayPanelWidth)
+  const setInterviewOverlayPanelShowBg = useUiPrefsStore((s) => s.setInterviewOverlayPanelShowBg)
+  const setInterviewOverlayPanelFontColor = useUiPrefsStore((s) => s.setInterviewOverlayPanelFontColor)
+  const setInterviewOverlayPanelHeight = useUiPrefsStore((s) => s.setInterviewOverlayPanelHeight)
+  const setInterviewOverlayLyricLines = useUiPrefsStore((s) => s.setInterviewOverlayLyricLines)
+  const setInterviewOverlayLyricFontSize = useUiPrefsStore((s) => s.setInterviewOverlayLyricFontSize)
+  const setInterviewOverlayLyricWidth = useUiPrefsStore((s) => s.setInterviewOverlayLyricWidth)
+  const setInterviewOverlayLyricColor = useUiPrefsStore((s) => s.setInterviewOverlayLyricColor)
 
   const [scrollBottomPx, setScrollBottomPx] = useState(40)
   const [generalSaving, setGeneralSaving] = useState(false)
@@ -108,8 +110,7 @@ export default function PreferencesTab() {
     try {
       const v = Math.max(4, Math.min(400, scrollBottomPx || 40))
       setScrollBottomPx(v)
-      await api.updateConfig({ answer_autoscroll_bottom_px: v, practice_audience: practiceAudience })
-      useInterviewStore.getState().setConfig(await api.getConfig())
+      await updateConfigAndRefresh({ answer_autoscroll_bottom_px: v, practice_audience: practiceAudience })
       useInterviewStore.getState().setToastMessage('设置已保存')
     } catch (e: unknown) {
       useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '保存失败')
@@ -167,8 +168,7 @@ export default function PreferencesTab() {
             checked={config?.assist_high_churn_short_answer ?? false}
             onChange={async (v) => {
               try {
-                await api.updateConfig({ assist_high_churn_short_answer: v })
-                useInterviewStore.getState().setConfig(await api.getConfig())
+                await updateConfigAndRefresh({ assist_high_churn_short_answer: v })
               } catch {}
             }}
             label={config?.assist_high_churn_short_answer ? '简短模式' : '详细模式'}
@@ -270,8 +270,7 @@ export default function PreferencesTab() {
                   value={config.screen_capture_region ?? 'left_half'}
                   onChange={async (e) => {
                     try {
-                      await api.updateConfig({ screen_capture_region: e.target.value })
-                      useInterviewStore.getState().setConfig(await api.getConfig())
+                      await updateConfigAndRefresh({ screen_capture_region: e.target.value })
                     } catch {}
                   }}
                   className="input-field w-full max-w-[200px]"
@@ -297,8 +296,7 @@ export default function PreferencesTab() {
                   checked={config?.written_exam_mode ?? false}
                   onChange={async (v) => {
                     try {
-                      await api.updateConfig({ written_exam_mode: v })
-                      useInterviewStore.getState().setConfig(await api.getConfig())
+                      await updateConfigAndRefresh({ written_exam_mode: v })
                     } catch {}
                   }}
                   label={config?.written_exam_mode ? '已开启' : '已关闭'}
@@ -310,8 +308,7 @@ export default function PreferencesTab() {
                         checked={config?.written_exam_think ?? false}
                         onChange={async (v) => {
                           try {
-                            await api.updateConfig({ written_exam_think: v })
-                            useInterviewStore.getState().setConfig(await api.getConfig())
+                            await updateConfigAndRefresh({ written_exam_think: v })
                           } catch {}
                         }}
                         label={config?.written_exam_think ? '已开启（更准但更慢）' : '已关闭（更快）'}
@@ -380,8 +377,7 @@ export default function PreferencesTab() {
               const v = Math.max(4, Math.min(400, scrollBottomPx || 40))
               setScrollBottomPx(v)
               try {
-                await api.updateConfig({ answer_autoscroll_bottom_px: v })
-                useInterviewStore.getState().setConfig(await api.getConfig())
+                await updateConfigAndRefresh({ answer_autoscroll_bottom_px: v })
               } catch {}
             }}
             className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
