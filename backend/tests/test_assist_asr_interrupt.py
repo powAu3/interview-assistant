@@ -227,6 +227,9 @@ def test_build_system_prompt_includes_high_churn_short_answer_instructions():
         high_churn_short_answer=True,
     )
 
-    assert "高 churn" not in normal
-    assert "高 churn" in short
+    assert "高 churn 模式" not in normal
+    assert "高 churn 模式" in short
     assert "80-180" in short
+    assert "输入判定三档 ladder" in normal
+    assert "输入判定三档 ladder" in short
+    assert "追问连贯规则" in short
