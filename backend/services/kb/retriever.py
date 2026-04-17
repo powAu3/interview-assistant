@@ -50,9 +50,14 @@ def _should_early_return_asr(q: str, min_chars: int) -> bool:
 
 
 def _build_fts_expr(q: str) -> str:
-    """query → FTS5 MATCH: CJK 走 bigram, 非 CJK 按空白切词, 每个 token 做 phrase(AND)。
+    """query → FTS5 MATCH: CJK 走 bigram, 非 CJK 按空白切词, token 之间用 ``OR`` 连接。
 
-    用 `"..."` 包住每个 token 避免 `-` / `OR` / `NEAR` 被解释为 FTS 运算符。
+    用 ``OR`` 而不是隐式 ``AND`` 是因为长 CJK query 的 bigram 数量很容易超过任何
+    单个 chunk 同时包含的数量(例如 "持久化方式" 拆出 4 个 bigram, 文档里只有 3 个)
+    AND 会导致整段 query 一个结果都查不到; OR 让 bm25 自动按命中数 + 词频排序,
+    top_k 截断后效果更稳定。
+
+    用 ``"..."`` 包住每个 token 避免 ``-`` / ``OR`` / ``NEAR`` 被当成运算符。
     """
     toks = cjk_bigram_query_tokens(q)
     if not toks:
@@ -67,7 +72,7 @@ def _build_fts_expr(q: str) -> str:
         if not any(ch.isalnum() or ord(ch) > 127 for ch in s):
             continue
         safe.append(f'"{s}"')
-    return " ".join(safe)
+    return " OR ".join(safe)
 
 
 def retrieve(

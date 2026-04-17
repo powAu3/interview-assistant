@@ -92,6 +92,20 @@ def test_manual_text_ignores_asr_min_chars(setup_retriever, monkeypatch):
     assert hits
 
 
+def test_long_cjk_query_partial_match(setup_retriever):
+    """长 CJK query 不应因为多了几个 bigram 失配就整段命中失败。
+
+    回归用例: 2026-04-17 真实 smoke 中发现 "Redis 快照持久化方式" 比
+    "Redis 快照持久化" 多 bigrams ['化方', '方式'] 而 chunk 没这两个词,
+    AND 语义把整个 query 撞空。修复后改成 OR 让 bm25 去排序。
+    """
+    hits = setup_retriever.retrieve(
+        "Redis 快照持久化方式是什么", k=3, deadline_ms=500, mode="manual_text"
+    )
+    assert hits, "长 CJK query 应允许部分 bigram 匹配, 否则真实问答永远 0 命中"
+    assert any("RDB" in h.text or "快照" in h.text for h in hits)
+
+
 def test_deadline_enforced(setup_retriever, monkeypatch):
     """人为让 fts_search sleep，验证 deadline 到期返回空。"""
     from services.kb import store as store_mod
