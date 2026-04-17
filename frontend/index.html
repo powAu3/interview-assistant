@@ -7,21 +7,21 @@
         try {
           var key = 'ia-color-scheme'
           var validThemes = [
-            'vscode-dark-plus',
             'vscode-light-plus',
+            'vscode-dark-plus',
             'vscode-dark-hc',
-            'command-center',
+            'nord',
             'editorial-glass',
-            'stealth-cyber',
+            'solarized-dark',
           ]
-          var theme = localStorage.getItem(key) || 'vscode-dark-plus'
-          if (validThemes.indexOf(theme) < 0) theme = 'vscode-dark-plus'
+          var theme = localStorage.getItem(key) || 'vscode-light-plus'
+          if (validThemes.indexOf(theme) < 0) theme = 'vscode-light-plus'
           document.documentElement.setAttribute('data-theme', theme)
           if (location.search.indexOf('overlay=1') !== -1) {
             document.documentElement.style.background = 'transparent'
           }
         } catch {
-          document.documentElement.setAttribute('data-theme', 'vscode-dark-plus')
+          document.documentElement.setAttribute('data-theme', 'vscode-light-plus')
         }
       })()
     </script>
