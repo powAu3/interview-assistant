@@ -63,5 +63,22 @@
   "transcription_min_sig_chars": 2,
   "assist_transcription_merge_gap_sec": 2.0,
   "assist_transcription_merge_max_sec": 12.0,
-  "screen_capture_region": "left_half"
+  "screen_capture_region": "left_half",
+  "kb_enabled": false,
+  "kb_dir": "backend/data/kb",
+  "kb_db_path": "backend/data/kb.sqlite",
+  "kb_cache_dir": "backend/data/kb_cache",
+  "kb_top_k": 4,
+  "kb_deadline_ms": 150,
+  "kb_asr_deadline_ms": 80,
+  "kb_min_score": 1.0,
+  "kb_chunk_max_chars": 800,
+  "kb_prompt_excerpt_chars": 300,
+  "kb_trigger_modes": ["asr_realtime", "manual_text", "written_exam"],
+  "kb_file_extensions": [".md", ".txt", ".log", ".docx", ".pdf"],
+  "kb_ocr_enabled": false,
+  "kb_vision_caption_enabled": false,
+  "kb_max_upload_bytes": 20971520,
+  "kb_recent_hits_capacity": 50,
+  "kb_asr_min_query_chars": 6
 }

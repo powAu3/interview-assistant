@@ -93,6 +93,29 @@ class AppConfig(BaseModel):
     # 笔试模式下是否开启 think（深度思考），默认关闭以加快响应
     written_exam_think: bool = False
 
+    # --- Knowledge Base (Beta) ---
+    kb_enabled: bool = False
+    kb_dir: str = "backend/data/kb"
+    kb_db_path: str = "backend/data/kb.sqlite"
+    kb_cache_dir: str = "backend/data/kb_cache"
+    kb_top_k: int = 4
+    kb_deadline_ms: int = 150
+    kb_asr_deadline_ms: int = 80
+    kb_min_score: float = 1.0
+    kb_chunk_max_chars: int = 800
+    kb_prompt_excerpt_chars: int = 300
+    kb_trigger_modes: list[str] = Field(
+        default_factory=lambda: ["asr_realtime", "manual_text", "written_exam"]
+    )
+    kb_file_extensions: list[str] = Field(
+        default_factory=lambda: [".md", ".txt", ".log", ".docx", ".pdf"]
+    )
+    kb_ocr_enabled: bool = False
+    kb_vision_caption_enabled: bool = False
+    kb_max_upload_bytes: int = 20 * 1024 * 1024
+    kb_recent_hits_capacity: int = 50
+    kb_asr_min_query_chars: int = 6
+
     @model_validator(mode="after")
     def _ensure_valid_models(self):
         if not self.models:

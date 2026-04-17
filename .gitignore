@@ -40,6 +40,12 @@ backend/job_tracker.db
 backend/job_tracker.db-shm
 backend/job_tracker.db-wal
 
+# Knowledge Base（用户上传的笔记/文件 + FTS 索引 + OCR/Vision 缓存）
+backend/data/kb/
+backend/data/kb.sqlite
+backend/data/kb.sqlite-*
+backend/data/kb_cache/
+
 # Whisper / model cache
 *.bin
 *.pt
@@ -70,6 +76,7 @@ temp/
 *.backup
 
 # Screenshots (generated, large binary)
+/docs/superpowers/**
 docs/screenshots/review/
 frontend/output/
 
