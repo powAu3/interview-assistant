@@ -70,7 +70,11 @@ function RadarChart({ tags }: { tags: TagSummary[] }) {
           y2={cy + r * Math.sin((Math.PI * 2 * i) / n - Math.PI / 2)}
           stroke="currentColor" className="text-bg-hover" strokeWidth="0.5" />
       ))}
-      <polygon points={polyStr} fill="rgba(59,130,246,0.15)" stroke="#3b82f6" strokeWidth="1.5" />
+      <polygon
+        points={polyStr}
+        className="fill-accent-blue/15 stroke-accent-blue"
+        strokeWidth="1.5"
+      />
       {points.map((p, i) => {
         const tooltip = `${p.tag} · ${p.score?.toFixed(1) ?? '--'}/10 · ${p.count}次 · 趋势${trendLabel(p.trend)}`
         return (
@@ -79,7 +83,7 @@ function RadarChart({ tags }: { tags: TagSummary[] }) {
             <circle cx={p.x} cy={p.y} r="10" fill="transparent" className="cursor-help">
               <title>{tooltip}</title>
             </circle>
-            <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
+            <circle cx={p.x} cy={p.y} r="3" className="fill-accent-blue" />
             <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle"
               className="fill-text-secondary" fontSize="9">{p.tag}
               <title>{tooltip}</title>

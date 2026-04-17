@@ -69,11 +69,47 @@ export default function KbFilesPanel({ onChanged }: Props) {
     }
   }
 
+  // 批量上传 - 顺序处理(避免并发写 FTS 冲突), 汇总成功/失败数
+  const handleUploadMany = async (files: File[]) => {
+    if (!files.length) return
+    if (files.length === 1) {
+      await handleUpload(files[0])
+      return
+    }
+    setUploading(true)
+    setError(null)
+    let ok = 0
+    let skipped = 0
+    const failed: string[] = []
+    for (const file of files) {
+      if (!isSupported(file.name)) {
+        skipped += 1
+        continue
+      }
+      try {
+        await api.kbUpload(file, '')
+        ok += 1
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '上传失败'
+        failed.push(`${file.name}: ${msg}`)
+      }
+    }
+    await onChanged()
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    const parts: string[] = []
+    if (ok) parts.push(`成功 ${ok}`)
+    if (skipped) parts.push(`跳过 ${skipped} (不支持的类型)`)
+    if (failed.length) parts.push(`失败 ${failed.length}`)
+    toast(`批量上传: ${parts.join(' · ') || '无变化'}`)
+    if (failed.length) setError(failed.join(' | '))
+  }
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    const f = e.dataTransfer.files?.[0]
-    if (f) await handleUpload(f)
+    const files = Array.from(e.dataTransfer.files ?? [])
+    if (files.length) await handleUploadMany(files)
   }
 
   const handleDelete = async (path: string) => {
@@ -142,11 +178,12 @@ export default function KbFilesPanel({ onChanged }: Props) {
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           accept={ACCEPT}
           onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) handleUpload(f)
+            const files = Array.from(e.target.files ?? [])
+            if (files.length) void handleUploadMany(files)
           }}
         />
       </div>
