@@ -14,6 +14,8 @@ import TranscriptionPanel from '@/components/TranscriptionPanel'
 import AnswerPanel from '@/components/AnswerPanel'
 import ControlBar from '@/components/ControlBar'
 import SettingsDrawer from '@/components/SettingsDrawer'
+import KnowledgeButton from '@/components/kb/KnowledgeButton'
+import KnowledgeDrawer from '@/components/kb/KnowledgeDrawer'
 const PracticeMode = lazy(() => import('@/components/PracticeMode'))
 const KnowledgeMap = lazy(() => import('@/components/KnowledgeMap'))
 const ResumeOptimizer = lazy(() => import('@/components/ResumeOptimizer'))
@@ -293,6 +295,7 @@ export default function App() {
               <option value="__custom__">自定义...</option>
             </select>
           )}
+          <KnowledgeButton />
           <button
             type="button"
             onClick={toggleSettings}
@@ -476,6 +479,7 @@ export default function App() {
       </div>
 
       <SettingsDrawer />
+      <KnowledgeDrawer />
     </div>
   )
 }

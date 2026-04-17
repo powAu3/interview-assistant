@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
+import { useKbStore } from '@/stores/kbStore'
 import { buildWsUrl } from '@/lib/backendUrl'
 import { subscribeLeader } from '@/lib/wsLeader'
 
@@ -174,6 +175,15 @@ export function useInterviewWS() {
       case 'error':
         s.setLastWSError(msg.message || '未知错误')
         setTimeout(() => useInterviewStore.getState().setLastWSError(null), 5000)
+        break
+      case 'kb_hits':
+        useKbStore.getState().appendHits({
+          qa_id: msg.qa_id,
+          latency_ms: msg.latency_ms ?? 0,
+          degraded: !!msg.degraded,
+          hit_count: msg.hit_count ?? (Array.isArray(msg.hits) ? msg.hits.length : 0),
+          hits: Array.isArray(msg.hits) ? msg.hits : [],
+        })
         break
     }
   }

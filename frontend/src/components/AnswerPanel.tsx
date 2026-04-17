@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
+import KbReferenceBanner from '@/components/kb/KbReferenceBanner'
 
 const SoundTest = lazy(() => import('./SoundTest'))
 const AnswerMarkdownContent = lazy(() => import('./AnswerMarkdownContent'))
@@ -269,6 +270,7 @@ export default function AnswerPanel() {
               <div className="flex items-start gap-2 sm:gap-3 pl-1 sm:pl-2">
                 <span className="w-7 sm:w-8 flex-shrink-0 text-center text-accent-green text-xs font-bold pt-1">A</span>
                 <div className="flex-1 min-w-0 pb-4 border-l-2 border-accent-green/25 pl-3 sm:pl-4 -ml-1">
+                  <KbReferenceBanner qaId={qa.id} />
                   {renderAnswerBody(qa, isStreaming)}
                 </div>
               </div>
@@ -299,6 +301,7 @@ export default function AnswerPanel() {
                 <span className="text-accent-green text-xs font-bold">A</span>
               </div>
               <div className="flex-1 min-w-0 max-h-[280px] overflow-y-auto rounded-xl bg-bg-tertiary/15 p-3">
+                <KbReferenceBanner qaId={qa.id} />
                 {renderAnswerBody(qa, isStreaming)}
               </div>
             </div>

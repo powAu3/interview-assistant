@@ -39,6 +39,53 @@ export type ResumeHistoryDetail = ResumeHistoryItem & {
   summary_is_full?: boolean
 }
 
+// --- Knowledge Base (Beta) ---
+export type KBOrigin = 'text' | 'ocr' | 'vision' | 'mixed'
+
+export interface KBHit {
+  path: string
+  section_path: string
+  page?: number | null
+  origin: KBOrigin
+  score: number
+  excerpt: string
+}
+
+export interface KBDoc {
+  id: number
+  path: string
+  mtime: number
+  size: number
+  loader: string
+  title: string | null
+  status: 'ok' | 'failed' | 'pending'
+  error: string | null
+  chunk_count: number
+}
+
+export interface KBStatus {
+  enabled: boolean
+  trigger_modes: string[]
+  top_k: number
+  deadline_ms: number
+  asr_deadline_ms: number
+  total_docs: number
+  total_chunks: number
+  last_mtime: number
+  deps: { docx: boolean; pdf: boolean; ocr: boolean; vision: boolean }
+}
+
+export interface KBRecentHit {
+  ts: number
+  query: string
+  mode: string
+  hit_count: number
+  latency_ms: number
+  timed_out?: boolean
+  error?: string | null
+  top_section_paths: string[]
+}
+
 export interface ResumeUploadResult {
   ok: boolean
   history_id: number
@@ -180,4 +227,33 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ offer_ids }),
     }),
+
+  // Knowledge Base (Beta)
+  kbStatus: () => request<KBStatus>('/api/kb/status'),
+  kbDocs: (limit?: number) =>
+    request<{ items: KBDoc[] }>(`/api/kb/docs${limit ? `?limit=${limit}` : ''}`),
+  kbSearch: (query: string, k = 4, min_score = 0) =>
+    request<{ hits: KBHit[] }>('/api/kb/search', {
+      method: 'POST',
+      body: JSON.stringify({ query, k, min_score }),
+    }),
+  kbHitsRecent: (limit = 50) =>
+    request<{ items: KBRecentHit[] }>(`/api/kb/hits/recent?limit=${limit}`),
+  kbReindex: () => request<Record<string, unknown>>('/api/kb/reindex', { method: 'POST', body: '{}' }),
+  kbDelete: (path: string) =>
+    request<{ ok: boolean }>(`/api/kb/docs?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+  kbUpload: async (file: File, subdir = ''): Promise<{ path: string; size: number }> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (subdir) fd.append('subdir', subdir)
+    const token = getAuthToken()
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+    const res = await fetch(buildApiUrl('/api/kb/upload'), { method: 'POST', body: fd, headers })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: '上传失败' }))
+      throw new Error(err.detail || '上传失败')
+    }
+    return res.json()
+  },
 }
