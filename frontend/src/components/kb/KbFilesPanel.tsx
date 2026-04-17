@@ -69,7 +69,9 @@ export default function KbFilesPanel({ onChanged }: Props) {
     }
   }
 
-  // 批量上传 - 顺序处理(避免并发写 FTS 冲突), 汇总成功/失败数
+  // 批量上传 - 顺序处理(避免并发写 FTS 冲突), 汇总成功/失败数.
+  // 使用 try/finally 保证即使 onChanged() 抛错, uploading 也会复位;
+  // 调用方需在 uploading 时自行早退避免并发触发.
   const handleUploadMany = async (files: File[]) => {
     if (!files.length) return
     if (files.length === 1) {
@@ -81,22 +83,29 @@ export default function KbFilesPanel({ onChanged }: Props) {
     let ok = 0
     let skipped = 0
     const failed: string[] = []
-    for (const file of files) {
-      if (!isSupported(file.name)) {
-        skipped += 1
-        continue
+    try {
+      for (const file of files) {
+        if (!isSupported(file.name)) {
+          skipped += 1
+          continue
+        }
+        try {
+          await api.kbUpload(file, '')
+          ok += 1
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '上传失败'
+          failed.push(`${file.name}: ${msg}`)
+        }
       }
       try {
-        await api.kbUpload(file, '')
-        ok += 1
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : '上传失败'
-        failed.push(`${file.name}: ${msg}`)
+        await onChanged()
+      } catch {
+        /* ignore: 上传已完成, 只是列表刷新失败; 不影响 uploading 状态复位 */
       }
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
-    await onChanged()
-    setUploading(false)
-    if (fileInputRef.current) fileInputRef.current.value = ''
     const parts: string[] = []
     if (ok) parts.push(`成功 ${ok}`)
     if (skipped) parts.push(`跳过 ${skipped} (不支持的类型)`)
@@ -108,6 +117,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
+    if (uploading) return // 正在上传时忽略新 drop, 避免两批并发交错
     const files = Array.from(e.dataTransfer.files ?? [])
     if (files.length) await handleUploadMany(files)
   }
