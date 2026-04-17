@@ -64,7 +64,8 @@ def _enqueue_broadcast(data: dict):
 def _ws_authorized(ws: WebSocket) -> bool:
     if is_auth_disabled():
         return True
-    client_host = ws.client.host if ws.client else None
+    _client = getattr(ws, "client", None)
+    client_host = _client.host if _client else None
     if is_loopback_host(client_host):
         return True
     token = ws.query_params.get("token")

@@ -65,6 +65,12 @@ def test_websocket_init_uses_session_snapshot(monkeypatch: pytest.MonkeyPatch):
     sent: list[dict] = []
 
     class FakeWS:
+        # 模拟 starlette WebSocket: 真实环境一定有 client / query_params / headers,
+        # 这里给最小 stub 让 _ws_authorized 在 loopback 分支直接放行。
+        client = SimpleNamespace(host="127.0.0.1")
+        query_params: dict[str, str] = {}
+        headers: dict[str, str] = {}
+
         async def accept(self):
             return None
 
