@@ -890,11 +890,45 @@ def _process_question_parallel(
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
     written_exam_think = bool(getattr(cfg, "written_exam_think", False))
     prompt_mode: PromptMode = _prompt_mode_for_task(source, manual_input, written_exam=written_exam)
+
+    # --- KB retrieve (Beta, opt-in) ---
+    # 同步调用; retriever 内部已做 deadline + sqlite interrupt watchdog,
+    # 即使开启也不会拖慢 first-token 超过 kb_deadline_ms (默认 150ms / ASR 80ms)。
+    kb_hits: list = []
+    kb_latency_ms = 0
+    kb_degraded = False
+    if (
+        bool(getattr(cfg, "kb_enabled", False))
+        and prompt_mode in set(getattr(cfg, "kb_trigger_modes", []) or [])
+        and (question_text or "").strip()
+    ):
+        try:
+            from services.kb.retriever import retrieve as _kb_retrieve
+
+            _deadline = (
+                int(getattr(cfg, "kb_asr_deadline_ms", 80) or 80)
+                if prompt_mode == PROMPT_MODE_ASR_REALTIME
+                else int(getattr(cfg, "kb_deadline_ms", 150) or 150)
+            )
+            _t0 = time.monotonic()
+            kb_hits = _kb_retrieve(
+                question_text,
+                k=int(getattr(cfg, "kb_top_k", 4) or 4),
+                deadline_ms=_deadline,
+                mode=prompt_mode,
+            )
+            kb_latency_ms = int((time.monotonic() - _t0) * 1000)
+        except Exception as _e:
+            _elog.warning("kb retrieve in pipeline failed: %s", _e)
+            kb_hits = []
+            kb_degraded = True
+
     system_prompt = build_system_prompt(
         manual_input=manual_input,
         mode=prompt_mode,
         screen_region=getattr(cfg, "screen_capture_region", "left_half"),
         high_churn_short_answer=bool(meta.get("high_churn_short_answer", False)),
+        kb_hits=kb_hits or None,
     )
 
     if image:
@@ -943,6 +977,25 @@ def _process_question_parallel(
             "model_index": model_idx,
         }
     )
+
+    # KB 命中提示：放在 answer_start 之后、首 token 之前; 永远不阻塞。
+    if kb_hits or kb_degraded:
+        try:
+            from services.kb.ws import build_kb_hits_payload as _kb_payload
+
+            broadcast(
+                _kb_payload(
+                    qa_id=qa_id,
+                    hits=kb_hits,
+                    latency_ms=kb_latency_ms,
+                    degraded=kb_degraded,
+                    excerpt_chars=int(
+                        getattr(cfg, "kb_prompt_excerpt_chars", 300) or 300
+                    ),
+                )
+            )
+        except Exception as _e:
+            _elog.warning("broadcast kb_hits failed: %s", _e)
 
     full_answer = ""
     full_think = ""
