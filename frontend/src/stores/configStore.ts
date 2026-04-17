@@ -437,15 +437,19 @@ export const useInterviewStore = create<InterviewState>((set) => ({
     }),
   setFallbackToast: (toast) => set({ fallbackToast: toast }),
   setToastMessage: (msg) => {
-    set({ toastMessage: msg })
-    if (msg) {
-      const level = inferToastLevel(msg)
-      const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      set((s) => {
-        const next = [...s.toasts, { id, message: msg, level, ttlMs: TOAST_DEFAULT_TTL[level] }]
-        return { toasts: next.length > 5 ? next.slice(next.length - 5) : next }
-      })
+    if (!msg) {
+      set({ toastMessage: null, toasts: [] })
+      return
     }
+    const level = inferToastLevel(msg)
+    const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    set((s) => {
+      const next = [...s.toasts, { id, message: msg, level, ttlMs: TOAST_DEFAULT_TTL[level] }]
+      return {
+        toastMessage: msg,
+        toasts: next.length > 5 ? next.slice(next.length - 5) : next,
+      }
+    })
   },
   pushToast: (msg, level = 'info', ttlMs) => {
     const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`

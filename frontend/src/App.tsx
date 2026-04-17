@@ -147,13 +147,24 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [toastMessage])
 
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   useEffect(() => {
-    if (!toasts.length) return
-    const timers = toasts.map((t) =>
-      setTimeout(() => useInterviewStore.getState().dismissToast(t.id), t.ttlMs),
-    )
-    return () => { timers.forEach(clearTimeout) }
+    const timers = toastTimersRef.current
+    const currentIds = new Set(toasts.map((t) => t.id))
+    for (const [id, timer] of timers) {
+      if (!currentIds.has(id)) { clearTimeout(timer); timers.delete(id) }
+    }
+    for (const t of toasts) {
+      if (!timers.has(t.id)) {
+        const timer = setTimeout(() => useInterviewStore.getState().dismissToast(t.id), t.ttlMs)
+        timers.set(t.id, timer)
+      }
+    }
   }, [toasts])
+  useEffect(() => () => {
+    for (const timer of toastTimersRef.current.values()) clearTimeout(timer)
+    toastTimersRef.current.clear()
+  }, [])
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -529,7 +540,7 @@ export default function App() {
         </Suspense>
       )}
 
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse gap-2 items-center" aria-live="polite">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse gap-2 items-center">
         {!wsIsLeader && (
           <div className="animate-fade-up">
             <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 flex items-center gap-3">
