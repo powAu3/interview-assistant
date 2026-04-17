@@ -14,6 +14,7 @@ import {
 
 const ANSWER_LAYOUT_KEY = 'ia_answer_panel_layout'
 const ASSIST_SPLIT_KEY = 'ia_assist_split_pct'
+const ASSIST_TRANSCRIPT_COLLAPSED_KEY = 'ia_assist_transcript_collapsed'
 const APP_MODE_KEY = 'ia_app_mode'
 
 export type AppMode = 'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
@@ -187,6 +188,14 @@ function readAssistSplitPct(): number {
   return 32
 }
 
+function readAssistTranscriptCollapsed(): boolean {
+  try {
+    return localStorage.getItem(ASSIST_TRANSCRIPT_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function persistOverlayPref(key: string, value: string) {
   try {
     localStorage.setItem(key, value)
@@ -202,6 +211,7 @@ interface UiPrefsState {
   answerPanelLayout: 'cards' | 'stream'
   colorScheme: ColorSchemeId
   assistSplitPct: number
+  assistTranscriptCollapsed: boolean
   interviewOverlayEnabled: boolean
   interviewOverlayMode: InterviewOverlayMode
   interviewOverlayOpacity: number
@@ -218,6 +228,8 @@ interface UiPrefsState {
   setColorScheme: (id: ColorSchemeId) => void
   setAssistSplitPct: (pct: number) => void
   persistAssistSplitPct: (pct: number) => void
+  setAssistTranscriptCollapsed: (collapsed: boolean) => void
+  toggleAssistTranscriptCollapsed: () => void
   setInterviewOverlayEnabled: (enabled: boolean) => void
   setInterviewOverlayMode: (mode: InterviewOverlayMode) => void
   setInterviewOverlayOpacity: (opacity: number) => void
@@ -248,6 +260,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
   answerPanelLayout: readAnswerPanelLayout(),
   colorScheme: readStoredColorScheme(),
   assistSplitPct: readAssistSplitPct(),
+  assistTranscriptCollapsed: readAssistTranscriptCollapsed(),
   interviewOverlayEnabled: readInterviewOverlayEnabled(),
   interviewOverlayMode: readInterviewOverlayMode(),
   interviewOverlayOpacity: readInterviewOverlayOpacity(),
@@ -289,6 +302,29 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
       /* ignore */
     }
     set((state) => (state.assistSplitPct === next ? state : { assistSplitPct: next }))
+  },
+  setAssistTranscriptCollapsed: (collapsed) => {
+    try {
+      localStorage.setItem(ASSIST_TRANSCRIPT_COLLAPSED_KEY, collapsed ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+    set((state) =>
+      state.assistTranscriptCollapsed === collapsed
+        ? state
+        : { assistTranscriptCollapsed: collapsed },
+    )
+  },
+  toggleAssistTranscriptCollapsed: () => {
+    set((state) => {
+      const next = !state.assistTranscriptCollapsed
+      try {
+        localStorage.setItem(ASSIST_TRANSCRIPT_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return { assistTranscriptCollapsed: next }
+    })
   },
   setInterviewOverlayEnabled: (enabled) => {
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.enabled, enabled ? '1' : '0')

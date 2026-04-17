@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { Settings, SlidersHorizontal, MonitorSmartphone } from 'lucide-react'
+import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
@@ -30,6 +30,8 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
   const appMode = useUiPrefsStore((s) => s.appMode)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
+  const assistTranscriptCollapsed = useUiPrefsStore((s) => s.assistTranscriptCollapsed)
+  const toggleAssistTranscriptCollapsed = useUiPrefsStore((s) => s.toggleAssistTranscriptCollapsed)
   useOverlayWindowSync(isRecording, appMode)
 
   // job-tracker is now available on both web and Electron
@@ -63,6 +65,28 @@ export default function App() {
       openModelsDrawer()
     }
   }, [config, openModelsDrawer])
+
+  // Cmd+Shift+J / Ctrl+Shift+J: 切换实时转录面板显隐
+  // 注: Chrome 等浏览器把 Cmd+J / Ctrl+J 保留给「下载」, 故叠加 Shift 降低冲突.
+  // 仅桌面端 assist 模式下生效; 输入框/contenteditable 内按键忽略.
+  useEffect(() => {
+    if (appMode !== 'assist') return
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isToggle =
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        !e.altKey &&
+        (e.key === 'j' || e.key === 'J')
+      if (!isToggle) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+      e.preventDefault()
+      toggleAssistTranscriptCollapsed()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [appMode, toggleAssistTranscriptCollapsed])
 
   const handlePositionChange = async (val: string) => {
     const v = val.trim()
@@ -295,20 +319,38 @@ export default function App() {
               <option value="__custom__">自定义...</option>
             </select>
           )}
+          {appMode === 'assist' && (
+            <button
+              type="button"
+              onClick={toggleAssistTranscriptCollapsed}
+              className="hidden md:inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-accent-blue transition-all duration-200 border border-transparent hover:border-accent-blue/20 flex-shrink-0"
+              title={assistTranscriptCollapsed ? '显示实时转录面板 (⌘⇧J / Ctrl+⇧+J)' : '隐藏实时转录面板 (⌘⇧J / Ctrl+⇧+J)'}
+              aria-label={assistTranscriptCollapsed ? '显示实时转录面板' : '隐藏实时转录面板'}
+              aria-expanded={!assistTranscriptCollapsed}
+            >
+              {assistTranscriptCollapsed ? (
+                <PanelLeftOpen className="w-4 h-4" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" />
+              )}
+            </button>
+          )}
           <KnowledgeButton />
           <button
             type="button"
             onClick={toggleSettings}
-            className="p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
-            title="设置"
+            className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
+            title="设置 (外观 / 偏好 / 隐私 / 快捷提示词)"
+            aria-label="打开设置"
           >
             <Settings className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={openConfigDrawer}
-            className="p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-accent-blue transition-all duration-200 border border-transparent hover:border-accent-blue/20 flex-shrink-0"
-            title="配置：模型并行、VAD、LLM"
+            className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-accent-blue transition-all duration-200 border border-transparent hover:border-accent-blue/20 flex-shrink-0"
+            title="参数调节:模型并行 / VAD / LLM"
+            aria-label="打开参数调节抽屉"
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
@@ -334,6 +376,8 @@ export default function App() {
             ref={assistSplitContainerRef}
             className="flex-1 hidden md:flex overflow-hidden min-h-0"
           >
+            {!assistTranscriptCollapsed && (
+              <>
             <div
               className="flex flex-col min-w-0 flex-shrink-0 border-r border-bg-tertiary"
               style={{
@@ -387,6 +431,8 @@ export default function App() {
                 aria-hidden
               />
             </div>
+              </>
+            )}
             <div className="flex-1 flex flex-col min-w-0 min-h-0">
               <AnswerPanel />
             </div>
@@ -463,14 +509,14 @@ export default function App() {
           </div>
         )}
         {fallbackToast && (
-          <div className="animate-fade-up">
+          <div className="animate-fade-up" role="alert" aria-live="assertive">
             <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20">
-              <span className="text-accent-amber font-semibold">⚠</span>&nbsp; {fallbackToast.from} 不可用，切换到 {fallbackToast.to}
+              <span className="text-accent-amber font-semibold" aria-hidden>⚠</span>&nbsp; {fallbackToast.from} 不可用，切换到 {fallbackToast.to}
             </div>
           </div>
         )}
         {toastMessage && (
-          <div className="animate-fade-up">
+          <div className="animate-fade-up" role="status" aria-live="polite">
             <div className="glass border border-bg-hover/50 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 font-medium">
               {toastMessage}
             </div>
