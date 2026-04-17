@@ -18,7 +18,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+import secrets
 from typing import Any, Dict, Generator, List, Tuple
+
+
+def _new_eid() -> str:
+    """生成短错误编号,便于用户在 UI 看到 + 服务端日志反查。"""
+    return secrets.token_hex(3)
 
 from core.config import get_config
 from services.llm import _add_tokens, get_client
@@ -283,8 +289,12 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
         )
         parsed = _try_parse_json(raw_extract)
     except Exception as e:  # noqa: BLE001
-        _log.warning("resume agent step1 failed: %s", e)
-        yield f"\n> 抽取步骤失败({e}),降级到单次综合分析\n\n---\n\n"
+        eid = _new_eid()
+        _log.warning("resume agent step1 failed [%s]: %s", eid, e)
+        yield (
+            f"\n> 抽取步骤失败,已自动降级到单次综合分析。"
+            f"(错误编号 `{eid}`,详情见服务端日志)\n\n---\n\n"
+        )
         yield from _legacy_pass(client, model_cfg, jd_text, cfg.resume_text)
         return
 
@@ -309,9 +319,11 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
             analysis_chunks.append(piece)
             yield piece
     except Exception as e:  # noqa: BLE001
-        _log.warning("resume agent step2 failed: %s", e)
+        eid = _new_eid()
+        _log.warning("resume agent step2 failed [%s]: %s", eid, e)
         yield (
-            f"\n\n> 匹配步骤失败:{e}\n\n"
+            f"\n\n> 匹配步骤失败,已切换为兜底综合分析。"
+            f"(错误编号 `{eid}`)\n\n"
             "---\n\n## 🛟 兜底综合分析(降级)\n\n"
         )
         yield from _legacy_pass(client, model_cfg, jd_text, cfg.resume_text)
@@ -343,9 +355,11 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
         ):
             yield piece
     except Exception as e:  # noqa: BLE001
-        _log.warning("resume agent step3 failed: %s", e)
+        eid = _new_eid()
+        _log.warning("resume agent step3 failed [%s]: %s", eid, e)
         yield (
-            f"\n\n> 改写步骤失败:{e}\n\n"
+            f"\n\n> 改写步骤失败,已切换为兜底改写建议。"
+            f"(错误编号 `{eid}`)\n\n"
             "---\n\n## 🛟 兜底改写建议(降级)\n\n"
         )
         yield from _legacy_pass(client, model_cfg, jd_text, cfg.resume_text)
@@ -362,4 +376,6 @@ def _legacy_pass(client, model_cfg, jd_text: str, resume_text: str) -> Generator
             max_tokens=2400,
         )
     except Exception as e:  # noqa: BLE001
-        yield f"\n\n[兜底分析也失败: {e}]"
+        eid = _new_eid()
+        _log.warning("resume legacy_pass failed [%s]: %s", eid, e)
+        yield f"\n\n[兜底分析也失败,错误编号 `{eid}`,详情见服务端日志]"

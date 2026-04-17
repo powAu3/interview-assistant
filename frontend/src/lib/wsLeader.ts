@@ -145,10 +145,13 @@ export function isLeaderTab(): boolean {
 export function requestTakeover(): void {
   init()
   if (currentlyLeader) return
-  // 先广播 takeover 通知旧 leader 让位,等待一拍 BroadcastChannel 派送(同 tick 内即可被收到),
-  // 旧 leader 在 onmessage 里会立即 setLeader(本 tab id, false) 并 teardown WS,
-  // 此时本 tab 再 setLeader(TAB_ID, true) 触发自身订阅者重新打开 WS,
-  // 双连接窗口压缩到一个事件循环 tick。
+  // 先广播 takeover 通知旧 leader 让位,然后用微任务推迟本 tab 自我晋升:
+  //   * 微任务只保证「本 tab 当前调用栈结束后才晋升」,给 BroadcastChannel
+  //     向其他 tab 派送 + 旧 leader teardown WS 留出最小窗口,
+  //     避免本函数返回的同步路径里立刻打开第二条 WS。
+  //   * 跨 tab 的事件循环顺序由浏览器决定,本机制 *无法* 保证旧 leader 一定
+  //     先于新 leader 完成 teardown -- 仍可能存在短暂双连接窗口。
+  //     如需严格无重叠,需要补 takeover_ack 二段握手(目前业务可接受软切换)。
   channel?.postMessage({ type: 'takeover', id: TAB_ID } satisfies BcMessage)
   if (typeof queueMicrotask === 'function') {
     queueMicrotask(() => setLeader(TAB_ID, true))
