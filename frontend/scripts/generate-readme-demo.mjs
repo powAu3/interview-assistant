@@ -103,6 +103,12 @@ function getApiPayload(url, method) {
   if (pathname === '/api/options') return SAMPLE_OPTIONS
   if (pathname === '/api/devices') return SAMPLE_DEVICES
   if (pathname === '/api/models/health' && method === 'POST') return { ok: true }
+  if (pathname === '/api/models/health' && method === 'GET') return { health: { 0: 'ok', 1: 'ok', 2: 'error' } }
+  if (pathname === '/api/preflight/scenarios') return { scenarios: [] }
+  if (pathname === '/api/preflight/run') return { ok: true }
+  if (pathname === '/api/kb/status') return { enabled: false, docs: 0, chunks: 0 }
+  if (pathname === '/api/knowledge/summary') return { tags: [] }
+  if (pathname === '/api/knowledge/history') return { records: [], total: 0 }
   if (pathname === '/api/resume/history') return SAMPLE_RESUME_HISTORY
   if (pathname === '/api/ask') return { ok: true }
   if (pathname === '/api/start') return { ok: true }
@@ -214,7 +220,7 @@ async function preparePage(browser, baseUrl) {
   })
 
   await context.addInitScript(() => {
-    localStorage.setItem('ia-color-scheme', 'vscode-dark-plus')
+    localStorage.setItem('ia-color-scheme', 'vscode-light-plus')
     localStorage.setItem('ia_answer_panel_layout', 'stream')
     window.confirm = () => true
 
@@ -291,8 +297,9 @@ async function preparePage(browser, baseUrl) {
   })
 
   const page = await context.newPage()
-  await page.goto(`${baseUrl}/?demo=assist`, { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: '开始' }).waitFor({ timeout: 5000 })
+  await page.goto(`${baseUrl}/?demo=assist`, { waitUntil: 'domcontentloaded' })
+  await page.waitForLoadState('networkidle').catch(() => {})
+  await page.locator('button:has-text("开始面试"), button:has-text("开始")').first().waitFor({ timeout: 15000 })
   return { context, page }
 }
 
@@ -354,7 +361,19 @@ async function runDemo(page) {
   await captureFrame(page, frames, { waitMs: 300, displayMs: 780 })
   await captureFrame(page, frames, { waitMs: 220, displayMs: 720 })
 
-  await page.getByRole('button', { name: '开始' }).click()
+  const startBtn = page.locator('button:has-text("开始面试"), button:has-text("开始")').first()
+  // 等待按钮 enabled（auto-select 设备需要时间，或手动选一下）
+  for (let i = 0; i < 30; i += 1) {
+    const disabled = await startBtn.getAttribute('disabled').catch(() => null)
+    if (disabled === null) break
+    // 尝试手动选一个 loopback 设备
+    const deviceSelect = page.locator('select').filter({ hasText: /BlackHole|麦克风|Mic|System/i }).first()
+    if (await deviceSelect.count().catch(() => 0)) {
+      await deviceSelect.selectOption({ index: 1 }).catch(() => {})
+    }
+    await page.waitForTimeout(200)
+  }
+  await startBtn.click({ force: true })
   await emit(page, { type: 'recording', value: true })
   await emit(page, { type: 'audio_level', value: 0.18 })
   await captureFrame(page, frames, { waitMs: 220, displayMs: 620 })
@@ -478,7 +497,32 @@ public String queryUser(String userId) {
   })
 
   await captureFrame(page, frames, { waitMs: 280, displayMs: 1400 })
-  await captureFrame(page, frames, { waitMs: 300, displayMs: 1600 })
+  await captureFrame(page, frames, { waitMs: 260, displayMs: 1100 })
+
+  // 额外演示：隐藏左侧实时转录面板，让回答区更聚焦
+  const togglePanelBtn = page.getByRole('button', { name: /隐藏实时转录面板|显示实时转录面板/ })
+  if (await togglePanelBtn.count().catch(() => 0)) {
+    await togglePanelBtn.first().click().catch(() => {})
+    await captureFrame(page, frames, { waitMs: 260, displayMs: 900 })
+    await captureFrame(page, frames, { waitMs: 240, displayMs: 1100 })
+    await togglePanelBtn.first().click().catch(() => {})
+    await captureFrame(page, frames, { waitMs: 260, displayMs: 900 })
+  }
+
+  // 额外演示：切到「能力分析」看看薄弱点雷达，再切回来
+  const knowledgeTab = page.getByRole('tab', { name: /能力分析/ })
+  if (await knowledgeTab.count().catch(() => 0)) {
+    await knowledgeTab.first().click().catch(() => {})
+    await captureFrame(page, frames, { waitMs: 320, displayMs: 1300 })
+    await captureFrame(page, frames, { waitMs: 260, displayMs: 900 })
+  }
+  const assistTab = page.getByRole('tab', { name: /实时辅助/ })
+  if (await assistTab.count().catch(() => 0)) {
+    await assistTab.first().click().catch(() => {})
+    await captureFrame(page, frames, { waitMs: 300, displayMs: 1400 })
+  }
+
+  await captureFrame(page, frames, { waitMs: 260, displayMs: 1600 })
   return frames
 }
 

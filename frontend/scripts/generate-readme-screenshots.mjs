@@ -460,7 +460,7 @@ async function preparePage(browser, baseUrl, scenario) {
 
   const initScriptConfig = buildInitScriptConfig(scenario)
   await context.addInitScript(({ scenario: shotScenario, messages }) => {
-    localStorage.setItem('ia-color-scheme', 'vscode-dark-plus')
+    localStorage.setItem('ia-color-scheme', 'vscode-light-plus')
     localStorage.setItem('ia_answer_panel_layout', 'stream')
 
     const nativeWebSocket = window.WebSocket
@@ -548,7 +548,12 @@ async function captureAssist(page, outputPath) {
 
 async function capturePractice(page, outputPath) {
   await page.getByRole('tab', { name: /模拟练习/i }).click()
-  await page.getByText('模拟面试练习').waitFor({ timeout: 5000 })
+  // 等 Practice 任一关键态可见：idle（"模拟面试练习"）或 questioning（"第 X 题"）
+  await Promise.race([
+    page.getByText('模拟面试练习').waitFor({ timeout: 6000 }).catch(() => null),
+    page.getByText(/第\s*\d+\s*题/).first().waitFor({ timeout: 6000 }).catch(() => null),
+  ])
+  await page.waitForTimeout(200)
   await page.screenshot({ path: outputPath })
 }
 

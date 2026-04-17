@@ -181,12 +181,12 @@ export default function App() {
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden noise-bg">
       {/* Header */}
       <header className="header-gradient flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 md:px-5 py-2.5 flex-shrink-0 gap-y-2">
-        <div className="flex items-center gap-2.5 flex-shrink-0 min-w-0 flex-wrap">
+        <div className="flex items-center gap-2 md:gap-2.5 flex-shrink-0 min-w-0 flex-wrap">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-blue/20 to-accent-blue/5 flex items-center justify-center border border-accent-blue/10">
               <span className="text-sm">🎙️</span>
             </div>
-            <h1 className="text-sm font-bold hidden sm:block flex-shrink-0 tracking-tight">学习助手</h1>
+            <h1 className="text-sm font-bold hidden lg:block flex-shrink-0 tracking-tight">学习助手</h1>
           </div>
 
           <div className="flex overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none" role="tablist" aria-label="功能模块">
@@ -208,14 +208,14 @@ export default function App() {
 
           <div className="flex items-center gap-1.5 ml-1.5 flex-shrink-0 bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20">
             <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
-            <span className="text-[10px] text-text-muted hidden sm:inline font-medium">
+            <span className="text-[10px] text-text-muted hidden lg:inline font-medium">
               {sttLoaded ? 'STT就绪' : sttLoading ? '加载中' : '未加载'}
             </span>
           </div>
 
           {tokenUsage.total > 0 && (
             <div
-              className="hidden sm:flex items-center gap-1.5 ml-1 cursor-help bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20"
+              className="hidden xl:flex items-center gap-1.5 ml-1 cursor-help bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20"
               title={[
                 `总计 ${tokenUsage.total}（Prompt ${tokenUsage.prompt} + Completion ${tokenUsage.completion}）`,
                 ...Object.entries(tokenUsage.byModel || {}).map(
