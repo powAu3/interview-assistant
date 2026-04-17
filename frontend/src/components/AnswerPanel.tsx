@@ -370,12 +370,23 @@ export default function AnswerPanel() {
       </div>
 
       {showScrollToLatestFab && (
-        <div className="pointer-events-none absolute bottom-4 right-3 sm:right-5 z-20 animate-fade-up">
+        <div className="pointer-events-none absolute bottom-4 right-3 sm:right-5 z-20 animate-fade-up flex flex-col items-end gap-1.5">
+          {hasActiveGeneration && (
+            <div
+              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-blue/10 border border-accent-blue/30 text-[10px] font-semibold text-accent-blue shadow-sm backdrop-blur-sm"
+              role="status"
+              aria-live="polite"
+              title="你手动上滑了页面，自动跟随已暂停；点击下方按钮继续跟随"
+            >
+              <span className="inline-flex w-1.5 h-1.5 rounded-full bg-accent-blue motion-safe:animate-pulse" aria-hidden />
+              <span>生成中 · 已暂停跟随</span>
+            </div>
+          )}
           <button
             type="button"
             onClick={scrollToLatest}
-            title={hasActiveGeneration ? '下方正在生成,点击回到最新' : '回到最新答案'}
-            aria-label={hasActiveGeneration ? '滚动到最新生成内容' : '滚动到最新答案'}
+            title={hasActiveGeneration ? '下方正在生成，点击继续跟随' : '回到最新答案'}
+            aria-label={hasActiveGeneration ? '继续跟随最新生成内容' : '滚动到最新答案'}
             className="pointer-events-auto flex h-[52px] w-[52px] items-center justify-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-transform hover:scale-105 active:scale-95"
           >
             <span className="relative flex h-[52px] w-[52px] items-center justify-center">
@@ -395,7 +406,7 @@ export default function AnswerPanel() {
               </span>
             </span>
             <span className="sr-only">
-              {hasActiveGeneration ? '正在生成,跳到最新' : '跳到最新答案'}
+              {hasActiveGeneration ? '正在生成，继续跟随最新' : '跳到最新答案'}
             </span>
           </button>
         </div>
