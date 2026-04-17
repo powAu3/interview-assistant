@@ -20,12 +20,16 @@ const TOAST_DEFAULT_TTL: Record<ToastLevel, number> = {
   error: 4500,
 }
 
-/** 根据消息文本启发式推断等级，让老代码 setToastMessage('xxx失败') 也能自动标红 */
+/**
+ * 根据消息文本启发式推断等级，让老代码 setToastMessage('xxx失败') 也能自动标红。
+ * 词表偏保守：仅匹配明显的失败/成功信号，避免「不能」「无效」等中性词误伤。
+ * 新代码建议直接用 pushToast(msg, level) 显式传等级。
+ */
 function inferToastLevel(msg: string): ToastLevel {
   const s = (msg || '').toLowerCase()
-  if (/失败|错误|未配置|未连接|超时|不能|无效|error|fail|denied|refused/.test(s)) return 'error'
-  if (/警告|风险|注意|warn/.test(s)) return 'warn'
-  if (/已保存|已更新|成功|已恢复|已开启|已关闭|已切换|已解析|已连通|ok\b|成功/.test(s)) return 'success'
+  if (/失败|错误|未配置|未连接|已中断|超时|error\b|\bfail(ed)?\b|denied|refused/.test(s)) return 'error'
+  if (/警告|风险|注意|warn(ing)?/.test(s)) return 'warn'
+  if (/已保存|已更新|成功|已恢复|已开启|已关闭|已切换|已解析|已连通|success/.test(s)) return 'success'
   return 'info'
 }
 

@@ -25,7 +25,7 @@ export default function App() {
   useInterviewWS()
   const {
     config, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
-    isRecording,
+    isRecording, isPaused,
   } = useInterviewStore()
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
   const appMode = useUiPrefsStore((s) => s.appMode)
@@ -243,16 +243,29 @@ export default function App() {
 
           {isRecording && (
             <div
-              className="flex items-center gap-1.5 ml-1 flex-shrink-0 rounded-lg px-2 py-1 border bg-accent-red/10 border-accent-red/30 animate-fade-up"
+              className={`flex items-center gap-1.5 ml-1 flex-shrink-0 rounded-lg px-2 py-1 border animate-fade-up ${
+                isPaused
+                  ? 'bg-accent-amber/10 border-accent-amber/30'
+                  : 'bg-accent-red/10 border-accent-red/30'
+              }`}
               role="status"
               aria-live="polite"
-              title="正在录音中"
+              title={isPaused ? '录音已暂停' : '正在录音中'}
             >
               <span className="relative inline-flex w-1.5 h-1.5 flex-shrink-0">
-                <span className="absolute inset-0 rounded-full bg-accent-red opacity-75 motion-safe:animate-ping" aria-hidden />
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-accent-red" aria-hidden />
+                {!isPaused && (
+                  <span className="absolute inset-0 rounded-full bg-accent-red opacity-75 motion-safe:animate-ping" aria-hidden />
+                )}
+                <span
+                  className={`relative inline-flex w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-accent-amber' : 'bg-accent-red'}`}
+                  aria-hidden
+                />
               </span>
-              <span className="text-[10px] font-semibold text-accent-red leading-none hidden md:inline">REC</span>
+              <span
+                className={`text-[10px] font-semibold leading-none hidden md:inline ${isPaused ? 'text-accent-amber' : 'text-accent-red'}`}
+              >
+                {isPaused ? 'PAUSED' : 'REC'}
+              </span>
             </div>
           )}
 
