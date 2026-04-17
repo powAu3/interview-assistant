@@ -31,45 +31,6 @@ code, pre, .font-mono {
 /* ========== 主题变量（与 tailwind.config 中 rgb(var(--c-*) / <alpha>) 对应）========== */
 
 :root,
-[data-theme='vscode-dark-plus'] {
-  --c-bg-primary: 15 15 18;
-  --c-bg-secondary: 26 26 36;
-  --c-bg-tertiary: 36 36 58;
-  --c-bg-hover: 42 42 68;
-  --c-text-primary: 226 232 240;
-  --c-text-secondary: 148 163 184;
-  --c-text-muted: 100 116 139;
-  --c-accent-blue: 99 102 241;
-  --c-accent-green: 34 197 94;
-  --c-accent-red: 239 68 68;
-  --c-accent-amber: 245 158 11;
-  --c-scrollbar-thumb: 51 65 85;
-  --c-scrollbar-thumb-hover: 71 85 105;
-  --c-selection-bg: 99 102 241;
-  --c-selection-fg: 255 255 255;
-  --c-md-code-bg: 30 41 59;
-  --c-md-pre-bg: 15 23 42;
-  --c-md-pre-border: 30 41 59;
-  --c-md-strong: 226 232 240;
-  --c-md-blockquote: 148 163 184;
-  --c-code-shell-bg: 11 18 32;
-  --c-code-header-bg: 17 26 46;
-  --c-code-inline-bg: 27 36 56;
-  --c-code-inline-fg: 219 234 254;
-  --c-surface-panel: 22 25 38;
-  --c-surface-elevated: 29 33 49;
-  --c-surface-glass: 23 28 44;
-  --c-border-subtle: 62 77 104;
-  --c-border-strong: 99 115 146;
-  --c-console-shell-bg: 10 16 28;
-  --c-console-header-bg: 18 25 44;
-  --c-timeline-rail: 87 102 132;
-  --c-overlay-backdrop: 14 18 29;
-  --c-overlay-border: 129 140 248;
-  --c-lyric-shell-bg: 21 26 41;
-  --c-lyric-shell-border: 129 140 248;
-}
-
 [data-theme='vscode-light-plus'] {
   --c-bg-primary: 255 255 255;
   --c-bg-secondary: 243 243 243;
@@ -107,6 +68,45 @@ code, pre, .font-mono {
   --c-overlay-border: 0 92 197;
   --c-lyric-shell-bg: 247 250 253;
   --c-lyric-shell-border: 125 170 224;
+}
+
+[data-theme='vscode-dark-plus'] {
+  --c-bg-primary: 15 15 18;
+  --c-bg-secondary: 26 26 36;
+  --c-bg-tertiary: 36 36 58;
+  --c-bg-hover: 42 42 68;
+  --c-text-primary: 226 232 240;
+  --c-text-secondary: 148 163 184;
+  --c-text-muted: 100 116 139;
+  --c-accent-blue: 99 102 241;
+  --c-accent-green: 34 197 94;
+  --c-accent-red: 239 68 68;
+  --c-accent-amber: 245 158 11;
+  --c-scrollbar-thumb: 51 65 85;
+  --c-scrollbar-thumb-hover: 71 85 105;
+  --c-selection-bg: 99 102 241;
+  --c-selection-fg: 255 255 255;
+  --c-md-code-bg: 30 41 59;
+  --c-md-pre-bg: 15 23 42;
+  --c-md-pre-border: 30 41 59;
+  --c-md-strong: 226 232 240;
+  --c-md-blockquote: 148 163 184;
+  --c-code-shell-bg: 11 18 32;
+  --c-code-header-bg: 17 26 46;
+  --c-code-inline-bg: 27 36 56;
+  --c-code-inline-fg: 219 234 254;
+  --c-surface-panel: 22 25 38;
+  --c-surface-elevated: 29 33 49;
+  --c-surface-glass: 23 28 44;
+  --c-border-subtle: 62 77 104;
+  --c-border-strong: 99 115 146;
+  --c-console-shell-bg: 10 16 28;
+  --c-console-header-bg: 18 25 44;
+  --c-timeline-rail: 87 102 132;
+  --c-overlay-backdrop: 14 18 29;
+  --c-overlay-border: 129 140 248;
+  --c-lyric-shell-bg: 21 26 41;
+  --c-lyric-shell-border: 129 140 248;
 }
 
 [data-theme='vscode-dark-hc'] {
@@ -148,43 +148,46 @@ code, pre, .font-mono {
   --c-lyric-shell-border: 255 255 255;
 }
 
-[data-theme='command-center'] {
-  --c-bg-primary: 6 12 20;
-  --c-bg-secondary: 10 20 31;
-  --c-bg-tertiary: 17 32 48;
-  --c-bg-hover: 23 42 62;
-  --c-text-primary: 223 239 255;
-  --c-text-secondary: 139 182 214;
-  --c-text-muted: 93 129 158;
-  --c-accent-blue: 56 189 248;
-  --c-accent-green: 74 222 128;
-  --c-accent-red: 248 113 113;
-  --c-accent-amber: 251 191 36;
-  --c-scrollbar-thumb: 33 71 101;
-  --c-scrollbar-thumb-hover: 49 103 145;
-  --c-selection-bg: 56 189 248;
-  --c-selection-fg: 3 10 18;
-  --c-md-code-bg: 16 29 43;
-  --c-md-pre-bg: 5 14 24;
-  --c-md-pre-border: 29 66 92;
-  --c-md-strong: 223 239 255;
-  --c-md-blockquote: 148 190 220;
-  --c-code-shell-bg: 4 14 24;
-  --c-code-header-bg: 10 26 40;
-  --c-code-inline-bg: 18 40 58;
-  --c-code-inline-fg: 186 230 253;
-  --c-surface-panel: 9 18 28;
-  --c-surface-elevated: 15 27 40;
-  --c-surface-glass: 12 23 35;
-  --c-border-subtle: 47 86 121;
-  --c-border-strong: 78 150 204;
-  --c-console-shell-bg: 5 13 22;
-  --c-console-header-bg: 11 28 43;
-  --c-timeline-rail: 62 117 158;
-  --c-overlay-backdrop: 7 15 24;
-  --c-overlay-border: 56 189 248;
-  --c-lyric-shell-bg: 10 19 30;
-  --c-lyric-shell-border: 251 191 36;
+/* Nord — 北欧冷灰蓝, 低饱和深色, 适合长时间开发/阅读
+ * 参考: https://www.nordtheme.com/ (Polar Night + Snow Storm + Frost + Aurora)
+ * 主表面 #2E3440 / 升起 #3B4252 / 文字 #ECEFF4 / 强调 #88C0D0 */
+[data-theme='nord'] {
+  --c-bg-primary: 46 52 64;
+  --c-bg-secondary: 59 66 82;
+  --c-bg-tertiary: 67 76 94;
+  --c-bg-hover: 76 86 106;
+  --c-text-primary: 236 239 244;
+  --c-text-secondary: 216 222 233;
+  --c-text-muted: 157 173 197;
+  --c-accent-blue: 136 192 208;
+  --c-accent-green: 163 190 140;
+  --c-accent-red: 191 97 106;
+  --c-accent-amber: 235 203 139;
+  --c-scrollbar-thumb: 76 86 106;
+  --c-scrollbar-thumb-hover: 94 105 124;
+  --c-selection-bg: 94 129 172;
+  --c-selection-fg: 236 239 244;
+  --c-md-code-bg: 59 66 82;
+  --c-md-pre-bg: 46 52 64;
+  --c-md-pre-border: 67 76 94;
+  --c-md-strong: 236 239 244;
+  --c-md-blockquote: 180 191 210;
+  --c-code-shell-bg: 40 46 58;
+  --c-code-header-bg: 52 59 73;
+  --c-code-inline-bg: 67 76 94;
+  --c-code-inline-fg: 143 188 187;
+  --c-surface-panel: 52 59 73;
+  --c-surface-elevated: 63 72 90;
+  --c-surface-glass: 59 66 82;
+  --c-border-subtle: 76 86 106;
+  --c-border-strong: 129 161 193;
+  --c-console-shell-bg: 40 46 58;
+  --c-console-header-bg: 52 59 73;
+  --c-timeline-rail: 129 161 193;
+  --c-overlay-backdrop: 46 52 64;
+  --c-overlay-border: 136 192 208;
+  --c-lyric-shell-bg: 52 59 73;
+  --c-lyric-shell-border: 136 192 208;
 }
 
 [data-theme='editorial-glass'] {
@@ -226,43 +229,46 @@ code, pre, .font-mono {
   --c-lyric-shell-border: 183 129 52;
 }
 
-[data-theme='stealth-cyber'] {
-  --c-bg-primary: 6 7 10;
-  --c-bg-secondary: 11 15 18;
-  --c-bg-tertiary: 18 24 28;
-  --c-bg-hover: 24 34 39;
-  --c-text-primary: 217 230 226;
-  --c-text-secondary: 125 153 146;
-  --c-text-muted: 83 106 100;
-  --c-accent-blue: 45 212 191;
-  --c-accent-green: 163 230 53;
-  --c-accent-red: 248 113 113;
-  --c-accent-amber: 250 204 21;
-  --c-scrollbar-thumb: 52 71 66;
-  --c-scrollbar-thumb-hover: 77 101 95;
-  --c-selection-bg: 45 212 191;
-  --c-selection-fg: 5 8 8;
-  --c-md-code-bg: 15 24 22;
-  --c-md-pre-bg: 7 12 11;
-  --c-md-pre-border: 26 47 41;
-  --c-md-strong: 230 244 239;
-  --c-md-blockquote: 134 166 158;
-  --c-code-shell-bg: 4 11 10;
-  --c-code-header-bg: 10 20 18;
-  --c-code-inline-bg: 15 30 27;
-  --c-code-inline-fg: 153 246 228;
-  --c-surface-panel: 9 13 15;
-  --c-surface-elevated: 14 19 22;
-  --c-surface-glass: 12 17 19;
-  --c-border-subtle: 40 63 58;
-  --c-border-strong: 68 123 112;
-  --c-console-shell-bg: 4 10 9;
-  --c-console-header-bg: 8 18 16;
-  --c-timeline-rail: 56 94 85;
-  --c-overlay-backdrop: 8 13 14;
-  --c-overlay-border: 45 212 191;
-  --c-lyric-shell-bg: 9 15 15;
-  --c-lyric-shell-border: 163 230 53;
+/* Solarized Dark — 经典护眼暖黄 + 青蓝强调, Ethan Schoonover
+ * 参考: https://ethanschoonover.com/solarized/
+ * base03 #002b36 / base02 #073642 / base0 #839496 / blue #268bd2 */
+[data-theme='solarized-dark'] {
+  --c-bg-primary: 0 43 54;
+  --c-bg-secondary: 7 54 66;
+  --c-bg-tertiary: 18 69 82;
+  --c-bg-hover: 26 86 100;
+  --c-text-primary: 238 232 213;
+  --c-text-secondary: 147 161 161;
+  --c-text-muted: 101 123 131;
+  --c-accent-blue: 38 139 210;
+  --c-accent-green: 133 153 0;
+  --c-accent-red: 220 50 47;
+  --c-accent-amber: 181 137 0;
+  --c-scrollbar-thumb: 30 90 104;
+  --c-scrollbar-thumb-hover: 56 118 132;
+  --c-selection-bg: 38 139 210;
+  --c-selection-fg: 253 246 227;
+  --c-md-code-bg: 7 54 66;
+  --c-md-pre-bg: 0 36 46;
+  --c-md-pre-border: 18 69 82;
+  --c-md-strong: 253 246 227;
+  --c-md-blockquote: 147 161 161;
+  --c-code-shell-bg: 0 36 46;
+  --c-code-header-bg: 7 54 66;
+  --c-code-inline-bg: 18 69 82;
+  --c-code-inline-fg: 131 197 235;
+  --c-surface-panel: 7 54 66;
+  --c-surface-elevated: 14 65 78;
+  --c-surface-glass: 12 60 72;
+  --c-border-subtle: 30 86 100;
+  --c-border-strong: 88 110 117;
+  --c-console-shell-bg: 0 36 46;
+  --c-console-header-bg: 7 54 66;
+  --c-timeline-rail: 88 110 117;
+  --c-overlay-backdrop: 0 43 54;
+  --c-overlay-border: 38 139 210;
+  --c-lyric-shell-bg: 7 54 66;
+  --c-lyric-shell-border: 181 137 0;
 }
 
 /* 文本选中：保证各主题下对比度足够，不依赖字体（仅改颜色） */
@@ -633,4 +639,48 @@ code, pre, .font-mono {
 
 .ia-overlay-resize {
   cursor: default;
+}
+
+/* ===== A11y: 键盘 focus 环 (仅键盘触发 focus-visible) ===== */
+button:focus-visible,
+a:focus-visible,
+[role="tab"]:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid rgb(var(--c-accent-blue));
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgb(var(--c-accent-blue));
+  outline-offset: 1px;
+}
+
+/* ===== A11y: 尊重用户 prefers-reduced-motion 偏好 ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-glow,
+  .animate-pulse,
+  .animate-pulse-dot,
+  .animate-spin,
+  .animate-fade-up,
+  .animate-bounce {
+    animation: none !important;
+  }
+}
+
+/* ===== SettingsDrawer 搜索: 搜索激活时隐藏非 Section/Collapsible 的装饰性/外部内容 ===== */
+[data-in-search="1"] > *:not([data-search-title]) {
+  display: none !important;
 }

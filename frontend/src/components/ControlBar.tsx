@@ -50,6 +50,117 @@ export function saveQuickPrompts(prompts: string[]) {
 
 export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
 
+/**
+ * WebSocket 断线后的轻量重连横幅:
+ * - 不挤占焦点,仅视觉提示
+ * - 显示断开时长 + 旋转指示器 (表示自动重连中)
+ * - 仅在断开 10s+ 才提供 "手动刷新" 逃生通道, 且二次确认避免误触丢失对话
+ */
+function WsReconnectingBanner() {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    const start = Date.now()
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  const allowReload = elapsed >= 10
+  const handleReload = () => {
+    if (window.confirm('刷新页面将丢失当前转录与未保存的对话,确定继续?')) {
+      window.location.reload()
+    }
+  }
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg"
+    >
+      <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+      <span>
+        连接已断开 ({elapsed}s), 正在自动重连…
+      </span>
+      {allowReload && (
+        <button
+          type="button"
+          onClick={handleReload}
+          className="ml-auto text-accent-blue hover:underline font-medium"
+          title="长时间未恢复时,手动刷新页面 (会丢失当前对话)"
+        >
+          手动刷新
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 快捷词滚动行: 仅在内容真的溢出时才渲染左右渐变遮罩.
+ * 小屏/少量快捷词时 (scrollWidth <= clientWidth) 不显示多余 fade.
+ */
+function QuickPromptsRow({ prompts, onPick }: { prompts: string[]; onPick: (p: string) => void }) {
+  const rowRef = useRef<HTMLDivElement>(null)
+  const [fadeLeft, setFadeLeft] = useState(false)
+  const [fadeRight, setFadeRight] = useState(false)
+
+  const recalc = useCallback(() => {
+    const el = rowRef.current
+    if (!el) return
+    const overflowing = el.scrollWidth - el.clientWidth > 1
+    setFadeLeft(overflowing && el.scrollLeft > 2)
+    setFadeRight(overflowing && el.scrollLeft < el.scrollWidth - el.clientWidth - 2)
+  }, [])
+
+  useEffect(() => {
+    recalc()
+    const el = rowRef.current
+    if (!el) return
+    el.addEventListener('scroll', recalc, { passive: true })
+    const ro = new ResizeObserver(recalc)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', recalc)
+      ro.disconnect()
+    }
+  }, [recalc, prompts.length])
+
+  return (
+    <div className="relative">
+      <div
+        ref={rowRef}
+        className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5"
+        title="快捷提示词 · 点击填入下方输入框 (可在 设置 → 偏好 → 快捷提示词 中编辑)"
+      >
+        <Zap
+          className="w-3 h-3 text-accent-amber flex-shrink-0"
+          aria-label="快捷提示词"
+        />
+        {prompts.map((prompt, i) => (
+          <button
+            key={`${i}-${prompt}`}
+            onClick={() => onPick(prompt)}
+            title={`填入「${prompt}」到输入框`}
+            className="prompt-pill inline-flex items-center min-h-[28px] px-2.5 py-1 text-[11px] rounded-lg font-medium whitespace-nowrap flex-shrink-0"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+      {fadeLeft && (
+        <div
+          className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-bg-primary to-transparent"
+          aria-hidden
+        />
+      )}
+      {fadeRight && (
+        <div
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-bg-primary to-transparent"
+          aria-hidden
+        />
+      )}
+    </div>
+  )
+}
+
 export default function ControlBar() {
   const { isRecording, isPaused, devices, config, platformInfo, clearSession, streamingIds, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError, wsConnected, modelHealth } = useInterviewStore()
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
@@ -64,11 +175,24 @@ export default function ControlBar() {
 
   const allModelsUnavailable = config?.models && config.models.length > 0 &&
     config.models.every((_, i) => modelHealth[i] === 'error')
-  const showColdStartHint = !isRecording && transcriptions.length === 0 && qaPairs.length === 0
+  const showColdStartHint =
+    !isRecording &&
+    transcriptions.length === 0 &&
+    qaPairs.length === 0 &&
+    (devices.length === 0 || selectedDevice === null)
   const fileRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
+
+  // WebSocket 从断开恢复时 toast 通知,避免用户误以为系统没反应
+  const prevWsConnectedRef = useRef(wsConnected)
+  useEffect(() => {
+    if (!prevWsConnectedRef.current && wsConnected) {
+      setToastMessage('连接已恢复')
+    }
+    prevWsConnectedRef.current = wsConnected
+  }, [wsConnected, setToastMessage])
 
   useEffect(() => {
     const onStorage = () => setQuickPrompts(getQuickPrompts())
@@ -214,17 +338,14 @@ export default function ControlBar() {
       {showColdStartHint && (
         <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>请先选择音频设备，再点击「开始」开始面试。</span>
+          <span>
+            {devices.length === 0
+              ? '正在检测音频设备…如长时间未出现，请检查麦克风/系统音频权限'
+              : '请先选择音频设备，再点击「开始」开始面试。'}
+          </span>
         </div>
       )}
-      {!wsConnected && (
-        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
-          <span>连接已断开，</span>
-          <button type="button" onClick={() => window.location.reload()} className="text-accent-blue hover:underline font-medium">
-            点击重试
-          </button>
-        </div>
-      )}
+      {!wsConnected && <WsReconnectingBanner />}
       {allModelsUnavailable && (
         <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -364,7 +485,13 @@ export default function ControlBar() {
               <button type="button" onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline hidden sm:inline flex-shrink-0">
                 更换
               </button>
-              <button type="button" onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red flex-shrink-0"><X className="w-3 h-3" /></button>
+              <button
+                type="button"
+                onClick={handleRemoveResume}
+                className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] rounded-md text-text-muted hover:text-accent-red hover:bg-bg-hover/60 transition-colors flex-shrink-0"
+                aria-label="移除已上传的简历"
+                title="移除简历 (仅取消挂载,不会删除历史文件)"
+              ><X className="w-3 h-3" /></button>
             </div>
           ) : (
             <button
@@ -382,7 +509,8 @@ export default function ControlBar() {
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}
-            className="flex items-center gap-1 px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+            className="flex items-center gap-1 min-h-[36px] min-w-[36px] justify-center px-2 py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+            aria-label={cancellingAsk ? '正在取消生成' : '取消正在生成的回答'}
             title="取消全部正在生成的回答">
             {cancellingAsk ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">
@@ -390,28 +518,34 @@ export default function ControlBar() {
             </span>
           </button>
         )}
-        <button onClick={handleClear} disabled={clearing}
-          className="flex items-center gap-1 px-2 py-2 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50">
+        <button
+          onClick={handleClear}
+          disabled={clearing}
+          title={qaPairs.length > 30 ? `当前会话较长 (${qaPairs.length} 条), 建议清空以保持流畅` : '清空当前页的实时转录与 AI 答案 (不影响历史)'}
+          aria-label={qaPairs.length > 30 ? `清空当前 ${qaPairs.length} 条转录与答案` : '清空当前转录与答案'}
+          className={`relative flex items-center gap-1 min-h-[36px] min-w-[36px] justify-center px-2 py-2 text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50 ${
+            qaPairs.length > 30
+              ? 'bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber'
+              : 'bg-bg-tertiary hover:bg-bg-hover hover:text-accent-red text-text-secondary'
+          }`}
+        >
           {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
           <span className="hidden sm:inline">{clearing ? '清空中' : '清空内容'}</span>
+          {qaPairs.length > 30 && !clearing && (
+            <span className="ml-0.5 text-[10px] tabular-nums hidden md:inline">({qaPairs.length})</span>
+          )}
         </button>
       </div>
 
       {/* 快捷提示词 */}
       {quickPrompts.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-          <Zap className="w-3 h-3 text-accent-amber flex-shrink-0" />
-          {quickPrompts.map((prompt) => (
-            <button key={prompt}
-              onClick={() => {
-                setManualQuestion((prev) => prev ? `${prev} ${prompt}` : prompt)
-                inputRef.current?.focus()
-              }}
-              className="prompt-pill px-2.5 py-1 text-[11px] rounded-lg font-medium whitespace-nowrap flex-shrink-0">
-              {prompt}
-            </button>
-          ))}
-        </div>
+        <QuickPromptsRow
+          prompts={quickPrompts}
+          onPick={(prompt) => {
+            setManualQuestion((prev) => (prev ? `${prev} ${prompt}` : prompt))
+            inputRef.current?.focus()
+          }}
+        />
       )}
 
       {/* 手动提问输入行 */}
@@ -429,9 +563,13 @@ export default function ControlBar() {
             <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
           )}
         </div>
-        <button onClick={handleAsk} disabled={!manualQuestion.trim() && !pastedImage}
-          className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-20 flex-shrink-0"
-          aria-label="发送问题">
+        <button
+          onClick={handleAsk}
+          disabled={!manualQuestion.trim() && !pastedImage}
+          title={manualQuestion.trim() || pastedImage ? '发送问题 (Enter)' : '请先输入问题或粘贴截图'}
+          aria-label="发送问题"
+          className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        >
           <Send className="w-3.5 h-3.5" />
         </button>
       </div>

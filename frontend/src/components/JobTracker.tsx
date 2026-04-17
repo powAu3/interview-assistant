@@ -353,7 +353,16 @@ export default function JobTracker() {
         }`}
       >
         {loading && applications.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-text-muted text-sm">加载中…</div>
+          <div className="px-3 py-3 space-y-2" aria-busy="true" aria-live="polite">
+            <span className="sr-only">正在加载求职看板数据…</span>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-10 rounded-lg bg-bg-tertiary/50 animate-pulse"
+                style={{ animationDelay: `${i * 80}ms`, opacity: 1 - i * 0.08 }}
+              />
+            ))}
+          </div>
         ) : view === 'table' ? (
           <ApplicationsTable
             applications={applications}

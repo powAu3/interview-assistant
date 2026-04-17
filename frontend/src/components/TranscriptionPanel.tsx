@@ -1,9 +1,12 @@
 import { useEffect, useRef } from 'react'
-import { Mic, MicOff, Activity } from 'lucide-react'
+import { Mic, MicOff, Activity, Volume2, Radio, Languages } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 
 export default function TranscriptionPanel() {
-  const { transcriptions, isRecording, audioLevel, isTranscribing } = useInterviewStore()
+  const transcriptions = useInterviewStore((s) => s.transcriptions)
+  const isRecording = useInterviewStore((s) => s.isRecording)
+  const audioLevel = useInterviewStore((s) => s.audioLevel)
+  const isTranscribing = useInterviewStore((s) => s.isTranscribing)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -58,21 +61,44 @@ export default function TranscriptionPanel() {
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {transcriptions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-bg-tertiary/50 flex items-center justify-center">
-              {isRecording ? (
-                <Activity className="w-5 h-5 text-accent-amber animate-pulse" />
-              ) : (
-                <Mic className="w-5 h-5 text-text-muted/50" />
-              )}
+            <div className="relative w-14 h-14">
+              <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br from-accent-blue/15 to-accent-green/10 ${isRecording ? 'animate-glow' : ''}`} />
+              <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-bg-tertiary/50">
+                {isRecording ? (
+                  <Activity className="w-6 h-6 text-accent-amber animate-pulse" />
+                ) : (
+                  <Mic className="w-6 h-6 text-text-muted/60" />
+                )}
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-text-muted text-sm font-medium">
-                {isRecording ? '等待语音输入...' : '实时语音转录'}
+            <div className="text-center space-y-1">
+              <p className="text-text-primary text-sm font-semibold">
+                {isRecording ? '等待语音输入…' : '实时语音转录'}
               </p>
-              <p className="text-text-muted/60 text-xs mt-1">
-                {isRecording ? '检测到语音后将自动转录' : '点击下方「开始面试」启动录音'}
+              <p className="text-text-muted text-xs leading-relaxed">
+                {isRecording
+                  ? '检测到语音会自动分段转录,问题会发给 AI 生成答案'
+                  : '选择音频设备后,点击「开始面试」启动实时识别'}
               </p>
             </div>
+            {!isRecording && (
+              <div className="flex items-center gap-1.5 flex-wrap justify-center pt-1">
+                {[
+                  { icon: Volume2, label: '会议拾音', hint: '优先选 BlackHole / 系统音频 (loopback), 可录远端声音' },
+                  { icon: Radio, label: '自动断句', hint: 'VAD 静音超阈值即切段并识别' },
+                  { icon: Languages, label: '中英混读', hint: '默认中文优先, 英文术语保留原样' },
+                ].map(({ icon: Icon, label, hint }) => (
+                  <span
+                    key={label}
+                    title={hint}
+                    className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-bg-tertiary/50 border border-bg-hover/40 text-text-secondary"
+                  >
+                    <Icon className="w-3 h-3 text-accent-blue/70" />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           transcriptions.map((text, i) => (

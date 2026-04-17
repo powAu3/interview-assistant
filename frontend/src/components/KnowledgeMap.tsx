@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
-import { RefreshCw, Trash2, ChevronDown, ChevronUp, Target, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
+import { RefreshCw, Trash2, ChevronDown, ChevronUp, Target, TrendingUp, TrendingDown, Minus, Sparkles, Mic, BookOpen, Loader2 } from 'lucide-react'
 import {
   ASSIST_MERGE_GAP_SEC,
   mergeHistoryByTimeGap,
@@ -13,6 +14,12 @@ interface TagSummary {
   count: number
   avg_score: number | null
   trend: 'up' | 'down' | 'stable'
+}
+
+function trendLabel(trend: string) {
+  if (trend === 'up') return '上升'
+  if (trend === 'down') return '下降'
+  return '持平'
 }
 
 function RadarChart({ tags }: { tags: TagSummary[] }) {
@@ -37,6 +44,8 @@ function RadarChart({ tags }: { tags: TagSummary[] }) {
       ly: cy + (r + 20) * Math.sin(angle),
       tag: t.tag,
       score: t.avg_score,
+      count: t.count,
+      trend: t.trend,
     }
   })
 
@@ -44,7 +53,11 @@ function RadarChart({ tags }: { tags: TagSummary[] }) {
   const polyStr = points.map(p => `${p.x},${p.y}`).join(' ')
 
   return (
-    <svg viewBox="0 0 300 260" className="w-full max-w-[320px] mx-auto">
+    <svg viewBox="0 0 300 260" className="w-full max-w-[320px] mx-auto" role="img" aria-label="知识点掌握度雷达图">
+      <title>知识点掌握度 (0-10 分)</title>
+      <desc>
+        {top.map(t => `${t.tag}: ${t.avg_score?.toFixed(1) ?? '无评分'}分, ${t.count}次, 趋势${trendLabel(t.trend)}`).join('; ')}
+      </desc>
       {gridLevels.map(level => {
         const gp = Array.from({ length: n }, (_, i) => {
           const angle = (Math.PI * 2 * i) / n - Math.PI / 2
@@ -58,15 +71,24 @@ function RadarChart({ tags }: { tags: TagSummary[] }) {
           stroke="currentColor" className="text-bg-hover" strokeWidth="0.5" />
       ))}
       <polygon points={polyStr} fill="rgba(59,130,246,0.15)" stroke="#3b82f6" strokeWidth="1.5" />
-      {points.map((p, i) => (
-        <g key={i}>
-          <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
-          <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle"
-            className="fill-text-secondary" fontSize="9">{p.tag}</text>
-          <text x={p.lx} y={p.ly + 12} textAnchor="middle"
-            className="fill-text-muted" fontSize="8">{p.score?.toFixed(1)}</text>
-        </g>
-      ))}
+      {points.map((p, i) => {
+        const tooltip = `${p.tag} · ${p.score?.toFixed(1) ?? '--'}/10 · ${p.count}次 · 趋势${trendLabel(p.trend)}`
+        return (
+          <g key={i}>
+            {/* 扩大命中半径, 便于 hover / 触控点中 */}
+            <circle cx={p.x} cy={p.y} r="10" fill="transparent" className="cursor-help">
+              <title>{tooltip}</title>
+            </circle>
+            <circle cx={p.x} cy={p.y} r="3" fill="#3b82f6" />
+            <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle"
+              className="fill-text-secondary" fontSize="9">{p.tag}
+              <title>{tooltip}</title>
+            </text>
+            <text x={p.lx} y={p.ly + 12} textAnchor="middle"
+              className="fill-text-muted" fontSize="8">{p.score?.toFixed(1)}</text>
+          </g>
+        )
+      })}
     </svg>
   )
 }
@@ -84,8 +106,10 @@ export default function KnowledgeMap() {
   const [historyTotal, setHistoryTotal] = useState(0)
   const [historyPage, setHistoryPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [firstLoaded, setFirstLoaded] = useState(false)
   const [genLoading, setGenLoading] = useState(false)
+  const setAppMode = useUiPrefsStore((s) => s.setAppMode)
 
   const history = useMemo(() => mergeHistoryByTimeGap(rawHistory), [rawHistory])
 
@@ -102,6 +126,7 @@ export default function KnowledgeMap() {
       setHistoryPage(1)
     } catch {}
     setLoading(false)
+    setFirstLoaded(true)
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
@@ -165,10 +190,51 @@ export default function KnowledgeMap() {
         </div>
       </div>
 
-      {tags.length === 0 ? (
-        <div className="text-center py-16 text-text-muted text-xs space-y-2">
-          <p>暂无数据</p>
-          <p>完成面试辅助或模拟练习后，知识点会自动记录</p>
+      {!firstLoaded && loading ? (
+        <div className="flex flex-col items-center justify-center py-20 text-text-muted gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-accent-blue/70" />
+          <p className="text-xs">正在加载能力分析数据…</p>
+        </div>
+      ) : tags.length === 0 && rawHistory.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-5 max-w-md mx-auto text-center">
+          <div className="relative w-20 h-20">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent-blue/15 to-violet-500/10 animate-glow" />
+            <div className="relative flex items-center justify-center w-20 h-20 rounded-2xl bg-bg-tertiary/50 border border-bg-hover/40">
+              <Target className="w-9 h-9 text-accent-blue/70" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-text-primary text-sm font-semibold flex items-center justify-center gap-1.5">
+              还没有能力画像
+              <Sparkles className="w-3.5 h-3.5 text-accent-amber/80" />
+            </p>
+            <p className="text-text-muted text-xs leading-relaxed">
+              完成几次「实时辅助」或「模拟练习」后，系统会自动从问答中提取知识点，
+              <br className="hidden sm:inline" />
+              生成雷达图、薄弱点排名和历史记录。
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <button
+              type="button"
+              onClick={() => setAppMode('assist')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent-blue text-white text-xs font-medium shadow-sm shadow-accent-blue/20 hover:brightness-110 transition"
+            >
+              <Mic className="w-3.5 h-3.5" />
+              开始实时辅助
+            </button>
+            <button
+              type="button"
+              onClick={() => setAppMode('practice')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-tertiary/60 border border-bg-hover/60 text-text-primary text-xs font-medium hover:bg-bg-hover/60 transition"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-accent-blue" />
+              进入模拟练习
+            </button>
+          </div>
+          <p className="text-[10px] text-text-muted/70 max-w-xs leading-relaxed">
+            小贴士:完成越多不同主题的问答,雷达图越有参考价值;一次对话里的多条提问会按 {ASSIST_MERGE_GAP_SEC} 秒间隔自动合并。
+          </p>
         </div>
       ) : (
         <>

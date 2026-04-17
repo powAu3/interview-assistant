@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight, a11yDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Copy, Check } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { ColorSchemeId } from '@/lib/colorScheme'
 
 function prismThemeForScheme(id: ColorSchemeId) {
@@ -83,7 +83,7 @@ function useMarkdownComponents(colorScheme: ColorSchemeId) {
   )
 }
 
-export default function AnswerMarkdownContent({
+function AnswerMarkdownContentInner({
   answer,
   colorScheme,
   stream,
@@ -99,3 +99,6 @@ export default function AnswerMarkdownContent({
     </div>
   )
 }
+
+const AnswerMarkdownContent = memo(AnswerMarkdownContentInner)
+export default AnswerMarkdownContent

@@ -123,7 +123,23 @@ export default function ResumeOptimizer() {
 
       {/* Right: result */}
       <div className="flex-1 overflow-y-auto p-4">
-        {!displayText ? (
+        {!displayText && resumeOptLoading ? (
+          <div className="space-y-3 max-w-xl mx-auto" aria-busy="true" aria-live="polite">
+            <span className="sr-only">正在分析简历与 JD 的匹配度…</span>
+            <div className="flex items-center gap-2 text-xs text-accent-blue">
+              <span className="inline-block w-2 h-2 rounded-full bg-accent-blue animate-pulse" />
+              正在分析简历与 JD 的匹配度…
+            </div>
+            {/* 模拟"标题 + 段落 + 小节"骨架 */}
+            {[0.7, 0.95, 0.85, 0.6, 0.9, 0.8].map((w, i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="h-3 w-1/4 rounded bg-bg-tertiary/60 animate-pulse" style={{ animationDelay: `${i * 120}ms` }} />
+                <div className="h-2 rounded bg-bg-tertiary/40 animate-pulse" style={{ animationDelay: `${i * 120 + 40}ms`, width: `${w * 100}%` }} />
+                <div className="h-2 rounded bg-bg-tertiary/40 animate-pulse" style={{ animationDelay: `${i * 120 + 80}ms`, width: `${(w - 0.15) * 100}%` }} />
+              </div>
+            ))}
+          </div>
+        ) : !displayText ? (
           <div className="h-full flex items-center justify-center text-text-muted text-xs">
             <div className="text-center space-y-2">
               <FileSearch className="w-8 h-8 mx-auto opacity-30" />

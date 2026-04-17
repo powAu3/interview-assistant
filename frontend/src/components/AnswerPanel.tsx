@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield } from 'lucide-react'
+import { lazy, memo, Suspense, useEffect, useRef, useState, useCallback } from 'react'
+import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield, Keyboard, ClipboardPaste, Mic } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import KbReferenceBanner from '@/components/kb/KbReferenceBanner'
+import type { ColorSchemeId } from '@/lib/colorScheme'
 
 const SoundTest = lazy(() => import('./SoundTest'))
 const AnswerMarkdownContent = lazy(() => import('./AnswerMarkdownContent'))
@@ -91,8 +92,136 @@ const SOURCE_LABELS: Record<string, string> = {
   server_screen_left: '服务端截图审题',
 }
 
+function renderAnswerBody(
+  qa: QAPair,
+  isStreaming: boolean,
+  stream: boolean,
+  colorScheme: ColorSchemeId,
+) {
+  return (
+    <>
+      {qa.thinkContent && <ThinkBlock content={qa.thinkContent} isThinking={qa.isThinking} streamLayout={stream} />}
+      {qa.answer === '[\u5DF2\u53D6\u6D88]' ? (
+        <div className="flex items-center gap-1.5 text-text-muted italic text-sm">
+          <Ban className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>{'\u5DF2\u53D6\u6D88'}</span>
+        </div>
+      ) : qa.answer ? (
+        isStreaming && !qa.isThinking ? (
+          <div className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap break-words">
+            {qa.answer}
+            <span className="inline-block w-2 h-4 bg-accent-green ml-0.5 animate-pulse-dot rounded-full align-middle" />
+          </div>
+        ) : (
+          <Suspense fallback={<div className="text-sm text-text-muted">渲染答案中…</div>}>
+            <AnswerMarkdownContent answer={qa.answer} colorScheme={colorScheme} stream={stream} />
+          </Suspense>
+        )
+      ) : isStreaming && !qa.isThinking ? (
+        <div className="flex items-center gap-2 text-text-muted text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {'\u751F\u6210\u4E2D\u2026'}
+        </div>
+      ) : null}
+      {qa.visionVerify && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
+        <VisionVerifyBadge verdict={qa.visionVerify.verdict} reason={qa.visionVerify.reason} />
+      )}
+      {qa.modelLabel && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
+        <p
+          className={`text-[10px] text-text-muted/70 mt-2.5 pt-2 border-t border-bg-tertiary/30 flex items-center gap-1 ${stream ? 'border-bg-hover/40' : ''}`}
+        >
+          <Brain className="w-3 h-3 opacity-50" />
+          {'\u7531 '}<span className="text-accent-blue/80 font-medium">{qa.modelLabel}</span>{' \u751F\u6210'}
+        </p>
+      )}
+    </>
+  )
+}
+
+type QACardProps = {
+  qa: QAPair
+  isStreaming: boolean
+  stream: boolean
+  colorScheme: ColorSchemeId
+  animate: boolean
+  animateDelayMs: number
+}
+
+const QACard = memo(function QACard({ qa, isStreaming, stream, colorScheme, animate, animateDelayMs }: QACardProps) {
+  const srcLabel = qa.questionSource ? SOURCE_LABELS[qa.questionSource] : null
+  const baseClass = animate ? 'animate-fade-up' : ''
+  const animStyle = animate ? { animationDelay: `${animateDelayMs}ms` } : undefined
+
+  if (stream) {
+    return (
+      <div className={`space-y-3 ${baseClass}`} style={animStyle}>
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-blue/25 to-indigo-500/15 flex items-center justify-center flex-shrink-0 text-accent-blue text-xs font-bold ring-1 ring-accent-blue/15">
+            Q
+          </div>
+          <div className="flex-1 min-w-0 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+              {srcLabel && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
+                  {srcLabel}
+                </span>
+              )}
+              {isStreaming && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-green/15 text-accent-green border border-accent-green/20 font-medium animate-pulse">
+                  {'\u8F93\u51FA\u4E2D'}
+                </span>
+              )}
+            </div>
+            <p className="text-sm md:text-[15px] text-text-primary leading-relaxed font-medium">{qa.question}</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-2 sm:gap-3 pl-1 sm:pl-2">
+          <span className="w-7 sm:w-8 flex-shrink-0 text-center text-accent-green text-xs font-bold pt-1">A</span>
+          <div className="flex-1 min-w-0 pb-4 border-l-2 border-accent-green/25 pl-3 sm:pl-4 -ml-1">
+            <KbReferenceBanner qaId={qa.id} />
+            {renderAnswerBody(qa, isStreaming, stream, colorScheme)}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`answer-card p-4 space-y-3 ${baseClass}`} style={animStyle}>
+      <div className="flex items-start gap-2.5">
+        <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-accent-blue/25 to-indigo-500/15 flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-accent-blue/15">
+          <span className="text-accent-blue text-xs font-bold">Q</span>
+        </div>
+        <div className="flex-1 min-w-0 pt-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+            {srcLabel && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
+                {srcLabel}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-text-primary leading-relaxed font-medium">{qa.question}</p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-2.5">
+        <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-accent-green/25 to-emerald-500/15 flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-accent-green/15">
+          <span className="text-accent-green text-xs font-bold">A</span>
+        </div>
+        <div className="flex-1 min-w-0 max-h-[280px] overflow-y-auto rounded-xl bg-bg-tertiary/15 p-3">
+          <KbReferenceBanner qaId={qa.id} />
+          {renderAnswerBody(qa, isStreaming, stream, colorScheme)}
+        </div>
+      </div>
+    </div>
+  )
+})
+
 export default function AnswerPanel() {
-  const { qaPairs, streamingIds, config, toggleSettings } = useInterviewStore()
+  const qaPairs = useInterviewStore((s) => s.qaPairs)
+  const streamingIds = useInterviewStore((s) => s.streamingIds)
+  const config = useInterviewStore((s) => s.config)
+  const toggleSettings = useInterviewStore((s) => s.toggleSettings)
   const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const stream = answerPanelLayout === 'stream'
@@ -134,7 +263,8 @@ export default function AnswerPanel() {
 
   const hasActiveGeneration =
     streamingIds.length > 0 || qaPairs.some((q) => q.isThinking)
-  const showScrollToLatestFab = qaPairs.length > 0 && hasActiveGeneration && !nearBottom
+  // 用户向上滚动且远离底部时即显示 "回到最新"; 生成中则补充旋转指示器
+  const showScrollToLatestFab = qaPairs.length > 0 && !nearBottom
 
   const scrollToLatest = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -143,45 +273,6 @@ export default function AnswerPanel() {
 
   const needsConfig = config && (!config.models?.length || !config.api_key_set)
   const multiStream = streamingIds.length > 1
-
-  const renderAnswerBody = (qa: QAPair, isStreaming: boolean) => (
-    <>
-      {qa.thinkContent && <ThinkBlock content={qa.thinkContent} isThinking={qa.isThinking} streamLayout={stream} />}
-      {qa.answer === '[\u5DF2\u53D6\u6D88]' ? (
-        <div className="flex items-center gap-1.5 text-text-muted italic text-sm">
-          <Ban className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>{'\u5DF2\u53D6\u6D88'}</span>
-        </div>
-      ) : qa.answer ? (
-        isStreaming && !qa.isThinking ? (
-          <div className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap break-words">
-            {qa.answer}
-            <span className="inline-block w-2 h-4 bg-accent-green ml-0.5 animate-pulse-dot rounded-full align-middle" />
-          </div>
-        ) : (
-          <Suspense fallback={<div className="text-sm text-text-muted">渲染答案中…</div>}>
-            <AnswerMarkdownContent answer={qa.answer} colorScheme={colorScheme} stream={stream} />
-          </Suspense>
-        )
-      ) : isStreaming && !qa.isThinking ? (
-        <div className="flex items-center gap-2 text-text-muted text-sm">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          {'\u751F\u6210\u4E2D\u2026'}
-        </div>
-      ) : null}
-      {qa.visionVerify && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
-        <VisionVerifyBadge verdict={qa.visionVerify.verdict} reason={qa.visionVerify.reason} />
-      )}
-      {qa.modelLabel && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
-        <p
-          className={`text-[10px] text-text-muted/70 mt-2.5 pt-2 border-t border-bg-tertiary/30 flex items-center gap-1 ${stream ? 'border-bg-hover/40' : ''}`}
-        >
-          <Brain className="w-3 h-3 opacity-50" />
-          {'\u7531 '}<span className="text-accent-blue/80 font-medium">{qa.modelLabel}</span>{' \u751F\u6210'}
-        </p>
-      )}
-    </>
-  )
 
   const isIdle = !useInterviewStore.getState().isRecording
 
@@ -213,6 +304,24 @@ export default function AnswerPanel() {
               </button>
             </div>
           )}
+          {!needsConfig && (
+            <div className="pt-2 flex items-center justify-center gap-1.5 flex-wrap">
+              {[
+                { icon: Keyboard, label: '键盘输入', hint: '底部输入框 + Enter' },
+                { icon: ClipboardPaste, label: '粘贴截图', hint: '输入框内 Ctrl/⌘+V' },
+                { icon: Mic, label: '开始面试', hint: '录音自动识别问题' },
+              ].map(({ icon: Icon, label, hint }) => (
+                <span
+                  key={label}
+                  title={hint}
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-bg-tertiary/50 border border-bg-hover/40 text-text-secondary"
+                >
+                  <Icon className="w-3 h-3 text-accent-blue/70" />
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Sound Test - only show when idle (not recording) */}
@@ -242,82 +351,31 @@ export default function AnswerPanel() {
 
       {qaPairs.map((qa, idx) => {
         const isStreaming = streamingIds.includes(qa.id)
-        const srcLabel = qa.questionSource ? SOURCE_LABELS[qa.questionSource] : null
-
-        if (stream) {
-          return (
-            <div key={qa.id} className="space-y-3 animate-fade-up" style={{ animationDelay: `${Math.min(idx * 50, 200)}ms` }}>
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-blue/25 to-indigo-500/15 flex items-center justify-center flex-shrink-0 text-accent-blue text-xs font-bold ring-1 ring-accent-blue/15">
-                  Q
-                </div>
-                <div className="flex-1 min-w-0 pt-1">
-                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                    {srcLabel && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
-                        {srcLabel}
-                      </span>
-                    )}
-                    {isStreaming && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-green/15 text-accent-green border border-accent-green/20 font-medium animate-pulse">
-                        {'\u8F93\u51FA\u4E2D'}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm md:text-[15px] text-text-primary leading-relaxed font-medium">{qa.question}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2 sm:gap-3 pl-1 sm:pl-2">
-                <span className="w-7 sm:w-8 flex-shrink-0 text-center text-accent-green text-xs font-bold pt-1">A</span>
-                <div className="flex-1 min-w-0 pb-4 border-l-2 border-accent-green/25 pl-3 sm:pl-4 -ml-1">
-                  <KbReferenceBanner qaId={qa.id} />
-                  {renderAnswerBody(qa, isStreaming)}
-                </div>
-              </div>
-            </div>
-          )
-        }
-
+        const isLatest = idx === qaPairs.length - 1
+        // 只给最新一项播入场动画,避免历史项在 store 更新时反复重播
+        const animate = isLatest
         return (
-          <div key={qa.id} className="answer-card p-4 space-y-3 animate-fade-up" style={{ animationDelay: `${Math.min(idx * 50, 200)}ms` }}>
-            <div className="flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-accent-blue/25 to-indigo-500/15 flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-accent-blue/15">
-                <span className="text-accent-blue text-xs font-bold">Q</span>
-              </div>
-              <div className="flex-1 min-w-0 pt-0.5">
-                <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                  {srcLabel && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
-                      {srcLabel}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-text-primary leading-relaxed font-medium">{qa.question}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-accent-green/25 to-emerald-500/15 flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-accent-green/15">
-                <span className="text-accent-green text-xs font-bold">A</span>
-              </div>
-              <div className="flex-1 min-w-0 max-h-[280px] overflow-y-auto rounded-xl bg-bg-tertiary/15 p-3">
-                <KbReferenceBanner qaId={qa.id} />
-                {renderAnswerBody(qa, isStreaming)}
-              </div>
-            </div>
-          </div>
+          <QACard
+            key={qa.id}
+            qa={qa}
+            isStreaming={isStreaming}
+            stream={stream}
+            colorScheme={colorScheme}
+            animate={animate}
+            animateDelayMs={0}
+          />
         )
       })}
       <div ref={bottomRef} />
       </div>
 
       {showScrollToLatestFab && (
-        <div className="pointer-events-none absolute bottom-4 right-3 sm:right-5 z-20">
+        <div className="pointer-events-none absolute bottom-4 right-3 sm:right-5 z-20 animate-fade-up">
           <button
             type="button"
             onClick={scrollToLatest}
-            title="下方正在生成，点击回到底部"
-            aria-label="滚动到最新生成内容"
+            title={hasActiveGeneration ? '下方正在生成,点击回到最新' : '回到最新答案'}
+            aria-label={hasActiveGeneration ? '滚动到最新生成内容' : '滚动到最新答案'}
             className="pointer-events-auto flex h-[52px] w-[52px] items-center justify-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-transform hover:scale-105 active:scale-95"
           >
             <span className="relative flex h-[52px] w-[52px] items-center justify-center">
@@ -325,14 +383,19 @@ export default function AnswerPanel() {
                 className="absolute inset-0 rounded-full border-[3px] border-accent-blue/20"
                 aria-hidden
               />
-              <span
-                className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-accent-blue border-r-accent-blue/60 animate-spin"
-                style={{ animationDuration: '1.05s' }}
-                aria-hidden
-              />
-              <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-bg-secondary ring-1 ring-bg-hover">
-                <ArrowDown className="h-[18px] w-[18px] text-text-primary" strokeWidth={2.75} />
+              {hasActiveGeneration && (
+                <span
+                  className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-accent-blue border-r-accent-blue/60 animate-spin"
+                  style={{ animationDuration: '1.05s' }}
+                  aria-hidden
+                />
+              )}
+              <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-bg-secondary ring-1 ring-accent-blue/40">
+                <ArrowDown className="h-[18px] w-[18px] text-accent-blue" strokeWidth={2.75} />
               </span>
+            </span>
+            <span className="sr-only">
+              {hasActiveGeneration ? '正在生成,跳到最新' : '跳到最新答案'}
             </span>
           </button>
         </div>
