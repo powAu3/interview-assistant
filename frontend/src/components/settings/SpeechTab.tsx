@@ -14,7 +14,7 @@ import {
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
-import { Section, Field, GradientCard, StatusBadge } from './shared'
+import { Section, Field, GradientCard, StatusBadge, useSettingsSearch } from './shared'
 import SttGuideCard from './SttGuideCard'
 
 export default function SpeechTab() {
@@ -115,9 +115,12 @@ export default function SpeechTab() {
     return false
   }
 
+  const searchQuery = useSettingsSearch()
+  const inSearch = searchQuery.trim().length > 0
+
   return (
-    <div className="p-5 space-y-5 pb-8">
-      <Section title="语音识别引擎" icon={<Mic className="w-3.5 h-3.5" />}>
+    <div className="p-5 space-y-5 pb-8" data-in-search={inSearch ? '1' : undefined}>
+      <Section title="语音识别引擎" icon={<Mic className="w-3.5 h-3.5" />} keywords="stt asr whisper funasr paraformer 识别引擎 model device 转写 sense-voice">
         <div className="grid grid-cols-3 gap-2">
           {providers.map((p) => {
             const meta = providerMeta[p] || { label: p, desc: '', icon: <Mic className="w-5 h-5" />, brandClass: 'blue' }
@@ -226,7 +229,7 @@ export default function SpeechTab() {
         </div>
       </GradientCard>
 
-      <Section title="语音活动检测 (VAD)" icon={<Settings2 className="w-3.5 h-3.5" />}>
+      <Section title="语音活动检测 (VAD)" icon={<Settings2 className="w-3.5 h-3.5" />} keywords="vad silence 静音 断句 阈值 silero 语音活动">
         <div className="bg-bg-tertiary/30 rounded-lg p-3 text-xs text-text-muted space-y-1.5 mb-2">
           <div className="flex items-start gap-1.5">
             <HelpCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-accent-blue" />
@@ -249,7 +252,7 @@ export default function SpeechTab() {
         </Field>
       </Section>
 
-      <Section title="转写合并与自动答题">
+      <Section title="转写合并与自动答题" keywords="合并 merge auto answer 自动答题 gap interval seconds 间隔">
         <div className="grid grid-cols-2 gap-3">
           <Field label="合并间隔 (秒)" hint="上一段结束后静默超过该时间送出；0=每段立即发">
             <input type="number" step="0.5" min={0} max={15} value={form.assist_transcription_merge_gap_sec}

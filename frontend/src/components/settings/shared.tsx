@@ -1,8 +1,38 @@
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { createContext, useContext } from 'react'
 
-export function Section({ title, icon, children }: { title: React.ReactNode; icon?: React.ReactNode; children: React.ReactNode }) {
+/**
+ * 设置抽屉顶部搜索框的 query,注入到每个 Section/Collapsible.
+ * 为空时视为不过滤.
+ */
+export const SettingsSearchContext = createContext<string>('')
+
+export function useSettingsSearch(): string {
+  return useContext(SettingsSearchContext)
+}
+
+/**
+ * 判断一个 section 的 title + 关键词是否命中当前搜索 query.
+ * query 为空时永远 true.
+ */
+export function matchSettingsSearch(
+  titleText: string | undefined,
+  keywords: string | undefined,
+  query: string,
+): boolean {
+  if (!query) return true
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const hay = `${titleText ?? ''} ${keywords ?? ''}`.toLowerCase()
+  return hay.includes(q)
+}
+
+export function Section({ title, icon, keywords, children }: { title: React.ReactNode; icon?: React.ReactNode; keywords?: string; children: React.ReactNode }) {
+  const query = useSettingsSearch()
+  const titleText = typeof title === 'string' ? title : ''
+  if (!matchSettingsSearch(titleText, keywords, query)) return null
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-search-title={titleText}>
       <h3 className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">
         {icon}
         {title}

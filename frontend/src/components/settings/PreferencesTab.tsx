@@ -8,23 +8,28 @@ import {
   Monitor,
   PenLine,
   ChevronDown,
+  BookOpen,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
-import { Section, Field } from './shared'
+import { Section, Field, matchSettingsSearch, useSettingsSearch } from './shared'
 import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
 
-function Collapsible({ title, icon, defaultOpen = false, badge, children }: {
-  title: string; icon?: React.ReactNode; defaultOpen?: boolean; badge?: React.ReactNode; children: React.ReactNode
+function Collapsible({ title, icon, defaultOpen = false, badge, keywords, children }: {
+  title: string; icon?: React.ReactNode; defaultOpen?: boolean; badge?: React.ReactNode; keywords?: string; children: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const query = useSettingsSearch()
+  if (!matchSettingsSearch(title, keywords, query)) return null
+  // 有 query 时强制展开,方便用户看到命中的内容
+  const effectiveOpen = query.trim() ? true : open
   return (
-    <div className="border border-bg-hover/60 rounded-xl overflow-hidden">
+    <div className="border border-bg-hover/60 rounded-xl overflow-hidden" data-search-title={title}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -33,9 +38,9 @@ function Collapsible({ title, icon, defaultOpen = false, badge, children }: {
         {icon}
         {title}
         {badge}
-        <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${effectiveOpen ? 'rotate-180' : ''}`} />
       </button>
-      {open && <div className="px-3 pb-3 space-y-3">{children}</div>}
+      {effectiveOpen && <div className="px-3 pb-3 space-y-3">{children}</div>}
     </div>
   )
 }
@@ -121,9 +126,11 @@ export default function PreferencesTab() {
 
   const sttLabel = config?.stt_provider === 'doubao' ? '豆包' : config?.stt_provider === 'iflytek' ? '讯飞' : 'Whisper'
   const hasScreenCapture = (options?.screen_capture_regions?.length ?? 0) > 0
+  const searchQuery = useSettingsSearch()
+  const inSearch = searchQuery.trim().length > 0
 
   return (
-    <div className="p-5 space-y-4 pb-8">
+    <div className="p-5 space-y-4 pb-8" data-in-search={inSearch ? '1' : undefined}>
       {/* ── 系统状态 ── */}
       {platformInfo?.needs_virtual_device && (
         <div className="bg-accent-amber/10 border border-accent-amber/30 rounded-lg p-3 text-xs space-y-2">
@@ -141,7 +148,7 @@ export default function PreferencesTab() {
       </div>
 
       {/* ── 1. 答案展示（常用，保持展开） ── */}
-      <Section title="答案展示">
+      <Section title="答案展示" keywords="布局 卡片 流式 简短 layout card stream">
         <div className="grid grid-cols-2 gap-2">
           {([
             { key: 'cards' as const, icon: LayoutGrid, label: '卡片', hint: '独立框，框内滚动' },
@@ -178,7 +185,7 @@ export default function PreferencesTab() {
       </Section>
 
       {/* ── 2. 悬浮提示窗（含截图区域、笔试模式） ── */}
-      <Collapsible title="悬浮提示窗" icon={<Monitor className="w-3.5 h-3.5" />}>
+      <Collapsible title="悬浮提示窗" icon={<Monitor className="w-3.5 h-3.5" />} keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗">
         <Toggle
           checked={interviewOverlayEnabled}
           onChange={(v) => setInterviewOverlayEnabled(v)}
@@ -335,8 +342,91 @@ export default function PreferencesTab() {
         )}
       </Collapsible>
 
-      {/* ── 3. 外观与高级 ── */}
-      <Collapsible title="外观与高级" icon={<Palette className="w-3.5 h-3.5" />}>
+      {/* ── 3. 知识库 (Beta) ── */}
+      <Collapsible
+        title="知识库"
+        icon={<BookOpen className="w-3.5 h-3.5" />}
+        keywords="kb knowledge base 笔记 参考 rag retrieval 引用"
+        badge={
+          <span className="ml-1 text-[9px] font-bold tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1 py-0 rounded">
+            BETA
+          </span>
+        }
+      >
+        <Field
+          label="主流程引用本地笔记"
+          hint="开启后 LLM 会在回答前从本地知识库检索相关内容并以 [角标] 引用; 关闭仅 Drawer 内手动测试可用"
+        >
+          <Toggle
+            checked={config?.kb_enabled ?? false}
+            onChange={async (v) => {
+              try {
+                await updateConfigAndRefresh({ kb_enabled: v })
+                useInterviewStore.getState().setToastMessage(v ? '已开启知识库' : '已关闭知识库')
+              } catch (e) {
+                useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '保存失败')
+              }
+            }}
+            label={config?.kb_enabled ? '已开启' : '已关闭'}
+          />
+        </Field>
+        <Field
+          label={`命中数 top_k: ${config?.kb_top_k ?? 4}`}
+          hint="一次检索最多返回的笔记片段数 (1-20)"
+        >
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={config?.kb_top_k ?? 4}
+            onChange={(e) => {
+              const v = Math.max(1, Math.min(20, Number(e.target.value) || 4))
+              updateConfigAndRefresh({ kb_top_k: v }).catch(() => {})
+            }}
+            className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
+          />
+        </Field>
+        <Field
+          label={`手动模式 deadline: ${config?.kb_deadline_ms ?? 150} ms`}
+          hint="手动输入 / 截图模式下检索的硬上限; 超时不阻塞首字, 直接返回空 (20-2000)"
+        >
+          <input
+            type="number"
+            min={20}
+            max={2000}
+            step={10}
+            value={config?.kb_deadline_ms ?? 150}
+            onChange={(e) => {
+              const v = Math.max(20, Math.min(2000, Number(e.target.value) || 150))
+              updateConfigAndRefresh({ kb_deadline_ms: v }).catch(() => {})
+            }}
+            className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
+          />
+        </Field>
+        <Field
+          label={`ASR 模式 deadline: ${config?.kb_asr_deadline_ms ?? 80} ms`}
+          hint="实时语音模式下更紧的检索上限, 优先保证首字延迟 (20-1000)"
+        >
+          <input
+            type="number"
+            min={20}
+            max={1000}
+            step={10}
+            value={config?.kb_asr_deadline_ms ?? 80}
+            onChange={(e) => {
+              const v = Math.max(20, Math.min(1000, Number(e.target.value) || 80))
+              updateConfigAndRefresh({ kb_asr_deadline_ms: v }).catch(() => {})
+            }}
+            className="w-full max-w-[120px] bg-bg-tertiary border border-bg-hover rounded-lg px-3 py-2 text-sm text-text-primary"
+          />
+        </Field>
+        <p className="text-[10px] text-text-muted leading-relaxed">
+          点击右上角 📖 图标管理文档/手动检索测试; OCR、Vision 等高阶配置仍在 backend/config.json 中。
+        </p>
+      </Collapsible>
+
+      {/* ── 4. 外观与高级 ── */}
+      <Collapsible title="外观与高级" icon={<Palette className="w-3.5 h-3.5" />} keywords="主题 配色 字体 theme color scheme font 高级">
         <Field label="配色方案">
           <div className="grid grid-cols-1 gap-1.5">
             {COLOR_SCHEME_OPTIONS.map((opt) => (

@@ -35,7 +35,7 @@ export default function QuickPromptsEditor() {
   const resetDefaults = () => persist([...DEFAULT_QUICK_PROMPTS])
 
   return (
-    <Section title="快捷提示词">
+    <Section title="快捷提示词" keywords="quick prompt 快捷词 模板 chip pill 简短 详细">
       <p className="text-[10px] text-text-muted -mt-1">点击输入框上方的标签可快速填入提示词，在此自定义列表</p>
 
       <div className="flex flex-wrap gap-1.5">
