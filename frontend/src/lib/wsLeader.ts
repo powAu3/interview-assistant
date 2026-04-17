@@ -1,0 +1,164 @@
+/**
+ * 多标签 WebSocket 主控选举(BroadcastChannel)。
+ *
+ * 目标:同一域名下打开多个 tab 时,只允许一个 tab 真正连接后端 WS,
+ * 避免「同一条 answer_chunk 在两个 tab 各 append 一次」的状态污染。
+ *
+ * 选举规则:
+ *  - 每个 tab 启动时生成 16 字节十六进制随机 id。
+ *  - 收到他人 announce/heartbeat 时取较小者作为 leader。
+ *  - leader 每 2s 广播一次 heartbeat,follower 在 5s 内未见 leader 则触发重新选举。
+ *  - leader 关闭时主动 broadcast leaving,follower 立即触发重新选举。
+ *
+ * 当浏览器不支持 BroadcastChannel(老 Safari 等)时直接退化为单标签 leader。
+ */
+
+const CHANNEL_NAME = 'ia-ws-leader-v1'
+const HEARTBEAT_INTERVAL = 2000
+const LEADER_TIMEOUT = 5000
+
+type RoleChangeHandler = (isLeader: boolean) => void
+
+function genTabId(): string {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const buf = new Uint8Array(8)
+    crypto.getRandomValues(buf)
+    return Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('')
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+const TAB_ID = genTabId()
+
+interface BcMessage {
+  type: 'announce' | 'heartbeat' | 'leaving' | 'takeover'
+  id: string
+}
+
+let channel: BroadcastChannel | null = null
+let leaderId: string = TAB_ID
+let leaderSeenAt = Date.now()
+let currentlyLeader = true
+let initialized = false
+let timer: number | null = null
+const handlers = new Set<RoleChangeHandler>()
+
+function notify(): void {
+  for (const h of handlers) {
+    try {
+      h(currentlyLeader)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function setLeader(id: string, broadcast: boolean): void {
+  const prevLeader = currentlyLeader
+  leaderId = id
+  leaderSeenAt = Date.now()
+  currentlyLeader = id === TAB_ID
+  if (prevLeader !== currentlyLeader) notify()
+  if (broadcast && currentlyLeader && channel) {
+    channel.postMessage({ type: 'announce', id: TAB_ID } satisfies BcMessage)
+  }
+}
+
+function tick(): void {
+  if (currentlyLeader) {
+    channel?.postMessage({ type: 'heartbeat', id: TAB_ID } satisfies BcMessage)
+    return
+  }
+  if (Date.now() - leaderSeenAt > LEADER_TIMEOUT) {
+    setLeader(TAB_ID, true)
+  }
+}
+
+function init(): void {
+  if (initialized) return
+  initialized = true
+  if (typeof window === 'undefined') return
+  if (typeof BroadcastChannel === 'undefined') {
+    setLeader(TAB_ID, false)
+    return
+  }
+  channel = new BroadcastChannel(CHANNEL_NAME)
+  channel.onmessage = (event: MessageEvent<BcMessage>) => {
+    const m = event.data
+    if (!m || typeof m.id !== 'string' || m.id === TAB_ID) return
+    if (m.type === 'announce' || m.type === 'heartbeat') {
+      if (m.id < leaderId || (!currentlyLeader && m.id === leaderId)) {
+        setLeader(m.id, false)
+      } else if (currentlyLeader && m.id < TAB_ID) {
+        setLeader(m.id, false)
+      }
+      if (m.type === 'announce' && currentlyLeader) {
+        channel?.postMessage({ type: 'heartbeat', id: TAB_ID } satisfies BcMessage)
+      }
+    } else if (m.type === 'leaving') {
+      if (m.id === leaderId && !currentlyLeader) {
+        setLeader(TAB_ID, true)
+      }
+    } else if (m.type === 'takeover') {
+      // 别的 tab 主动接管
+      if (m.id !== TAB_ID) setLeader(m.id, false)
+    }
+  }
+  channel.postMessage({ type: 'announce', id: TAB_ID } satisfies BcMessage)
+  // 假定自己是 leader,直到见到更小 id;同时启动心跳
+  setLeader(TAB_ID, false)
+  timer = window.setInterval(tick, HEARTBEAT_INTERVAL)
+  window.addEventListener('beforeunload', () => {
+    try {
+      channel?.postMessage({ type: 'leaving', id: TAB_ID } satisfies BcMessage)
+      channel?.close()
+    } catch {
+      /* ignore */
+    }
+  })
+}
+
+export function subscribeLeader(handler: RoleChangeHandler): () => void {
+  init()
+  handlers.add(handler)
+  // 立即同步一次当前角色
+  try {
+    handler(currentlyLeader)
+  } catch {
+    /* ignore */
+  }
+  return () => {
+    handlers.delete(handler)
+  }
+}
+
+export function isLeaderTab(): boolean {
+  init()
+  return currentlyLeader
+}
+
+export function requestTakeover(): void {
+  init()
+  if (currentlyLeader) return
+  channel?.postMessage({ type: 'takeover', id: TAB_ID } satisfies BcMessage)
+  setLeader(TAB_ID, true)
+}
+
+export function getTabId(): string {
+  return TAB_ID
+}
+
+export function shutdownLeader(): void {
+  if (timer != null) {
+    clearInterval(timer)
+    timer = null
+  }
+  try {
+    channel?.postMessage({ type: 'leaving', id: TAB_ID } satisfies BcMessage)
+    channel?.close()
+  } catch {
+    /* ignore */
+  }
+  channel = null
+  initialized = false
+}

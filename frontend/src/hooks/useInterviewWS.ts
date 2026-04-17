@@ -1,6 +1,23 @@
 import { useEffect, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { buildWsUrl } from '@/lib/backendUrl'
+import { subscribeLeader } from '@/lib/wsLeader'
+
+// scope -> 仅在该 appMode 下消费;assist / 全局消息不带 scope,任何模式都可见
+const SCOPE_ALLOWED_MODES: Record<string, ReadonlySet<string>> = {
+  practice: new Set(['practice']),
+  'resume-opt': new Set(['resume-opt']),
+}
+
+function shouldDeliver(msg: { scope?: string }): boolean {
+  const scope = msg.scope
+  if (!scope) return true
+  const allowed = SCOPE_ALLOWED_MODES[scope]
+  if (!allowed) return true
+  const mode = useUiPrefsStore.getState().appMode
+  return allowed.has(mode)
+}
 
 export function useInterviewWS() {
   const wsRef = useRef<WebSocket | null>(null)
@@ -24,7 +41,9 @@ export function useInterviewWS() {
     }
     ws.onmessage = (event) => {
       try {
-        handleMessage(JSON.parse(event.data))
+        const data = JSON.parse(event.data)
+        if (!shouldDeliver(data)) return
+        handleMessage(data)
       } catch {}
     }
     ws.onclose = () => {
@@ -80,6 +99,9 @@ export function useInterviewWS() {
       case 'answer_cancelled':
         s.cancelAnswer(msg.id)
         break
+      case 'vision_verify':
+        s.setVisionVerify(msg.id, msg.verdict, msg.reason)
+        break
       case 'stt_status':
         s.setSttStatus(msg.loaded ?? false, msg.loading ?? false)
         break
@@ -98,8 +120,8 @@ export function useInterviewWS() {
       case 'practice_eval_done':
         s.finalizePracticeEval({
           question_id: msg.question_id,
-          question: '',
-          answer: '',
+          question: msg.question ?? '',
+          answer: msg.answer ?? '',
           score: msg.score,
           feedback: msg.feedback,
         })
@@ -157,18 +179,42 @@ export function useInterviewWS() {
   }
 
   useEffect(() => {
-    shouldReconnect.current = true
-    connect()
-    const ping = setInterval(() => {
+    let unsubscribe: (() => void) | null = null
+    let pingTimer: ReturnType<typeof setInterval> | null = null
+
+    const teardown = () => {
+      shouldReconnect.current = false
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current)
+        reconnectTimer.current = null
+      }
+      if (wsRef.current) {
+        try { wsRef.current.close() } catch { /* ignore */ }
+        wsRef.current = null
+      }
+      useInterviewStore.getState().setWsConnected(false)
+    }
+
+    unsubscribe = subscribeLeader((isLeader) => {
+      useInterviewStore.getState().setWsIsLeader(isLeader)
+      if (isLeader) {
+        shouldReconnect.current = true
+        connect()
+      } else {
+        // 让出主控:断开 WS,store 回归只读
+        teardown()
+      }
+    })
+
+    pingTimer = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN)
         wsRef.current.send(JSON.stringify({ type: 'ping' }))
     }, 30000)
+
     return () => {
-      shouldReconnect.current = false
-      clearInterval(ping)
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
-      wsRef.current?.close()
-      wsRef.current = null
+      unsubscribe?.()
+      if (pingTimer) clearInterval(pingTimer)
+      teardown()
     }
   }, [])
 }

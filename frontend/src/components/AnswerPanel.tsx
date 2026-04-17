@@ -1,10 +1,40 @@
 import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles } from 'lucide-react'
+import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 const SoundTest = lazy(() => import('./SoundTest'))
 const AnswerMarkdownContent = lazy(() => import('./AnswerMarkdownContent'))
+
+function VisionVerifyBadge({ verdict, reason }: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }) {
+  const palette =
+    verdict === 'PASS'
+      ? {
+          icon: <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />,
+          label: '截图自检通过',
+          ring: 'border-accent-green/40 bg-accent-green/10 text-accent-green',
+        }
+      : verdict === 'FAIL'
+        ? {
+            icon: <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />,
+            label: '截图自检不一致,请人工复核',
+            ring: 'border-accent-amber/50 bg-accent-amber/10 text-accent-amber',
+          }
+        : {
+            icon: <Shield className="w-3.5 h-3.5 flex-shrink-0" />,
+            label: '截图自检无定论',
+            ring: 'border-bg-hover/60 bg-bg-tertiary/40 text-text-muted',
+          }
+  return (
+    <div className={`mt-3 flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-[11px] leading-snug ${palette.ring}`}>
+      {palette.icon}
+      <div className="min-w-0">
+        <div className="font-medium">{palette.label}</div>
+        {reason && <div className="opacity-80 mt-0.5 break-words">{reason}</div>}
+      </div>
+    </div>
+  )
+}
 
 function ThinkBlock({ content, isThinking, streamLayout }: { content: string; isThinking: boolean; streamLayout?: boolean }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -138,6 +168,9 @@ export default function AnswerPanel() {
           {'\u751F\u6210\u4E2D\u2026'}
         </div>
       ) : null}
+      {qa.visionVerify && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
+        <VisionVerifyBadge verdict={qa.visionVerify.verdict} reason={qa.visionVerify.reason} />
+      )}
       {qa.modelLabel && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
         <p
           className={`text-[10px] text-text-muted/70 mt-2.5 pt-2 border-t border-bg-tertiary/30 flex items-center gap-1 ${stream ? 'border-bg-hover/40' : ''}`}

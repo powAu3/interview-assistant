@@ -1,9 +1,17 @@
 import { buildApiUrl } from './backendUrl'
+import { getAuthToken } from './auth'
+
+function buildHeaders(extra?: HeadersInit): HeadersInit {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = getAuthToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+  return { ...headers, ...(extra as Record<string, string> | undefined) }
+}
 
 async function request<T = any>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(buildApiUrl(url), {
-    headers: { 'Content-Type': 'application/json', ...opts?.headers },
     ...opts,
+    headers: buildHeaders(opts?.headers),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
@@ -56,7 +64,14 @@ export const api = {
   uploadResume: async (file: File): Promise<ResumeUploadResult> => {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(buildApiUrl('/api/resume'), { method: 'POST', body: fd })
+    const token = getAuthToken()
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+    const res = await fetch(buildApiUrl('/api/resume'), {
+      method: 'POST',
+      body: fd,
+      headers,
+    })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
       throw new Error(err.detail)

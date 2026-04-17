@@ -3,10 +3,12 @@
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from core.config import get_config
 from core.session import get_session, snapshot_session
+from services.audio import AudioBusyError
 from .pipeline import (
     cancel_answer_work,
     is_paused,
@@ -38,15 +40,17 @@ async def api_start(body: dict):
     except (TypeError, ValueError):
         raise HTTPException(400, "device_id 必须是整数")
     try:
-        start_nonblocking(dev)
+        await run_in_threadpool(start_nonblocking, dev)
         return {"ok": True}
+    except AudioBusyError as e:
+        raise HTTPException(409, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @router.post("/stop")
 async def api_stop():
-    stop_interview_loop()
+    await run_in_threadpool(stop_interview_loop)
     return {"ok": True}
 
 
@@ -57,7 +61,7 @@ async def api_pause():
         raise HTTPException(400, "\u9762\u8bd5\u672a\u5728\u8fdb\u884c\u4e2d")
     if is_paused():
         raise HTTPException(400, "\u5df2\u7ecf\u5904\u4e8e\u6682\u505c\u72b6\u6001")
-    pause_interview()
+    await run_in_threadpool(pause_interview)
     return {"ok": True}
 
 
@@ -74,7 +78,13 @@ async def api_resume_interview(body: Optional[dict] = None):
             int(device_id)
         except (TypeError, ValueError):
             raise HTTPException(400, "device_id \u5fc5\u987b\u662f\u6574\u6570")
-    unpause_interview(device_id=int(device_id) if device_id is not None else None)
+    try:
+        await run_in_threadpool(
+            unpause_interview,
+            int(device_id) if device_id is not None else None,
+        )
+    except AudioBusyError as e:
+        raise HTTPException(409, str(e))
     return {"ok": True}
 
 

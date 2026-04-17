@@ -4,10 +4,11 @@ import time
 from typing import Optional
 import requests
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ValidationError
 
+from core.auth import get_token, is_auth_disabled, is_loopback_host
 from core.config import (
     get_config, update_config,
     POSITION_OPTIONS, LANGUAGE_OPTIONS, PRACTICE_AUDIENCE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
@@ -248,7 +249,7 @@ async def api_update_config(body: ConfigUpdate):
             d.pop("screen_capture_region", None)
         if "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
             d.pop("practice_audience", None)
-        update_config(d)
+        await run_in_threadpool(update_config, d)
     except HTTPException:
         raise
     except (TypeError, ValueError, ValidationError) as e:
@@ -264,8 +265,13 @@ async def api_update_config(body: ConfigUpdate):
 
 
 @router.get("/network-info")
-async def api_network_info():
-    """Return LAN IP and port so the frontend can render a scannable QR code."""
+async def api_network_info(request: Request):
+    """Return LAN IP and port so the frontend can render a scannable QR code.
+
+    若 LAN 鉴权开启,环回访问会在 URL 中追加 ``?t=<token>``,扫码后手机端
+    可自动写入 sessionStorage 并附在后续请求里。LAN 客户端拿到的是不带
+    token 的 URL,自身就拒绝访问,从而避免凭证泄露。
+    """
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -276,7 +282,18 @@ async def api_network_info():
     # Read PORT from env (set by start.py), fallback to 18080
     import os
     port = int(os.environ.get("PORT", 18080))
-    return {"ip": ip, "port": port, "url": f"http://{ip}:{port}"}
+    base = f"http://{ip}:{port}"
+    client_host = request.client.host if request.client else None
+    url = base
+    auth_required = not is_auth_disabled()
+    if auth_required and is_loopback_host(client_host):
+        url = f"{base}/?t={get_token()}"
+    return {
+        "ip": ip,
+        "port": port,
+        "url": url,
+        "auth_required": auth_required,
+    }
 
 
 @router.get("/options")
@@ -316,7 +333,9 @@ async def api_upload_resume(file: UploadFile = File(...)):
 
 @router.delete("/resume")
 async def api_delete_resume():
-    update_config({"resume_text": None, "resume_active_history_id": None})
+    await run_in_threadpool(
+        update_config, {"resume_text": None, "resume_active_history_id": None}
+    )
     return {"ok": True}
 
 
@@ -547,5 +566,5 @@ async def api_models_layout(body: dict):
                 updates["active_model"] = min(active, len(models) - 1)
         except Exception:
             updates["active_model"] = 0
-    update_config(updates)
+    await run_in_threadpool(update_config, updates)
     return {"ok": True}

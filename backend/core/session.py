@@ -25,12 +25,18 @@ class Session:
     last_device_id: int = 0
     capture_is_loopback: bool = True
     created_at: float = field(default_factory=time.time)
+    system_summary: str = ""
+    _compaction_running: bool = False
 
     MAX_HISTORY = 20
     MAX_TRANSCRIPTION_HISTORY = 200
     MAX_QA_PAIRS = 80
     CONVERSATION_TURNS_FOR_LLM = 6
     MAX_CHARS_PER_MESSAGE = 2000
+    # 滚动摘要触发阈值:超过此条数后台压缩一次
+    SUMMARY_TRIGGER = 12
+    # 摘要后保留最近 N 条原文(必须为偶数,代表完整轮数 * 2)
+    SUMMARY_KEEP_RECENT = 4
 
     def add_transcription(self, text: str):
         if text.strip():
@@ -42,10 +48,12 @@ class Session:
     def add_user_message(self, content: Union[str, list]):
         self.conversation_history.append({"role": "user", "content": content})
         self._trim_history()
+        self._maybe_compact()
 
     def add_assistant_message(self, content: str):
         self.conversation_history.append({"role": "assistant", "content": content})
         self._trim_history()
+        self._maybe_compact()
 
     def add_qa(
         self,
@@ -71,10 +79,21 @@ class Session:
         return list(self.conversation_history)
 
     def get_conversation_messages_for_llm(self) -> list[dict]:
-        """最近 N 轮对话，每条 content 截断到 max_chars，用于控制 token。"""
+        """最近 N 轮对话，每条 content 截断到 max_chars，用于控制 token。
+
+        若已存在滚动摘要(system_summary),会作为一条 system 消息插在最前。
+        """
         n = self.CONVERSATION_TURNS_FOR_LLM * 2
         recent = self.conversation_history[-n:] if len(self.conversation_history) > n else self.conversation_history
-        out = []
+        out: list[dict] = []
+        if self.system_summary:
+            out.append({
+                "role": "system",
+                "content": (
+                    "以下是之前面试中已经发生的问答的滚动摘要(由系统压缩,仅供你了解上下文,"
+                    "不要复读它):\n" + self.system_summary
+                ),
+            })
         for msg in recent:
             content = msg.get("content")
             if isinstance(content, list):
@@ -99,6 +118,21 @@ class Session:
         if len(self.conversation_history) > self.MAX_HISTORY:
             self.conversation_history = self.conversation_history[-self.MAX_HISTORY:]
 
+    def _maybe_compact(self):
+        """超过软阈值后,异步触发一次摘要压缩。绝不阻塞当前调用。"""
+        if len(self.conversation_history) <= self.SUMMARY_TRIGGER:
+            return
+        if self._compaction_running:
+            return
+        try:
+            from services.memory import schedule_compaction
+        except Exception:
+            return
+        try:
+            schedule_compaction(self)
+        except Exception:
+            self._compaction_running = False
+
     def clear(self):
         self.transcription_history.clear()
         self.conversation_history.clear()
@@ -109,6 +143,8 @@ class Session:
         self.last_device_id = 0
         self.capture_is_loopback = True
         self.created_at = time.time()
+        self.system_summary = ""
+        self._compaction_running = False
 
     def snapshot(self) -> dict:
         return {

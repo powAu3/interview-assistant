@@ -655,7 +655,7 @@ def start_nonblocking(device_id: int):
             capture_is_loopback = d["is_loopback"]
             break
 
-    audio_capture.start(device_id)
+    audio_capture.start(device_id, owner="assist")
 
     session = get_session()
     with conversation_lock:
@@ -676,7 +676,7 @@ def stop_interview_loop():
     _stop_event.set()
     _pause_event.clear()
     cancel_answer_work(reset_session_data=False)
-    audio_capture.stop()
+    audio_capture.stop(owner="assist")
     session = get_session()
     with conversation_lock:
         session.is_recording = False
@@ -694,7 +694,7 @@ def stop_interview_loop():
 
 def pause_interview():
     _pause_event.set()
-    audio_capture.stop()
+    audio_capture.stop(owner="assist")
     session = get_session()
     with conversation_lock:
         session.is_paused = True
@@ -711,7 +711,7 @@ def unpause_interview(device_id: Optional[int] = None):
             if d["id"] == next_device_id:
                 capture_is_loopback = d["is_loopback"]
                 break
-    audio_capture.start(next_device_id)
+    audio_capture.start(next_device_id, owner="assist")
     _pause_event.clear()
     with conversation_lock:
         session.last_device_id = next_device_id
@@ -1040,6 +1040,17 @@ def _process_question_parallel(
             )
             if not _submit_knowledge_record(question_text, full_answer):
                 _elog.warning("KNOWLEDGE_ENQUEUE_DROP id=%s question=%r", qa_id, question_text[:80])
+            if prompt_mode == PROMPT_MODE_SERVER_SCREEN and image:
+                try:
+                    from services.vision_verify import schedule_self_verify
+                    schedule_self_verify(
+                        qa_id=qa_id,
+                        answer=full_answer,
+                        image_data_url=image,
+                        broadcast_callable=broadcast,
+                    )
+                except Exception as ve:  # noqa: BLE001
+                    _elog.warning("VISION_VERIFY_SCHEDULE_FAIL id=%s err=%s", qa_id, ve)
         except Exception:
             broadcast({"type": "answer_cancelled", "id": qa_id})
 

@@ -81,6 +81,7 @@ export interface QAPair {
   timestamp: number
   questionSource?: string
   modelLabel?: string
+  visionVerify?: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }
 }
 
 export interface PracticeQuestion {
@@ -135,6 +136,7 @@ interface InterviewState {
   toastMessage: string | null
   lastWSError: string | null
   wsConnected: boolean
+  wsIsLeader: boolean
 
   // Resume optimizer
   resumeOptStreaming: string
@@ -175,6 +177,7 @@ interface InterviewState {
     modelName?: string,
   ) => void
   cancelAnswer: (id: string) => void
+  setVisionVerify: (id: string, verdict: 'PASS' | 'FAIL' | 'UNKNOWN', reason: string) => void
   setInitData: (data: any) => void
   setSttStatus: (loaded: boolean, loading: boolean) => void
   toggleSettings: () => void
@@ -188,6 +191,7 @@ interface InterviewState {
   setToastMessage: (msg: string | null) => void
   setLastWSError: (msg: string | null) => void
   setWsConnected: (v: boolean) => void
+  setWsIsLeader: (v: boolean) => void
 
   // Resume optimizer actions
   appendResumeOptChunk: (chunk: string) => void
@@ -254,6 +258,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   toastMessage: null,
   lastWSError: null,
   wsConnected: false,
+  wsIsLeader: true,
   resumeOptStreaming: '',
   resumeOptResult: '',
   resumeOptLoading: false,
@@ -341,6 +346,12 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       }
     })
   },
+  setVisionVerify: (id, verdict, reason) =>
+    set((s) => ({
+      qaPairs: s.qaPairs.map((qa) =>
+        qa.id === id ? { ...qa, visionVerify: { verdict, reason } } : qa,
+      ),
+    })),
   setInitData: (data) => {
     _chunkBuffer.clear()
     if (_chunkFlushTimer !== null) { clearTimeout(_chunkFlushTimer); _chunkFlushTimer = null }
@@ -389,6 +400,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   setToastMessage: (msg) => set({ toastMessage: msg }),
   setLastWSError: (msg) => set({ lastWSError: msg }),
   setWsConnected: (v) => set({ wsConnected: v }),
+  setWsIsLeader: (v) => set({ wsIsLeader: v }),
 
   appendResumeOptChunk: (chunk) => set((s) => ({ resumeOptStreaming: s.resumeOptStreaming + chunk })),
   setResumeOptResult: (text) => set({ resumeOptResult: text, resumeOptStreaming: '' }),

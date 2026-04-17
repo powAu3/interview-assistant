@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './lib/auth' // 抽取 URL 中的 ?t=<token>(必须先于其他 import 触发副作用)
 import App from './App'
 import InterviewOverlay from './components/InterviewOverlay'
 import './index.css'

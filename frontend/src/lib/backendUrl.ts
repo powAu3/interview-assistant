@@ -1,3 +1,5 @@
+import { getAuthToken } from './auth'
+
 const RAW_BASE = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE ?? ''
 
 function normalizeBase(base: string): string {
@@ -24,5 +26,9 @@ export function buildApiUrl(path: string): string {
 export function buildWsUrl(path: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${proto}//${window.location.host}${BACKEND_ROOT}${normalizedPath}`
+  const base = `${proto}//${window.location.host}${BACKEND_ROOT}${normalizedPath}`
+  const token = getAuthToken()
+  if (!token) return base
+  const sep = base.includes('?') ? '&' : '?'
+  return `${base}${sep}token=${encodeURIComponent(token)}`
 }

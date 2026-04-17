@@ -3,8 +3,9 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
+from core.auth import is_auth_disabled, is_loopback_host, verify_token
 from core.session import snapshot_session
 from services.stt import get_stt_engine
 
@@ -60,8 +61,25 @@ def _enqueue_broadcast(data: dict):
             )
 
 
+def _ws_authorized(ws: WebSocket) -> bool:
+    if is_auth_disabled():
+        return True
+    client_host = ws.client.host if ws.client else None
+    if is_loopback_host(client_host):
+        return True
+    token = ws.query_params.get("token")
+    if not token:
+        auth = ws.headers.get("authorization") or ""
+        if auth.lower().startswith("bearer "):
+            token = auth.split(None, 1)[1].strip()
+    return verify_token(token)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    if not _ws_authorized(ws):
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     await ws.accept()
     ws_clients.add(ws)
     _log.info("WS connect clients=%d", len(ws_clients))

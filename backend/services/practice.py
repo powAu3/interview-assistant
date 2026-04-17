@@ -5,7 +5,7 @@ import threading
 from typing import Optional, Generator
 from dataclasses import dataclass, field
 from core.config import get_config
-from services.llm import get_client_for_model, _add_tokens, _token_stats
+from services.llm import get_client_for_model, _add_tokens
 
 
 @dataclass

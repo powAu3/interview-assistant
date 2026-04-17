@@ -27,9 +27,39 @@ export default function SettingsDrawer() {
   useEffect(() => {
     if (!settingsOpen || !drawerRef.current) return
     previousActiveRef.current = document.activeElement as HTMLElement | null
-    const focusable = drawerRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea')
-    const first = focusable[0]
-    if (first) first.focus()
+    const root = drawerRef.current
+
+    // 涵盖原生表单元素 + 可编辑元素 + ARIA 自定义控件 + 显式 tabindex 节点
+    const FOCUSABLE_SELECTOR = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled]):not([type="hidden"])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[contenteditable]:not([contenteditable="false"])',
+      '[role="checkbox"]:not([aria-disabled="true"])',
+      '[role="switch"]:not([aria-disabled="true"])',
+      '[role="radio"]:not([aria-disabled="true"])',
+      '[role="menuitem"]',
+      '[role="tab"]',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',')
+
+    const collectFocusable = (): HTMLElement[] => {
+      const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+      return nodes.filter((el) => {
+        if (el.hasAttribute('disabled')) return false
+        if (el.getAttribute('aria-hidden') === 'true') return false
+        if (el.getAttribute('tabindex') === '-1') return false
+        if (el.offsetWidth === 0 && el.offsetHeight === 0 && el.getClientRects().length === 0) {
+          return false
+        }
+        return true
+      })
+    }
+
+    const initial = collectFocusable()
+    initial[0]?.focus()
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -37,15 +67,20 @@ export default function SettingsDrawer() {
         previousActiveRef.current?.focus()
         return
       }
-      if (e.key !== 'Tab' || !drawerRef.current) return
-      const focusableNodes = Array.from(drawerRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea'))
-      const len = focusableNodes.length
-      if (len === 0) return
-      const idx = focusableNodes.indexOf(document.activeElement as HTMLElement)
+      if (e.key !== 'Tab') return
+      const nodes = collectFocusable()
+      if (nodes.length === 0) return
+      const idx = nodes.indexOf(document.activeElement as HTMLElement)
       if (e.shiftKey) {
-        if (idx <= 0) { e.preventDefault(); focusableNodes[len - 1].focus() }
+        if (idx <= 0) {
+          e.preventDefault()
+          nodes[nodes.length - 1].focus()
+        }
       } else {
-        if (idx === -1 || idx >= len - 1) { e.preventDefault(); focusableNodes[0].focus() }
+        if (idx === -1 || idx >= nodes.length - 1) {
+          e.preventDefault()
+          nodes[0].focus()
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)

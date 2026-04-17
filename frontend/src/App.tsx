@@ -9,6 +9,7 @@ import { useOverlayWindowSync } from '@/hooks/useOverlayWindowSync'
 import { useAssistSplit } from '@/hooks/useAssistSplit'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
+import { requestTakeover } from '@/lib/wsLeader'
 import TranscriptionPanel from '@/components/TranscriptionPanel'
 import AnswerPanel from '@/components/AnswerPanel'
 import ControlBar from '@/components/ControlBar'
@@ -24,10 +25,9 @@ export default function App() {
     config, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
     isRecording,
   } = useInterviewStore()
-  const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('answer')
-  const [appMode, setAppMode] = useState<
-    'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
-  >('assist')
+  const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
+  const appMode = useUiPrefsStore((s) => s.appMode)
+  const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   useOverlayWindowSync(isRecording, appMode)
 
   // job-tracker is now available on both web and Electron
@@ -100,6 +100,7 @@ export default function App() {
   const tokenUsage = useInterviewStore((s) => s.tokenUsage)
   const fallbackToast = useInterviewStore((s) => s.fallbackToast)
   const toastMessage = useInterviewStore((s) => s.toastMessage)
+  const wsIsLeader = useInterviewStore((s) => s.wsIsLeader)
 
   const formatTokens = (n: number) => {
     if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
@@ -443,6 +444,21 @@ export default function App() {
       )}
 
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse gap-2 items-center" aria-live="polite">
+        {!wsIsLeader && (
+          <div className="animate-fade-up">
+            <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 flex items-center gap-3">
+              <span className="text-accent-amber font-semibold">⏸</span>
+              <span>本标签处于备用状态(其他标签正在连接后端)</span>
+              <button
+                type="button"
+                onClick={requestTakeover}
+                className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber"
+              >
+                在此页接管
+              </button>
+            </div>
+          </div>
+        )}
         {fallbackToast && (
           <div className="animate-fade-up">
             <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20">

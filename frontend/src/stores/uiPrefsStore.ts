@@ -14,6 +14,27 @@ import {
 
 const ANSWER_LAYOUT_KEY = 'ia_answer_panel_layout'
 const ASSIST_SPLIT_KEY = 'ia_assist_split_pct'
+const APP_MODE_KEY = 'ia_app_mode'
+
+export type AppMode = 'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
+
+const APP_MODE_VALUES: ReadonlySet<AppMode> = new Set([
+  'assist',
+  'practice',
+  'knowledge',
+  'resume-opt',
+  'job-tracker',
+])
+
+function readAppMode(): AppMode {
+  try {
+    const v = localStorage.getItem(APP_MODE_KEY)
+    if (v && APP_MODE_VALUES.has(v as AppMode)) return v as AppMode
+  } catch {
+    /* ignore */
+  }
+  return 'assist'
+}
 
 function readAnswerPanelLayout(): 'cards' | 'stream' {
   try {
@@ -176,6 +197,8 @@ function persistOverlayPref(key: string, value: string) {
 }
 
 interface UiPrefsState {
+  appMode: AppMode
+  setAppMode: (mode: AppMode) => void
   answerPanelLayout: 'cards' | 'stream'
   colorScheme: ColorSchemeId
   assistSplitPct: number
@@ -212,6 +235,16 @@ interface UiPrefsState {
 }
 
 export const useUiPrefsStore = create<UiPrefsState>((set) => ({
+  appMode: readAppMode(),
+  setAppMode: (mode) => {
+    if (!APP_MODE_VALUES.has(mode)) return
+    try {
+      localStorage.setItem(APP_MODE_KEY, mode)
+    } catch {
+      /* ignore */
+    }
+    set({ appMode: mode })
+  },
   answerPanelLayout: readAnswerPanelLayout(),
   colorScheme: readStoredColorScheme(),
   assistSplitPct: readAssistSplitPct(),

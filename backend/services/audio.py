@@ -19,8 +19,27 @@ from typing import Callable, Optional
 
 import sounddevice as sd
 
+try:
+    from core.logger import get_logger as _get_logger
+    _alog = _get_logger("audio")
+except Exception:  # pragma: no cover - logger module not available during isolated import
+    import logging
+    _alog = logging.getLogger("audio")
+
 # Windows WDM-KS devices crash PortAudio with -9999; exclude them entirely
 _WDM_KS_API = "Windows WDM-KS"
+
+
+class AudioBusyError(RuntimeError):
+    """音频设备已被其他模块占用。HTTP 层应映射到 409。"""
+
+    def __init__(self, current_owner: Optional[str], requested_owner: Optional[str] = None):
+        self.current_owner = current_owner
+        self.requested_owner = requested_owner
+        super().__init__(
+            f"音频设备已被 {current_owner or '未知模块'} 占用，"
+            f"无法被 {requested_owner or '其他模块'} 启动；请先停止当前模块。"
+        )
 
 # ---------------------------------------------------------------------------
 # soundcard (Windows WASAPI loopback) – optional
@@ -145,6 +164,8 @@ class AudioCapture:
         # AGC state
         self._agc_peak: float = 0.0
         self._use_agc: bool = False
+        # Ownership token: only one of {"assist", "practice", ...} may hold the device
+        self._owner: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Device listing
@@ -244,12 +265,29 @@ class AudioCapture:
     # Start / Stop
     # ------------------------------------------------------------------
 
-    def start(self, device_id, on_audio: Optional[Callable[[np.ndarray], None]] = None):
+    def start(
+        self,
+        device_id,
+        on_audio: Optional[Callable[[np.ndarray], None]] = None,
+        owner: Optional[str] = None,
+    ):
+        """Start audio capture on the requested device.
+
+        owner identifies the caller (e.g. ``"assist"`` / ``"practice"``).
+        - 已运行且 owner 不一致:抛出 AudioBusyError(409)
+        - 已运行且 owner 相同:静默 no-op(等价旧行为)
+        - 已运行但当前无 owner 标签:沿用旧行为 no-op
+        """
         with self._lock:
             if self._running:
+                if owner is not None and self._owner is not None and self._owner != owner:
+                    raise AudioBusyError(self._owner, owner)
+                if owner is not None and self._owner is None:
+                    self._owner = owner
                 return
             self._callback = on_audio
             self._running = True
+            self._owner = owner
             self._audio_queue = queue.Queue(maxsize=300)
             self._resample_state = [None]
             self._agc_peak = 0.0
@@ -301,7 +339,7 @@ class AudioCapture:
                     pass
 
                 mic = _sc.get_microphone(speaker_guid, include_loopback=True)
-                print(f"[AudioCapture] soundcard loopback opened: {mic.name}", flush=True)
+                _alog.info("soundcard loopback opened: %s", mic.name)
                 with mic.recorder(samplerate=self.SAMPLE_RATE,
                                   channels=1,
                                   blocksize=self.BLOCK_SIZE) as rec:
@@ -309,9 +347,7 @@ class AudioCapture:
                         data = rec.record(numframes=self.BLOCK_SIZE)
                         self._push(data[:, 0].copy())
             except Exception as e:
-                import traceback
-                print(f"[AudioCapture] soundcard error: {e}", flush=True)
-                traceback.print_exc()
+                _alog.error("soundcard error: %s", e, exc_info=True)
                 self._running = False
             finally:
                 try:
@@ -349,8 +385,20 @@ class AudioCapture:
             self._running = False
             raise RuntimeError(f"无法启动麦克风: {e}")
 
-    def stop(self):
+    def stop(self, owner: Optional[str] = None):
+        """Stop the running stream.
+
+        If owner is provided and does not match current owner, the call is
+        ignored to prevent module A from accidentally stopping module B's
+        capture. Pass owner=None to force-stop (legacy behaviour).
+        """
         with self._lock:
+            if (
+                owner is not None
+                and self._owner is not None
+                and owner != self._owner
+            ):
+                return
             self._running = False
             self._sc_stop.set()
             if self._stream:
@@ -363,6 +411,11 @@ class AudioCapture:
             if self._sc_thread and self._sc_thread.is_alive():
                 self._sc_thread.join(timeout=1.0)
             self._sc_thread = None
+            self._owner = None
+
+    @property
+    def current_owner(self) -> Optional[str]:
+        return self._owner
 
     def get_audio_chunk(self, timeout: float = 0.1) -> Optional[np.ndarray]:
         chunks = []
