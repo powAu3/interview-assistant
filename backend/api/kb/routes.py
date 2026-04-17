@@ -74,10 +74,13 @@ async def kb_search(req: SearchReq) -> dict:
     cfg = get_config()
     deadline = req.deadline_ms or int(getattr(cfg, "kb_deadline_ms", 150) or 150)
     hits = await run_in_threadpool(
-        retriever.retrieve,
-        req.query,
-        req.k,
-        deadline,
+        lambda: retriever.retrieve(
+            req.query,
+            req.k,
+            deadline,
+            mode="manual_text",
+            force=True,
+        )
     )
     if req.min_score > 0:
         hits = [h for h in hits if h.score >= req.min_score]

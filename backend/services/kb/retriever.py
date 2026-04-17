@@ -76,13 +76,20 @@ def retrieve(
     deadline_ms: int = 150,
     *,
     mode: str = "manual_text",
+    force: bool = False,
 ) -> list[KBHit]:
-    """同步 FTS5 检索；deadline 到期立刻中断返回空。"""
+    """同步 FTS5 检索；deadline 到期立刻中断返回空。
+
+    ``force=True`` 时跳过 ``kb_enabled`` / ``kb_trigger_modes`` 这两道开关;
+    专给手动测试面板 (`/api/kb/search`) 用 —— 用户既然在 Drawer 里点了搜索,
+    就不该被「主流程总开关」拦住。pipeline 默认 ``force=False``,行为不变。
+    """
     cfg = get_config()
-    if not getattr(cfg, "kb_enabled", False):
-        return []
-    if mode not in getattr(cfg, "kb_trigger_modes", []):
-        return []
+    if not force:
+        if not getattr(cfg, "kb_enabled", False):
+            return []
+        if mode not in getattr(cfg, "kb_trigger_modes", []):
+            return []
 
     q = _normalize_query(query)
     if not q:
