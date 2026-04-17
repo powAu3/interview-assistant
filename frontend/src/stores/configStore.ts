@@ -70,6 +70,15 @@ export interface AppConfig {
   written_exam_mode?: boolean
   /** 笔试模式下是否开启深度思考 */
   written_exam_think?: boolean
+  // --- Knowledge Base (Beta) ---
+  /** KB 总开关; 关闭后 pipeline 不查 KB,但 Drawer 里的手动测试仍可用 (force=True) */
+  kb_enabled?: boolean
+  /** 主流程检索 deadline (ms),超时直接返回空,不阻塞首字 */
+  kb_deadline_ms?: number
+  /** ASR 模式专用 deadline (ms),通常更紧 */
+  kb_asr_deadline_ms?: number
+  /** 命中数上限 */
+  kb_top_k?: number
 }
 
 export interface QAPair {

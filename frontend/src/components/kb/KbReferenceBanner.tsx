@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react'
 import { useKbStore } from '@/stores/kbStore'
 import BetaBadge from './BetaBadge'
@@ -21,14 +21,29 @@ const ORIGIN_TAG: Record<string, string> = {
 export default function KbReferenceBanner({ qaId }: Props) {
   const payload = useKbStore((s) => (qaId ? s.hitsByQaId[qaId] : undefined))
   const [open, setOpen] = useState(false)
+  const userToggled = useRef(false)
+
+  // 首次有命中时自动展开 — 否则正文里的 [1][2] 角标用户找不到来源会困惑。
+  // 用 ref 记录是否用户主动 toggle 过, 避免后续 payload 更新覆盖用户折叠意图。
+  useEffect(() => {
+    if (!userToggled.current && payload && payload.hit_count > 0) {
+      setOpen(true)
+    }
+  }, [payload])
+
   if (!payload) return null
   if (payload.hit_count === 0 && !payload.degraded) return null
+
+  const handleToggle = () => {
+    userToggled.current = true
+    setOpen((v) => !v)
+  }
 
   return (
     <div className="mb-2 rounded-xl border border-amber-500/25 bg-amber-500/5 overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggle}
         className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-amber-500/10 transition-colors"
       >
         {open ? (
@@ -57,10 +72,12 @@ export default function KbReferenceBanner({ qaId }: Props) {
           {payload.hits.map((h, i) => (
             <div
               key={`${h.path}-${i}`}
-              className="px-2 py-1.5 rounded-lg bg-bg-tertiary/40 border border-bg-hover/30"
+              className="group px-2 py-1.5 rounded-lg bg-bg-tertiary/40 border border-bg-hover/30 hover:border-amber-500/40 hover:bg-bg-tertiary/60 transition-colors"
             >
               <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                <span className="text-[10px] font-mono text-text-muted">[{i + 1}]</span>
+                <span className="text-[10px] font-mono px-1 py-[1px] rounded bg-amber-500/15 text-amber-300 tabular-nums">
+                  [{i + 1}]
+                </span>
                 <span className="text-[11px] text-amber-300 font-medium truncate">
                   {h.section_path || '(无小节)'}
                 </span>
@@ -70,7 +87,7 @@ export default function KbReferenceBanner({ qaId }: Props) {
                   </span>
                 )}
               </div>
-              <div className="text-[10px] text-text-muted truncate">
+              <div className="text-[10px] text-text-muted truncate" title={h.path}>
                 {h.path}
                 {h.page ? ` · 第 ${h.page} 页` : ''}
               </div>

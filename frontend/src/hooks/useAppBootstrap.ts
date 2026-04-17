@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
+import { useKbStore } from '@/stores/kbStore'
 
 export function useAppBootstrap() {
   const setConfig = useInterviewStore((s) => s.setConfig)
   const setDevices = useInterviewStore((s) => s.setDevices)
   const setOptions = useInterviewStore((s) => s.setOptions)
+  const setKbStatus = useKbStore((s) => s.setStatus)
   const [initError, setInitError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -34,6 +36,14 @@ export function useAppBootstrap() {
         .catch(() => {})
 
       void api.checkModelsHealth().catch(() => {})
+
+      // KB status: 让 KnowledgeButton 能根据 enabled+0docs 显示提醒红点
+      void api
+        .kbStatus()
+        .then((s) => {
+          if (!cancelled) setKbStatus(s)
+        })
+        .catch(() => {})
     }
 
     void bootstrap()
@@ -41,7 +51,7 @@ export function useAppBootstrap() {
     return () => {
       cancelled = true
     }
-  }, [setConfig, setDevices, setOptions])
+  }, [setConfig, setDevices, setOptions, setKbStatus])
 
   return { initError }
 }

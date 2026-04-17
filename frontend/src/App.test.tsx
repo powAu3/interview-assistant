@@ -9,6 +9,7 @@ const apiMock = vi.hoisted(() => ({
   getDevices: vi.fn(),
   getOptions: vi.fn(),
   checkModelsHealth: vi.fn(),
+  kbStatus: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -59,6 +60,14 @@ describe('App bootstrap', () => {
     apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
     apiMock.getOptions.mockResolvedValue({ positions: [], languages: [] })
     apiMock.checkModelsHealth.mockResolvedValue(undefined)
+    apiMock.kbStatus.mockResolvedValue({
+      enabled: false,
+      total_docs: 0,
+      total_chunks: 0,
+      deadline_ms: 150,
+      asr_deadline_ms: 80,
+      deps: { docx: false, pdf: false, ocr: false, vision: false },
+    })
   })
 
   it('renders the init error view when config bootstrap fails', async () => {

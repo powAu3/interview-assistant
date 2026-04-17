@@ -70,6 +70,11 @@ class ConfigUpdate(BaseModel):
     iflytek_stt_app_id: Optional[str] = None
     iflytek_stt_api_key: Optional[str] = None
     iflytek_stt_api_secret: Optional[str] = None
+    # KB (Beta) - 详细字段(min_score / OCR / Vision / chunk_size 等)仍走 config.json
+    kb_enabled: Optional[bool] = None
+    kb_top_k: Optional[int] = None
+    kb_deadline_ms: Optional[int] = None
+    kb_asr_deadline_ms: Optional[int] = None
 
 
 @router.get("/config")
@@ -128,6 +133,11 @@ async def api_get_config():
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "written_exam_mode": bool(getattr(cfg, "written_exam_mode", False)),
         "written_exam_think": bool(getattr(cfg, "written_exam_think", False)),
+        # KB (Beta) - 暴露给前端 SettingsDrawer 调节; 详细配置仍在 config.json 中
+        "kb_enabled": bool(getattr(cfg, "kb_enabled", False)),
+        "kb_top_k": int(getattr(cfg, "kb_top_k", 4) or 4),
+        "kb_deadline_ms": int(getattr(cfg, "kb_deadline_ms", 150) or 150),
+        "kb_asr_deadline_ms": int(getattr(cfg, "kb_asr_deadline_ms", 80) or 80),
         "has_resume": bool(cfg.resume_text),
         "resume_active_history_id": resume_active_history_id,
         "resume_active_filename": (
@@ -249,6 +259,12 @@ async def api_update_config(body: ConfigUpdate):
             d.pop("screen_capture_region", None)
         if "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
             d.pop("practice_audience", None)
+        if "kb_top_k" in d:
+            d["kb_top_k"] = max(1, min(20, int(d["kb_top_k"])))
+        if "kb_deadline_ms" in d:
+            d["kb_deadline_ms"] = max(20, min(2000, int(d["kb_deadline_ms"])))
+        if "kb_asr_deadline_ms" in d:
+            d["kb_asr_deadline_ms"] = max(20, min(1000, int(d["kb_asr_deadline_ms"])))
         await run_in_threadpool(update_config, d)
     except HTTPException:
         raise
