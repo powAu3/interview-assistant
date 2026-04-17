@@ -176,6 +176,13 @@ export default function App() {
     if (status === 'error') return 'bg-accent-red'
     return 'bg-text-muted/30'
   }
+  const healthLabel = (idx: number): string => {
+    const status = modelHealth[idx]
+    if (status === 'ok') return '连接正常'
+    if (status === 'checking') return '正在检测连接…'
+    if (status === 'error') return '连接失败，点击下拉菜单「重新检查连接」重试'
+    return '未检测，点击下拉菜单「重新检查连接」'
+  }
 
   return (
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden noise-bg">
@@ -212,6 +219,21 @@ export default function App() {
               {sttLoaded ? 'STT就绪' : sttLoading ? '加载中' : '未加载'}
             </span>
           </div>
+
+          {isRecording && (
+            <div
+              className="flex items-center gap-1.5 ml-1 flex-shrink-0 rounded-lg px-2 py-1 border bg-accent-red/10 border-accent-red/30 animate-fade-up"
+              role="status"
+              aria-live="polite"
+              title="正在录音中"
+            >
+              <span className="relative inline-flex w-1.5 h-1.5 flex-shrink-0">
+                <span className="absolute inset-0 rounded-full bg-accent-red opacity-75 motion-safe:animate-ping" aria-hidden />
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-accent-red" aria-hidden />
+              </span>
+              <span className="text-[10px] font-semibold text-accent-red leading-none hidden md:inline">REC</span>
+            </div>
+          )}
 
           {tokenUsage.total > 0 && (
             <div
@@ -257,10 +279,14 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                title="优先答题模型"
+                title={`优先答题模型 · ${activeModel?.name ?? ''}\n状态：${healthLabel(config.active_model)}`}
+                aria-label={`优先答题模型 ${activeModel?.name ?? ''}，${healthLabel(config.active_model)}`}
                 className="flex items-center gap-1.5 bg-bg-tertiary/50 text-text-primary text-xs rounded-xl px-2.5 py-1.5 border border-bg-hover/50 hover:border-accent-blue/40 transition-all duration-200 max-w-[130px] md:max-w-[160px]"
               >
-                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`} />
+                <div
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`}
+                  aria-hidden
+                />
                 <span className="truncate min-w-0 font-medium">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
                 <svg className={`w-3 h-3 flex-shrink-0 text-text-muted transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
@@ -269,8 +295,9 @@ export default function App() {
                   {config.models.map((m, i) => (
                     <button key={i}
                       onClick={async () => { setModelDropdownOpen(false); await handleModelChange(i) }}
+                      title={`${m.name} · ${healthLabel(i)}`}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-bg-tertiary/50 transition-all duration-150 ${i === config.active_model ? 'text-accent-blue bg-accent-blue/5' : 'text-text-primary'}`}>
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${healthDot(i)}`} />
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${healthDot(i)}`} aria-hidden />
                       <span className="truncate font-medium">{m.name}{m.supports_vision ? ' 👁' : ''}</span>
                       {i === config.active_model && <span className="ml-auto text-accent-blue text-[10px] font-semibold">优先</span>}
                     </button>
