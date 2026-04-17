@@ -7,7 +7,11 @@
 3) 改写建议(必须引用对应 L<n> 的原文,禁止编造经历)
 
 简历正文在送入步骤 2、3 前预先打编号,模型必须用 L<n> 引用。
-任何一步失败都会自动降级到旧的单次分析,保证可用性。
+失败回退策略:
+- 步骤 1 失败 → 直接走 `_legacy_pass`(单次综合分析),保证用户至少拿到基础结果。
+- 步骤 2 失败 → 在已输出步骤 1 的基础上追加提示,再走 `_legacy_pass` 续输出,
+  避免只输出半截 Markdown。
+- 步骤 3 失败 → 在已输出步骤 1、2 的基础上,追加 `_legacy_pass` 的「兜底改写」段。
 """
 from __future__ import annotations
 
@@ -306,12 +310,20 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
             yield piece
     except Exception as e:  # noqa: BLE001
         _log.warning("resume agent step2 failed: %s", e)
-        yield f"\n\n> 匹配步骤失败:{e}\n\n"
+        yield (
+            f"\n\n> 匹配步骤失败:{e}\n\n"
+            "---\n\n## 🛟 兜底综合分析(降级)\n\n"
+        )
+        yield from _legacy_pass(client, model_cfg, jd_text, cfg.resume_text)
         return
 
     analysis_text = "".join(analysis_chunks).strip()
     if not analysis_text:
-        yield "\n\n> 模型返回空匹配结果,跳过改写步骤。\n"
+        yield (
+            "\n\n> 模型返回空匹配结果,使用兜底综合分析。\n\n"
+            "---\n\n## 🛟 兜底综合分析(降级)\n\n"
+        )
+        yield from _legacy_pass(client, model_cfg, jd_text, cfg.resume_text)
         return
     yield "\n\n---\n\n"
 
@@ -332,7 +344,11 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
             yield piece
     except Exception as e:  # noqa: BLE001
         _log.warning("resume agent step3 failed: %s", e)
-        yield f"\n\n> 改写步骤失败:{e}\n"
+        yield (
+            f"\n\n> 改写步骤失败:{e}\n\n"
+            "---\n\n## 🛟 兜底改写建议(降级)\n\n"
+        )
+        yield from _legacy_pass(client, model_cfg, jd_text, cfg.resume_text)
 
 
 def _legacy_pass(client, model_cfg, jd_text: str, resume_text: str) -> Generator[str, None, None]:

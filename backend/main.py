@@ -137,15 +137,29 @@ _AUTH_BYPASS_EXACT = {
 }
 
 
+_AUTH_PROTECTED_EXACT = {
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+}
+_AUTH_PROTECTED_PREFIXES = (
+    "/api/",
+    "/docs/",   # FastAPI 子路径如 /docs/oauth2-redirect
+    "/redoc/",
+)
+
+
 def _request_needs_auth(path: str) -> bool:
     if path in _AUTH_BYPASS_EXACT:
         return False
     for prefix in _AUTH_BYPASS_PATH_PREFIXES:
         if path.startswith(prefix):
             return False
-    # 仅 API 与 WebSocket(由路由内部校验)走鉴权
-    if path.startswith("/api/"):
+    if path in _AUTH_PROTECTED_EXACT:
         return True
+    for prefix in _AUTH_PROTECTED_PREFIXES:
+        if path.startswith(prefix):
+            return True
     return False
 
 

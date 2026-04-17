@@ -15,7 +15,7 @@ import os
 import secrets
 from typing import Optional
 
-_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost", ""}
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 _token: Optional[str] = None
 _initialized = False
@@ -48,9 +48,16 @@ def is_auth_disabled() -> bool:
 
 
 def is_loopback_host(host: Optional[str]) -> bool:
-    if host is None:
-        return True
+    """判断客户端 host 是否环回。
+
+    安全默认:host 为空字符串 / None(无法识别客户端)时一律视为非环回,
+    强制走鉴权路径,避免在反向代理 / 异常 ASGI 场景下绕过 LAN token。
+    """
+    if not host:
+        return False
     h = host.strip().lower()
+    if not h:
+        return False
     if h in _LOOPBACK_HOSTS:
         return True
     try:

@@ -100,8 +100,13 @@ function init(): void {
         setLeader(TAB_ID, true)
       }
     } else if (m.type === 'takeover') {
-      // 别的 tab 主动接管
-      if (m.id !== TAB_ID) setLeader(m.id, false)
+      // 别的 tab 主动接管:无条件让位,立刻同步角色,避免双 leader 同时持 WS
+      if (m.id !== TAB_ID && currentlyLeader) {
+        setLeader(m.id, false)
+      } else if (m.id !== TAB_ID) {
+        leaderId = m.id
+        leaderSeenAt = Date.now()
+      }
     }
   }
   channel.postMessage({ type: 'announce', id: TAB_ID } satisfies BcMessage)
@@ -140,8 +145,16 @@ export function isLeaderTab(): boolean {
 export function requestTakeover(): void {
   init()
   if (currentlyLeader) return
+  // 先广播 takeover 通知旧 leader 让位,等待一拍 BroadcastChannel 派送(同 tick 内即可被收到),
+  // 旧 leader 在 onmessage 里会立即 setLeader(本 tab id, false) 并 teardown WS,
+  // 此时本 tab 再 setLeader(TAB_ID, true) 触发自身订阅者重新打开 WS,
+  // 双连接窗口压缩到一个事件循环 tick。
   channel?.postMessage({ type: 'takeover', id: TAB_ID } satisfies BcMessage)
-  setLeader(TAB_ID, true)
+  if (typeof queueMicrotask === 'function') {
+    queueMicrotask(() => setLeader(TAB_ID, true))
+  } else {
+    Promise.resolve().then(() => setLeader(TAB_ID, true))
+  }
 }
 
 export function getTabId(): string {
