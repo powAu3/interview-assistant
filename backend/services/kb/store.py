@@ -1,4 +1,11 @@
-"""SQLite + FTS5 持久层：薄封装、短连接、写入持锁。"""
+"""SQLite + FTS5 持久层。
+
+关键设计:
+- `kb_fts` 是独立 FTS5 表, rowid 与 `kb_chunk.id` 对齐; 不使用 content= 映射。
+- 写入 FTS 时把 `kb_chunk.text` 做 CJK bigram 化, 让 unicode61 tokenizer 能检索中文短语。
+- `kb_chunk` 存原文; SELECT 时从 JOIN 里取原文, 不从 FTS 里读。
+- 短连接 + WAL + check_same_thread=False, 让 retriever watchdog 主线程能 interrupt 子线程查询。
+"""
 from __future__ import annotations
 
 import logging
@@ -7,6 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from ._tokenize import cjk_bigram_text
 from .types import Chunk
 
 _log = logging.getLogger(__name__)
@@ -42,36 +50,20 @@ CREATE TABLE IF NOT EXISTS kb_attachment (
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(
-  section_path,
-  text,
-  content='kb_chunk',
-  content_rowid='id',
+  chunk_text,
   tokenize='unicode61 remove_diacritics 2'
 );
-
-CREATE TRIGGER IF NOT EXISTS kb_chunk_ai AFTER INSERT ON kb_chunk BEGIN
-  INSERT INTO kb_fts(rowid, section_path, text) VALUES (new.id, new.section_path, new.text);
-END;
-CREATE TRIGGER IF NOT EXISTS kb_chunk_ad AFTER DELETE ON kb_chunk BEGIN
-  INSERT INTO kb_fts(kb_fts, rowid, section_path, text) VALUES ('delete', old.id, old.section_path, old.text);
-END;
-CREATE TRIGGER IF NOT EXISTS kb_chunk_au AFTER UPDATE ON kb_chunk BEGIN
-  INSERT INTO kb_fts(kb_fts, rowid, section_path, text) VALUES ('delete', old.id, old.section_path, old.text);
-  INSERT INTO kb_fts(rowid, section_path, text) VALUES (new.id, new.section_path, new.text);
-END;
 """
 
 
 class KBStore:
-    """SQLite + FTS5 的薄封装。每次操作内部独立短连接，主流程不持有连接。"""
-
     def __init__(self, db_path: str):
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        conn = sqlite3.connect(self.db_path, timeout=5.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
@@ -122,8 +114,16 @@ class KBStore:
             )
 
     def delete_doc(self, path: str) -> None:
+        """删 kb_doc + 先清相关 FTS 行 (外键 cascade 不会触及 FTS 独立表)。"""
         with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM kb_doc WHERE path=?", (path,))
+            row = conn.execute("SELECT id FROM kb_doc WHERE path=?", (path,)).fetchone()
+            if row is None:
+                return
+            conn.execute(
+                "DELETE FROM kb_fts WHERE rowid IN (SELECT id FROM kb_chunk WHERE doc_id=?)",
+                (row["id"],),
+            )
+            conn.execute("DELETE FROM kb_doc WHERE id=?", (row["id"],))
 
     def get_doc(self, path: str) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
@@ -154,18 +154,35 @@ class KBStore:
         }
 
     def replace_chunks(self, doc_id: int, chunks: Iterable[Chunk]) -> None:
+        """事务内替换 doc 的所有 chunk, 同步写 kb_fts (含 bigram)。"""
+        chunks_list = list(chunks)
         with self._lock, self._connect() as conn:
+            old_ids = [
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM kb_chunk WHERE doc_id=?", (doc_id,)
+                ).fetchall()
+            ]
+            if old_ids:
+                conn.executemany(
+                    "DELETE FROM kb_fts WHERE rowid=?",
+                    [(cid,) for cid in old_ids],
+                )
             conn.execute("DELETE FROM kb_chunk WHERE doc_id=?", (doc_id,))
-            conn.executemany(
-                """
-                INSERT INTO kb_chunk(doc_id, section_path, page, ord, text, origin)
-                VALUES(?,?,?,?,?,?)
-                """,
-                [
-                    (doc_id, c.section_path, c.page, c.ord, c.text, c.origin)
-                    for c in chunks
-                ],
-            )
+            for c in chunks_list:
+                cur = conn.execute(
+                    """
+                    INSERT INTO kb_chunk(doc_id, section_path, page, ord, text, origin)
+                    VALUES(?,?,?,?,?,?)
+                    """,
+                    (doc_id, c.section_path, c.page, c.ord, c.text, c.origin),
+                )
+                chunk_id = cur.lastrowid
+                fts_text = _build_fts_text(c.section_path or "", c.text)
+                conn.execute(
+                    "INSERT INTO kb_fts(rowid, chunk_text) VALUES(?, ?)",
+                    (chunk_id, fts_text),
+                )
 
     def fts_search(
         self,
@@ -174,7 +191,7 @@ class KBStore:
         *,
         interrupt_connection: Optional[sqlite3.Connection] = None,
     ) -> list[dict[str, Any]]:
-        """执行一次 FTS5 查询。传入 interrupt_connection 时由调用方自行管理连接。"""
+        """query 必须是已经 bigram/token 化后的 FTS5 MATCH 表达式。"""
         conn = interrupt_connection or self._connect()
         own_conn = interrupt_connection is None
         try:
@@ -197,5 +214,16 @@ class KBStore:
                 conn.close()
 
     def open_connection(self) -> sqlite3.Connection:
-        """retriever 自己管 interrupt 时用这个拿独立连接。"""
         return self._connect()
+
+
+def _build_fts_text(section_path: str, body: str) -> str:
+    """写入 FTS5 前的预处理: section_path + body 均 bigram 化拼接。
+
+    section_path 以空格连接 body, 让标题词和正文都可被检索。
+    """
+    sp = cjk_bigram_text(section_path or "")
+    bd = cjk_bigram_text(body or "")
+    if sp and bd:
+        return f"{sp}\n{bd}"
+    return sp or bd

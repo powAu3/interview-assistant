@@ -41,9 +41,10 @@ def _l3_vision_enabled() -> bool:
 def _kb_cache_root() -> Path:
     try:
         from core.config import get_config  # type: ignore
-        return Path(getattr(get_config(), "kb_cache_dir", "backend/data/kb_cache"))
+        from services.kb.indexer import resolve_path  # type: ignore
+        return resolve_path(getattr(get_config(), "kb_cache_dir", "data/kb_cache"))
     except Exception:  # pragma: no cover
-        return Path("backend/data/kb_cache")
+        return Path("data/kb_cache")
 
 
 def _run_ocr_on_pdf_page(pdf_path: Path, page_idx: int) -> str:

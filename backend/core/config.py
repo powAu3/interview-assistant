@@ -94,14 +94,17 @@ class AppConfig(BaseModel):
     written_exam_think: bool = False
 
     # --- Knowledge Base (Beta) ---
+    # 路径相对 backend/ 目录解析; 默认值与 .gitignore (backend/data/kb/) 对齐。
     kb_enabled: bool = False
-    kb_dir: str = "backend/data/kb"
-    kb_db_path: str = "backend/data/kb.sqlite"
-    kb_cache_dir: str = "backend/data/kb_cache"
+    kb_dir: str = "data/kb"
+    kb_db_path: str = "data/kb.sqlite"
+    kb_cache_dir: str = "data/kb_cache"
     kb_top_k: int = 4
     kb_deadline_ms: int = 150
     kb_asr_deadline_ms: int = 80
-    kb_min_score: float = 1.0
+    # BM25 对稀疏语料区分度低 (常返回很小的分数), MVP 只靠 top_k + 排序,
+    # 将 min_score 设为 0 关闭阈值过滤; 上线后看热点 query 再调。
+    kb_min_score: float = 0.0
     kb_chunk_max_chars: int = 800
     kb_prompt_excerpt_chars: int = 300
     kb_trigger_modes: list[str] = Field(
