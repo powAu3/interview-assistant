@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Play,
   Square,
@@ -48,7 +48,68 @@ export function saveQuickPrompts(prompts: string[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(prompts))
 }
 
-export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, getQuickPrompts }
+/**
+ * Quick Prompts 最近使用：按时间戳记录最近点过的快捷词，限制最多 16 条。
+ * 仅用于 UI 排序（recent-first）和顶部「最近用过」视觉标记，不持久化到后端。
+ */
+const RECENT_KEY = 'quick_prompts_recent_v1'
+const RECENT_MAX = 16
+
+export function readQuickPromptRecent(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, number>
+    if (parsed && typeof parsed === 'object') return parsed
+  } catch {}
+  return {}
+}
+
+export function bumpQuickPromptRecent(prompt: string): Record<string, number> {
+  const now = Date.now()
+  const current = readQuickPromptRecent()
+  current[prompt] = now
+  const entries = Object.entries(current)
+  if (entries.length > RECENT_MAX) {
+    entries.sort((a, b) => b[1] - a[1])
+    const kept = Object.fromEntries(entries.slice(0, RECENT_MAX))
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(kept))
+    } catch {}
+    return kept
+  }
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(current))
+  } catch {}
+  return current
+}
+
+/**
+ * 把 quickPrompts 按「最近使用时间」降序排序；未在 recent 中的保持原顺序追加。
+ */
+export function orderByRecent(
+  prompts: string[],
+  recent: Record<string, number>,
+): string[] {
+  const seen = new Set<string>()
+  const withTs = prompts
+    .filter((p) => recent[p] != null)
+    .sort((a, b) => (recent[b] ?? 0) - (recent[a] ?? 0))
+  const result: string[] = []
+  for (const p of withTs) {
+    if (seen.has(p)) continue
+    seen.add(p)
+    result.push(p)
+  }
+  for (const p of prompts) {
+    if (seen.has(p)) continue
+    seen.add(p)
+    result.push(p)
+  }
+  return result
+}
+
+export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, RECENT_KEY, getQuickPrompts }
 
 /**
  * WebSocket 断线后的轻量重连横幅:
@@ -97,7 +158,15 @@ function WsReconnectingBanner() {
  * 快捷词滚动行: 仅在内容真的溢出时才渲染左右渐变遮罩.
  * 小屏/少量快捷词时 (scrollWidth <= clientWidth) 不显示多余 fade.
  */
-function QuickPromptsRow({ prompts, onPick }: { prompts: string[]; onPick: (p: string) => void }) {
+function QuickPromptsRow({
+  prompts,
+  onPick,
+  recentSet,
+}: {
+  prompts: string[]
+  onPick: (p: string) => void
+  recentSet?: Set<string>
+}) {
   const rowRef = useRef<HTMLDivElement>(null)
   const [fadeLeft, setFadeLeft] = useState(false)
   const [fadeRight, setFadeRight] = useState(false)
@@ -134,16 +203,27 @@ function QuickPromptsRow({ prompts, onPick }: { prompts: string[]; onPick: (p: s
           className="w-3 h-3 text-accent-amber flex-shrink-0"
           aria-label="快捷提示词"
         />
-        {prompts.map((prompt, i) => (
-          <button
-            key={`${i}-${prompt}`}
-            onClick={() => onPick(prompt)}
-            title={`填入「${prompt}」到输入框`}
-            className="prompt-pill inline-flex items-center min-h-[28px] px-2.5 py-1 text-[11px] rounded-lg font-medium whitespace-nowrap flex-shrink-0"
-          >
-            {prompt}
-          </button>
-        ))}
+        {prompts.map((prompt, i) => {
+          const isRecent = recentSet?.has(prompt) ?? false
+          return (
+            <button
+              key={`${i}-${prompt}`}
+              onClick={() => onPick(prompt)}
+              title={isRecent ? `最近使用过 · 填入「${prompt}」到输入框` : `填入「${prompt}」到输入框`}
+              className={`prompt-pill inline-flex items-center gap-1 min-h-[28px] px-2.5 py-1 text-[11px] rounded-lg font-medium whitespace-nowrap flex-shrink-0${
+                isRecent ? ' ring-1 ring-accent-blue/40 text-accent-blue' : ''
+              }`}
+            >
+              {isRecent && (
+                <span
+                  className="inline-flex w-1 h-1 rounded-full bg-accent-blue/80"
+                  aria-hidden
+                />
+              )}
+              {prompt}
+            </button>
+          )
+        })}
       </div>
       {fadeLeft && (
         <div
@@ -184,6 +264,21 @@ export default function ControlBar() {
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
+  const [quickPromptRecent, setQuickPromptRecent] = useState<Record<string, number>>(readQuickPromptRecent)
+  const orderedQuickPrompts = useMemo(
+    () => orderByRecent(quickPrompts, quickPromptRecent),
+    [quickPrompts, quickPromptRecent],
+  )
+  const recentSet = useMemo(() => {
+    // 只把排序后靠前且真被标记的前 3 项视为「最近使用」
+    const s = new Set<string>()
+    const withTs = quickPrompts
+      .filter((p) => quickPromptRecent[p] != null)
+      .sort((a, b) => (quickPromptRecent[b] ?? 0) - (quickPromptRecent[a] ?? 0))
+      .slice(0, 3)
+    for (const p of withTs) s.add(p)
+    return s
+  }, [quickPrompts, quickPromptRecent])
 
   // WebSocket 从断开恢复时 toast 通知,避免用户误以为系统没反应
   const prevWsConnectedRef = useRef(wsConnected)
@@ -540,10 +635,12 @@ export default function ControlBar() {
       {/* 快捷提示词 */}
       {quickPrompts.length > 0 && (
         <QuickPromptsRow
-          prompts={quickPrompts}
+          prompts={orderedQuickPrompts}
+          recentSet={recentSet}
           onPick={(prompt) => {
             setManualQuestion((prev) => (prev ? `${prev} ${prompt}` : prompt))
             inputRef.current?.focus()
+            setQuickPromptRecent(bumpQuickPromptRecent(prompt))
           }}
         />
       )}
