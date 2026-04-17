@@ -5,6 +5,30 @@ const CHUNK_THROTTLE_MS = 50
 const _chunkBuffer: Map<string, { answer: string; think: string }> = new Map()
 let _chunkFlushTimer: ReturnType<typeof setTimeout> | null = null
 
+export type ToastLevel = 'info' | 'success' | 'warn' | 'error'
+export interface ToastItem {
+  id: string
+  message: string
+  level: ToastLevel
+  ttlMs: number
+}
+
+const TOAST_DEFAULT_TTL: Record<ToastLevel, number> = {
+  info: 2200,
+  success: 2200,
+  warn: 3200,
+  error: 4500,
+}
+
+/** 根据消息文本启发式推断等级，让老代码 setToastMessage('xxx失败') 也能自动标红 */
+function inferToastLevel(msg: string): ToastLevel {
+  const s = (msg || '').toLowerCase()
+  if (/失败|错误|未配置|未连接|超时|不能|无效|error|fail|denied|refused/.test(s)) return 'error'
+  if (/警告|风险|注意|warn/.test(s)) return 'warn'
+  if (/已保存|已更新|成功|已恢复|已开启|已关闭|已切换|已解析|已连通|ok\b|成功/.test(s)) return 'success'
+  return 'info'
+}
+
 export interface ModelInfo {
   name: string
   supports_think: boolean
@@ -143,6 +167,8 @@ interface InterviewState {
   }
   fallbackToast: { from: string; to: string; reason: string } | null
   toastMessage: string | null
+  /** 堆叠的 toast 列表；setToastMessage 会同步推入，便于并发多条提示不互相覆盖 */
+  toasts: ToastItem[]
   lastWSError: string | null
   wsConnected: boolean
   wsIsLeader: boolean
@@ -198,6 +224,9 @@ interface InterviewState {
   setTokenUsage: (usage: InterviewState['tokenUsage']) => void
   setFallbackToast: (toast: { from: string; to: string; reason: string } | null) => void
   setToastMessage: (msg: string | null) => void
+  /** 推入一条带分级的 toast；level 默认 info；ttlMs 默认由 level 决定（error 更长） */
+  pushToast: (msg: string, level?: ToastLevel, ttlMs?: number) => string
+  dismissToast: (id: string) => void
   setLastWSError: (msg: string | null) => void
   setWsConnected: (v: boolean) => void
   setWsIsLeader: (v: boolean) => void
@@ -265,6 +294,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
   fallbackToast: null,
   toastMessage: null,
+  toasts: [],
   lastWSError: null,
   wsConnected: false,
   wsIsLeader: true,
@@ -406,7 +436,33 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       },
     }),
   setFallbackToast: (toast) => set({ fallbackToast: toast }),
-  setToastMessage: (msg) => set({ toastMessage: msg }),
+  setToastMessage: (msg) => {
+    set({ toastMessage: msg })
+    if (msg) {
+      const level = inferToastLevel(msg)
+      const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      set((s) => {
+        const next = [...s.toasts, { id, message: msg, level, ttlMs: TOAST_DEFAULT_TTL[level] }]
+        return { toasts: next.length > 5 ? next.slice(next.length - 5) : next }
+      })
+    }
+  },
+  pushToast: (msg, level = 'info', ttlMs) => {
+    const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    set((s) => {
+      const next = [
+        ...s.toasts,
+        { id, message: msg, level, ttlMs: ttlMs ?? TOAST_DEFAULT_TTL[level] },
+      ]
+      return {
+        toasts: next.length > 5 ? next.slice(next.length - 5) : next,
+        toastMessage: msg,
+      }
+    })
+    return id
+  },
+  dismissToast: (id) =>
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   setLastWSError: (msg) => set({ lastWSError: msg }),
   setWsConnected: (v) => set({ wsConnected: v }),
   setWsIsLeader: (v) => set({ wsIsLeader: v }),

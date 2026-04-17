@@ -126,6 +126,8 @@ export default function App() {
   const tokenUsage = useInterviewStore((s) => s.tokenUsage)
   const fallbackToast = useInterviewStore((s) => s.fallbackToast)
   const toastMessage = useInterviewStore((s) => s.toastMessage)
+  const toasts = useInterviewStore((s) => s.toasts)
+  const dismissToast = useInterviewStore((s) => s.dismissToast)
   const wsIsLeader = useInterviewStore((s) => s.wsIsLeader)
 
   const formatTokens = (n: number) => {
@@ -144,6 +146,14 @@ export default function App() {
     const timer = setTimeout(() => useInterviewStore.getState().setToastMessage(null), 2000)
     return () => clearTimeout(timer)
   }, [toastMessage])
+
+  useEffect(() => {
+    if (!toasts.length) return
+    const timers = toasts.map((t) =>
+      setTimeout(() => useInterviewStore.getState().dismissToast(t.id), t.ttlMs),
+    )
+    return () => { timers.forEach(clearTimeout) }
+  }, [toasts])
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -542,13 +552,41 @@ export default function App() {
             </div>
           </div>
         )}
-        {toastMessage && (
-          <div className="animate-fade-up" role="status" aria-live="polite">
-            <div className="glass border border-bg-hover/50 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 font-medium">
-              {toastMessage}
+        {toasts.map((t) => {
+          const cls = {
+            info: 'border-bg-hover/50',
+            success: 'border-accent-green/40',
+            warn: 'border-accent-amber/40',
+            error: 'border-accent-red/50',
+          }[t.level]
+          const icon = { info: 'ℹ', success: '✓', warn: '⚠', error: '✕' }[t.level]
+          const iconCls = {
+            info: 'text-text-muted',
+            success: 'text-accent-green',
+            warn: 'text-accent-amber',
+            error: 'text-accent-red',
+          }[t.level]
+          const role = t.level === 'error' || t.level === 'warn' ? 'alert' : 'status'
+          const live = t.level === 'error' ? 'assertive' : 'polite'
+          return (
+            <div key={t.id} className="animate-fade-up" role={role} aria-live={live}>
+              <div
+                className={`glass border ${cls} text-text-primary text-xs pl-3 pr-2 py-2 rounded-xl shadow-xl shadow-black/20 font-medium flex items-center gap-2 max-w-[90vw]`}
+              >
+                <span className={`font-semibold ${iconCls}`} aria-hidden>{icon}</span>
+                <span className="truncate">{t.message}</span>
+                <button
+                  type="button"
+                  onClick={() => dismissToast(t.id)}
+                  aria-label="关闭提示"
+                  className="ml-1 w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text-primary hover:bg-bg-hover/70 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })}
       </div>
 
       <SettingsDrawer />
