@@ -10,6 +10,7 @@
     "test:e2e": "playwright test --config=playwright.config.mjs",
     "test:e2e:ui": "playwright test --config=playwright.config.mjs --ui",
     "test:e2e:install": "playwright install --with-deps chromium",
+    "test:e2e:update-snapshots": "playwright test --config=playwright.config.mjs --grep @visual --update-snapshots",
     "preview": "vite preview",
     "screenshots:readme": "node ./scripts/generate-readme-screenshots.mjs",
     "demo:readme": "node ./scripts/generate-readme-demo.mjs"

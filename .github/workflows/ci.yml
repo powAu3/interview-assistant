@@ -155,8 +155,8 @@ jobs:
       - name: Build frontend (preview server needs dist/)
         run: npm run build
 
-      - name: Run Playwright tests
-        run: npm run test:e2e
+      - name: Run Playwright functional tests (skip @visual)
+        run: npx playwright test --config=playwright.config.mjs --grep-invert "@visual"
         env:
           CI: "true"
 
@@ -175,6 +175,60 @@ jobs:
         with:
           name: playwright-test-results
           path: frontend/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── Visual regression (pixel-diff snapshots) ─────────────
+  # First-time runs after merging will fail because no baseline images
+  # exist yet. Trigger the `update-visual-snapshots` workflow once after
+  # merge to seed baselines, then this job becomes a real gate.
+  e2e-visual:
+    needs: [changes, frontend]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: frontend
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run visual regression
+        run: npx playwright test --config=playwright.config.mjs --grep "@visual"
+        env:
+          CI: "true"
+
+      - name: Upload visual diff report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-visual-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
           retention-days: 7
           if-no-files-found: ignore
 
@@ -229,6 +283,9 @@ jobs:
           if-no-files-found: ignore
 
   # ── Aggregate gate so PR can require a single status check ──
+  # NOTE: e2e-visual is intentionally NOT in this gate yet (uses
+  # continue-on-error). Once visual baselines are seeded via the
+  # update-visual-snapshots workflow, you can add it here.
   ci-gate:
     needs: [backend, frontend, e2e-playwright, e2e-smoke]
     if: always()
