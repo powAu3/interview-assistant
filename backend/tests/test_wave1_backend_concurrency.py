@@ -19,9 +19,16 @@ class DummyUpload:
     def __init__(self, filename: str, content: bytes):
         self.filename = filename
         self._content = content
+        self._pos = 0
 
-    async def read(self) -> bytes:
-        return self._content
+    async def read(self, size: int = -1) -> bytes:
+        if size is None or size < 0:
+            chunk = self._content[self._pos:]
+            self._pos = len(self._content)
+            return chunk
+        chunk = self._content[self._pos : self._pos + size]
+        self._pos += len(chunk)
+        return chunk
 
 
 def test_api_upload_resume_offloads_blocking_work_to_threadpool(monkeypatch):
@@ -39,8 +46,11 @@ def test_api_upload_resume_offloads_blocking_work_to_threadpool(monkeypatch):
     monkeypatch.setattr(common_router, "add_upload", fake_add_upload)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
 
+    class _Req:
+        headers = {"content-length": "11"}
+
     result = asyncio.run(
-        common_router.api_upload_resume(DummyUpload("resume.txt", b"hello world"))
+        common_router.api_upload_resume(_Req(), DummyUpload("resume.txt", b"hello world"))
     )
 
     assert called["fn"] is fake_add_upload
