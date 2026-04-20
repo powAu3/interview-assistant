@@ -60,14 +60,12 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 }
 
 export default function PreferencesTab() {
-  const {
-    config,
-    options,
-    platformInfo,
-    sttLoaded,
-    sttLoading,
-    setSettingsDrawerTab,
-  } = useInterviewStore()
+  const config = useInterviewStore((s) => s.config)
+  const options = useInterviewStore((s) => s.options)
+  const platformInfo = useInterviewStore((s) => s.platformInfo)
+  const sttLoaded = useInterviewStore((s) => s.sttLoaded)
+  const sttLoading = useInterviewStore((s) => s.sttLoading)
+  const setSettingsDrawerTab = useInterviewStore((s) => s.setSettingsDrawerTab)
   const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
   const setAnswerPanelLayout = useUiPrefsStore((s) => s.setAnswerPanelLayout)
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)

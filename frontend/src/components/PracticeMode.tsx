@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Play, Square, Mic, Send, RotateCcw, FileText, Upload, ChevronRight, Trophy, X, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useInterviewStore } from '@/stores/configStore'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/lib/api'
 import { refreshConfig } from '@/lib/configSync'
 
@@ -14,10 +15,36 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function PracticeMode() {
   const {
-    config, devices, practiceStatus, practiceQuestions, practiceIndex,
-    practiceEvals, practiceEvalStreaming, practiceReport, practiceReportStreaming,
-    practiceRecording, sttLoaded, practiceAnswerDraft, setPracticeAnswerDraft,
-  } = useInterviewStore()
+    config,
+    devices,
+    practiceStatus,
+    practiceQuestions,
+    practiceIndex,
+    practiceEvals,
+    practiceEvalStreaming,
+    practiceReport,
+    practiceReportStreaming,
+    practiceRecording,
+    sttLoaded,
+    practiceAnswerDraft,
+    setPracticeAnswerDraft,
+  } = useInterviewStore(
+    useShallow((s) => ({
+      config: s.config,
+      devices: s.devices,
+      practiceStatus: s.practiceStatus,
+      practiceQuestions: s.practiceQuestions,
+      practiceIndex: s.practiceIndex,
+      practiceEvals: s.practiceEvals,
+      practiceEvalStreaming: s.practiceEvalStreaming,
+      practiceReport: s.practiceReport,
+      practiceReportStreaming: s.practiceReportStreaming,
+      practiceRecording: s.practiceRecording,
+      sttLoaded: s.sttLoaded,
+      practiceAnswerDraft: s.practiceAnswerDraft,
+      setPracticeAnswerDraft: s.setPracticeAnswerDraft,
+    })),
+  )
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

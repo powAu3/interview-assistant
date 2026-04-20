@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
@@ -23,10 +24,19 @@ const JobTracker = lazy(() => import('@/components/JobTracker'))
 
 export default function App() {
   useInterviewWS()
-  const {
-    config, toggleSettings, openConfigDrawer, openModelsDrawer, sttLoaded, sttLoading,
-    isRecording, isPaused,
-  } = useInterviewStore()
+  // 精确订阅, 避免 store 任意字段变化(LLM token 流式 / toast 等)触发 App 重渲染
+  const { config, toggleSettings, openConfigDrawer, openModelsDrawer } = useInterviewStore(
+    useShallow((s) => ({
+      config: s.config,
+      toggleSettings: s.toggleSettings,
+      openConfigDrawer: s.openConfigDrawer,
+      openModelsDrawer: s.openModelsDrawer,
+    })),
+  )
+  const sttLoaded = useInterviewStore((s) => s.sttLoaded)
+  const sttLoading = useInterviewStore((s) => s.sttLoading)
+  const isRecording = useInterviewStore((s) => s.isRecording)
+  const isPaused = useInterviewStore((s) => s.isPaused)
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
   const appMode = useUiPrefsStore((s) => s.appMode)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
@@ -88,27 +98,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [appMode, toggleAssistTranscriptCollapsed])
 
-  const handlePositionChange = async (val: string) => {
+  const handlePositionChange = useCallback(async (val: string) => {
     const v = val.trim()
-    if (v && v !== config?.position) {
+    if (v && v !== useInterviewStore.getState().config?.position) {
       await updateConfigAndRefresh({ position: v })
     }
-  }
-  const handleLanguageChange = async (val: string) => {
+  }, [])
+  const handleLanguageChange = useCallback(async (val: string) => {
     const v = val.trim()
-    if (v && v !== config?.language) {
+    if (v && v !== useInterviewStore.getState().config?.language) {
       await updateConfigAndRefresh({ language: v })
     }
-  }
-  const handleModelChange = async (active_model: number) => {
+  }, [])
+  const handleModelChange = useCallback(async (active_model: number) => {
     await updateConfigAndRefresh({ active_model })
     useInterviewStore.getState().setToastMessage('已设为优先答题模型（实时辅助优先占用该路）')
-  }
-  const handleThinkToggle = async () => {
-    await updateConfigAndRefresh({ think_mode: !config?.think_mode })
-  }
+  }, [])
+  const handleThinkToggle = useCallback(async () => {
+    const cur = useInterviewStore.getState().config?.think_mode
+    await updateConfigAndRefresh({ think_mode: !cur })
+  }, [])
 
-  const handleServerScreenAsk = async () => {
+  const handleServerScreenAsk = useCallback(async () => {
     setServerScreenLoading(true)
     try {
       await api.askFromServerScreen()
@@ -118,7 +129,7 @@ export default function App() {
     } finally {
       setServerScreenLoading(false)
     }
-  }
+  }, [])
 
   const options = useInterviewStore((s) => s.options)
   const activeModel = config?.models?.[config.active_model]
@@ -168,7 +179,9 @@ export default function App() {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
+  // P1: 仅在下拉菜单打开时才挂事件; 关闭后立即解绑, 避免 mousedown 全局污染
   useEffect(() => {
+    if (!modelDropdownOpen) return
     const handler = (e: MouseEvent) => {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
         setModelDropdownOpen(false)
@@ -176,7 +189,7 @@ export default function App() {
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [modelDropdownOpen])
 
   if (initError) {
     return (
