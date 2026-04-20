@@ -92,7 +92,7 @@ class RoundResult:
 async def run_stress_test():
     print(f"\n{'='*72}")
     print(f"  面试压力测试 — {len(QUESTIONS)} 轮对话")
-    print(f"  目标: 首包 < 500ms | 追问关联 | 长时间运行稳定性")
+    print("  目标: 首包 < 500ms | 追问关联 | 长时间运行稳定性")
     print(f"{'='*72}\n")
 
     results: list[RoundResult] = []
@@ -237,7 +237,7 @@ async def run_stress_test():
 
     # === REPORT ===
     print(f"\n{'='*72}")
-    print(f"  📊 压力测试报告")
+    print("  📊 压力测试报告")
     print(f"{'='*72}\n")
 
     ok_results = [r for r in results if not r.error]
@@ -253,9 +253,9 @@ async def run_stress_test():
         total_list = [r.total_ms for r in ok_results]
         answer_lens = [r.answer_len for r in ok_results]
 
-        print(f"  ┌──────────────────────────────────────┐")
-        print(f"  │         首包延迟 (first token)        │")
-        print(f"  ├──────────────────────────────────────┤")
+        print("  ┌──────────────────────────────────────┐")
+        print("  │         首包延迟 (first token)        │")
+        print("  ├──────────────────────────────────────┤")
         if ft_list:
             ft_sorted = sorted(ft_list)
             p50 = ft_sorted[len(ft_sorted)//2]
@@ -272,36 +272,36 @@ async def run_stress_test():
             print(f"  │  MAX:  {max(ft_list):>8.0f} ms                   │")
             print(f"  │  < 500ms:  {under_500}/{len(ft_list)} ({under_500/len(ft_list)*100:.0f}%)              │")
             print(f"  │  <1000ms:  {under_1000}/{len(ft_list)} ({under_1000/len(ft_list)*100:.0f}%)              │")
-        print(f"  └──────────────────────────────────────┘")
+        print("  └──────────────────────────────────────┘")
         print()
 
-        print(f"  ┌──────────────────────────────────────┐")
-        print(f"  │         总耗时 (端到端)               │")
-        print(f"  ├──────────────────────────────────────┤")
+        print("  ┌──────────────────────────────────────┐")
+        print("  │         总耗时 (端到端)               │")
+        print("  ├──────────────────────────────────────┤")
         t_sorted = sorted(total_list)
         print(f"  │  P50:  {t_sorted[len(t_sorted)//2]:>8.0f} ms                   │")
         print(f"  │  P90:  {t_sorted[int(len(t_sorted)*0.9)]:>8.0f} ms                   │")
         print(f"  │  AVG:  {statistics.mean(total_list):>8.0f} ms                   │")
-        print(f"  └──────────────────────────────────────┘")
+        print("  └──────────────────────────────────────┘")
         print()
 
-        print(f"  ┌──────────────────────────────────────┐")
-        print(f"  │         回答长度 (字)                 │")
-        print(f"  ├──────────────────────────────────────┤")
+        print("  ┌──────────────────────────────────────┐")
+        print("  │         回答长度 (字)                 │")
+        print("  ├──────────────────────────────────────┤")
         print(f"  │  AVG:  {statistics.mean(answer_lens):>8.0f}                      │")
         print(f"  │  MIN:  {min(answer_lens):>8d}                      │")
         print(f"  │  MAX:  {max(answer_lens):>8d}                      │")
-        print(f"  └──────────────────────────────────────┘")
+        print("  └──────────────────────────────────────┘")
         print()
 
         if followup_ok:
             ctx_count = sum(1 for r in followup_ok if r.has_context_ref)
-            print(f"  ┌──────────────────────────────────────┐")
-            print(f"  │         追问上下文关联                │")
-            print(f"  ├──────────────────────────────────────┤")
+            print("  ┌──────────────────────────────────────┐")
+            print("  │         追问上下文关联                │")
+            print("  ├──────────────────────────────────────┤")
             print(f"  │  追问总数:   {len(followup_ok):>3d}                       │")
             print(f"  │  检测到上文: {ctx_count:>3d} ({ctx_count/len(followup_ok)*100:.0f}%)                   │")
-            print(f"  └──────────────────────────────────────┘")
+            print("  └──────────────────────────────────────┘")
             print()
 
         # Stability: compare first half vs second half
@@ -319,9 +319,9 @@ async def run_stress_test():
             ft_avg_second = statistics.mean(ft_second) if ft_second else 0
             ft_delta = (ft_avg_second - ft_avg_first) / ft_avg_first * 100 if ft_avg_first > 0 else 0
 
-            print(f"  ┌──────────────────────────────────────┐")
-            print(f"  │         长时间运行稳定性              │")
-            print(f"  ├──────────────────────────────────────┤")
+            print("  ┌──────────────────────────────────────┐")
+            print("  │         长时间运行稳定性              │")
+            print("  ├──────────────────────────────────────┤")
             print(f"  │  前半段总耗时 AVG: {avg_first:>7.0f} ms          │")
             print(f"  │  后半段总耗时 AVG: {avg_second:>7.0f} ms          │")
             print(f"  │  总耗时变化:       {delta_pct:>+7.1f}%             │")
@@ -329,15 +329,15 @@ async def run_stress_test():
             print(f"  │  后半段首包 AVG:   {ft_avg_second:>7.0f} ms          │")
             print(f"  │  首包变化:         {ft_delta:>+7.1f}%             │")
             if abs(delta_pct) < 25 and abs(ft_delta) < 30:
-                print(f"  │  结论: ✅ 稳定, 无明显性能退化        │")
+                print("  │  结论: ✅ 稳定, 无明显性能退化        │")
             elif delta_pct > 25:
-                print(f"  │  结论: ⚠️  后半段变慢, 可能有性能退化 │")
+                print("  │  结论: ⚠️  后半段变慢, 可能有性能退化 │")
             else:
-                print(f"  │  结论: ✅ 后半段更快 (缓存/预热效果)  │")
-            print(f"  └──────────────────────────────────────┘")
+                print("  │  结论: ✅ 后半段更快 (缓存/预热效果)  │")
+            print("  └──────────────────────────────────────┘")
 
     if err_results:
-        print(f"\n  ---- 失败列表 ----")
+        print("\n  ---- 失败列表 ----")
         for r in err_results:
             print(f"    [{r.idx+1:02d}] {r.error}: {r.question[:40]}")
 

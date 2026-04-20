@@ -100,7 +100,7 @@ def _pick_vision_model():
             getattr(m, "supports_vision", False)
             and bool(getattr(m, "enabled", True))
             and getattr(m, "api_key", "")
-            and getattr(m, "api_key") not in ("", "sk-your-api-key-here")
+            and m.api_key not in ("", "sk-your-api-key-here")
         ):
             return m
     return None

@@ -126,7 +126,7 @@ class RoundResult:
 async def run_test():
     print(f"\n{'='*76}")
     print(f"  真实面试场景模拟 — {len(QUESTIONS)} 轮对话")
-    print(f"  测试: 中英混合名词 | 口语停顿 | 连续追问性能 | 上下文关联")
+    print("  测试: 中英混合名词 | 口语停顿 | 连续追问性能 | 上下文关联")
     print(f"{'='*76}\n")
 
     results: list[RoundResult] = []
@@ -283,7 +283,7 @@ async def run_test():
 
     # ── REPORT ──
     print(f"\n{'='*76}")
-    print(f"  REPORT: 真实面试场景模拟")
+    print("  REPORT: 真实面试场景模拟")
     print(f"{'='*76}\n")
 
     ok = [r for r in results if not r.error]
@@ -330,11 +330,11 @@ async def run_test():
             delta = (avg2 - avg1) / avg1 * 100 if avg1 > 0 else 0
             print(f"  [Stability]  1st-half ft avg={avg1:.0f}ms  2nd-half ft avg={avg2:.0f}ms  delta={delta:+.1f}%")
             if abs(delta) < 25:
-                print(f"               Stable")
+                print("               Stable")
             elif delta > 25:
-                print(f"               WARNING: degradation in 2nd half")
+                print("               WARNING: degradation in 2nd half")
             else:
-                print(f"               Good: faster in 2nd half (warmup effect)")
+                print("               Good: faster in 2nd half (warmup effect)")
     print()
 
     # Tech term coverage check
@@ -355,7 +355,7 @@ async def run_test():
         print(f"               Missing from preview (may be in full answer): {', '.join(not_found[:10])}")
 
     if err:
-        print(f"\n  [Failures]")
+        print("\n  [Failures]")
         for r in err:
             print(f"    [{r.idx+1:02d}] {r.error}: {r.question[:50]}")
 

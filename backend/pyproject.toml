@@ -1,0 +1,32 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["."]
+extend-exclude = [
+    "data",
+    ".pytest_cache",
+    "__pycache__",
+    "tests/_fixtures",
+]
+
+[tool.ruff.lint]
+# Day-1 lint set: only catch real bugs / dead code that compile-time check
+# misses. Style rules (UP/I/RUF/etc.) are intentionally off so CI passes on
+# the existing codebase. Tighten incrementally.
+select = [
+    "E9",     # syntax errors
+    "F",      # pyflakes: undefined names, unused imports/vars
+    "B0",     # flake8-bugbear bugs (B001-B099 only, skip noisy B9 opinions)
+]
+ignore = [
+    "E501",   # line too long
+    "E402",   # imports not at top
+    "B008",   # function call in default arg (FastAPI Depends)
+    "B904",   # bare raise inside except
+    "F401",   # unused import (allowed in __init__ re-exports)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F811", "B011", "F841"]
+"scripts/*" = ["E402"]
+"__init__.py" = ["F401", "F403"]

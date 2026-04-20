@@ -207,7 +207,7 @@ def test_cancel_answer_work_clears_everything_and_optionally_session_history():
     assert assist_router._in_flight_tasks == {}
     assert assist_router._recent_asr_turn_monos == []
     assert assist_router._answer_generation == 8
-    assert getattr(get_session(), "transcription_history") == ["旧转写"]
+    assert get_session().transcription_history == ["旧转写"]
     assert len(get_session().qa_pairs) == 1
 
     assist_router.cancel_answer_work(reset_session_data=True)
