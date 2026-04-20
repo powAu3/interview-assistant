@@ -22,7 +22,11 @@ export function useOverlayWindowSync(isRecording: boolean, appMode: string) {
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
     overlaySyncUntilRef.current = Date.now() + 500
+    // visible = enabled: 启用 overlay 后即显示窗口 (即使未录音, 内部会渲染等待提示)。
+    // 这与 4/12 之前的语义一致, 修复 71ad03d 之后 Toggle UI 失效的回归。
     window.electronAPI.syncOverlayWindow({
+      enabled: interviewOverlayEnabled,
+      visible: interviewOverlayEnabled,
       mode: interviewOverlayMode,
       opacity: interviewOverlayOpacity,
       panelFontSize: interviewOverlayPanelFontSize,
@@ -36,6 +40,7 @@ export function useOverlayWindowSync(isRecording: boolean, appMode: string) {
       lyricColor: interviewOverlayLyricColor,
     }).catch(() => {})
   }, [
+    interviewOverlayEnabled,
     interviewOverlayLyricColor,
     interviewOverlayLyricFontSize,
     interviewOverlayLyricLines,

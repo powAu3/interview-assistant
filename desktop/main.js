@@ -614,7 +614,16 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     lyricColor: typeof payload.lyricColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.lyricColor) ? payload.lyricColor : '#ffffff',
   };
 
-  const state = { ...lastOverlayState, ...style };
+  // enabled / visible 是「可选」字段：
+  // - 渲染端 toggle 开关时显式传 (UI 路径，必须能从 false 切到 true 创建窗口)
+  // - 仅样式变更时不传，沿用 lastOverlayState 中的当前值，避免 style update 误关 overlay
+  // 这是为了修复 71ad03d 之后「Toggle UI 永远不通知 main」的回归 (overlay 只能靠 Ctrl+O 启动)。
+  const nextEnabled = typeof payload.enabled === 'boolean' ? payload.enabled : Boolean(lastOverlayState.enabled);
+  const nextVisible = typeof payload.visible === 'boolean' ? payload.visible : Boolean(lastOverlayState.visible);
+
+  const state = { ...lastOverlayState, ...style, enabled: nextEnabled, visible: nextVisible };
+  const enabledChanged = Boolean(lastOverlayState.enabled) !== state.enabled;
+  const visibleChanged = Boolean(lastOverlayState.visible) !== state.visible;
   const modeChanged = lastOverlayState.mode !== state.mode;
 
   lastOverlayState = state;
@@ -625,11 +634,18 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     return { ok: true, visible: false };
   }
 
-  if (modeChanged) {
-    const win = createOverlayWindow(state.mode);
+  // 启用 + 模式变更 + 窗口已被销毁 三种情况都需要 (重新)创建 overlay 窗口。
+  // 仅样式变更时跳过创建，保留 71ad03d 引入的「不为 style 重建窗口」性能优化。
+  const needCreate = enabledChanged || modeChanged || !overlayWindow || overlayWindow.isDestroyed();
+  if (needCreate) {
+    createOverlayWindow(state.mode);
     applyOverlayPreset(state.mode);
-    if (state.visible) showOverlayWindow();
-    else if (win && !win.isDestroyed()) win.hide();
+  }
+
+  if (state.visible) {
+    showOverlayWindow();
+  } else if (visibleChanged && overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.hide();
   }
   return { ok: true, visible: state.visible };
 });
