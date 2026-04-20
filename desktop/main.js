@@ -19,7 +19,23 @@ if (process.platform === 'win32') {
 
 // 跨平台：阻止系统 occlusion / window list 计算把 overlay 暴露给屏幕共享 / 录屏 API。
 // 与 BrowserWindow 的 setContentProtection(true) (+ macOS type:'panel') 形成多重防御。
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+//
+// macOS 真正生效的方案 (Electron PR #34362, refs issue #19880):
+// 1. enable ScreenCaptureKitMac —— 切换到 macOS 12.3+ 的 ScreenCaptureKit 实现，
+//    PR #34362 在这个 capturer 路径里 *硬编码* 跳过 setContentProtection(true) 的窗口，
+//    是目前唯一让 overlay 在「always-on-top + transparent」配置下真正隐身的方案。
+// 2. disable IOSurfaceCapturer / DesktopCaptureMacV2 —— 关掉旧 capturer 防回退,
+//    它们绕过 NSWindowSharingNone 让 setContentProtection 失效 (这正是 overlay 截图可见的根因)。
+// 3. disable CalculateNativeWinOcclusion —— 防 OS 把 overlay 列入 window list,
+//    被 CGWindowListCreateImage 类老 API 抓到。
+//
+// 三件齐备后, ScreenCaptureKit / CGWindowListCreateImage / Lark/钉钉/Zoom 屏幕共享、
+// macOS 系统截图 (Cmd+Shift+5) 都不再录到 overlay。
+app.commandLine.appendSwitch('enable-features', 'ScreenCaptureKitMac');
+app.commandLine.appendSwitch(
+  'disable-features',
+  'CalculateNativeWinOcclusion,IOSurfaceCapturer,DesktopCaptureMacV2',
+);
 const {
   ShortcutStatus,
   createShortcutState,
@@ -69,23 +85,41 @@ let overlayPositionSaveTimer = null;
 let lastOverlayState = {
   enabled: false,
   visible: false,
-  mode: 'panel',
-  opacity: 0.82,
-  panelFontSize: 13,
-  panelWidth: 420,
-  panelShowBg: true,
-  panelFontColor: '#ffffff',
-  panelHeight: 0,
-  lyricLines: 2,
-  lyricFontSize: 23,
-  lyricWidth: 760,
-  lyricColor: '#ffffff',
+  opacity: 0.88,
+  fontSize: 14,
+  fontColor: '#e2e8f0',
+  showBg: true,
+  maxLines: 0,
 };
 
-const OVERLAY_PRESETS = {
-  panel: { width: 480, height: 320, minWidth: 380, minHeight: 220, resizable: false },
-  lyrics: { width: 760, height: 160, minWidth: 420, minHeight: 120, resizable: false },
-};
+const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
+
+let _frontReassertTimer = null;
+const FRONT_REASSERT_LEVEL = 1;
+const FRONT_REASSERT_DURATION = 5000;
+const FRONT_REASSERT_INTERVAL = 500;
+
+function applyTopMost(win) {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
+  win.setContentProtection(true);
+  win.moveTop();
+}
+
+function keepWindowInFront(win) {
+  if (_frontReassertTimer) { clearInterval(_frontReassertTimer); _frontReassertTimer = null; }
+  if (!win || win.isDestroyed()) return;
+  const start = Date.now();
+  applyTopMost(win);
+  _frontReassertTimer = setInterval(() => {
+    if (!win || win.isDestroyed() || Date.now() - start > FRONT_REASSERT_DURATION) {
+      clearInterval(_frontReassertTimer);
+      _frontReassertTimer = null;
+      return;
+    }
+    applyTopMost(win);
+  }, FRONT_REASSERT_INTERVAL);
+}
 
 function getOverlayStateFilePath() {
   return path.join(app.getPath('userData'), 'overlay-window.json');
@@ -110,26 +144,9 @@ function saveOverlayWindowState(data) {
   }
 }
 
-function computeLyricWindowSize(state = lastOverlayState) {
-  const width = Math.max(420, Math.min(1200, Math.round(Number(state.lyricWidth) || 760)));
-  const lineCount = Math.max(1, Math.min(8, Math.round(Number(state.lyricLines) || 2)));
-  const fontSize = Math.max(1, Math.round(Number(state.lyricFontSize) || 23));
-  const height = Math.max(60, Math.round(fontSize * lineCount * 1.55 + 40));
-  return { width, height };
-}
-
-function getOverlayPreset(mode = 'panel', state = lastOverlayState) {
-  if (mode === 'lyrics') {
-    const { width, height } = computeLyricWindowSize(state);
-    return { width, height, minWidth: 420, minHeight: 120, resizable: false };
-  }
-  return OVERLAY_PRESETS.panel;
-}
-
-function getStoredOverlayPosition(mode = 'panel') {
-  const preset = getOverlayPreset(mode);
+function getStoredOverlayPosition() {
   const saved = loadOverlayWindowState();
-  const pos = saved?.positions?.[mode];
+  const pos = saved?.position;
   if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return null;
   const displays = screen.getAllDisplays();
   const fitsSomeDisplay = displays.some((display) => {
@@ -144,25 +161,24 @@ function getStoredOverlayPosition(mode = 'panel') {
   if (fitsSomeDisplay) return { x: pos.x, y: pos.y };
   const primary = screen.getPrimaryDisplay().workArea;
   return {
-    x: primary.x + Math.max(16, Math.round((primary.width - preset.width) / 2)),
-    y: primary.y + Math.max(16, Math.round((primary.height - preset.height) * 0.18)),
+    x: primary.x + Math.max(16, Math.round((primary.width - OVERLAY_PRESET.width) / 2)),
+    y: primary.y + Math.max(16, Math.round((primary.height - OVERLAY_PRESET.height) * 0.18)),
   };
 }
 
-function persistOverlayPosition(mode = 'panel') {
+function persistOverlayPosition() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const bounds = overlayWindow.getBounds();
   const saved = loadOverlayWindowState();
-  saved.positions = saved.positions || {};
-  saved.positions[mode] = { x: bounds.x, y: bounds.y };
+  saved.position = { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height };
   saveOverlayWindowState(saved);
 }
 
-function schedulePersistOverlayPosition(mode = 'panel') {
+function schedulePersistOverlayPosition() {
   if (overlayPositionSaveTimer) clearTimeout(overlayPositionSaveTimer);
   overlayPositionSaveTimer = setTimeout(() => {
     overlayPositionSaveTimer = null;
-    persistOverlayPosition(mode);
+    persistOverlayPosition();
   }, 180);
 }
 
@@ -271,44 +287,31 @@ function createWindow() {
   });
 }
 
-function applyOverlayPreset(mode = 'panel') {
-  if (!overlayWindow || overlayWindow.isDestroyed()) return;
-  const preset = getOverlayPreset(mode);
-  const bounds = overlayWindow.getBounds();
-  const storedPos = getStoredOverlayPosition(mode);
-  overlayWindow.setResizable(Boolean(preset.resizable));
-  overlayWindow.setMinimumSize(preset.minWidth, preset.minHeight);
-  overlayWindow.setBounds({
-    x: storedPos?.x ?? bounds.x,
-    y: storedPos?.y ?? bounds.y,
-    width: preset.width,
-    height: preset.height,
-  });
-  overlayWindow._overlayMode = mode;
-}
-
-function createOverlayWindow(mode = 'panel') {
+function createOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    applyOverlayPreset(mode);
     return overlayWindow;
   }
 
-  const preset = getOverlayPreset(mode);
-  const storedPos = getStoredOverlayPosition(mode);
-  // macOS 'panel' 类型对应 NSPanel，会被 ScreenCaptureKit / CGWindowListCreateImage / Zoom-Teams 屏幕共享
-  // 视为 utility window，配合 setContentProtection(true) 才能真正隐身。
-  // 其他平台保持默认 'normal' 类型。
-  const overlayType = process.platform === 'darwin' ? 'panel' : undefined;
+  const storedPos = getStoredOverlayPosition();
+  const saved = loadOverlayWindowState();
+  const storedSize = saved?.position;
+  const w = (storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width;
+  const h = (storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height;
+
+  // 透明浮窗: 视觉上能看到桌面, 需要 transparent: true + alpha=0 背景.
+  // 注意: setContentProtection 在 macOS 的透明窗口上只是 best effort,
+  // 对部分截图路径 (尤其是 ScreenCaptureKit) 可能无效; 这是 OS 级限制.
   overlayWindow = new BrowserWindow({
-    width: preset.width,
-    height: preset.height,
+    width: w,
+    height: h,
     ...(storedPos ? storedPos : {}),
-    minWidth: preset.minWidth,
-    minHeight: preset.minHeight,
+    minWidth: OVERLAY_PRESET.minWidth,
+    minHeight: OVERLAY_PRESET.minHeight,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     hasShadow: false,
-    resizable: preset.resizable,
+    resizable: OVERLAY_PRESET.resizable,
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
@@ -316,27 +319,36 @@ function createOverlayWindow(mode = 'panel') {
     alwaysOnTop: true,
     hiddenInMissionControl: true,
     show: false,
-    focusable: true,
+    autoHideMenuBar: true,
+    roundedCorners: true,
     title: `${APP_DISPLAY_NAME} Overlay`,
-    backgroundColor: '#00000000',
-    ...(overlayType ? { type: overlayType } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
-  // 多重保险：创建后立即设 + did-finish-load 再设 + ready-to-show 再设
-  // (macOS 上 NSWindow.sharingType 在不同生命周期可能被重置)
+  // Content protection 必须尽早调用 —— 等到 ready-to-show 时,
+  // 窗口可能已经被 window server 登记过一次, 导致 NSWindowSharingNone 漏掉初始帧
   overlayWindow.setContentProtection(true);
-  overlayWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  overlayWindow._overlayMode = mode;
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  if (process.platform === 'darwin') {
+    // macOS: NSWindowCollectionBehaviorCanJoinAllSpaces + Transient
+    // 让窗口不进入 Cmd+Tab, Mission Control, Exposé, 以及 CGWindowList
+    try {
+      overlayWindow.setHiddenInMissionControl(true);
+    } catch { /* older electron */ }
+  }
+
   overlayWindow._overlayReady = false;
+
   overlayWindow.once('ready-to-show', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
   });
   overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
   overlayWindow.webContents.on('did-finish-load', () => {
@@ -354,16 +366,19 @@ function createOverlayWindow(mode = 'panel') {
       }
     }, process.platform === 'win32' ? 120 : 0);
   });
+  overlayWindow.on('show', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    overlayWindow.setContentProtection(true);
+  });
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
     _overlayDragging = false;
     if (_blurTimer) { clearTimeout(_blurTimer); _blurTimer = null; }
+    if (_frontReassertTimer) { clearInterval(_frontReassertTimer); _frontReassertTimer = null; }
   });
-  overlayWindow.on('moved', () => {
-    const currentMode = overlayWindow?._overlayMode || lastOverlayState.mode || 'panel';
-    schedulePersistOverlayPosition(currentMode);
-  });
+  overlayWindow.on('moved', () => schedulePersistOverlayPosition());
+  overlayWindow.on('resize', () => schedulePersistOverlayPosition());
   overlayWindow.on('focus', () => {
     if (_blurTimer) clearTimeout(_blurTimer);
     _blurTimer = setTimeout(() => {
@@ -387,15 +402,13 @@ function sendOverlayState(payload) {
 
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
-  if (!overlayWindow._overlayReady) {
-    overlayWindow._pendingShow = true;
-    return;
-  }
   if (process.platform === 'darwin' || process.platform === 'win32') {
     overlayWindow.showInactive();
   } else {
     overlayWindow.show();
   }
+  overlayWindow.setContentProtection(true);
+  keepWindowInFront(overlayWindow);
 }
 
 function toggleWindow() {
@@ -561,21 +574,26 @@ const shortcutCallbacks = {
     }
   },
   toggleInterviewOverlay: () => {
-    const nextEnabled = !Boolean(lastOverlayState.enabled);
+    const nextVisible = !Boolean(lastOverlayState.visible);
     const nextState = {
       ...lastOverlayState,
-      enabled: nextEnabled,
-      visible: nextEnabled,
+      enabled: nextVisible || lastOverlayState.enabled,
+      visible: nextVisible,
     };
     sendOverlayState(nextState);
-    if (!nextEnabled) {
+
+    if (nextVisible) {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+        mainWindow._hiddenByOverlay = true;
+        mainWindow.hide();
+      }
+      createOverlayWindow();
+      showOverlayWindow();
+    } else {
+      // 快捷键仅切换 overlay 可见性, 主窗口保持原状 (用户可通过 Cmd+B 或托盘唤回).
+      // 只有 ControlBar 的 "结束面试" 按钮会走 sync-overlay-window IPC 恢复主窗口.
       if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
-      return;
     }
-    const win = createOverlayWindow(nextState.mode);
-    applyOverlayPreset(nextState.mode);
-    if (nextState.visible) showOverlayWindow();
-    else if (win && !win.isDestroyed()) win.hide();
   },
   moveOverlayToMouse: () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
@@ -584,8 +602,7 @@ const shortcutCallbacks = {
       Math.round(cursor.x + 16),
       Math.round(cursor.y + 16),
     );
-    const mode = overlayWindow._overlayMode || lastOverlayState.mode || 'panel';
-    schedulePersistOverlayPosition(mode);
+    schedulePersistOverlayPosition();
   },
 };
 
@@ -626,53 +643,48 @@ ipcMain.handle('get-window-state', () => ({
 }));
 ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   const style = {
-    mode: payload.mode === 'lyrics' ? 'lyrics' : 'panel',
     opacity: Math.max(0, Math.min(1, Number(payload.opacity) || 0)),
-    panelFontSize: Math.max(1, Math.round(Number(payload.panelFontSize) || 13)),
-    panelWidth: Math.max(180, Math.round(Number(payload.panelWidth) || 420)),
-    panelShowBg: payload.panelShowBg !== false,
-    panelFontColor: typeof payload.panelFontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.panelFontColor) ? payload.panelFontColor : '#ffffff',
-    panelHeight: Math.max(0, Math.min(1200, Math.round(Number(payload.panelHeight) || 0))),
-    lyricLines: Math.max(1, Math.min(8, Math.round(Number(payload.lyricLines) || 2))),
-    lyricFontSize: Math.max(1, Math.round(Number(payload.lyricFontSize) || 23)),
-    lyricWidth: Math.max(420, Math.min(1200, Math.round(Number(payload.lyricWidth) || 760))),
-    lyricColor: typeof payload.lyricColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.lyricColor) ? payload.lyricColor : '#ffffff',
+    fontSize: Math.max(10, Math.min(48, Math.round(Number(payload.fontSize) || 14))),
+    fontColor: typeof payload.fontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.fontColor) ? payload.fontColor : '#e2e8f0',
+    showBg: payload.showBg !== false,
+    maxLines: Math.max(0, Math.min(50, Math.round(Number(payload.maxLines) || 0))),
   };
 
-  // enabled / visible 是「可选」字段：
-  // - 渲染端 toggle 开关时显式传 (UI 路径，必须能从 false 切到 true 创建窗口)
-  // - 仅样式变更时不传，沿用 lastOverlayState 中的当前值，避免 style update 误关 overlay
-  // 这是为了修复 71ad03d 之后「Toggle UI 永远不通知 main」的回归 (overlay 只能靠 Ctrl+O 启动)。
   const nextEnabled = typeof payload.enabled === 'boolean' ? payload.enabled : Boolean(lastOverlayState.enabled);
   const nextVisible = typeof payload.visible === 'boolean' ? payload.visible : Boolean(lastOverlayState.visible);
 
   const state = { ...lastOverlayState, ...style, enabled: nextEnabled, visible: nextVisible };
-  const enabledChanged = Boolean(lastOverlayState.enabled) !== state.enabled;
   const visibleChanged = Boolean(lastOverlayState.visible) !== state.visible;
-  const modeChanged = lastOverlayState.mode !== state.mode;
 
   lastOverlayState = state;
   sendOverlayState(state);
 
-  if (!state.enabled) {
+  if (visibleChanged) {
+    if (state.visible) {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+        mainWindow._hiddenByOverlay = true;
+        mainWindow.hide();
+      }
+    } else {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow._hiddenByOverlay) {
+        mainWindow._hiddenByOverlay = false;
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  }
+
+  if (!state.visible) {
     if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
     return { ok: true, visible: false };
   }
 
-  // 启用 + 模式变更 + 窗口已被销毁 三种情况都需要 (重新)创建 overlay 窗口。
-  // 仅样式变更时跳过创建，保留 71ad03d 引入的「不为 style 重建窗口」性能优化。
-  const needCreate = enabledChanged || modeChanged || !overlayWindow || overlayWindow.isDestroyed();
-  if (needCreate) {
-    createOverlayWindow(state.mode);
-    applyOverlayPreset(state.mode);
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow();
   }
 
-  if (state.visible) {
-    showOverlayWindow();
-  } else if (visibleChanged && overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.hide();
-  }
-  return { ok: true, visible: state.visible };
+  showOverlayWindow();
+  return { ok: true, visible: true };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
 ipcMain.handle('move-overlay-window', (_event, dx, dy) => {
@@ -745,14 +757,10 @@ app.whenReady().then(async () => {
   createTray();
   registerShortcuts();
 
-  // 预热 overlay：后端就绪后立即创建 panel 模式窗口（hidden），
-  // 加载整个 SPA bundle + 建 WS，等用户首次 toggle 时直接 show，
-  // 把首次启动卡顿（~1s+）摊薄到主窗口加载阶段。
-  // lyrics 模式因为窗口尺寸不同需要重建，但绝大多数用户从默认 panel 起步。
   setImmediate(() => {
     if (overlayWindow && !overlayWindow.isDestroyed()) return;
     try {
-      createOverlayWindow('panel');
+      createOverlayWindow();
     } catch (error) {
       console.warn('overlay preheat failed:', error?.message || error);
     }

@@ -19,9 +19,12 @@ body,
   font-family: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
 }
 
+html.overlay-window,
+html.overlay-window body,
 body.overlay-window,
 body.overlay-window #root {
   background: transparent !important;
+  background-color: transparent !important;
 }
 
 code, pre, .font-mono {
@@ -617,119 +620,223 @@ code, pre, .font-mono {
   text-transform: uppercase;
 }
 
-/* ========== Overlay HUD 设计（2026-04-17 重做） ==========
- * 产品定位：面试期间的「副屏 HUD」—— 信息密度大，视觉压力小，与桌面背景融合，
- * 屏幕共享时不可见 (依赖 main.js 的 setContentProtection)。
- * 关键设计语言：deep glass + dark + content-first + 流式脉冲。
+/* ========== Overlay HUD (重构 2026-04-20) ==========
+ * 单一统一模式，有背景(磨砂玻璃) / 无背景(浮文字幕) 通过 showBg 切换。
+ * 字体: JetBrains Mono + DM Sans — 通过 InterviewOverlay.tsx 动态注入 <link>。
  */
-.ia-overlay-shell {
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(8, 12, 18, 0.78);
-  box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+
+.ov-root {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 10px;
+  font-family: 'DM Sans', 'JetBrains Mono', system-ui, sans-serif;
 }
 
-/* 拖拽区：顶部 18px 隐式手柄，hover 时浮现 grip 指示 */
-.ia-overlay-grip {
+.ov-drag {
+  user-select: none;
+  cursor: grab;
+}
+.ov-drag:active {
+  cursor: grabbing;
+}
+
+/* ── 统一容器 ── */
+.ov-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 240px;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* 有背景: 磨砂玻璃深色卡片 */
+.ov-shell--bg {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 12, 20, 0.78);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(28px) saturate(1.3);
+  -webkit-backdrop-filter: blur(28px) saturate(1.3);
+}
+
+/* 无背景: 文字浮在桌面上, 靠描边 + 阴影保证可读性 */
+.ov-shell--nobg {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+}
+
+.ov-shell--nobg .ov-header {
+  padding: 6px 4px 4px;
+}
+.ov-shell--nobg .ov-answer {
+  padding: 0 4px 4px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ov-shell--nobg .ov-status,
+.ov-shell--nobg .ov-question,
+.ov-shell--nobg .ov-answer,
+.ov-shell--nobg .ov-standby-hint {
+  /* 三层阴影: 1px 锐利描边 + 2px 近影 + 10px 光晕 -> 任何桌面底色都可读 */
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.95),
+    0 1px 3px rgba(0, 0, 0, 0.92),
+    0 2px 12px rgba(0, 0, 0, 0.6);
+}
+.ov-shell--nobg .ov-answer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.ov-grip {
   position: absolute;
-  top: 0;
+  top: 6px;
   left: 50%;
   transform: translateX(-50%);
-  width: 36px;
+  width: 32px;
   height: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  margin-top: 5px;
+  background: rgba(255, 255, 255, 0.15);
   opacity: 0;
-  transition: opacity 180ms ease-out;
+  transition: opacity 200ms ease;
   pointer-events: none;
+  z-index: 10;
 }
-.ia-overlay-shell:hover .ia-overlay-grip {
+.ov-shell:hover .ov-grip {
   opacity: 1;
 }
 
-/* 流式脉冲点 — 替代 spinner，避免分散注意力 */
-.ia-overlay-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgb(74, 222, 128);
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
-  animation: ia-overlay-pulse 1.4s ease-in-out infinite;
-}
-@keyframes ia-overlay-pulse {
-  0%, 100% { opacity: 0.45; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1.15); }
+.ov-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  min-height: 28px;
+  flex-shrink: 0;
 }
 
-/* 问题区 — 单行截断，hover 显示完整内容 */
-.ia-overlay-question {
+.ov-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.4;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.ov-question {
+  flex: 1;
   font-size: 12px;
   line-height: 1.4;
-  color: rgba(255, 255, 255, 0.55);
-  letter-spacing: 0.01em;
+  opacity: 0.45;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.01em;
 }
 
-/* 答案区 — 主信息层，可滚动 */
-.ia-overlay-answer {
-  font-size: 14px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.94);
+.ov-answer {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 4px 14px 14px;
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  font-family: 'DM Sans', sans-serif;
 }
-.ia-overlay-answer::-webkit-scrollbar {
-  width: 4px;
+.ov-answer::-webkit-scrollbar {
+  width: 6px;
 }
-.ia-overlay-answer::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+.ov-answer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
 }
-
-/* 流式光标 */
-.ia-overlay-caret {
-  display: inline-block;
-  width: 6px;
-  height: 1em;
-  margin-left: 3px;
-  background: rgb(74, 222, 128);
-  vertical-align: text-bottom;
-  animation: ia-overlay-caret 1s steps(2, end) infinite;
+.ov-answer::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
-@keyframes ia-overlay-caret {
+
+.ov-standby-hint {
+  display: block;
+  padding: 8px 0;
+  font-size: 12px;
+  opacity: 0.3;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.02em;
+}
+
+/* ── 状态指示点 ── */
+.ov-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  transition: background 300ms, box-shadow 300ms;
+}
+
+.ov-dot--rec {
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.7);
+  animation: ov-pulse 1.4s ease-in-out infinite;
+}
+
+.ov-dot--think {
+  background: #facc15;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+  animation: ov-pulse 0.9s ease-in-out infinite;
+}
+
+.ov-dot--stream {
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  animation: ov-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ov-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── 流式光标 ── */
+.ov-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  background: #4ade80;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  animation: ov-blink 1s steps(2, end) infinite;
+}
+@keyframes ov-blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
 }
 
-/* 等待态 — 极简 */
-.ia-overlay-waiting {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.42);
-  letter-spacing: 0.04em;
-  text-transform: lowercase;
-}
-
-.ia-overlay-drag {
-  user-select: none;
-}
-
-.ia-overlay-resize {
-  cursor: default;
-}
-
-/* prefers-reduced-motion: 关闭脉冲/光标动画 */
+/* ── reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  .ia-overlay-pulse,
-  .ia-overlay-caret {
+  .ov-dot--rec,
+  .ov-dot--think,
+  .ov-dot--stream,
+  .ov-caret {
     animation: none;
   }
 }

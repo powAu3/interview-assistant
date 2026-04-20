@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useOverlayWindowSync } from './useOverlayWindowSync'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-// 防止 isRecording / appMode 变化触发的主窗口 hide/show 调用对断言造成噪音。
 const noopAsync = () => Promise.resolve()
 
 function setupElectronAPI() {
@@ -30,20 +29,13 @@ function Harness({ isRecording, appMode }: { isRecording: boolean; appMode: stri
 }
 
 beforeEach(() => {
-  // 重置 zustand store: 关键是 enabled 默认 false (本测试要观察 false → true 的迁移)
   useUiPrefsStore.setState({
     interviewOverlayEnabled: false,
-    interviewOverlayMode: 'panel',
-    interviewOverlayOpacity: 0.82,
-    interviewOverlayPanelFontSize: 13,
-    interviewOverlayPanelWidth: 420,
-    interviewOverlayPanelShowBg: true,
-    interviewOverlayPanelFontColor: '#ffffff',
-    interviewOverlayPanelHeight: 0,
-    interviewOverlayLyricLines: 2,
-    interviewOverlayLyricFontSize: 23,
-    interviewOverlayLyricWidth: 760,
-    interviewOverlayLyricColor: '#ffffff',
+    interviewOverlayOpacity: 0.88,
+    interviewOverlayFontSize: 14,
+    interviewOverlayFontColor: '#e2e8f0',
+    interviewOverlayShowBg: true,
+    interviewOverlayMaxLines: 0,
   })
 })
 
@@ -53,17 +45,19 @@ afterEach(() => {
 })
 
 describe('useOverlayWindowSync', () => {
-  it('initial sync passes the enabled / visible flags to main process', () => {
+  it('initial sync sends style prefs only (no enabled/visible when off)', () => {
     const api = setupElectronAPI()
     render(<Harness isRecording={false} appMode="assist" />)
     expect(api.syncOverlayWindow).toHaveBeenCalledTimes(1)
-    // 修复前回归：payload 完全没有 enabled 字段，导致 main 始终视为 disabled。
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false, visible: false, mode: 'panel' }),
+      expect.objectContaining({ opacity: 0.88 }),
+    )
+    expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ enabled: expect.anything(), visible: expect.anything() }),
     )
   })
 
-  it('toggling enabled re-syncs to main with enabled=true (regression: 71ad03d)', async () => {
+  it('toggling enabled ON only syncs style prefs (no visible: true)', async () => {
     const api = setupElectronAPI()
     render(<Harness isRecording={false} appMode="assist" />)
     api.syncOverlayWindow.mockClear()
@@ -73,14 +67,31 @@ describe('useOverlayWindowSync', () => {
     })
 
     expect(api.syncOverlayWindow).toHaveBeenCalledTimes(1)
-    // 关键回归断言：用户在 Preferences UI toggle on 时，必须把 enabled=true 送到 main，
-    // 否则 overlay 窗口永远不会被创建 (当前 bug：main 用 lastOverlayState.enabled 默认 false)。
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: true, visible: true }),
+      expect.objectContaining({ opacity: expect.any(Number) }),
+    )
+    expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ visible: expect.anything() }),
     )
   })
 
-  it('style-only updates (e.g. opacity) still sync, carrying current enabled', async () => {
+  it('toggling enabled OFF sends enabled=false visible=false to hide overlay', async () => {
+    const api = setupElectronAPI()
+    useUiPrefsStore.setState({ interviewOverlayEnabled: true })
+    render(<Harness isRecording={false} appMode="assist" />)
+    api.syncOverlayWindow.mockClear()
+
+    await act(async () => {
+      useUiPrefsStore.getState().setInterviewOverlayEnabled(false)
+    })
+
+    expect(api.syncOverlayWindow).toHaveBeenCalledTimes(1)
+    expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false, visible: false }),
+    )
+  })
+
+  it('style-only updates (e.g. opacity) sync without enabled/visible', async () => {
     const api = setupElectronAPI()
     useUiPrefsStore.setState({ interviewOverlayEnabled: true })
     render(<Harness isRecording={false} appMode="assist" />)
@@ -92,25 +103,24 @@ describe('useOverlayWindowSync', () => {
 
     expect(api.syncOverlayWindow).toHaveBeenCalledTimes(1)
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
-      expect.objectContaining({ opacity: 0.5, enabled: true }),
+      expect.objectContaining({ opacity: 0.5 }),
+    )
+    expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ enabled: expect.anything(), visible: expect.anything() }),
     )
   })
 
-  it('does NOT auto-hide / restore main window — Cmd+O and Cmd+B are orthogonal (2026-04-17 decoupled)', async () => {
+  it('前端 hook 不再 fire hideWindow/showWindow IPC', async () => {
     const api = setupElectronAPI()
-    // 模拟「正在录制 + assist 模式 + overlay 启用」三件齐备 — 这就是修复前会触发 hideWindow 的全部条件。
     const { rerender } = render(<Harness isRecording={false} appMode="assist" />)
     await act(async () => {
       useUiPrefsStore.getState().setInterviewOverlayEnabled(true)
     })
     rerender(<Harness isRecording={true} appMode="assist" />)
-    // 多 tick 等待任何潜在的 promise 链
     await act(async () => {})
 
-    // 关键：拆耦之后，main 窗口的显隐归 Cmd+B 管，overlay 启用绝对不能动 main 窗口。
     expect(api.hideWindow).not.toHaveBeenCalled()
 
-    // 反向：disable overlay 也不能恢复 main（之前的 mainHiddenByOverlayRef 路径已删除）
     await act(async () => {
       useUiPrefsStore.getState().setInterviewOverlayEnabled(false)
     })

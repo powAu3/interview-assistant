@@ -173,15 +173,19 @@ def _print_node_help():
 # Frontend build
 # ---------------------------------------------------------------------------
 
-def build_frontend():
-    if os.path.isdir(FRONTEND_DIST):
-        print("[OK] 前端已构建，跳过")
+def build_frontend(force: bool = False):
+    if not force and os.path.isdir(FRONTEND_DIST):
+        print("[OK] 前端已构建，跳过 (用 --rebuild 强制重新构建)")
         return True
 
     npm = _find_npm()
     if npm is None:
         _print_node_help()
         return False
+
+    if force and os.path.isdir(FRONTEND_DIST):
+        print("[...] 清除旧构建产物...")
+        shutil.rmtree(FRONTEND_DIST, ignore_errors=True)
 
     print("[...] 构建前端...")
     if not os.path.isdir(os.path.join(FRONTEND_DIR, "node_modules")):
@@ -351,6 +355,7 @@ def main():
                         help="运行模式: desktop (Electron 桌面窗口) 或 network (局域网浏览器访问)")
     parser.add_argument("--port", type=int, default=18080, help="服务端口 (默认 18080)")
     parser.add_argument("--no-build", action="store_true", help="跳过前端构建")
+    parser.add_argument("--rebuild", action="store_true", help="强制重新构建前端（即使 dist 已存在）")
     parser.add_argument("--skip-dep-check", action="store_true",
                         help="跳过 Python 依赖检查（已确认环境正确时可加速启动）")
     args = parser.parse_args()
@@ -375,7 +380,7 @@ def main():
         ensure_python_deps()
 
     if not args.no_build:
-        if not build_frontend():
+        if not build_frontend(force=args.rebuild):
             print()
             print("  前端构建失败，可以用 --no-build 跳过（需先手动构建）：")
             print(f"    cd frontend && npm install && npm run build && cd ..")

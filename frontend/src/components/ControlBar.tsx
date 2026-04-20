@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
 import { refreshConfig } from '@/lib/configSync'
 import { ResumeHistoryPopover } from '@/components/ResumeHistory'
@@ -382,14 +383,31 @@ export default function ControlBar() {
   const handleStart = useCallback(async () => {
     if (selectedDevice === null) { setError('请先选择音频设备'); return }
     setLoading(true); setError(null)
-    try { await api.start(selectedDevice) }
+    try {
+      await api.start(selectedDevice)
+      const s = useUiPrefsStore.getState()
+      if (s.interviewOverlayEnabled && window.electronAPI?.syncOverlayWindow) {
+        window.electronAPI.syncOverlayWindow({
+          enabled: true,
+          visible: true,
+          opacity: s.interviewOverlayOpacity,
+          fontSize: s.interviewOverlayFontSize,
+          fontColor: s.interviewOverlayFontColor,
+          showBg: s.interviewOverlayShowBg,
+          maxLines: s.interviewOverlayMaxLines,
+        }).catch(() => {})
+      }
+    }
     catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
   }, [selectedDevice])
   const handleStop = useCallback(async () => {
     if (isRecording && !window.confirm('结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
     setLoading(true)
-    try { await api.stop() } catch {} finally { setLoading(false) }
+    try {
+      await api.stop()
+      window.electronAPI?.syncOverlayWindow?.({ visible: false }).catch(() => {})
+    } catch {} finally { setLoading(false) }
   }, [isRecording])
   const handlePause = useCallback(async () => {
     setLoading(true)

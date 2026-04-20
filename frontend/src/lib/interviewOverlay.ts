@@ -1,33 +1,19 @@
-export type InterviewOverlayMode = 'panel' | 'lyrics'
-
 export interface OverlayStatePayload {
   enabled: boolean
-  mode: InterviewOverlayMode
   opacity: number
-  panelFontSize: number
-  panelWidth: number
-  panelShowBg: boolean
-  panelFontColor: string
-  panelHeight: number
-  lyricLines: number
-  lyricFontSize: number
-  lyricWidth: number
-  lyricColor: string
+  fontSize: number
+  fontColor: string
+  showBg: boolean
+  maxLines: number
 }
 
 export const INTERVIEW_OVERLAY_STORAGE_KEYS = {
-  enabled: 'ia_interview_overlay_enabled',
-  mode: 'ia_interview_overlay_mode',
-  opacity: 'ia_interview_overlay_opacity',
-  panelFontSize: 'ia_interview_overlay_panel_font_size',
-  panelWidth: 'ia_interview_overlay_panel_width',
-  lyricLines: 'ia_interview_overlay_lyric_lines',
-  lyricFontSize: 'ia_interview_overlay_lyric_font_size',
-  lyricWidth: 'ia_interview_overlay_lyric_width',
-  lyricColor: 'ia_interview_overlay_lyric_color',
-  panelShowBg: 'ia_interview_overlay_panel_show_bg',
-  panelFontColor: 'ia_interview_overlay_panel_font_color',
-  panelHeight: 'ia_interview_overlay_panel_height',
+  enabled: 'ia_overlay_enabled',
+  opacity: 'ia_overlay_opacity',
+  fontSize: 'ia_overlay_font_size',
+  fontColor: 'ia_overlay_font_color',
+  showBg: 'ia_overlay_show_bg',
+  maxLines: 'ia_overlay_max_lines',
 } as const
 
 export const INTERVIEW_OVERLAY_STORAGE_KEY_SET = new Set<string>(Object.values(INTERVIEW_OVERLAY_STORAGE_KEYS))

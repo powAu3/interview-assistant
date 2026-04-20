@@ -1,61 +1,47 @@
 import { useEffect, useRef } from 'react'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-// 注意：此 hook 仅同步「overlay 自身的样式与开关」到 main 进程，
-// 故意不再联动 main 窗口的显隐 — Cmd+O 只管 overlay、Cmd+B 只管 main，
-// 两个全局快捷键完全正交（产品决策，2026-04-17 拆耦）。
 export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
   void _isRecording
   void _appMode
   const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
-  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
   const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
-  const interviewOverlayPanelFontSize = useUiPrefsStore((s) => s.interviewOverlayPanelFontSize)
-  const interviewOverlayPanelWidth = useUiPrefsStore((s) => s.interviewOverlayPanelWidth)
-  const interviewOverlayPanelShowBg = useUiPrefsStore((s) => s.interviewOverlayPanelShowBg)
-  const interviewOverlayPanelFontColor = useUiPrefsStore((s) => s.interviewOverlayPanelFontColor)
-  const interviewOverlayPanelHeight = useUiPrefsStore((s) => s.interviewOverlayPanelHeight)
-  const interviewOverlayLyricLines = useUiPrefsStore((s) => s.interviewOverlayLyricLines)
-  const interviewOverlayLyricFontSize = useUiPrefsStore((s) => s.interviewOverlayLyricFontSize)
-  const interviewOverlayLyricWidth = useUiPrefsStore((s) => s.interviewOverlayLyricWidth)
-  const interviewOverlayLyricColor = useUiPrefsStore((s) => s.interviewOverlayLyricColor)
+  const interviewOverlayFontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
+  const interviewOverlayFontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
+  const interviewOverlayShowBg = useUiPrefsStore((s) => s.interviewOverlayShowBg)
+  const interviewOverlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const applyInterviewOverlayState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
 
   const overlaySyncUntilRef = useRef(0)
+  const prevEnabledRef = useRef(interviewOverlayEnabled)
 
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
     overlaySyncUntilRef.current = Date.now() + 500
-    // visible = enabled: 启用 overlay 后即显示窗口 (即使未录音, 内部会渲染等待提示)。
-    // 这与 4/12 之前的语义一致, 修复 71ad03d 之后 Toggle UI 失效的回归。
-    window.electronAPI.syncOverlayWindow({
-      enabled: interviewOverlayEnabled,
-      visible: interviewOverlayEnabled,
-      mode: interviewOverlayMode,
+
+    const payload: Record<string, unknown> = {
       opacity: interviewOverlayOpacity,
-      panelFontSize: interviewOverlayPanelFontSize,
-      panelWidth: interviewOverlayPanelWidth,
-      panelShowBg: interviewOverlayPanelShowBg,
-      panelFontColor: interviewOverlayPanelFontColor,
-      panelHeight: interviewOverlayPanelHeight,
-      lyricLines: interviewOverlayLyricLines,
-      lyricFontSize: interviewOverlayLyricFontSize,
-      lyricWidth: interviewOverlayLyricWidth,
-      lyricColor: interviewOverlayLyricColor,
-    }).catch(() => {})
+      fontSize: interviewOverlayFontSize,
+      fontColor: interviewOverlayFontColor,
+      showBg: interviewOverlayShowBg,
+      maxLines: interviewOverlayMaxLines,
+    }
+
+    // enabled OFF → force hide overlay + show main window
+    if (prevEnabledRef.current && !interviewOverlayEnabled) {
+      payload.enabled = false
+      payload.visible = false
+    }
+    prevEnabledRef.current = interviewOverlayEnabled
+
+    window.electronAPI.syncOverlayWindow(payload).catch(() => {})
   }, [
     interviewOverlayEnabled,
-    interviewOverlayLyricColor,
-    interviewOverlayLyricFontSize,
-    interviewOverlayLyricLines,
-    interviewOverlayLyricWidth,
-    interviewOverlayMode,
     interviewOverlayOpacity,
-    interviewOverlayPanelFontColor,
-    interviewOverlayPanelFontSize,
-    interviewOverlayPanelHeight,
-    interviewOverlayPanelShowBg,
-    interviewOverlayPanelWidth,
+    interviewOverlayFontSize,
+    interviewOverlayFontColor,
+    interviewOverlayShowBg,
+    interviewOverlayMaxLines,
   ])
 
   useEffect(() => {

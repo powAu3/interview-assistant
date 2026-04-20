@@ -20,16 +20,22 @@ import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
 
-function Collapsible({ title, icon, defaultOpen = false, badge, keywords, children }: {
-  title: string; icon?: React.ReactNode; defaultOpen?: boolean; badge?: React.ReactNode; keywords?: string; children: React.ReactNode
+function Collapsible({ title, searchTitle, icon, defaultOpen = false, badge, keywords, children }: {
+  title: React.ReactNode
+  searchTitle?: string
+  icon?: React.ReactNode
+  defaultOpen?: boolean
+  badge?: React.ReactNode
+  keywords?: string
+  children: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const query = useSettingsSearch()
-  if (!matchSettingsSearch(title, keywords, query)) return null
-  // 有 query 时强制展开,方便用户看到命中的内容
+  const titleText = searchTitle ?? (typeof title === 'string' ? title : '')
+  if (!matchSettingsSearch(titleText, keywords, query)) return null
   const effectiveOpen = query.trim() ? true : open
   return (
-    <div className="border border-bg-hover/60 rounded-xl overflow-hidden" data-search-title={title}>
+    <div className="border border-bg-hover/60 rounded-xl overflow-hidden" data-search-title={titleText}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -70,30 +76,18 @@ export default function PreferencesTab() {
   const setAnswerPanelLayout = useUiPrefsStore((s) => s.setAnswerPanelLayout)
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const setColorScheme = useUiPrefsStore((s) => s.setColorScheme)
-  const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
-  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
-  const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
-  const interviewOverlayPanelFontSize = useUiPrefsStore((s) => s.interviewOverlayPanelFontSize)
-  const interviewOverlayPanelWidth = useUiPrefsStore((s) => s.interviewOverlayPanelWidth)
-  const interviewOverlayPanelShowBg = useUiPrefsStore((s) => s.interviewOverlayPanelShowBg)
-  const interviewOverlayPanelFontColor = useUiPrefsStore((s) => s.interviewOverlayPanelFontColor)
-  const interviewOverlayPanelHeight = useUiPrefsStore((s) => s.interviewOverlayPanelHeight)
-  const interviewOverlayLyricLines = useUiPrefsStore((s) => s.interviewOverlayLyricLines)
-  const interviewOverlayLyricFontSize = useUiPrefsStore((s) => s.interviewOverlayLyricFontSize)
-  const interviewOverlayLyricWidth = useUiPrefsStore((s) => s.interviewOverlayLyricWidth)
-  const interviewOverlayLyricColor = useUiPrefsStore((s) => s.interviewOverlayLyricColor)
-  const setInterviewOverlayEnabled = useUiPrefsStore((s) => s.setInterviewOverlayEnabled)
-  const setInterviewOverlayMode = useUiPrefsStore((s) => s.setInterviewOverlayMode)
-  const setInterviewOverlayOpacity = useUiPrefsStore((s) => s.setInterviewOverlayOpacity)
-  const setInterviewOverlayPanelFontSize = useUiPrefsStore((s) => s.setInterviewOverlayPanelFontSize)
-  const setInterviewOverlayPanelWidth = useUiPrefsStore((s) => s.setInterviewOverlayPanelWidth)
-  const setInterviewOverlayPanelShowBg = useUiPrefsStore((s) => s.setInterviewOverlayPanelShowBg)
-  const setInterviewOverlayPanelFontColor = useUiPrefsStore((s) => s.setInterviewOverlayPanelFontColor)
-  const setInterviewOverlayPanelHeight = useUiPrefsStore((s) => s.setInterviewOverlayPanelHeight)
-  const setInterviewOverlayLyricLines = useUiPrefsStore((s) => s.setInterviewOverlayLyricLines)
-  const setInterviewOverlayLyricFontSize = useUiPrefsStore((s) => s.setInterviewOverlayLyricFontSize)
-  const setInterviewOverlayLyricWidth = useUiPrefsStore((s) => s.setInterviewOverlayLyricWidth)
-  const setInterviewOverlayLyricColor = useUiPrefsStore((s) => s.setInterviewOverlayLyricColor)
+  const overlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
+  const overlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
+  const overlayFontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
+  const overlayFontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
+  const overlayShowBg = useUiPrefsStore((s) => s.interviewOverlayShowBg)
+  const overlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
+  const setOverlayEnabled = useUiPrefsStore((s) => s.setInterviewOverlayEnabled)
+  const setOverlayOpacity = useUiPrefsStore((s) => s.setInterviewOverlayOpacity)
+  const setOverlayFontSize = useUiPrefsStore((s) => s.setInterviewOverlayFontSize)
+  const setOverlayFontColor = useUiPrefsStore((s) => s.setInterviewOverlayFontColor)
+  const setOverlayShowBg = useUiPrefsStore((s) => s.setInterviewOverlayShowBg)
+  const setOverlayMaxLines = useUiPrefsStore((s) => s.setInterviewOverlayMaxLines)
 
   const [scrollBottomPx, setScrollBottomPx] = useState(40)
   const [generalSaving, setGeneralSaving] = useState(false)
@@ -183,90 +177,80 @@ export default function PreferencesTab() {
       </Section>
 
       {/* ── 2. 悬浮提示窗（含截图区域、笔试模式） ── */}
-      <Collapsible title="悬浮提示窗" icon={<Monitor className="w-3.5 h-3.5" />} keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗">
+      <Collapsible
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            悬浮提示窗
+            <span className="px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded bg-accent-amber/15 text-accent-amber border border-accent-amber/30">
+              Beta
+            </span>
+          </span>
+        }
+        searchTitle="悬浮提示窗"
+        icon={<Monitor className="w-3.5 h-3.5" />}
+        keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗 beta"
+      >
+        <div className="mb-2 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-[11px] text-text-secondary leading-relaxed">
+          <div className="font-semibold text-accent-amber mb-0.5">反截图检测为 Beta 能力</div>
+          <div>
+            Windows 上通过 <code className="font-mono text-[10px] bg-bg-tertiary/60 px-1 rounded">setContentProtection</code> 可稳定避免被屏幕共享软件截图；
+            macOS 15+ 的 <span className="font-mono text-[10px]">ScreenCaptureKit</span> 会绕过保护位，实际效果请以你自己的环境测试为准。
+          </div>
+        </div>
         <Toggle
-          checked={interviewOverlayEnabled}
-          onChange={(v) => setInterviewOverlayEnabled(v)}
-          label={interviewOverlayEnabled ? '已开启' : '已关闭'}
+          checked={overlayEnabled}
+          onChange={(v) => setOverlayEnabled(v)}
+          label={overlayEnabled ? '已开启' : '已关闭'}
         />
-        {interviewOverlayEnabled && (
+        {overlayEnabled && (
           <>
-            <Field label="显示模式">
+            <Field label="背景样式">
               <div className="flex gap-2">
-                {(['panel', 'lyrics'] as const).map((m) => (
+                {([true, false] as const).map((bg) => (
                   <button
-                    key={m}
+                    key={String(bg)}
                     type="button"
-                    onClick={() => setInterviewOverlayMode(m)}
+                    onClick={() => setOverlayShowBg(bg)}
                     className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                      interviewOverlayMode === m
+                      overlayShowBg === bg
                         ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
                         : 'border-bg-hover bg-bg-tertiary/30 text-text-secondary hover:border-bg-hover'
                     }`}
                   >
-                    {m === 'panel' ? '面板' : '歌词'}
+                    {bg ? '磨砂面板' : '提词模式'}
                   </button>
                 ))}
               </div>
+              <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
+                {overlayShowBg ? '半透明磨砂玻璃背景，含状态栏与问题预览' : '无框纯文字、隐藏多余信息，仅保留答案'}
+              </p>
             </Field>
-            <Field label={`不透明度: ${Math.round(interviewOverlayOpacity * 100)}%`}>
-              <input type="range" min={0} max={100} value={Math.round(interviewOverlayOpacity * 100)}
-                onChange={(e) => setInterviewOverlayOpacity(Number(e.target.value) / 100)} className="w-full max-w-[200px]" />
+            <Field label={`不透明度: ${Math.round(overlayOpacity * 100)}%`}>
+              <input type="range" min={10} max={100} value={Math.round(overlayOpacity * 100)}
+                onChange={(e) => setOverlayOpacity(Number(e.target.value) / 100)} className="w-full max-w-[200px]" />
             </Field>
-            {interviewOverlayMode === 'panel' && (
-              <>
-                <Field label={`字号: ${interviewOverlayPanelFontSize}px`}>
-                  <input type="range" min={1} max={48} value={interviewOverlayPanelFontSize}
-                    onChange={(e) => setInterviewOverlayPanelFontSize(Number(e.target.value))} className="w-full max-w-[200px]" />
-                </Field>
-                <div className="flex items-center gap-4">
-                  <Field label="背景框">
-                    <Toggle checked={interviewOverlayPanelShowBg} onChange={(v) => setInterviewOverlayPanelShowBg(v)}
-                      label={interviewOverlayPanelShowBg ? '有' : '无'} />
-                  </Field>
-                  <Field label="字体颜色">
-                    <div className="flex items-center gap-1.5">
-                      <input type="color" value={interviewOverlayPanelFontColor}
-                        onChange={(e) => setInterviewOverlayPanelFontColor(e.target.value)}
-                        className="w-6 h-6 rounded border border-bg-hover cursor-pointer bg-transparent p-0" />
-                      <span className="text-[10px] text-text-muted font-mono">{interviewOverlayPanelFontColor}</span>
-                    </div>
-                  </Field>
+            <Field label={`字号: ${overlayFontSize}px`}>
+              <input type="range" min={10} max={48} value={overlayFontSize}
+                onChange={(e) => setOverlayFontSize(Number(e.target.value))} className="w-full max-w-[200px]" />
+            </Field>
+            <div className="flex items-center gap-4">
+              <Field label="字体颜色">
+                <div className="flex items-center gap-1.5">
+                  <input type="color" value={overlayFontColor}
+                    onChange={(e) => setOverlayFontColor(e.target.value)}
+                    className="w-6 h-6 rounded border border-bg-hover cursor-pointer bg-transparent p-0" />
+                  <span className="text-[10px] text-text-muted font-mono">{overlayFontColor}</span>
                 </div>
-                <Field label={`高度: ${interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : '自适应'}`}>
-                  <input type="range" min={0} max={1200} step={10} value={interviewOverlayPanelHeight}
-                    onChange={(e) => setInterviewOverlayPanelHeight(Number(e.target.value))} className="w-full max-w-[200px]" />
-                </Field>
-              </>
-            )}
-            {interviewOverlayMode === 'lyrics' && (
-              <>
-                <div className="flex items-center gap-4">
-                  <Field label={`行数: ${interviewOverlayLyricLines}`}>
-                    <input type="range" min={1} max={8} value={interviewOverlayLyricLines}
-                      onChange={(e) => setInterviewOverlayLyricLines(Number(e.target.value))} className="w-24" />
-                  </Field>
-                  <Field label={`字号: ${interviewOverlayLyricFontSize}px`}>
-                    <input type="range" min={1} max={72} value={interviewOverlayLyricFontSize}
-                      onChange={(e) => setInterviewOverlayLyricFontSize(Number(e.target.value))} className="w-24" />
-                  </Field>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Field label={`宽度: ${interviewOverlayLyricWidth}px`}>
-                    <input type="range" min={420} max={1200} step={20} value={interviewOverlayLyricWidth}
-                      onChange={(e) => setInterviewOverlayLyricWidth(Number(e.target.value))} className="w-24" />
-                  </Field>
-                  <Field label="字体颜色">
-                    <div className="flex items-center gap-1.5">
-                      <input type="color" value={interviewOverlayLyricColor}
-                        onChange={(e) => setInterviewOverlayLyricColor(e.target.value)}
-                        className="w-6 h-6 rounded border border-bg-hover cursor-pointer bg-transparent p-0" />
-                      <span className="text-[10px] text-text-muted font-mono">{interviewOverlayLyricColor}</span>
-                    </div>
-                  </Field>
-                </div>
-              </>
-            )}
+              </Field>
+              <Field label={`最大行数: ${overlayMaxLines > 0 ? overlayMaxLines : '不限'}`}>
+                <input type="range" min={0} max={50} value={overlayMaxLines}
+                  onChange={(e) => setOverlayMaxLines(Number(e.target.value))} className="w-24" />
+              </Field>
+            </div>
+            <p className="text-[10px] text-text-muted leading-relaxed -mt-1">
+              悬浮窗不会抢占焦点,直接用鼠标滚轮即可滚动内容,
+              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">Cmd+M</kbd> 可把窗口一键移到鼠标附近。
+            </p>
 
             {/* 截图区域 */}
             {config && hasScreenCapture && (

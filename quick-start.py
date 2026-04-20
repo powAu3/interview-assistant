@@ -14,7 +14,7 @@ import subprocess, sys, os
 ROOT = os.path.dirname(os.path.abspath(__file__))
 try:
     sys.exit(subprocess.call(
-        [sys.executable, os.path.join(ROOT, "start.py"), "--mode", "desktop", "--no-build"] + sys.argv[1:]
+        [sys.executable, os.path.join(ROOT, "start.py"), "--mode", "desktop", "--rebuild"] + sys.argv[1:]
     ))
 except KeyboardInterrupt:
     sys.exit(0)
