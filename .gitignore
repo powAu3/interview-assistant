@@ -80,5 +80,11 @@ temp/
 docs/screenshots/review/
 frontend/output/
 
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/.last-run.json
+
 CODE_REVIEW.md
 .omx/
