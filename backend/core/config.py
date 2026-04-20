@@ -157,7 +157,7 @@ def _load_config() -> AppConfig:
     if not os.path.exists(CONFIG_FILE):
         if os.path.exists(CONFIG_EXAMPLE):
             shutil.copy2(CONFIG_EXAMPLE, CONFIG_FILE)
-            print(f"[Config] 已从 config.example.json 创建 config.json，请填入你的 API Key")
+            print("[Config] 已从 config.example.json 创建 config.json，请填入你的 API Key")
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:

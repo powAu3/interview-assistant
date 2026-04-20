@@ -27,5 +27,7 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: true,
+    include: ['src/**/*.{test,spec}.{ts,tsx,js,jsx}'],
+    exclude: ['node_modules', 'dist', 'e2e/**'],
   },
 })
