@@ -73,7 +73,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          python -m pytest tests/test_api_contracts.py tests/test_wave1_backend_concurrency.py tests/test_session_integration.py tests/test_assist_asr_interrupt.py tests/test_preflight_real_audio.py tests/test_prompt_polish.py tests/test_bench_prompt.py tests/test_router_p0.py -q --tb=short
+          python -m pytest tests/test_api_contracts.py tests/test_wave1_backend_concurrency.py tests/test_session_integration.py tests/test_assist_asr_interrupt.py tests/test_preflight_real_audio.py tests/test_prompt_polish.py tests/test_bench_prompt.py tests/test_router_p0.py tests/test_pipeline_p0.py -q --tb=short
 
   # ── Frontend ─────────────────────────────────────────────
   frontend:
