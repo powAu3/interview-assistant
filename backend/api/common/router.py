@@ -17,6 +17,7 @@ from core.config import (
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
 from services.storage.resume_history import (
+    MAX_UPLOAD_BYTES as RESUME_UPLOAD_MAX_BYTES,
     add_upload,
     apply_entry,
     delete_entry,
@@ -27,6 +28,11 @@ from services.storage.resume_history import (
 )
 
 router = APIRouter()
+
+# 简历上传阈值从 services.storage.resume_history 引入 (单一来源 / DRY)。
+# Router 层做流式校验是为了在拿到 Content-Length 或读到超限时立即拒绝,
+# 避免恶意客户端发送 GB 级 body 把整个文件读进内存触发 OOM.
+_RESUME_UPLOAD_CHUNK = 1 * 1024 * 1024
 
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
@@ -255,10 +261,23 @@ async def api_update_config(body: ConfigUpdate):
             d["assist_asr_group_max_wait_sec"] = max(
                 0.2, min(8.0, float(d["assist_asr_group_max_wait_sec"]))
             )
-        if "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
+        # 非法 enum 值必须明确报错: 静默 pop 会让前端以为保存成功,
+        # 但实际配置没变, 用户看到的 UI 状态与后端不一致 (P0 #3 in CR)。
+        # 例外: 空字符串视为「重置回默认」, pop 而不是 422, 兼容前端清空字段的语义。
+        if d.get("screen_capture_region") == "":
             d.pop("screen_capture_region", None)
-        if "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
+        elif "screen_capture_region" in d and d["screen_capture_region"] not in SCREEN_CAPTURE_REGION_OPTIONS:
+            raise HTTPException(
+                422,
+                f"screen_capture_region 必须是 {list(SCREEN_CAPTURE_REGION_OPTIONS)} 之一",
+            )
+        if d.get("practice_audience") == "":
             d.pop("practice_audience", None)
+        elif "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
+            raise HTTPException(
+                422,
+                f"practice_audience 必须是 {list(PRACTICE_AUDIENCE_OPTIONS)} 之一",
+            )
         if "kb_top_k" in d:
             d["kb_top_k"] = max(1, min(20, int(d["kb_top_k"])))
         if "kb_deadline_ms" in d:
@@ -335,16 +354,43 @@ async def api_devices():
 
 
 @router.post("/resume")
-async def api_upload_resume(file: UploadFile = File(...)):
+async def api_upload_resume(request: Request, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "未选择文件")
-    content = await file.read()
+
+    # 早期拦截: 若客户端声明的 Content-Length 已经超限, 直接 413, 不读 body.
+    try:
+        declared = int(request.headers.get("content-length") or "0")
+    except ValueError:
+        declared = 0
+    if declared > RESUME_UPLOAD_MAX_BYTES:
+        raise HTTPException(413, "文件大小不能超过 10MB")
+
+    # 流式累积: chunked 编码或 Content-Length 缺失/伪造时, 累计超限就立即终止读取。
+    # max_iters 是 robustness 兜底: 防御异常 file.read 实现 (例如返回 size=0 的非空 chunk)
+    # 无限循环, 实际 starlette UploadFile 不会出现这种情况。
+    max_iters = (RESUME_UPLOAD_MAX_BYTES // _RESUME_UPLOAD_CHUNK) + 2
+    chunks: list[bytes] = []
+    total = 0
+    for _ in range(max_iters):
+        chunk = await file.read(_RESUME_UPLOAD_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > RESUME_UPLOAD_MAX_BYTES:
+            raise HTTPException(413, "文件大小不能超过 10MB")
+        chunks.append(chunk)
+    else:
+        # for-else: 跑满 max_iters 仍没退出, 视为读取异常
+        raise HTTPException(500, "上传读取异常")
+    content = b"".join(chunks)
+
     try:
         return await run_in_threadpool(add_upload, content, file.filename)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, str(e)) from e
 
 
 @router.delete("/resume")
@@ -534,7 +580,15 @@ async def api_models_layout(body: dict):
         models = []
         seen = set()
         for i in order:
-            if isinstance(i, int) and 0 <= i < len(cfg.models) and i not in seen:
+            # 必须显式排除 bool: Python 中 isinstance(True, int) 为 True,
+            # 否则前端误传 [True, False, 0, 1] 时 True/False 会被当成 1/0,
+            # 导致模型顺序被悄悄改写或直接丢失.
+            if (
+                isinstance(i, int)
+                and not isinstance(i, bool)
+                and 0 <= i < len(cfg.models)
+                and i not in seen
+            ):
                 models.append(cfg.models[i])
                 seen.add(i)
         for i, m in enumerate(cfg.models):

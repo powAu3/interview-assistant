@@ -17,6 +17,9 @@ from services.resume import parse_resume_bytes, summarize_resume
 from services.storage.paths import data_dir, sqlite_path
 
 MAX_ENTRIES = 10
+# 单次上传字节数上限。Router 层 (api.common.router) 也以此为流式校验阈值,
+# 双方共用同一常量, 避免阈值漂移。
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 DB_PATH = sqlite_path("resume_history.db")
 _db_lock = threading.Lock()
 
@@ -180,7 +183,9 @@ def add_upload(content: bytes, original_filename: str) -> dict[str, Any]:
     """
     if not original_filename:
         raise ValueError("未选择文件")
-    if len(content) > 10 * 1024 * 1024:
+    # Defense-in-depth: router 层会先做流式 413, 但本函数也可能被脚本/测试直接调用,
+    # 因此保留同一阈值校验, 防止单元测试或非 HTTP 调用绕过限制。
+    if len(content) > MAX_UPLOAD_BYTES:
         raise ValueError("文件大小不能超过 10MB")
 
     now = time.time()
