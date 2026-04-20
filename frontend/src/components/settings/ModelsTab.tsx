@@ -49,7 +49,8 @@ function toModelRow(model: ModelFullInfo, index: number): ModelRow {
 }
 
 export default function ModelsTab() {
-  const { config, modelHealth } = useInterviewStore()
+  const config = useInterviewStore((s) => s.config)
+  const modelHealth = useInterviewStore((s) => s.modelHealth)
 
   const [modelRows, setModelRows] = useState<ModelRow[]>([])
   const [loading, setLoading] = useState(true)

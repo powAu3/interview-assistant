@@ -7,7 +7,7 @@ import {
   Settings2,
   Search,
 } from 'lucide-react'
-import { useInterviewStore } from '@/stores/configStore'
+import { useUiSettings } from '@/stores/hooks'
 import { INPUT_FIELD_STYLE, SettingsSearchContext } from './shared'
 import PreferencesTab from './PreferencesTab'
 
@@ -15,12 +15,7 @@ const SpeechTab = lazy(() => import('./SpeechTab'))
 const ModelsTab = lazy(() => import('./ModelsTab'))
 
 export default function SettingsDrawer() {
-  const {
-    settingsOpen,
-    toggleSettings,
-    settingsDrawerTab,
-    setSettingsDrawerTab,
-  } = useInterviewStore()
+  const { settingsOpen, toggleSettings, settingsDrawerTab, setSettingsDrawerTab } = useUiSettings()
 
   const drawerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)

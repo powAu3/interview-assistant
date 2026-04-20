@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import { api } from '@/lib/api'
@@ -11,7 +12,15 @@ import { ResumeHistoryPanel } from '@/components/ResumeHistory'
 export default function ResumeOptimizer() {
   const [jdText, setJdText] = useState('')
   const { config, resumeOptStreaming, resumeOptResult, resumeOptLoading, setToastMessage } =
-    useInterviewStore()
+    useInterviewStore(
+      useShallow((s) => ({
+        config: s.config,
+        resumeOptStreaming: s.resumeOptStreaming,
+        resumeOptResult: s.resumeOptResult,
+        resumeOptLoading: s.resumeOptLoading,
+        setToastMessage: s.setToastMessage,
+      })),
+    )
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const lightMarkdown = isLightColorScheme(colorScheme)
   const fileRef = useRef<HTMLInputElement>(null)

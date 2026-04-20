@@ -18,7 +18,8 @@ import { Section, Field, GradientCard, StatusBadge, useSettingsSearch } from './
 import SttGuideCard from './SttGuideCard'
 
 export default function SpeechTab() {
-  const { config, options } = useInterviewStore()
+  const config = useInterviewStore((s) => s.config)
+  const options = useInterviewStore((s) => s.options)
   const [form, setForm] = useState({
     stt_provider: 'whisper' as string,
     whisper_model: 'base',

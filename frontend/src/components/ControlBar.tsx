@@ -14,6 +14,7 @@ import {
   Zap,
   Loader2,
 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { refreshConfig } from '@/lib/configSync'
@@ -242,7 +243,40 @@ function QuickPromptsRow({
 }
 
 export default function ControlBar() {
-  const { isRecording, isPaused, devices, config, platformInfo, clearSession, streamingIds, qaPairs, transcriptions, setToastMessage, lastWSError, setLastWSError, wsConnected, modelHealth } = useInterviewStore()
+  // 精确订阅 14 个字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
+  const {
+    isRecording,
+    isPaused,
+    devices,
+    config,
+    platformInfo,
+    clearSession,
+    streamingIds,
+    qaPairs,
+    transcriptions,
+    setToastMessage,
+    lastWSError,
+    setLastWSError,
+    wsConnected,
+    modelHealth,
+  } = useInterviewStore(
+    useShallow((s) => ({
+      isRecording: s.isRecording,
+      isPaused: s.isPaused,
+      devices: s.devices,
+      config: s.config,
+      platformInfo: s.platformInfo,
+      clearSession: s.clearSession,
+      streamingIds: s.streamingIds,
+      qaPairs: s.qaPairs,
+      transcriptions: s.transcriptions,
+      setToastMessage: s.setToastMessage,
+      lastWSError: s.lastWSError,
+      setLastWSError: s.setLastWSError,
+      wsConnected: s.wsConnected,
+      modelHealth: s.modelHealth,
+    })),
+  )
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
@@ -345,27 +379,27 @@ export default function ControlBar() {
     }
   }, [])
 
-  const handleStart = async () => {
+  const handleStart = useCallback(async () => {
     if (selectedDevice === null) { setError('请先选择音频设备'); return }
     setLoading(true); setError(null)
     try { await api.start(selectedDevice) }
     catch (e: any) { setError(e.message) }
     finally { setLoading(false) }
-  }
-  const handleStop = async () => {
+  }, [selectedDevice])
+  const handleStop = useCallback(async () => {
     if (isRecording && !window.confirm('结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
     setLoading(true)
     try { await api.stop() } catch {} finally { setLoading(false) }
-  }
-  const handlePause = async () => {
+  }, [isRecording])
+  const handlePause = useCallback(async () => {
     setLoading(true)
     try { await api.pause() } catch (e: any) { setError(e.message) } finally { setLoading(false) }
-  }
-  const handleResume = async () => {
+  }, [])
+  const handleResume = useCallback(async () => {
     setLoading(true)
     try { await api.resume(selectedDevice ?? undefined) } catch (e: any) { setError(e.message) } finally { setLoading(false) }
-  }
-  const handleClear = async () => {
+  }, [selectedDevice])
+  const handleClear = useCallback(async () => {
     if (qaPairs.length > 0 || transcriptions.length > 0) {
       if (!window.confirm('确定要清空当前页的转录与答案吗？清空后不可恢复。')) return
     }
@@ -376,18 +410,18 @@ export default function ControlBar() {
       setToastMessage('已清空')
     } catch (e: any) { setError(e.message) }
     finally { setClearing(false) }
-  }
+  }, [qaPairs.length, transcriptions.length, clearSession, setToastMessage])
 
-  const handleCancelAsk = async () => {
+  const handleCancelAsk = useCallback(async () => {
     setCancellingAsk(true)
     try {
       await api.cancelAsk()
       setToastMessage('已发送取消')
     } catch {}
     setTimeout(() => setCancellingAsk(false), 500)
-  }
+  }, [setToastMessage])
 
-  const handleAsk = async () => {
+  const handleAsk = useCallback(async () => {
     if (!manualQuestion.trim() && !pastedImage) return
     if (pastedImage && !activeModelSupportsVision) {
       setError(`当前模型「${activeModel?.name ?? '未命名模型'}」不支持图片识别，请切换到带 👁 标记的模型后再发送截图`)
@@ -398,14 +432,14 @@ export default function ControlBar() {
       setManualQuestion('')
       setPastedImage(null)
     } catch (e: any) { setError(e.message) }
-  }
+  }, [manualQuestion, pastedImage, activeModelSupportsVision, activeModel?.name])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (isComposingRef.current) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk() }
-  }
+  }, [handleAsk])
 
-  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleResumeUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setResumeUploading(true)
@@ -422,11 +456,17 @@ export default function ControlBar() {
     } catch (err: any) { setError(err.message) }
     finally { setResumeUploading(false) }
     if (fileRef.current) fileRef.current.value = ''
-  }
-  const handleRemoveResume = async () => {
+  }, [setToastMessage])
+  const handleRemoveResume = useCallback(async () => {
     await api.deleteResume(); setResumeFile(null)
     await refreshConfig()
-  }
+  }, [])
+
+  const handleQuickPromptPick = useCallback((prompt: string) => {
+    setManualQuestion((prev) => (prev ? `${prev} ${prompt}` : prompt))
+    inputRef.current?.focus()
+    setQuickPromptRecent(bumpQuickPromptRecent(prompt))
+  }, [])
 
   return (
     <div className="control-bar px-3 md:px-5 py-2.5 flex-shrink-0 space-y-1.5">
@@ -637,11 +677,7 @@ export default function ControlBar() {
         <QuickPromptsRow
           prompts={orderedQuickPrompts}
           recentSet={recentSet}
-          onPick={(prompt) => {
-            setManualQuestion((prev) => (prev ? `${prev} ${prompt}` : prompt))
-            inputRef.current?.focus()
-            setQuickPromptRecent(bumpQuickPromptRecent(prompt))
-          }}
+          onPick={handleQuickPromptPick}
         />
       )}
 
