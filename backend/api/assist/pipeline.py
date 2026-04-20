@@ -747,14 +747,27 @@ def _interview_worker():
     )
     session = get_session()
     _reset_asr_merge_buffer()
-    _last_gc_mono = time.monotonic()
+
+    # gc.collect() 之前直接放在主 ASR 循环里 (每 60s 同步执行),
+    # 大堆下单次 50~500ms, 期间无法读音频可能丢块。改成独立 daemon 线程,
+    # 主循环零阻塞; 线程靠 _stop_event 退出, 与 worker 生命周期对齐。
+    _gc_stop = threading.Event()
+
+    def _gc_periodic_worker() -> None:
+        while not _gc_stop.wait(60.0):
+            try:
+                gc.collect()
+            except Exception:
+                pass
+
+    _gc_thread = threading.Thread(
+        target=_gc_periodic_worker, daemon=True, name="assist-gc"
+    )
+    _gc_thread.start()
 
     try:
         while not _stop_event.is_set():
             now = time.monotonic()
-            if now - _last_gc_mono > 60.0:
-                gc.collect()
-                _last_gc_mono = now
             _try_flush_asr_merge_buffer(get_config(), session, now, False)
             _try_flush_asr_question_group(get_config(), session, now, False)
 
@@ -824,6 +837,22 @@ def _interview_worker():
             get_session().is_recording = False
         broadcast({"type": "recording", "value": False})
     finally:
+        # 保证 worker 任何退出路径 (正常 / 异常 / 早退) 都释放音频设备。
+        # AudioCapture.stop 是幂等的: 即使外部 stop_interview_loop 已经先调过,
+        # 重复调用也是 no-op (内部用 _lock + _running 标志位防御)。
+        # 这能修复 worker 异常崩溃后麦克风/系统音频设备一直被占用的泄漏。
+        try:
+            audio_capture.stop(owner="assist")
+        except Exception:
+            _elog.error("audio_capture.stop in worker finally failed", exc_info=True)
+        # 通知 GC daemon 退出并 join, 让 worker 生命周期完全确定 (避免测试需要
+        # sleep 等收敛, 也不让旧 daemon 与下一轮 worker 的 daemon 短暂并存)。
+        # threading.Event.set() 不会抛, 不需要 try; join(timeout) 只兜个上限。
+        _gc_stop.set()
+        try:
+            _gc_thread.join(timeout=0.5)
+        except Exception:
+            pass
         try:
             _try_flush_asr_merge_buffer(
                 get_config(), get_session(), time.monotonic(), True
