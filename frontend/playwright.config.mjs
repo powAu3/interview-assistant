@@ -20,6 +20,18 @@ export default defineConfig({
     video: 'retain-on-failure',
     viewport: { width: 1440, height: 900 },
   },
+  // Snapshots live in e2e/__screenshots__/<file>/<name>-<platform>.png so
+  // Linux (CI) and macOS (local dev) baselines don't collide.
+  snapshotPathTemplate:
+    'e2e/__screenshots__/{testFilePath}/{arg}-{platform}{ext}',
+  expect: {
+    toHaveScreenshot: {
+      // ~0.5% allowed pixel diff handles font subpixel rendering noise.
+      maxDiffPixelRatio: 0.005,
+      threshold: 0.2,
+      animations: 'disabled',
+    },
+  },
   projects: [
     {
       name: 'chromium',
