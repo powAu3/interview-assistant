@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-export function useOverlayWindowSync(isRecording: boolean, appMode: string) {
+// 注意：此 hook 仅同步「overlay 自身的样式与开关」到 main 进程，
+// 故意不再联动 main 窗口的显隐 — Cmd+O 只管 overlay、Cmd+B 只管 main，
+// 两个全局快捷键完全正交（产品决策，2026-04-17 拆耦）。
+export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
+  void _isRecording
+  void _appMode
   const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
   const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
   const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
@@ -17,7 +22,6 @@ export function useOverlayWindowSync(isRecording: boolean, appMode: string) {
   const applyInterviewOverlayState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
 
   const overlaySyncUntilRef = useRef(0)
-  const mainHiddenByOverlayRef = useRef(false)
 
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
@@ -53,22 +57,6 @@ export function useOverlayWindowSync(isRecording: boolean, appMode: string) {
     interviewOverlayPanelShowBg,
     interviewOverlayPanelWidth,
   ])
-
-  useEffect(() => {
-    if (!window.electronAPI?.hideWindow) return
-    const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
-    if (overlayVisible) {
-      window.electronAPI.getWindowState?.().then((state) => {
-        if (state?.visible) {
-          mainHiddenByOverlayRef.current = true
-          window.electronAPI!.hideWindow()
-        }
-      }).catch(() => {})
-    } else if (mainHiddenByOverlayRef.current) {
-      mainHiddenByOverlayRef.current = false
-      window.electronAPI.showWindow?.()
-    }
-  }, [appMode, interviewOverlayEnabled, isRecording])
 
   useEffect(() => {
     if (!window.electronAPI?.onOverlayState) return

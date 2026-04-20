@@ -95,4 +95,28 @@ describe('useOverlayWindowSync', () => {
       expect.objectContaining({ opacity: 0.5, enabled: true }),
     )
   })
+
+  it('does NOT auto-hide / restore main window — Cmd+O and Cmd+B are orthogonal (2026-04-17 decoupled)', async () => {
+    const api = setupElectronAPI()
+    // 模拟「正在录制 + assist 模式 + overlay 启用」三件齐备 — 这就是修复前会触发 hideWindow 的全部条件。
+    const { rerender } = render(<Harness isRecording={false} appMode="assist" />)
+    await act(async () => {
+      useUiPrefsStore.getState().setInterviewOverlayEnabled(true)
+    })
+    rerender(<Harness isRecording={true} appMode="assist" />)
+    // 多 tick 等待任何潜在的 promise 链
+    await act(async () => {})
+
+    // 关键：拆耦之后，main 窗口的显隐归 Cmd+B 管，overlay 启用绝对不能动 main 窗口。
+    expect(api.hideWindow).not.toHaveBeenCalled()
+
+    // 反向：disable overlay 也不能恢复 main（之前的 mainHiddenByOverlayRef 路径已删除）
+    await act(async () => {
+      useUiPrefsStore.getState().setInterviewOverlayEnabled(false)
+    })
+    rerender(<Harness isRecording={false} appMode="assist" />)
+    await act(async () => {})
+
+    expect(api.showWindow).not.toHaveBeenCalled()
+  })
 })

@@ -4,10 +4,22 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 
+// Windows: 透明 BrowserWindow 需要 DWM 硬件加速。
+// 历史遗留 disableHardwareAcceleration() 已移除 ——
+// 它会让 setContentProtection 退化成「窗口被捕获时显示黑色」(WDA_MONITOR)，
+// 而非 Win10 2004+ 才支持的「直接从屏幕捕获中排除」(WDA_EXCLUDEFROMCAPTURE)，
+// 后者才是真正的屏幕共享隐身。
+// 如个别老 Win7/Win8 设备透明窗口出现渲染异常，可设环境变量 ELECTRON_DISABLE_HW_ACCEL=1 回退。
 if (process.platform === 'win32') {
-  app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('enable-transparent-visuals');
+  if (process.env.ELECTRON_DISABLE_HW_ACCEL === '1') {
+    app.disableHardwareAcceleration();
+  }
 }
+
+// 跨平台：阻止系统 occlusion / window list 计算把 overlay 暴露给屏幕共享 / 录屏 API。
+// 与 BrowserWindow 的 setContentProtection(true) (+ macOS type:'panel') 形成多重防御。
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 const {
   ShortcutStatus,
   createShortcutState,
@@ -283,6 +295,10 @@ function createOverlayWindow(mode = 'panel') {
 
   const preset = getOverlayPreset(mode);
   const storedPos = getStoredOverlayPosition(mode);
+  // macOS 'panel' 类型对应 NSPanel，会被 ScreenCaptureKit / CGWindowListCreateImage / Zoom-Teams 屏幕共享
+  // 视为 utility window，配合 setContentProtection(true) 才能真正隐身。
+  // 其他平台保持默认 'normal' 类型。
+  const overlayType = process.platform === 'darwin' ? 'panel' : undefined;
   overlayWindow = new BrowserWindow({
     width: preset.width,
     height: preset.height,
@@ -303,6 +319,7 @@ function createOverlayWindow(mode = 'panel') {
     focusable: true,
     title: `${APP_DISPLAY_NAME} Overlay`,
     backgroundColor: '#00000000',
+    ...(overlayType ? { type: overlayType } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -310,15 +327,23 @@ function createOverlayWindow(mode = 'panel') {
     },
   });
 
+  // 多重保险：创建后立即设 + did-finish-load 再设 + ready-to-show 再设
+  // (macOS 上 NSWindow.sharingType 在不同生命周期可能被重置)
   overlayWindow.setContentProtection(true);
   overlayWindow.setAlwaysOnTop(true, 'screen-saver', 1);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow._overlayMode = mode;
   overlayWindow._overlayReady = false;
+  overlayWindow.once('ready-to-show', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    overlayWindow.setContentProtection(true);
+  });
   overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
   overlayWindow.webContents.on('did-finish-load', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    overlayWindow.setContentProtection(true);
     if (lastOverlayState) {
-      overlayWindow?.webContents.send('overlay-state', lastOverlayState);
+      overlayWindow.webContents.send('overlay-state', lastOverlayState);
     }
     setTimeout(() => {
       if (!overlayWindow || overlayWindow.isDestroyed()) return;
@@ -719,6 +744,19 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   registerShortcuts();
+
+  // 预热 overlay：后端就绪后立即创建 panel 模式窗口（hidden），
+  // 加载整个 SPA bundle + 建 WS，等用户首次 toggle 时直接 show，
+  // 把首次启动卡顿（~1s+）摊薄到主窗口加载阶段。
+  // lyrics 模式因为窗口尺寸不同需要重建，但绝大多数用户从默认 panel 起步。
+  setImmediate(() => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) return;
+    try {
+      createOverlayWindow('panel');
+    } catch (error) {
+      console.warn('overlay preheat failed:', error?.message || error);
+    }
+  });
 });
 
 app.on('window-all-closed', () => {

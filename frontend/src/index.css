@@ -617,20 +617,105 @@ code, pre, .font-mono {
   text-transform: uppercase;
 }
 
-.ia-overlay-header {
-  border-bottom: 1px solid rgb(var(--c-border-subtle) / 0.72);
-  background: linear-gradient(180deg, rgb(var(--c-console-header-bg) / 0.9) 0%, rgb(var(--c-surface-glass) / 0.72) 100%);
+/* ========== Overlay HUD 设计（2026-04-17 重做） ==========
+ * 产品定位：面试期间的「副屏 HUD」—— 信息密度大，视觉压力小，与桌面背景融合，
+ * 屏幕共享时不可见 (依赖 main.js 的 setContentProtection)。
+ * 关键设计语言：deep glass + dark + content-first + 流式脉冲。
+ */
+.ia-overlay-shell {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 12, 18, 0.78);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px) saturate(1.18);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
 }
 
-.ia-overlay-shell {
-  border: 1px solid rgb(var(--c-overlay-border) / 0.72);
-  background:
-    linear-gradient(180deg, rgb(var(--c-overlay-backdrop) / 0.88) 0%, rgb(var(--c-surface-glass) / 0.68) 100%);
-  box-shadow:
-    0 24px 64px rgb(0 0 0 / 0.26),
-    inset 0 1px 0 rgb(255 255 255 / 0.05);
-  backdrop-filter: blur(18px) saturate(1.15);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+/* 拖拽区：顶部 18px 隐式手柄，hover 时浮现 grip 指示 */
+.ia-overlay-grip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  margin-top: 5px;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+  pointer-events: none;
+}
+.ia-overlay-shell:hover .ia-overlay-grip {
+  opacity: 1;
+}
+
+/* 流式脉冲点 — 替代 spinner，避免分散注意力 */
+.ia-overlay-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(74, 222, 128);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+  animation: ia-overlay-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ia-overlay-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* 问题区 — 单行截断，hover 显示完整内容 */
+.ia-overlay-question {
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 答案区 — 主信息层，可滚动 */
+.ia-overlay-answer {
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+.ia-overlay-answer::-webkit-scrollbar {
+  width: 4px;
+}
+.ia-overlay-answer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+/* 流式光标 */
+.ia-overlay-caret {
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  margin-left: 3px;
+  background: rgb(74, 222, 128);
+  vertical-align: text-bottom;
+  animation: ia-overlay-caret 1s steps(2, end) infinite;
+}
+@keyframes ia-overlay-caret {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* 等待态 — 极简 */
+.ia-overlay-waiting {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.42);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
 }
 
 .ia-overlay-drag {
@@ -639,6 +724,14 @@ code, pre, .font-mono {
 
 .ia-overlay-resize {
   cursor: default;
+}
+
+/* prefers-reduced-motion: 关闭脉冲/光标动画 */
+@media (prefers-reduced-motion: reduce) {
+  .ia-overlay-pulse,
+  .ia-overlay-caret {
+    animation: none;
+  }
 }
 
 /* ===== A11y: 键盘 focus 环 (仅键盘触发 focus-visible) ===== */

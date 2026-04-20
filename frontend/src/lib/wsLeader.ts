@@ -74,6 +74,27 @@ function tick(): void {
   }
 }
 
+/**
+ * markStandalone — 适配 Electron 多 BrowserWindow 场景。
+ *
+ * 背景：main 窗口和 overlay 窗口同 origin (http://127.0.0.1:18080)，
+ * BroadcastChannel 跨 BrowserWindow 互通，会让两者抢 leader，
+ * 落选的窗口完全断 WS → 无法收到 question/answer/transcription 推送。
+ *
+ * Overlay 是「只读副屏」，与 main 各自维护独立 store，**互不污染**：
+ * 它必须独立连 WS，但不参与选举（不发 announce / 不收消息），
+ * 这样 main 也察觉不到它的存在，main 仍维持唯一 leader 地位。
+ *
+ * 必须在任何 subscribeLeader / isLeaderTab 调用之前同步执行。
+ */
+export function markStandalone(): void {
+  if (initialized) return
+  initialized = true
+  currentlyLeader = true
+  leaderId = TAB_ID
+  leaderSeenAt = Date.now()
+}
+
 function init(): void {
   if (initialized) return
   initialized = true
