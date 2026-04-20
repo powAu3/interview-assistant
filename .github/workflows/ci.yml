@@ -179,14 +179,13 @@ jobs:
           if-no-files-found: ignore
 
   # ── Visual regression (pixel-diff snapshots) ─────────────
-  # First-time runs after merging will fail because no baseline images
-  # exist yet. Trigger the `update-visual-snapshots` workflow once after
-  # merge to seed baselines, then this job becomes a real gate.
+  # Baselines live under frontend/e2e/__screenshots__/ . When intentional
+  # UI changes break this job, trigger the `update-visual-snapshots`
+  # workflow on the feature branch to regenerate them.
   e2e-visual:
     needs: [changes, frontend]
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: frontend
@@ -283,11 +282,11 @@ jobs:
           if-no-files-found: ignore
 
   # ── Aggregate gate so PR can require a single status check ──
-  # NOTE: e2e-visual is intentionally NOT in this gate yet (uses
-  # continue-on-error). Once visual baselines are seeded via the
-  # update-visual-snapshots workflow, you can add it here.
+  # All required jobs must succeed (or be skipped via paths-filter).
+  # When this gate fails on visual diff, regenerate baselines on the
+  # branch via the `update-visual-snapshots` workflow.
   ci-gate:
-    needs: [backend, frontend, e2e-playwright, e2e-smoke]
+    needs: [backend, frontend, e2e-playwright, e2e-smoke, e2e-visual]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -297,7 +296,8 @@ jobs:
           for r in "${{ needs.backend.result }}" \
                    "${{ needs.frontend.result }}" \
                    "${{ needs.e2e-playwright.result }}" \
-                   "${{ needs.e2e-smoke.result }}"; do
+                   "${{ needs.e2e-smoke.result }}" \
+                   "${{ needs.e2e-visual.result }}"; do
             case "$r" in
               success|skipped) ;;
               *) echo "Job result: $r"; ok=false ;;
