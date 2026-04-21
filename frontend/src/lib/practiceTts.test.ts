@@ -77,6 +77,19 @@ describe('practiceTts', () => {
     expect(normalized).toContain('My sequel')
     expect(normalized).toContain('Postgres sequel')
     expect(normalized).toContain('sequel')
-    expect(normalized).toContain('瑞迪斯')
+    expect(normalized).toContain('Ree dis')
+  })
+
+  it('normalizes english backend terms for clearer TTS output', () => {
+    const normalized = normalizePracticeTtsText(
+      'Explain Redis, API gateway, SDK retry, JSON payload, YAML config, and OAuth.',
+      'en-US',
+    )
+
+    expect(normalized).toContain('A P I')
+    expect(normalized).toContain('S D K')
+    expect(normalized).toContain('J S O N')
+    expect(normalized).toContain('Y A M L')
+    expect(normalized).toContain('Oh Auth')
   })
 })

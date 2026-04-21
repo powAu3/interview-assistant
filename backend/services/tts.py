@@ -20,14 +20,51 @@ VOLCENGINE_TTS_NAMESPACE = "TTS"
 
 VoiceGender = Literal["auto", "female", "male"]
 
-_TTS_TERM_REPLACEMENTS = [
+_COMMON_TERM_REPLACEMENTS = [
     ("PostgreSQL", "Postgres sequel"),
     ("MySQL", "My sequel"),
     ("SQL", "sequel"),
-    ("Redis", "瑞迪斯"),
     ("JVM", "J V M"),
     ("API", "A P I"),
     ("SDK", "S D K"),
+    ("HTTP", "H T T P"),
+    ("HTTPS", "H T T P S"),
+    ("TCP", "T C P"),
+    ("UDP", "U D P"),
+    ("RPC", "R P C"),
+    ("gRPC", "G R P C"),
+    ("JWT", "J W T"),
+    ("JSON", "J S O N"),
+    ("YAML", "Y A M L"),
+    ("CDN", "C D N"),
+    ("DNS", "D N S"),
+]
+
+_ZH_TERM_REPLACEMENTS = [
+    ("Redis", "Ree dis"),
+    ("Kafka", "Kaf ka"),
+    ("Nginx", "Engine X"),
+    ("Linux", "Linucks"),
+    ("MongoDB", "Mongo D B"),
+    ("RabbitMQ", "Rabbit M Q"),
+    ("Elasticsearch", "Elastic Search"),
+    ("OpenTelemetry", "Open Telemetry"),
+    ("ClickHouse", "Click House"),
+    ("Prometheus", "Prometheus"),
+    ("Grafana", "Grafana"),
+    ("Kubernetes", "Kuber net ease"),
+    ("TypeScript", "Type Script"),
+    ("JavaScript", "Java Script"),
+    ("OAuth", "Oh Auth"),
+]
+
+_EN_TERM_REPLACEMENTS = [
+    ("ClickHouse", "Click House"),
+    ("OpenTelemetry", "Open Telemetry"),
+    ("RabbitMQ", "Rabbit M Q"),
+    ("MongoDB", "Mongo D B"),
+    ("Nginx", "Engine X"),
+    ("OAuth", "Oh Auth"),
 ]
 
 
@@ -49,9 +86,11 @@ def _edge_voice_for_gender(preferred_gender: VoiceGender) -> str:
     return (getattr(cfg, "edge_tts_voice_female", "") or "zh-CN-XiaoxiaoNeural").strip()
 
 
-def normalize_tts_text(text: str) -> str:
+def normalize_tts_text(text: str, locale_hint: str = "zh") -> str:
     normalized = str(text or "").strip()
-    for src, target in _TTS_TERM_REPLACEMENTS:
+    replacements = list(_COMMON_TERM_REPLACEMENTS)
+    replacements.extend(_EN_TERM_REPLACEMENTS if locale_hint.lower().startswith("en") else _ZH_TERM_REPLACEMENTS)
+    for src, target in replacements:
         escaped = re.escape(src)
         normalized = re.sub(
             rf"(^|[^A-Za-z])({escaped})(?=[^A-Za-z]|$)",
@@ -94,7 +133,7 @@ def synthesize_volcengine_tts(
     audio_format: str = "mp3",
     sample_rate: int = 24000,
 ) -> dict:
-    clean_text = normalize_tts_text(text)
+    clean_text = normalize_tts_text(text, locale_hint="zh")
     if not clean_text:
         raise ValueError("TTS 文本不能为空")
 
@@ -149,15 +188,15 @@ def synthesize_edge_tts(
     rate: str | None = None,
     pitch: str | None = None,
 ) -> dict:
-    clean_text = normalize_tts_text(text)
+    cfg = get_config()
+    resolved_voice = (voice or _edge_voice_for_gender(preferred_gender)).strip()
+    clean_text = normalize_tts_text(text, locale_hint=resolved_voice.split("-")[0].lower())
     if not clean_text:
         raise ValueError("TTS 文本不能为空")
     if importlib.util.find_spec("edge_tts") is None:
         raise ValueError("edge-tts 未安装，请先执行 pip install edge-tts")
     import edge_tts  # type: ignore
 
-    cfg = get_config()
-    resolved_voice = (voice or _edge_voice_for_gender(preferred_gender)).strip()
     resolved_rate = (rate or getattr(cfg, "edge_tts_rate", "+0%") or "+0%").strip()
     resolved_pitch = (pitch or getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz").strip()
 

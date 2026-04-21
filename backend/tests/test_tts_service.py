@@ -81,7 +81,20 @@ def test_normalize_tts_text_rewrites_sql_and_related_terms():
     assert "My sequel" in normalized
     assert "Postgres sequel" in normalized
     assert "sequel" in normalized
-    assert "瑞迪斯" in normalized
+    assert "Ree dis" in normalized
+
+
+def test_normalize_tts_text_rewrites_english_backend_terms():
+    text = "Explain Redis, Kafka, API gateway, SDK retry, JSON payload, YAML config, and OAuth."
+    normalized = tts_service.normalize_tts_text(text, locale_hint="en")
+
+    assert "Redis" in normalized
+    assert "Kaf ka" not in normalized
+    assert "A P I" in normalized
+    assert "S D K" in normalized
+    assert "J S O N" in normalized
+    assert "Y A M L" in normalized
+    assert "Oh Auth" in normalized
 
 
 def test_synthesize_volcengine_tts_rejects_missing_credentials(monkeypatch):
@@ -138,5 +151,4 @@ def test_synthesize_edge_tts_uses_selected_voice(monkeypatch):
     assert result["audio_bytes"] == b"ID3demo"
     assert seen["voice"] == "zh-CN-YunxiNeural"
     assert "sequel" in seen["text"]
-    assert "瑞迪斯" in seen["text"]
-
+    assert "Ree dis" in seen["text"]

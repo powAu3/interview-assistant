@@ -55,14 +55,51 @@ const MALE_HINTS = [
   'grandpa',
 ]
 
-const TTS_TERM_REPLACEMENTS: Array<[string, string]> = [
+const COMMON_TERM_REPLACEMENTS: Array<[string, string]> = [
   ['PostgreSQL', 'Postgres sequel'],
   ['MySQL', 'My sequel'],
   ['SQL', 'sequel'],
-  ['Redis', '瑞迪斯'],
   ['JVM', 'J V M'],
   ['API', 'A P I'],
   ['SDK', 'S D K'],
+  ['HTTP', 'H T T P'],
+  ['HTTPS', 'H T T P S'],
+  ['TCP', 'T C P'],
+  ['UDP', 'U D P'],
+  ['RPC', 'R P C'],
+  ['gRPC', 'G R P C'],
+  ['JWT', 'J W T'],
+  ['JSON', 'J S O N'],
+  ['YAML', 'Y A M L'],
+  ['CDN', 'C D N'],
+  ['DNS', 'D N S'],
+]
+
+const ZH_TERM_REPLACEMENTS: Array<[string, string]> = [
+  ['Redis', 'Ree dis'],
+  ['Kafka', 'Kaf ka'],
+  ['Nginx', 'Engine X'],
+  ['Linux', 'Linucks'],
+  ['MongoDB', 'Mongo D B'],
+  ['RabbitMQ', 'Rabbit M Q'],
+  ['Elasticsearch', 'Elastic Search'],
+  ['OpenTelemetry', 'Open Telemetry'],
+  ['ClickHouse', 'Click House'],
+  ['Prometheus', 'Prometheus'],
+  ['Grafana', 'Grafana'],
+  ['Kubernetes', 'Kuber net ease'],
+  ['TypeScript', 'Type Script'],
+  ['JavaScript', 'Java Script'],
+  ['OAuth', 'Oh Auth'],
+]
+
+const EN_TERM_REPLACEMENTS: Array<[string, string]> = [
+  ['ClickHouse', 'Click House'],
+  ['OpenTelemetry', 'Open Telemetry'],
+  ['RabbitMQ', 'Rabbit M Q'],
+  ['MongoDB', 'Mongo D B'],
+  ['Nginx', 'Engine X'],
+  ['OAuth', 'Oh Auth'],
 ]
 
 function includesAny(name: string, hints: string[]): boolean {
@@ -70,9 +107,13 @@ function includesAny(name: string, hints: string[]): boolean {
   return hints.some((hint) => lower.includes(hint))
 }
 
-export function normalizePracticeTtsText(text: string): string {
+export function normalizePracticeTtsText(text: string, localeHint = 'zh'): string {
   let normalized = String(text || '').trim()
-  for (const [source, target] of TTS_TERM_REPLACEMENTS) {
+  const replacements = [
+    ...COMMON_TERM_REPLACEMENTS,
+    ...(localeHint.toLowerCase().startsWith('en') ? EN_TERM_REPLACEMENTS : ZH_TERM_REPLACEMENTS),
+  ]
+  for (const [source, target] of replacements) {
     const escaped = source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     normalized = normalized.replace(
       new RegExp(`(^|[^A-Za-z])(${escaped})(?=[^A-Za-z]|$)`, 'g'),
@@ -113,7 +154,8 @@ export async function speakWithBrowserTts(options: SpeakOptions): Promise<boolea
   const voice = pickPreferredVoice(voices, options) as SpeechSynthesisVoice | null
 
   return new Promise<boolean>((resolve) => {
-    const utterance = new SpeechSynthesisUtterance(normalizePracticeTtsText(options.text))
+    const localeHint = voice?.lang || 'zh-CN'
+    const utterance = new SpeechSynthesisUtterance(normalizePracticeTtsText(options.text, localeHint))
     utterance.lang = voice?.lang || 'zh-CN'
     if (voice) utterance.voice = voice
     utterance.rate = 1
