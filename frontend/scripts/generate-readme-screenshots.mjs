@@ -195,6 +195,32 @@ const SAMPLE_RESUME_OPTIMIZATION = `## 匹配结论
 | 稳定性建设 | 体现不够 | 增加“补齐日志、告警、压测与故障复盘闭环” |
 `
 
+const SAMPLE_KB_HITS = {
+  type: 'kb_hits',
+  qa_id: 'qa-redis',
+  latency_ms: 52,
+  degraded: false,
+  hit_count: 2,
+  hits: [
+    {
+      path: 'redis/持久化与主从切换.md',
+      section_path: 'Redis/持久化/AOF 与 RDB',
+      page: null,
+      origin: 'text',
+      score: 0.93,
+      excerpt: '线上常见做法是同时开启 AOF 与 RDB，前者偏数据完整性，后者偏恢复速度。',
+    },
+    {
+      path: 'system-design/缓存穿透治理.pdf',
+      section_path: '缓存/穿透治理/布隆过滤器',
+      page: 3,
+      origin: 'vision',
+      score: 0.87,
+      excerpt: '布隆过滤器负责快速挡掉明显不存在的 key，再配合缓存空值控制热点空穿透。',
+    },
+  ],
+}
+
 const ASSIST_INIT = {
   type: 'init',
   transcriptions: [
@@ -364,7 +390,13 @@ function getApiPayload(url, method) {
 
 function buildInitScriptConfig(scenario) {
   const scenarioMessages = {
-    assist: [{ ...ASSIST_INIT, delay: 20 }, ...COMMON_MESSAGES, { type: 'recording', value: true, delay: 60 }, { type: 'audio_level', value: 0.62, delay: 80 }],
+    assist: [
+      { ...ASSIST_INIT, delay: 20 },
+      ...COMMON_MESSAGES,
+      { type: 'recording', value: true, delay: 60 },
+      { type: 'audio_level', value: 0.62, delay: 80 },
+      { ...SAMPLE_KB_HITS, delay: 120 },
+    ],
     practice: [...COMMON_MESSAGES, ...PRACTICE_MESSAGES],
     knowledge: [...COMMON_MESSAGES],
     resume: [...COMMON_MESSAGES, ...RESUME_MESSAGES],
@@ -544,6 +576,7 @@ async function preparePage(browser, baseUrl, scenario) {
 
 async function captureAssist(page, outputPath) {
   await page.getByRole('heading', { name: '学习助手' }).waitFor({ timeout: 5000 })
+  await page.getByText(/引用 2 条本地笔记/).waitFor({ timeout: 5000 }).catch(() => null)
   await page.screenshot({ path: outputPath })
 }
 

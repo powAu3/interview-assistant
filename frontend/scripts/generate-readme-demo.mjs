@@ -545,6 +545,7 @@ function encodeGif(frames) {
 
 async function runDemo(page) {
   const frames = []
+  const BEAT = { waitMs: 900, displayMs: 1300 }
 
   await emit(page, { type: 'init', transcriptions: [], qa_pairs: [], is_recording: false, is_paused: false, stt_loaded: true })
   await emit(page, { type: 'stt_status', loaded: true, loading: false })
@@ -561,9 +562,9 @@ async function runDemo(page) {
       'DeepSeek V3': { prompt: 1300, completion: 1700 },
     },
   })
-  await setCaption(page, '打开应用后，直接进入实时辅助主流程。', '00 / 起步')
-  await captureFrame(page, frames, { waitMs: 500, displayMs: 1800 })
-  await captureFrame(page, frames, { waitMs: 1200, displayMs: 1500 })
+
+  await setCaption(page, '打开应用后，直接进入实时辅助主流程。', '00 / START')
+  await captureFrame(page, frames, { waitMs: 500, displayMs: 1250 })
 
   const startBtn = page.locator('button:has-text("开始面试"), button:has-text("开始")').first()
   for (let i = 0; i < 30; i += 1) {
@@ -576,22 +577,22 @@ async function runDemo(page) {
     await page.waitForTimeout(200)
   }
 
-  await setCaption(page, '选择系统音频或麦克风后，一键开始实时听题。', '01 / 听题')
-  await captureFrame(page, frames, { waitMs: 900, displayMs: 1800 })
+  await setCaption(page, '选择系统音频或麦克风后，一键开始实时听题。', '01 / LISTEN')
+  await captureFrame(page, frames, BEAT)
   await startBtn.click({ force: true })
   await emit(page, { type: 'recording', value: true })
-  await emit(page, { type: 'audio_level', value: 0.18 })
-  await captureFrame(page, frames, { waitMs: 900, displayMs: 1500 })
-
+  await emit(page, { type: 'audio_level', value: 0.2 })
   await emit(page, { type: 'transcribing', value: true })
-  await emit(page, { type: 'audio_level', value: 0.46 })
-  await captureFrame(page, frames, { waitMs: 900, displayMs: 1600 })
+  await captureFrame(page, frames, BEAT)
 
-  const firstQuestion = '请你讲一下 Redis 持久化机制，以及 AOF 和 RDB 的取舍。'
-  await emit(page, { type: 'transcription', text: firstQuestion })
+  await setCaption(page, '左侧实时转录会跟着面试进度持续落字。', '02 / TRANSCRIPT')
+  await emit(page, { type: 'transcription', text: '请你讲一下 Redis 持久化机制。' })
+  await emit(page, { type: 'audio_level', value: 0.46 })
+  await captureFrame(page, frames, BEAT)
+  await emit(page, { type: 'transcription', text: '再补一下 AOF 和 RDB 的取舍。' })
+  await emit(page, { type: 'audio_level', value: 0.54 })
+  await captureFrame(page, frames, BEAT)
   await emit(page, { type: 'transcribing', value: false })
-  await setCaption(page, '问题一出来，左侧转写会实时落字。', '02 / 转写')
-  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1900 })
 
   await emit(page, {
     type: 'answer_start',
@@ -603,155 +604,94 @@ async function runDemo(page) {
   await emit(page, {
     type: 'answer_think_chunk',
     id: 'demo-1',
-    chunk: '按正式面试长答来讲：先结论，再讲机制、取舍、线上做法和追问点。',
+    chunk: '先给结论，再讲机制、取舍和线上实践边界。',
   })
-  await setCaption(page, '右侧答案区会先组织思路，再流式生成正式回答。', '03 / 作答')
-  await captureFrame(page, frames, { waitMs: 1100, displayMs: 2000 })
+  await setCaption(page, '右侧答案区会先组织思路，再流式生成正式回答。', '03 / ANSWER')
+  await captureFrame(page, frames, BEAT)
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-1',
-    chunk: `如果我是候选人，我不会把这个问题回答成“RDB 和 AOF 二选一”，而是先给结论：线上通常会同时开启两者，因为 RDB 解决的是“恢复速度”，AOF 解决的是“数据完整性”，真正要比较的是业务更怕恢复慢还是更怕丢数据。\n\n`,
+    chunk: `这个问题我会先给结论：线上通常不会把 RDB 和 AOF 当成二选一，而是一起看。RDB 更偏恢复速度，AOF 更偏数据完整性，真正要比较的是业务更怕恢复慢还是更怕丢数据。\n\n`,
   })
-  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1800 })
+  await captureFrame(page, frames, BEAT)
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-1',
-    chunk: `正式展开我会分五层来答：\n1. RDB 是周期性快照，优点是文件紧凑、恢复快，适合冷启动和全量恢复；缺点是两次快照之间如果实例宕机，会丢最后一段数据。\n2. AOF 是把写命令按策略追加到日志里，数据完整性更高，但文件更大、恢复更慢，而且 fsync 配置不当会把磁盘压力传导到延迟。\n3. 生产上通常会同时开启：恢复时优先用 AOF，没有 AOF 再回退到 RDB，这样能兼顾恢复能力和重启速度。\n4. 真正线上要继续看 AOF 重写时机、主从复制延迟、哨兵切换窗口、磁盘 IO 峰值，以及高峰流量下是否会放大抖动。\n5. 如果面试官继续追问，我会补一句：持久化只能解决“重启后怎么恢复”，不能单独解决“故障期间是否丢数据”，还要结合主从、故障转移和客户端重试一起看。\n`,
+    chunk: `正式展开我会分三层来答：\n1. RDB 是周期性快照，恢复快，但会丢最后一段数据。\n2. AOF 数据更完整，但文件更大、恢复更慢，而且要关注 fsync 对延迟的影响。\n3. 线上通常会同时开启，再结合主从和故障转移一起看，才更接近真实生产结论。\n`,
   })
-  await captureFrame(page, frames, { waitMs: 1200, displayMs: 2300 })
+  await captureFrame(page, frames, BEAT)
 
-  const firstAnswer = `如果我是候选人，我不会把这个问题回答成“RDB 和 AOF 二选一”，而是先给结论：线上通常会同时开启两者，因为 RDB 解决的是“恢复速度”，AOF 解决的是“数据完整性”，真正要比较的是业务更怕恢复慢还是更怕丢数据。
+  const firstAnswer = `这个问题我会先给结论：线上通常不会把 RDB 和 AOF 当成二选一，而是一起看。RDB 更偏恢复速度，AOF 更偏数据完整性，真正要比较的是业务更怕恢复慢还是更怕丢数据。
 
-正式展开我会分五层来答：
-1. RDB 是周期性快照，优点是文件紧凑、恢复快，适合冷启动和全量恢复；缺点是两次快照之间如果实例宕机，会丢最后一段数据。
-2. AOF 是把写命令按策略追加到日志里，数据完整性更高，但文件更大、恢复更慢，而且 fsync 配置不当会把磁盘压力传导到延迟。
-3. 生产上通常会同时开启：恢复时优先用 AOF，没有 AOF 再回退到 RDB，这样能兼顾恢复能力和重启速度。
-4. 真正线上要继续看 AOF 重写时机、主从复制延迟、哨兵切换窗口、磁盘 IO 峰值，以及高峰流量下是否会放大抖动。
-5. 如果面试官继续追问，我会补一句：持久化只能解决“重启后怎么恢复”，不能单独解决“故障期间是否丢数据”，还要结合主从、故障转移和客户端重试一起看。`
+正式展开我会分三层来答：
+1. RDB 是周期性快照，恢复快，但会丢最后一段数据。
+2. AOF 数据更完整，但文件更大、恢复更慢，而且要关注 fsync 对延迟的影响。
+3. 线上通常会同时开启，再结合主从和故障转移一起看，才更接近真实生产结论。`
 
   await emit(page, {
     type: 'answer_done',
     id: 'demo-1',
     question: 'Redis 持久化机制，以及 AOF 和 RDB 的取舍。',
     answer: firstAnswer,
-    think: '按正式面试长答来讲：先结论，再讲机制、取舍、线上做法和追问点。',
+    think: '先给结论，再讲机制、取舍和线上实践边界。',
     model_name: 'GPT-4.1 Mini',
-  })
-  await captureFrame(page, frames, { waitMs: 1200, displayMs: 2100 })
-
-  const input = page.getByPlaceholder('输入问题，Enter 发送')
-  await input.click()
-  await input.type('写代码实现：给一个 Redis 缓存穿透防护的 Java 示例', { delay: 28 })
-  await setCaption(page, '如果面试官追问“写代码实现”，可以手动补一句继续追问。', '04 / 追问')
-  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1900 })
-  await input.press('Enter')
-  await emit(page, {
-    type: 'answer_start',
-    id: 'demo-2',
-    question: '写代码实现：给一个 Redis 缓存穿透防护的 Java 示例',
-    source: 'manual_text',
-    model_name: 'DeepSeek V3',
-  })
-  await captureFrame(page, frames, { waitMs: 900, displayMs: 1500 })
-
-  await emit(page, {
-    type: 'answer_chunk',
-    id: 'demo-2',
-    chunk: `这个题如果面试里让我写代码，我会先给一个“布隆过滤器 + 缓存空值”的可落地版本，因为它同时覆盖了非法 key 和热点空值两类缓存穿透。\n\n\`\`\`java\npublic String queryUser(String userId) {\n`,
-  })
-  await captureFrame(page, frames, { waitMs: 1100, displayMs: 1800 })
-
-  await emit(page, {
-    type: 'answer_chunk',
-    id: 'demo-2',
-    chunk: `    if (!bloomFilter.mightContain(userId)) return null;\n    String key = "user:" + userId;\n    String cached = redis.get(key);\n`,
-  })
-  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1800 })
-
-  const secondAnswer = `这个题如果面试里让我写代码，我会先给一个“布隆过滤器 + 缓存空值”的可落地版本，因为它同时覆盖了非法 key 和热点空值两类缓存穿透。
-
-\`\`\`java
-public String queryUser(String userId) {
-    if (!bloomFilter.mightContain(userId)) return null;
-    String key = "user:" + userId;
-    String cached = redis.get(key);
-    if (cached != null) return cached;
-
-    User user = userRepository.findById(userId);
-    if (user == null) {
-        redis.setex(key, 60, "__NULL__");
-        return null;
-    }
-
-    redis.setex(key, 600, toJson(user));
-    return toJson(user);
-}
-\`\`\`
-
-面试里我还会再补三句：
-1. 布隆过滤器负责挡掉明显不存在的 key，避免请求直接打到数据库。
-2. 缓存空值负责挡短时间内对同一个不存在数据的重复穿透，但 TTL 要比正常缓存更短。
-3. 如果这是高并发热点场景，还要继续补限流、互斥锁和监控命中率，否则只靠一段代码还不够。`
-
-  await emit(page, {
-    type: 'answer_done',
-    id: 'demo-2',
-    question: '写代码实现：给一个 Redis 缓存穿透防护的 Java 示例',
-    answer: secondAnswer,
-    think: '',
-    model_name: 'DeepSeek V3',
   })
   await emit(page, {
     type: 'kb_hits',
-    qa_id: 'demo-2',
+    qa_id: 'demo-1',
     latency_ms: 52,
     degraded: false,
     hit_count: 2,
     hits: SAMPLE_KB_SEARCH.hits,
   })
-  await captureFrame(page, frames, { waitMs: 1200, displayMs: 2100 })
+  await setCaption(page, '回答还能挂上本地知识库引用，方便补全你自己的材料。', '04 / KB')
+  await captureFrame(page, frames, BEAT)
 
   const togglePanelBtn = page.getByRole('button', { name: /隐藏实时转录面板|显示实时转录面板/ })
   if (await togglePanelBtn.count().catch(() => 0)) {
-    await setCaption(page, '空间不够时，支持一键收起实时转录面板，把焦点留给答案。', '05 / 聚焦')
+    await setCaption(page, '空间不够时，支持一键收起实时转录面板，把焦点留给答案。', '05 / FOCUS')
     await togglePanelBtn.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 1000, displayMs: 1800 })
-    await captureFrame(page, frames, { waitMs: 1200, displayMs: 2000 })
+    await captureFrame(page, frames, BEAT)
     await togglePanelBtn.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 900, displayMs: 1500 })
+    await captureFrame(page, frames, BEAT)
   }
 
-  const kbButton = page.getByRole('button', { name: /打开知识库 Beta/ })
-  if (await kbButton.count().catch(() => 0)) {
-    await setCaption(page, '知识库可以挂载本地笔记，让回答引用你自己的材料。', '06 / KB')
-    await kbButton.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 1200, displayMs: 2100 })
+  const settingsButton = page.getByRole('button', { name: /打开设置/ })
+  if (await settingsButton.count().catch(() => 0)) {
+    await setCaption(page, '桌面端的重点不是花哨，而是屏幕共享隐身能力；Boss Key 和悬浮提示窗是配套能力。', '06 / DESKTOP')
+    await settingsButton.first().click().catch(() => {})
+    await captureFrame(page, frames, BEAT)
 
-    const recentTab = page.getByRole('button', { name: /最近命中/ })
-    if (await recentTab.count().catch(() => 0)) {
-      await recentTab.first().click().catch(() => {})
-      await captureFrame(page, frames, { waitMs: 1200, displayMs: 1900 })
+    const searchInput = page.getByLabel('搜索设置项')
+    if (await searchInput.count().catch(() => 0)) {
+      await searchInput.fill('overlay').catch(() => {})
+      await page.getByText('反截图检测为 Beta 能力').waitFor({ timeout: 4000 }).catch(() => {})
+      await captureFrame(page, frames, BEAT)
+      await setCaption(page, '它的强项是桌面端在大多数常见屏幕共享场景下更稳，但不同软件、系统和权限策略差异很大，必须由你自己探索、验证并按环境调整。', '07 / STEALTH')
+      await captureFrame(page, frames, { waitMs: 920, displayMs: 1450 })
     }
 
-    const closeKb = page.getByRole('button', { name: /关闭/ })
-    if (await closeKb.count().catch(() => 0)) {
-      await closeKb.first().click().catch(() => {})
-      await captureFrame(page, frames, { waitMs: 900, displayMs: 1300 })
+    const modelsTab = page.getByRole('button', { name: /^模型$/ })
+    if (await modelsTab.count().catch(() => 0)) {
+      await modelsTab.first().click().catch(() => {})
+      await page.getByText('LLM 模型管理').waitFor({ timeout: 4000 }).catch(() => {})
+      await setCaption(page, '模型配置也能细调：支持自定义 temperature、max tokens 和并行路数。', '08 / LLM')
+      await captureFrame(page, frames, BEAT)
+    }
+
+    const closeSettings = page.getByRole('button', { name: /关闭/ }).last()
+    if (await closeSettings.count().catch(() => 0)) {
+      await closeSettings.click().catch(() => {})
+      await captureFrame(page, frames, { waitMs: 350, displayMs: 500 })
     }
   }
 
-  const assistTab = page.getByRole('tab', { name: /实时辅助/ })
-  if (await assistTab.count().catch(() => 0)) {
-    await assistTab.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 500, displayMs: 1100 })
-  }
-
-  await setCaption(page, '一边听题，一边组织答案，需要时再补追问或引用本地知识。', 'END / SUMMARY')
-  await captureFrame(page, frames, { waitMs: 1300, displayMs: 2200 })
+  await setCaption(page, '实时转录、自动回答、桌面端屏幕共享隐身，再加上可定制化的 LLM 参数，这些才是它最核心的主流程；隐身效果也一定要自己探索和验证。', 'END / SUMMARY')
+  await captureFrame(page, frames, { waitMs: 820, displayMs: 1320 })
   await clearCaption(page)
-  await captureFrame(page, frames, { waitMs: 400, displayMs: 900 })
+  await captureFrame(page, frames, { waitMs: 260, displayMs: 450 })
   return frames
 }
 

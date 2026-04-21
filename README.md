@@ -1,8 +1,8 @@
 # 智能面试学习辅助助手
 
-实时听题，自动生成专业面试回答。你可以把它理解成一个开着就能用的面试辅助工具：你负责听题、追问和临场反应，它负责转写、答题、截图审题，卡壳的时候还能把问答框挂在旁边。
+实时听题，自动生成专业面试回答。你可以把它理解成一个开着就能用的面试辅助工具：你负责听题和临场反应，它负责转写、答题、截图审题，卡壳的时候还能把问答框挂在旁边。
 
-面向真实技术面试场景：支持系统音频 / 麦克风转写、手动追问、截图审题、多模型切换、知识库引用；Electron 端提供共享隐身、Boss Key、托盘和轻量悬浮窗，绝大多数面试软件场景下都能避开屏幕共享检测。
+面向真实技术面试场景：支持系统音频 / 麦克风转写、截图审题、多模型切换、知识库引用；Electron 端提供共享隐身、Boss Key、托盘和轻量悬浮窗，绝大多数常见面试软件场景下都能更稳地避开屏幕共享检测，但具体效果仍建议自行充分实测。
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-284B63" alt="License" />
@@ -13,26 +13,22 @@
   <img src="https://img.shields.io/badge/desktop-Electron-6D597A" alt="Electron" />
 </p>
 
-<p align="center">
-  <a href="docs/screenshots/assist-demo.webm">
-    <img src="docs/screenshots/assist-demo-poster.png" alt="58 秒主流程演示视频封面" width="100%" />
-  </a>
-  <br />
-  <sub>点击封面播放 58 秒主流程演示视频（WebM）：实时听题 → 自动作答 → 手动追问 → 知识库引用</sub>
-</p>
+https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
 
 <p align="center">
-  <a href="docs/screenshots/assist-demo.webm"><strong>▶ 播放演示视频</strong></a>
+  <img src="docs/screenshots/assist-demo.gif" alt="面试主流程演示 GIF：实时听题、自动作答、共享隐身、知识库引用" width="100%" />
+  <br />
+  <sub>上面是 GitHub 附件视频直链，可在仓库页直接播放；下方保留 GIF 作为静态预览，仓库内原始视频文件仍保留在 <code>docs/screenshots/assist-demo.webm</code>。</sub>
 </p>
 
 ## 为什么值得试
 
-> 不是“问答玩具”，而是围绕技术面试现场的节奏设计：听题、识别问题、生成答案、继续追问、必要时引用你自己的笔记。
+> 不是“问答玩具”，而是围绕技术面试现场的节奏设计：听题、识别问题、生成答案、必要时引用你自己的笔记，并把共享隐身和悬浮窗能力一起纳入桌面端主流程。
 
 | 场景 | 能力 |
 | --- | --- |
-| **实时面试** | 系统音频 / 麦克风转写，自动识别问题，多模型并行生成回答，支持继续追问 |
-| **卡壳补位** | 一句话手动追问、代码实现提示词、截图审题、识图模型分析 |
+| **实时面试** | 系统音频 / 麦克风转写，自动识别问题，多模型并行生成回答 |
+| **卡壳补位** | 截图审题、识图模型分析、知识库引用本地笔记 |
 | **个人材料接入** | 简历上传、简历优化、知识库引用本地笔记，让答案更贴近你的经历 |
 | **桌面端使用体验** | 共享隐身、Boss Key、托盘、轻量悬浮问答框、移动到鼠标附近 |
 | **复盘与提升** | 模拟练习、知识点能力分析、求职看板、Offer 对比 |
@@ -42,10 +38,10 @@
 1. 选择系统音频或麦克风，点击开始。
 2. 左侧实时转写持续落字，系统自动识别“值得回答”的问题。
 3. 右侧答案区按当前模型配置流式生成正式回答。
-4. 遇到追问时，直接在底部输入一句补充，例如“写代码实现”或“对比区别”。
-5. 需要审图时，可粘贴截图，把题目、代码片段或页面内容交给模型分析。
-6. 开启知识库后，答案上方会显示引用角标，关联你的本地笔记或资料。
-7. 空间紧张时，可用 `⌘⇧J / Ctrl+Shift+J` 折叠左侧实时转录面板，让回答区铺满。
+4. 需要审图时，可粘贴截图，把题目、代码片段或页面内容交给模型分析。
+5. 开启知识库后，答案上方会显示引用角标，关联你的本地笔记或资料。
+6. 空间紧张时，可用 `⌘⇧J / Ctrl+Shift+J` 折叠左侧实时转录面板，让回答区铺满。
+7. 使用桌面模式时，还可以配合共享隐身、Boss Key 和悬浮提示窗一起使用，但不同面试软件策略不同，请务必自行充分实测。
 
 ## 主界面速览
 
@@ -59,7 +55,7 @@
   <tr>
     <td width="50%" valign="top">
       <h3>实时辅助</h3>
-      <p>ASR 转写、自动识别问题、流式回答、截图审题、手动追问、知识库引用、模型健康与 Token 统计。</p>
+      <p>ASR 转写、自动识别问题、流式回答、截图审题、知识库引用、模型健康与 Token 统计。</p>
     </td>
     <td width="50%" valign="top">
       <h3>桌面协同</h3>
@@ -101,7 +97,7 @@
 
 | 模块 | 现在能做什么 |
 | --- | --- |
-| **实时辅助** | ASR 转写 → 问题识别 → 多模型回答 → 手动追问 / 截图审题 / 知识库引用 |
+| **实时辅助** | ASR 转写 → 问题识别 → 多模型回答 → 截图审题 / 知识库引用 |
 | **知识库 Beta** | 上传 `.md` / `.txt` / `.log` / `.docx` / `.pdf`，支持检索测试、最近命中和回答引用 |
 | **模拟练习** | AI 面试官出题、逐题评价、练习报告 |
 | **能力分析** | 知识点标签、历史问答记录、薄弱点趋势 |
@@ -112,77 +108,37 @@
 ## 技术结构
 
 ```mermaid
-flowchart TD
-    entry["start.py / quick-start.py"]
+sequenceDiagram
+    participant Entry as start.py / quick-start.py
+    participant Client as Electron / Browser
+    participant UI as React + Vite + Zustand
+    participant API as FastAPI + WebSocket
+    participant Capture as 音频 / 截图采集
+    participant STT as STT 引擎
+    participant LLM as LLM 路由
+    participant KB as 知识库检索
+    participant DB as SQLite / 本地存储
 
-    subgraph client["客户端入口层"]
-        desktop["Electron 桌面壳\n窗口 / 托盘 / Boss Key / 悬浮窗"]
-        web["浏览器访问\nhttp://localhost:18080"]
-    end
+    Entry->>Client: 启动桌面模式或浏览器模式
+    Client->>UI: 加载实时辅助 / 模拟练习 / 看板等前端模块
+    UI->>API: 读取配置、设备列表、历史数据
+    API->>DB: 读取 config / resume / knowledge / jobs
+    DB-->>API: 返回本地状态
+    API-->>UI: REST 初始化结果
 
-    subgraph ui["前端交互层"]
-        frontend["React + Vite + Zustand"]
-        assist["实时辅助\n转写 / 回答 / 追问 / 截图审题"]
-        practice["模拟练习"]
-        knowledge["能力分析"]
-        resume["简历优化"]
-        jobs["求职看板"]
-        settings["设置中心"]
-    end
-
-    subgraph api["后端服务层"]
-        fastapi["FastAPI + WebSocket"]
-        assistApi["assist / realtime"]
-        practiceApi["practice"]
-        analyticsApi["analytics / knowledge"]
-        resumeApi["resume"]
-        jobsApi["job-tracker"]
-        commonApi["config / devices / options"]
-    end
-
-    subgraph engines["能力与基础设施"]
-        stt["STT 引擎\nfaster-whisper / 豆包 / 讯飞"]
-        llm["LLM 路由\nOpenAI 兼容接口 / Think / Vision"]
-        kb["知识库检索\n本地文档索引 / 命中引用"]
-        capture["音频与截图采集"]
-        storage["SQLite 本地存储\n配置 / 简历历史 / knowledge"]
-    end
-
-    entry --> desktop
-    entry --> web
-    desktop --> frontend
-    web --> frontend
-
-    frontend --> assist
-    frontend --> practice
-    frontend --> knowledge
-    frontend --> resume
-    frontend --> jobs
-    frontend --> settings
-
-    frontend <-->|"REST / WebSocket"| fastapi
-    fastapi --> assistApi
-    fastapi --> practiceApi
-    fastapi --> analyticsApi
-    fastapi --> resumeApi
-    fastapi --> jobsApi
-    fastapi --> commonApi
-
-    assistApi --> stt
-    assistApi --> llm
-    assistApi --> kb
-    assistApi --> capture
-    practiceApi --> llm
-    analyticsApi --> storage
-    analyticsApi --> kb
-    resumeApi --> llm
-    resumeApi --> storage
-    jobsApi --> storage
-    commonApi --> storage
-
-    stt --> capture
-    llm --> storage
-    kb --> storage
+    UI->>API: 建立 WebSocket 会话
+    UI->>API: 开始面试 / 截图审题 / 请求回答
+    API->>Capture: 采集系统音频、麦克风或屏幕区域
+    Capture->>STT: 音频流转写
+    STT-->>API: 实时转录文本
+    API->>KB: 按问题检索本地笔记
+    KB->>DB: 读取索引与命中文档
+    DB-->>KB: 返回相关片段
+    KB-->>API: 返回引用结果
+    API->>LLM: 组合转写、截图、知识库上下文
+    LLM-->>API: 流式回答 / 练习评价 / 简历建议
+    API->>DB: 持久化问答、配置、知识点与求职数据
+    API-->>UI: 推送转录、答案、引用、状态更新
 ```
 
 ### 技术栈
@@ -266,9 +222,9 @@ npm run demo:readme
 
 生成结果会输出到 `docs/screenshots/`：
 
-- `assist-demo.webm`：README 顶部主流程视频
+- `assist-demo.webm`：主流程原始视频素材
 - `assist-demo-poster.png`：视频封面
-- `assist-demo.gif`：兼容旧用法保留的动图版本
+- `assist-demo.gif`：README 顶部实际使用的 GIF 演示
 - `assist-mode.png`：实时辅助界面
 - `practice-mode.png`：模拟练习
 - `knowledge-map.png`：能力分析
