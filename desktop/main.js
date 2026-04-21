@@ -730,8 +730,42 @@ function createAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.on('before-quit', () => {
+// 优雅停止后端：发 SIGTERM,等 timeout 后兜底 SIGKILL,
+// 让 SQLite/FTS5 有机会刷盘 wal/-shm,避免下次启动恢复缓慢或索引异常。
+let pythonStopPromise = null;
+function gracefulStopPython(timeoutMs = 5000) {
+  if (pythonStopPromise) return pythonStopPromise;
+  const proc = pythonProcess;
+  if (!proc) return Promise.resolve();
+  pythonStopPromise = new Promise((resolve) => {
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; resolve(); };
+    proc.once('exit', finish);
+    try { proc.kill('SIGTERM'); } catch (err) { console.warn('[py] SIGTERM failed:', err.message); }
+    setTimeout(() => {
+      if (settled) return;
+      try {
+        if (!proc.killed) {
+          console.warn('[py] graceful timeout, escalating to SIGKILL');
+          proc.kill('SIGKILL');
+        }
+      } catch (err) {
+        console.warn('[py] SIGKILL failed:', err.message);
+      }
+      finish();
+    }, timeoutMs);
+  });
+  return pythonStopPromise;
+}
+
+app.on('before-quit', (event) => {
   isQuitting = true;
+  if (!pythonProcess || pythonStopPromise) return;
+  event.preventDefault();
+  gracefulStopPython().then(() => {
+    pythonProcess = null;
+    app.quit();
+  });
 });
 
 app.whenReady().then(async () => {
@@ -786,8 +820,10 @@ app.on('will-quit', () => {
     overlayWindow.destroy();
     overlayWindow = null;
   }
+  // 兜底:before-quit 通常已经 graceful 停过 pythonProcess,
+  // 这里 fallback 防止异常路径泄漏子进程。
   if (pythonProcess) {
-    pythonProcess.kill('SIGTERM');
+    try { pythonProcess.kill('SIGKILL'); } catch (_) { /* ignore */ }
     pythonProcess = null;
   }
 });

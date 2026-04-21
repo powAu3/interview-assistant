@@ -14,6 +14,78 @@ _log = get_logger("llm.streaming")
 
 
 # ---------------------------------------------------------------------------
+# LLM exception taxonomy (internal use; keeps yield protocol unchanged)
+# ---------------------------------------------------------------------------
+
+class LLMError(Exception):
+    """Base for all LLM-layer exceptions. ``user_msg`` is shown to end-users."""
+
+    user_msg: str = "调用大模型失败，请稍后重试。"
+
+    def __init__(self, message: str, *, cause: Optional[BaseException] = None):
+        super().__init__(message)
+        self.cause = cause
+
+
+class LLMTimeout(LLMError):
+    user_msg = "大模型响应超时（请检查网络或更换模型）。"
+
+
+class LLMAuthError(LLMError):
+    user_msg = "大模型鉴权失败（请检查 API Key）。"
+
+
+class LLMRateLimit(LLMError):
+    user_msg = "大模型触发限流，请稍后重试或切换模型。"
+
+
+class LLMContextExceeded(LLMError):
+    user_msg = "上下文超长，请清空会话或缩短问题后重试。"
+
+
+class LLMServerError(LLMError):
+    user_msg = "大模型服务端异常（5xx），稍后重试。"
+
+
+class LLMConnectionError(LLMError):
+    user_msg = "无法连接大模型服务（请检查网络/代理）。"
+
+
+class LLMProtocolError(LLMError):
+    user_msg = "大模型返回格式异常。"
+
+
+def _classify_exception(e: BaseException) -> LLMError:
+    """Map any underlying SDK/HTTP exception to a typed LLMError."""
+    if isinstance(e, LLMError):
+        return e
+    if isinstance(e, openai.APITimeoutError):
+        return LLMTimeout(str(e), cause=e)
+    if isinstance(e, openai.AuthenticationError):
+        return LLMAuthError(str(e), cause=e)
+    if isinstance(e, openai.PermissionDeniedError):
+        return LLMAuthError(str(e), cause=e)
+    if isinstance(e, openai.RateLimitError):
+        return LLMRateLimit(str(e), cause=e)
+    if isinstance(e, openai.BadRequestError):
+        msg = str(e).lower()
+        if "context" in msg or "maximum context" in msg or "token" in msg:
+            return LLMContextExceeded(str(e), cause=e)
+        return LLMError(str(e), cause=e)
+    if isinstance(e, openai.InternalServerError):
+        return LLMServerError(str(e), cause=e)
+    if isinstance(e, openai.APIConnectionError):
+        return LLMConnectionError(str(e), cause=e)
+    if isinstance(e, requests.exceptions.Timeout):
+        return LLMTimeout(str(e), cause=e)
+    if isinstance(e, requests.exceptions.ConnectionError):
+        return LLMConnectionError(str(e), cause=e)
+    if isinstance(e, requests.exceptions.RequestException):
+        return LLMConnectionError(str(e), cause=e)
+    return LLMError(str(e) or e.__class__.__name__, cause=e)
+
+
+# ---------------------------------------------------------------------------
 # Client helpers (pooled by api_key + base_url)
 # ---------------------------------------------------------------------------
 
@@ -69,7 +141,7 @@ def _vision_via_http(model_cfg, messages: list[dict]) -> str:
         "max_tokens": 4096,
         "temperature": 0,
     }
-    resp = requests.post(url, headers=headers, json=payload, timeout=120)
+    resp = requests.post(url, headers=headers, json=payload, timeout=(10, 120))
     if resp.status_code >= 400:
         raise RuntimeError(f"Vision HTTP {resp.status_code}: {resp.text[:200]}")
     data = resp.json()
@@ -125,6 +197,12 @@ _RETRYABLE_ERRORS = (
     openai.APIConnectionError,
     openai.APITimeoutError,
     openai.InternalServerError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+    LLMTimeout,
+    LLMRateLimit,
+    LLMServerError,
+    LLMConnectionError,
 )
 
 _token_stats: dict = {"prompt": 0, "completion": 0, "total": 0, "by_model": {}}
@@ -246,13 +324,24 @@ def _stream_via_http(model_cfg, full_messages, cfg, think_params):
     }
     if think_params:
         payload.update(think_params)
-    with requests.post(url, headers=headers, json=payload, stream=True, timeout=60) as resp:
+    # timeout=(connect, read): read 是「两次 byte 之间」的间隔上限，
+    # 而非整体响应时长，正好适合长流式（避免 60s 总超时硬截断）。
+    with requests.post(url, headers=headers, json=payload, stream=True, timeout=(10, 90)) as resp:
         if resp.status_code >= 400:
             try:
                 body = resp.json()
             except Exception:
                 body = resp.text
-            raise RuntimeError(f"HTTP {resp.status_code}: {str(body)[:200]}")
+            text = str(body)[:200]
+            if resp.status_code in (401, 403):
+                raise LLMAuthError(f"HTTP {resp.status_code}: {text}")
+            if resp.status_code == 429:
+                raise LLMRateLimit(f"HTTP {resp.status_code}: {text}")
+            if resp.status_code == 400 and ("context" in text.lower() or "token" in text.lower()):
+                raise LLMContextExceeded(f"HTTP {resp.status_code}: {text}")
+            if 500 <= resp.status_code < 600:
+                raise LLMServerError(f"HTTP {resp.status_code}: {text}")
+            raise LLMError(f"HTTP {resp.status_code}: {text}")
         for raw_line in resp.iter_lines(decode_unicode=False):
             if not raw_line:
                 continue
@@ -349,16 +438,31 @@ def chat_stream(
             return
 
         except _RETRYABLE_ERRORS as e:
-            _log.warning("LLM retryable error model=%s: %s", model.name, e)
-            last_error = e
+            err = _classify_exception(e)
+            _log.warning(
+                "LLM retryable error model=%s kind=%s: %s",
+                model.name, type(err).__name__, err,
+            )
+            last_error = err
             continue
         except Exception as e:
-            _log.error("LLM fatal error model=%s: %s", model.name, e, exc_info=True)
-            yield ("text", f"\n\n[LLM 错误: {str(e)}]")
+            err = _classify_exception(e)
+            _log.error(
+                "LLM fatal error model=%s kind=%s: %s",
+                model.name, type(err).__name__, err, exc_info=True,
+            )
+            yield ("text", f"\n\n[{err.user_msg}]")
             return
 
-    _log.error("All models exhausted: %s", last_error)
-    yield ("text", f"\n\n[所有模型均不可用: {str(last_error)}]")
+    if last_error is None:
+        _log.error("All models exhausted with unknown reason")
+        yield ("text", "\n\n[所有模型均不可用，请稍后重试。]")
+    else:
+        _log.error(
+            "All models exhausted kind=%s: %s",
+            type(last_error).__name__, last_error,
+        )
+        yield ("text", f"\n\n[{last_error.user_msg}]")
 
 
 def chat_stream_single_model(
@@ -398,5 +502,9 @@ def chat_stream_single_model(
                 )
                 _broadcast_tokens()
     except Exception as e:
-        _log.error("LLM single-model error model=%s: %s", model_name, e, exc_info=True)
-        yield ("text", f"\n\n[LLM 错误: {str(e)}]")
+        err = _classify_exception(e)
+        _log.error(
+            "LLM single-model error model=%s kind=%s: %s",
+            model_name, type(err).__name__, err, exc_info=True,
+        )
+        yield ("text", f"\n\n[{err.user_msg}]")

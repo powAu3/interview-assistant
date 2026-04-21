@@ -77,6 +77,7 @@ async def lifespan(app: FastAPI):
     queue: asyncio.Queue = asyncio.Queue(maxsize=500)
     ws.init_broadcast(loop, queue)
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
+    heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
     assist.init_background_workers()
     threading.Thread(target=_preload_stt, daemon=True).start()
     yield
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
     assist.stop_interview_loop()
     assist.shutdown_background_workers()
     dispatch_task.cancel()
+    heartbeat_task.cancel()
 
 
 def _preload_stt():

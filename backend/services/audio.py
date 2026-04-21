@@ -417,10 +417,19 @@ class AudioCapture:
     def current_owner(self) -> Optional[str]:
         return self._owner
 
-    def get_audio_chunk(self, timeout: float = 0.1) -> Optional[np.ndarray]:
-        chunks = []
+    # 单次最多取多少个 chunk(每个 ~64ms),避免消费者打盹后一次涌出 9 秒大块
+    # 引发 ASR 处理尖刺。32 个 chunk ≈ 2 秒音频,够 STT 一次推理用。
+    MAX_DRAIN_CHUNKS = 32
+
+    def get_audio_chunk(
+        self,
+        timeout: float = 0.1,  # noqa: ARG002 - 保留向后兼容签名
+        max_chunks: Optional[int] = None,
+    ) -> Optional[np.ndarray]:
+        limit = max_chunks if max_chunks and max_chunks > 0 else self.MAX_DRAIN_CHUNKS
+        chunks: list[np.ndarray] = []
         try:
-            while True:
+            for _ in range(limit):
                 chunks.append(self._audio_queue.get_nowait())
         except queue.Empty:
             pass
