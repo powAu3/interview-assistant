@@ -223,7 +223,7 @@ export default function PracticeMode() {
   const currentPhaseLabel = currentTurn?.phase_label ?? '模拟面试'
   const isFinished = practiceStatus === 'finished'
   const isIdle = practiceStatus === 'idle'
-  const useMeloTts = (config?.practice_tts_provider ?? 'melo_local') === 'melo_local'
+  const useEdgeTts = (config?.practice_tts_provider ?? 'edge_tts') === 'edge_tts'
   const selectedDesktopVoice = selectedVoiceURI.startsWith('say:')
     ? selectedVoiceURI.replace(/^say:/, '')
     : ''
@@ -366,7 +366,7 @@ export default function PracticeMode() {
     }
 
     const run = async () => {
-      const provider = config?.practice_tts_provider ?? 'melo_local'
+      const provider = config?.practice_tts_provider ?? 'edge_tts'
       let ok = false
       if (provider === 'volcengine' || provider === 'melo_local') {
         try {
@@ -600,13 +600,13 @@ export default function PracticeMode() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-[#8bb0d6]">播报音色偏好</p>
-                  {useMeloTts ? (
+                  {useEdgeTts ? (
                     <>
                       <div className="mt-3 rounded-2xl border border-[#f4b88a]/25 bg-[#f4b88a]/10 px-3 py-3 text-sm leading-6 text-[#f8f1e4]">
-                        当前主方案是 MeloTTS。中文路径先按单默认音色处理，不再强行给“男女声”假选择。
+                        当前主方案是 EdgeTTS。它更轻，不需要本地大模型环境；英文专有词和男/女声音色也更容易调。
                       </div>
                       <p className="mt-3 text-xs leading-6 text-[#c5b79f]">
-                        如果后续确认了多 speaker / 多音色模型，再把男女声偏好重新接回来。
+                        它是在线神经语音，适合先把体验和音色调顺；火山引擎仍然保留为云端备选。
                       </p>
                     </>
                   ) : (
@@ -659,14 +659,14 @@ export default function PracticeMode() {
                   </div>
                 </div>
 
-                {!useMeloTts && (
+                {!useEdgeTts && (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-[#8bb0d6]">本机可用 voice</p>
                   <select
                     value={selectedVoiceURI}
                     onChange={(event) => setSelectedVoiceURI(event.target.value)}
                     className="mt-3 w-full rounded-2xl border border-white/10 bg-[#0d1d31] px-3 py-3 text-sm text-[#f8f1e4] outline-none"
-                    disabled={useMeloTts}
+                    disabled={useEdgeTts}
                   >
                     <option value="">自动选择最合适的中文语音</option>
                     {voices.map((voice) => (
@@ -676,8 +676,8 @@ export default function PracticeMode() {
                     ))}
                   </select>
                   <p className="mt-3 text-xs leading-6 text-[#c5b79f]">
-                    {useMeloTts
-                      ? 'MeloTTS 作为主方案时，这里只保留兜底用的系统 voice。'
+                    {useEdgeTts
+                      ? 'EdgeTTS 作为主方案时，这里只保留兜底用的系统 voice。'
                       : '桌面端会优先枚举 macOS 系统 `say` 语音；没有时再退回浏览器 voice 列表。'}
                   </p>
                   {autoPreferredLocalVoice && (
@@ -901,7 +901,7 @@ export default function PracticeMode() {
                       : config?.practice_tts_provider === 'volcengine'
                         ? ' 预设火山引擎，失败时静默展示题目'
                         : config?.practice_tts_provider === 'melo_local'
-                          ? ' 预设 MeloTTS，未就绪时静默展示题目'
+                          ? ' 实验态 MeloTTS，未就绪时静默展示题目'
                           : ' 无播报'}
               </div>
             </div>

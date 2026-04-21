@@ -30,6 +30,8 @@ from services.practice import (
 )
 from services.stt import get_stt_engine, transcription_for_publish
 from services.tts import (
+    edge_tts_configured,
+    synthesize_edge_tts,
     melo_tts_configured,
     synthesize_melo_tts,
     synthesize_volcengine_tts,
@@ -211,6 +213,15 @@ async def api_practice_tts(body: PracticeTtsBody):
                 text,
                 preferred_gender=(body.preferred_gender or "auto"),
                 speaker=body.speaker,
+            )
+        elif provider == "edge_tts":
+            if not edge_tts_configured():
+                raise HTTPException(400, "EdgeTTS 未安装，请先执行 pip install edge-tts")
+            result = await run_in_threadpool(
+                synthesize_edge_tts,
+                text,
+                preferred_gender=(body.preferred_gender or "auto"),
+                voice=body.speaker,
             )
         elif provider == "melo_local":
             if not melo_tts_configured():

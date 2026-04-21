@@ -46,6 +46,12 @@ export interface AppConfig {
   iflytek_stt_api_key: string
   iflytek_stt_api_secret: string
   practice_tts_provider?: string
+  edge_tts_available?: boolean
+  edge_tts_status_detail?: string
+  edge_tts_voice_female?: string
+  edge_tts_voice_male?: string
+  edge_tts_rate?: string
+  edge_tts_pitch?: string
   volcengine_tts_appkey?: string
   volcengine_tts_token?: string
   practice_tts_speaker_female?: string

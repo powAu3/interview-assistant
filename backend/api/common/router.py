@@ -79,6 +79,10 @@ class ConfigUpdate(BaseModel):
     iflytek_stt_api_key: Optional[str] = None
     iflytek_stt_api_secret: Optional[str] = None
     practice_tts_provider: Optional[str] = None
+    edge_tts_voice_female: Optional[str] = None
+    edge_tts_voice_male: Optional[str] = None
+    edge_tts_rate: Optional[str] = None
+    edge_tts_pitch: Optional[str] = None
     volcengine_tts_appkey: Optional[str] = None
     volcengine_tts_token: Optional[str] = None
     practice_tts_speaker_female: Optional[str] = None
@@ -124,7 +128,11 @@ async def api_get_config():
         "iflytek_stt_app_id": cfg.iflytek_stt_app_id or "",
         "iflytek_stt_api_key": cfg.iflytek_stt_api_key or "",
         "iflytek_stt_api_secret": cfg.iflytek_stt_api_secret or "",
-        "practice_tts_provider": getattr(cfg, "practice_tts_provider", "melo_local") or "melo_local",
+        "practice_tts_provider": getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts",
+        "edge_tts_voice_female": getattr(cfg, "edge_tts_voice_female", "zh-CN-XiaoxiaoNeural") or "zh-CN-XiaoxiaoNeural",
+        "edge_tts_voice_male": getattr(cfg, "edge_tts_voice_male", "zh-CN-YunxiNeural") or "zh-CN-YunxiNeural",
+        "edge_tts_rate": getattr(cfg, "edge_tts_rate", "+0%") or "+0%",
+        "edge_tts_pitch": getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz",
         "volcengine_tts_appkey": getattr(cfg, "volcengine_tts_appkey", "") or "",
         "volcengine_tts_token": getattr(cfg, "volcengine_tts_token", "") or "",
         "practice_tts_speaker_female": getattr(cfg, "practice_tts_speaker_female", "zh_female_qingxin") or "zh_female_qingxin",
@@ -306,6 +314,14 @@ async def api_update_config(body: ConfigUpdate):
             d["practice_tts_speaker_female"] = str(d["practice_tts_speaker_female"]).strip()
         if "practice_tts_speaker_male" in d:
             d["practice_tts_speaker_male"] = str(d["practice_tts_speaker_male"]).strip()
+        if "edge_tts_voice_female" in d:
+            d["edge_tts_voice_female"] = str(d["edge_tts_voice_female"]).strip()
+        if "edge_tts_voice_male" in d:
+            d["edge_tts_voice_male"] = str(d["edge_tts_voice_male"]).strip()
+        if "edge_tts_rate" in d:
+            d["edge_tts_rate"] = str(d["edge_tts_rate"]).strip()
+        if "edge_tts_pitch" in d:
+            d["edge_tts_pitch"] = str(d["edge_tts_pitch"]).strip()
         if "melo_tts_cmd" in d:
             d["melo_tts_cmd"] = str(d["melo_tts_cmd"]).strip()
         if "melo_tts_speed" in d:

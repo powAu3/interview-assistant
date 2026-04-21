@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import json
 import re
 import shutil
 import subprocess
 import tempfile
+import asyncio
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode
@@ -39,6 +41,15 @@ def _speaker_for_gender(preferred_gender: VoiceGender) -> str:
     if preferred_gender == "female":
         return (getattr(cfg, "practice_tts_speaker_female", "") or "zh_female_qingxin").strip()
     return (getattr(cfg, "practice_tts_speaker_female", "") or "zh_female_qingxin").strip()
+
+
+def _edge_voice_for_gender(preferred_gender: VoiceGender) -> str:
+    cfg = get_config()
+    if preferred_gender == "male":
+        return (getattr(cfg, "edge_tts_voice_male", "") or "zh-CN-YunxiNeural").strip()
+    if preferred_gender == "female":
+        return (getattr(cfg, "edge_tts_voice_female", "") or "zh-CN-XiaoxiaoNeural").strip()
+    return (getattr(cfg, "edge_tts_voice_female", "") or "zh-CN-XiaoxiaoNeural").strip()
 
 
 def normalize_tts_text(text: str) -> str:
@@ -82,6 +93,14 @@ def _resolve_melo_command() -> str:
         if found:
             return found
     raise ValueError("MeloTTS 未安装或命令不可用，请先确保 `melo` / `melotts` 在 PATH 中")
+
+
+def get_edge_tts_status() -> dict:
+    available = importlib.util.find_spec("edge_tts") is not None
+    return {
+        "edge_tts_available": available,
+        "edge_tts_status_detail": "edge-tts Python 包可用" if available else "未安装 edge-tts，请执行 pip install edge-tts",
+    }
 
 
 def get_melo_tts_status() -> dict:
@@ -155,6 +174,55 @@ def synthesize_volcengine_tts(
     }
 
 
+def synthesize_edge_tts(
+    text: str,
+    *,
+    preferred_gender: VoiceGender = "auto",
+    voice: str | None = None,
+    rate: str | None = None,
+    pitch: str | None = None,
+) -> dict:
+    clean_text = normalize_tts_text(text)
+    if not clean_text:
+        raise ValueError("TTS 文本不能为空")
+    if importlib.util.find_spec("edge_tts") is None:
+        raise ValueError("edge-tts 未安装，请先执行 pip install edge-tts")
+    import edge_tts  # type: ignore
+
+    cfg = get_config()
+    resolved_voice = (voice or _edge_voice_for_gender(preferred_gender)).strip()
+    resolved_rate = (rate or getattr(cfg, "edge_tts_rate", "+0%") or "+0%").strip()
+    resolved_pitch = (pitch or getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz").strip()
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="ia-edge-tts-"))
+    output_path = tmpdir / "out.mp3"
+
+    async def _run() -> None:
+        communicate = edge_tts.Communicate(clean_text, resolved_voice, rate=resolved_rate, pitch=resolved_pitch)
+        await communicate.save(str(output_path))
+
+    try:
+        asyncio.run(_run())
+        if not output_path.exists():
+            raise ValueError("EdgeTTS 未生成输出音频")
+        audio_bytes = output_path.read_bytes()
+        return {
+            "provider": "edge_tts",
+            "speaker": resolved_voice,
+            "audio_bytes": audio_bytes,
+            "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
+            "content_type": "audio/mpeg",
+            "duration": 0.0,
+        }
+    finally:
+        try:
+            if output_path.exists():
+                output_path.unlink()
+            tmpdir.rmdir()
+        except Exception:
+            pass
+
+
 def synthesize_melo_tts(
     text: str,
     *,
@@ -210,6 +278,13 @@ def volcengine_tts_configured() -> bool:
         and (getattr(cfg, "volcengine_tts_appkey", "") or "").strip()
         and (getattr(cfg, "volcengine_tts_token", "") or "").strip()
     )
+
+
+def edge_tts_configured() -> bool:
+    cfg = get_config()
+    if (getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts") != "edge_tts":
+        return False
+    return bool(get_edge_tts_status()["edge_tts_available"])
 
 
 def melo_tts_configured() -> bool:

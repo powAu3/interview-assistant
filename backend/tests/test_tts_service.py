@@ -96,6 +96,49 @@ def test_synthesize_volcengine_tts_rejects_missing_credentials(monkeypatch):
         raise AssertionError("expected ValueError for missing credentials")
 
 
+def test_get_edge_tts_status_reports_availability(monkeypatch):
+    monkeypatch.setattr(tts_service.importlib.util, "find_spec", lambda name: object() if name == "edge_tts" else None)
+
+    status = tts_service.get_edge_tts_status()
+
+    assert status["edge_tts_available"] is True
+    assert "edge-tts" in status["edge_tts_status_detail"]
+
+
+def test_synthesize_edge_tts_uses_selected_voice(monkeypatch):
+    class _EdgeCfg(_FakeCfg):
+        practice_tts_provider = "edge_tts"
+        edge_tts_voice_female = "zh-CN-XiaoxiaoNeural"
+        edge_tts_voice_male = "zh-CN-YunxiNeural"
+        edge_tts_rate = "+0%"
+        edge_tts_pitch = "+0Hz"
+
+    seen: dict[str, object] = {}
+
+    class _Communicate:
+        def __init__(self, text, voice, rate, pitch):
+            seen["text"] = text
+            seen["voice"] = voice
+            seen["rate"] = rate
+            seen["pitch"] = pitch
+
+        async def save(self, output_path):
+            Path(output_path).write_bytes(b"ID3demo")
+
+    monkeypatch.setattr(tts_service, "get_config", lambda: _EdgeCfg())
+    monkeypatch.setattr(tts_service.importlib.util, "find_spec", lambda name: object() if name == "edge_tts" else None)
+    monkeypatch.setitem(sys.modules, "edge_tts", type("EdgeModule", (), {"Communicate": _Communicate}))
+
+    result = tts_service.synthesize_edge_tts("请讲一下 SQL 和 Redis。", preferred_gender="male")
+
+    assert result["provider"] == "edge_tts"
+    assert result["speaker"] == "zh-CN-YunxiNeural"
+    assert result["audio_bytes"] == b"ID3demo"
+    assert seen["voice"] == "zh-CN-YunxiNeural"
+    assert "sequel" in seen["text"]
+    assert "瑞迪斯" in seen["text"]
+
+
 def test_synthesize_melo_tts_uses_cli_and_returns_wav(monkeypatch, tmp_path):
     seen: dict[str, object] = {}
 

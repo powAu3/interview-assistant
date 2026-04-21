@@ -32,7 +32,11 @@ export default function SpeechTab() {
     iflytek_stt_app_id: '',
     iflytek_stt_api_key: '',
     iflytek_stt_api_secret: '',
-    practice_tts_provider: 'melo_local' as string,
+    practice_tts_provider: 'edge_tts' as string,
+    edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
+    edge_tts_voice_male: 'zh-CN-YunxiNeural',
+    edge_tts_rate: '+0%',
+    edge_tts_pitch: '+0Hz',
     volcengine_tts_appkey: '',
     volcengine_tts_token: '',
     practice_tts_speaker_female: 'zh_female_qingxin',
@@ -66,7 +70,11 @@ export default function SpeechTab() {
         iflytek_stt_app_id: config.iflytek_stt_app_id ?? '',
         iflytek_stt_api_key: config.iflytek_stt_api_key ?? '',
         iflytek_stt_api_secret: config.iflytek_stt_api_secret ?? '',
-        practice_tts_provider: config.practice_tts_provider ?? 'melo_local',
+        practice_tts_provider: config.practice_tts_provider ?? 'edge_tts',
+        edge_tts_voice_female: config.edge_tts_voice_female ?? 'zh-CN-XiaoxiaoNeural',
+        edge_tts_voice_male: config.edge_tts_voice_male ?? 'zh-CN-YunxiNeural',
+        edge_tts_rate: config.edge_tts_rate ?? '+0%',
+        edge_tts_pitch: config.edge_tts_pitch ?? '+0Hz',
         volcengine_tts_appkey: config.volcengine_tts_appkey ?? '',
         volcengine_tts_token: config.volcengine_tts_token ?? '',
         practice_tts_speaker_female: config.practice_tts_speaker_female ?? 'zh_female_qingxin',
@@ -118,19 +126,21 @@ export default function SpeechTab() {
       const text = ttsPreviewText.trim()
       if (!text) throw new Error('试听文本不能为空')
       const normalizedText = normalizePracticeTtsText(text)
-      if (form.practice_tts_provider === 'volcengine' || form.practice_tts_provider === 'melo_local') {
+      if (form.practice_tts_provider === 'volcengine' || form.practice_tts_provider === 'edge_tts') {
         const result = await api.practiceTts({
           text: normalizedText,
           preferred_gender: 'female',
-          speaker: form.practice_tts_speaker_female || undefined,
+          speaker: form.practice_tts_provider === 'edge_tts'
+            ? (form.edge_tts_voice_female || undefined)
+            : (form.practice_tts_speaker_female || undefined),
         })
         await playBase64Audio({
           audioBase64: result.audio_base64,
           contentType: result.content_type,
         })
         useInterviewStore.getState().setToastMessage(
-          form.practice_tts_provider === 'melo_local'
-            ? '已试听 MeloTTS 本地神经语音'
+          form.practice_tts_provider === 'edge_tts'
+            ? `已试听 EdgeTTS 音色：${result.speaker}`
             : `已试听火山引擎音色：${result.speaker}`,
         )
       } else if (window.electronAPI?.synthesizeSystemTts) {
@@ -161,7 +171,7 @@ export default function SpeechTab() {
   }
 
   const providers = options?.stt_providers ?? ['whisper', 'doubao', 'iflytek']
-  const practiceTtsProviders = options?.practice_tts_providers ?? ['melo_local', 'volcengine']
+  const practiceTtsProviders = options?.practice_tts_providers ?? ['edge_tts', 'volcengine']
 
   const providerMeta: Record<string, { label: string; desc: string; icon: React.ReactNode; brandClass: string }> = {
     whisper: { label: 'Whisper', desc: '本地运行，免费无限', icon: <Volume2 className="w-5 h-5" />, brandClass: 'sky' },
@@ -305,42 +315,64 @@ export default function SpeechTab() {
           >
             {practiceTtsProviders.map((provider) => (
               <option key={provider} value={provider}>
-                {provider === 'volcengine' ? '火山引擎 TTS' : provider === 'melo_local' ? 'MeloTTS 本地神经语音' : '系统语音兜底'}
+                {provider === 'volcengine' ? '火山引擎 TTS' : 'EdgeTTS 在线神经语音'}
               </option>
             ))}
           </select>
         </Field>
 
-        {form.practice_tts_provider === 'melo_local' && (
+        {form.practice_tts_provider === 'edge_tts' && (
           <GradientCard className="p-4 space-y-3 border-emerald-400/30">
             <div className="flex items-center gap-3">
               <StatusBadge
-                status={config?.melo_tts_available ? 'ok' : 'error'}
-                label={config?.melo_tts_available ? 'MeloTTS 已安装' : 'MeloTTS 未就绪'}
+                status={config?.edge_tts_available ? 'ok' : 'error'}
+                label={config?.edge_tts_available ? 'EdgeTTS 已可用' : 'EdgeTTS 未就绪'}
               />
               <span className="text-xs text-text-muted">
-                {config?.melo_tts_available
-                  ? (config?.melo_tts_resolved_cmd || '已检测到可执行命令')
-                  : (config?.melo_tts_status_detail || '请先安装 melotts 并确认 melo 命令可执行')}
+                {config?.edge_tts_status_detail || '请先安装 edge-tts'}
               </span>
             </div>
-            <Field label="MeloTTS 命令" hint="默认用 PATH 里的 melo；如果你装在别的位置，可以手填绝对路径">
+            <Field label="默认女声音色" hint="EdgeTTS 支持大量中文神经音色">
               <input
                 type="text"
-                value={form.melo_tts_cmd}
-                onChange={(e) => setForm({ ...form, melo_tts_cmd: e.target.value })}
-                placeholder="如：melo 或 /opt/homebrew/bin/melo"
+                value={form.edge_tts_voice_female}
+                onChange={(e) => setForm({ ...form, edge_tts_voice_female: e.target.value })}
+                placeholder="如：zh-CN-XiaoxiaoNeural"
                 className="input-field"
               />
             </Field>
-            <Field label="MeloTTS 语速" hint="1.0 最自然；偏快可调到 1.1 ~ 1.2">
+            <Field label="默认男声音色" hint="如需更稳重的英文/中文读法可以换男声">
               <input
-                type="number"
-                min={0.6}
-                max={1.8}
-                step={0.05}
-                value={form.melo_tts_speed}
-                onChange={(e) => setForm({ ...form, melo_tts_speed: Number(e.target.value) || 1.0 })}
+                type="text"
+                value={form.edge_tts_voice_male}
+                onChange={(e) => setForm({ ...form, edge_tts_voice_male: e.target.value })}
+                placeholder="如：zh-CN-YunxiNeural"
+                className="input-field"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="语速" hint="官方格式如 +0% / +10%">
+                <input
+                  type="text"
+                  value={form.edge_tts_rate}
+                  onChange={(e) => setForm({ ...form, edge_tts_rate: e.target.value })}
+                  className="input-field"
+                />
+              </Field>
+              <Field label="音高" hint="官方格式如 +0Hz / -10Hz">
+                <input
+                  type="text"
+                  value={form.edge_tts_pitch}
+                  onChange={(e) => setForm({ ...form, edge_tts_pitch: e.target.value })}
+                  className="input-field"
+                />
+              </Field>
+            </div>
+            <Field label="说明" hint="EdgeTTS 轻很多，但依赖网络；适合先把体验跑顺">
+              <input
+                type="text"
+                value="在线神经语音，无需 torch"
+                readOnly
                 className="input-field"
               />
             </Field>

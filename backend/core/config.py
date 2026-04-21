@@ -56,7 +56,11 @@ class AppConfig(BaseModel):
     iflytek_stt_api_key: str = ""
     iflytek_stt_api_secret: str = ""
     # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
-    practice_tts_provider: str = "melo_local"
+    practice_tts_provider: str = "edge_tts"
+    edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"
+    edge_tts_voice_male: str = "zh-CN-YunxiNeural"
+    edge_tts_rate: str = "+0%"
+    edge_tts_pitch: str = "+0Hz"
     volcengine_tts_appkey: str = ""
     volcengine_tts_token: str = ""
     practice_tts_speaker_female: str = "zh_female_qingxin"
@@ -199,6 +203,6 @@ PRACTICE_AUDIENCE_OPTIONS = ["campus_intern", "social"]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API
 STT_PROVIDER_OPTIONS = ["whisper", "doubao", "iflytek"]
-PRACTICE_TTS_PROVIDER_OPTIONS = ["melo_local", "volcengine"]
+PRACTICE_TTS_PROVIDER_OPTIONS = ["edge_tts", "volcengine"]
 # 电脑截图区域
 SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]
