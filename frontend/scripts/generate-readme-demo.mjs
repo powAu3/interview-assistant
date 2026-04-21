@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import net from 'node:net'
 import path from 'node:path'
 import process from 'node:process'
@@ -19,6 +19,8 @@ const REPO_DIR = path.resolve(FRONTEND_DIR, '..')
 const OUTPUT_DIR = path.resolve(REPO_DIR, 'docs', 'screenshots')
 const OUTPUT_GIF = path.join(OUTPUT_DIR, 'assist-demo.gif')
 const OUTPUT_POSTER = path.join(OUTPUT_DIR, 'assist-demo-poster.png')
+const OUTPUT_VIDEO = path.join(OUTPUT_DIR, 'assist-demo.webm')
+const VIDEO_TEMP_DIR = path.join(OUTPUT_DIR, '.video-tmp')
 const NPM_CMD = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 const SAMPLE_CONFIG = {
@@ -96,6 +98,102 @@ const SAMPLE_RESUME_HISTORY = {
   max: 10,
 }
 
+const SAMPLE_KB_STATUS = {
+  enabled: true,
+  trigger_modes: ['asr_realtime', 'manual_text', 'written_exam'],
+  top_k: 4,
+  deadline_ms: 150,
+  asr_deadline_ms: 80,
+  total_docs: 3,
+  total_chunks: 42,
+  last_mtime: now - 120,
+  deps: { docx: true, pdf: true, ocr: false, vision: true },
+}
+
+const SAMPLE_KB_DOCS = {
+  items: [
+    {
+      id: 1,
+      path: 'redis/持久化与主从切换.md',
+      mtime: now - 200,
+      size: 12480,
+      loader: 'markdown',
+      title: 'Redis 持久化与主从切换',
+      status: 'ok',
+      error: null,
+      chunk_count: 12,
+    },
+    {
+      id: 2,
+      path: 'system-design/缓存穿透治理.pdf',
+      mtime: now - 420,
+      size: 328000,
+      loader: 'pdf',
+      title: '缓存穿透治理',
+      status: 'ok',
+      error: null,
+      chunk_count: 16,
+    },
+    {
+      id: 3,
+      path: 'resume/项目复盘.docx',
+      mtime: now - 660,
+      size: 84560,
+      loader: 'docx',
+      title: '项目复盘',
+      status: 'ok',
+      error: null,
+      chunk_count: 14,
+    },
+  ],
+}
+
+const SAMPLE_KB_RECENT_HITS = {
+  items: [
+    {
+      ts: now - 65,
+      query: 'Redis 持久化机制，以及 AOF 和 RDB 的取舍',
+      mode: 'asr_realtime',
+      hit_count: 2,
+      latency_ms: 46,
+      timed_out: false,
+      error: null,
+      top_section_paths: ['Redis/持久化', 'Redis/主从切换'],
+    },
+    {
+      ts: now - 18,
+      query: 'Redis 缓存穿透防护的 Java 示例',
+      mode: 'manual_text',
+      hit_count: 3,
+      latency_ms: 52,
+      timed_out: false,
+      error: null,
+      top_section_paths: ['缓存/穿透治理', 'Java/缓存模式'],
+    },
+  ],
+}
+
+const SAMPLE_KB_SEARCH = {
+  hits: [
+    {
+      path: 'redis/持久化与主从切换.md',
+      section_path: 'Redis/持久化/AOF 与 RDB',
+      page: null,
+      origin: 'text',
+      score: 0.93,
+      excerpt: '线上常见做法是同时开启 AOF 与 RDB，前者偏数据完整性，后者偏恢复速度。',
+    },
+    {
+      path: 'system-design/缓存穿透治理.pdf',
+      section_path: '缓存/穿透治理/布隆过滤器',
+      page: 3,
+      origin: 'vision',
+      score: 0.87,
+      excerpt: '布隆过滤器负责快速挡掉明显不存在的 key，再配合缓存空值控制热点空穿透。',
+    },
+  ],
+}
+
 function getApiPayload(url, method) {
   const pathname = url.pathname
   if (pathname === '/api/config' && method === 'GET') return SAMPLE_CONFIG
@@ -106,7 +204,11 @@ function getApiPayload(url, method) {
   if (pathname === '/api/models/health' && method === 'GET') return { health: { 0: 'ok', 1: 'ok', 2: 'error' } }
   if (pathname === '/api/preflight/scenarios') return { scenarios: [] }
   if (pathname === '/api/preflight/run') return { ok: true }
-  if (pathname === '/api/kb/status') return { enabled: false, docs: 0, chunks: 0 }
+  if (pathname === '/api/kb/status') return SAMPLE_KB_STATUS
+  if (pathname === '/api/kb/docs') return SAMPLE_KB_DOCS
+  if (pathname === '/api/kb/hits/recent') return SAMPLE_KB_RECENT_HITS
+  if (pathname === '/api/kb/search' && method === 'POST') return SAMPLE_KB_SEARCH
+  if (pathname === '/api/kb/reindex' && method === 'POST') return { ok: true, docs: 3, chunks: 42 }
   if (pathname === '/api/knowledge/summary') return { tags: [] }
   if (pathname === '/api/knowledge/history') return { records: [], total: 0 }
   if (pathname === '/api/resume/history') return SAMPLE_RESUME_HISTORY
@@ -207,6 +309,10 @@ async function preparePage(browser, baseUrl) {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 820 },
     deviceScaleFactor: 1,
+    recordVideo: {
+      dir: VIDEO_TEMP_DIR,
+      size: { width: 1280, height: 820 },
+    },
   })
 
   await context.route('**/api/**', async (route) => {
@@ -220,7 +326,7 @@ async function preparePage(browser, baseUrl) {
   })
 
   await context.addInitScript(() => {
-    localStorage.setItem('ia-color-scheme', 'vscode-light-plus')
+    localStorage.setItem('ia-color-scheme', 'editorial-glass')
     localStorage.setItem('ia_answer_panel_layout', 'stream')
     window.confirm = () => true
 
@@ -294,6 +400,89 @@ async function preparePage(browser, baseUrl) {
         }
       },
     }
+
+    window.__IA_CAPTION__ = {
+      ensure() {
+        let root = document.getElementById('ia-demo-caption')
+        if (root) return root
+
+        root = document.createElement('div')
+        root.id = 'ia-demo-caption'
+        root.setAttribute(
+          'style',
+          [
+            'position:fixed',
+            'left:32px',
+            'right:32px',
+            'bottom:28px',
+            'z-index:9999',
+            'pointer-events:none',
+            'display:flex',
+            'justify-content:center',
+          ].join(';'),
+        )
+
+        const pill = document.createElement('div')
+        pill.setAttribute(
+          'style',
+          [
+            'max-width:920px',
+            'padding:14px 18px',
+            'border-radius:20px',
+            'background:rgba(15,23,42,0.78)',
+            'color:#f8fafc',
+            'font:600 18px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif',
+            'letter-spacing:0.01em',
+            'box-shadow:0 24px 60px rgba(15,23,42,0.28)',
+            'backdrop-filter:blur(14px)',
+            'border:1px solid rgba(255,255,255,0.12)',
+            'text-align:center',
+          ].join(';'),
+        )
+
+        const tag = document.createElement('div')
+        tag.id = 'ia-demo-caption-tag'
+        tag.setAttribute(
+          'style',
+          [
+            'display:inline-flex',
+            'align-items:center',
+            'gap:8px',
+            'margin-bottom:8px',
+            'padding:4px 10px',
+            'border-radius:999px',
+            'background:rgba(250,204,21,0.16)',
+            'color:#fde68a',
+            'font-size:11px',
+            'font-weight:700',
+            'letter-spacing:0.12em',
+            'text-transform:uppercase',
+          ].join(';'),
+        )
+        tag.textContent = 'INTERVIEW FLOW'
+
+        const text = document.createElement('div')
+        text.id = 'ia-demo-caption-text'
+        text.textContent = ''
+
+        pill.append(tag, text)
+        root.append(pill)
+        document.documentElement.append(root)
+        return root
+      },
+      set(text, tagText = 'INTERVIEW FLOW') {
+        const root = this.ensure()
+        root.style.opacity = '1'
+        const tag = document.getElementById('ia-demo-caption-tag')
+        const el = document.getElementById('ia-demo-caption-text')
+        if (tag) tag.textContent = tagText
+        if (el) el.textContent = text
+      },
+      clear() {
+        const root = this.ensure()
+        root.style.opacity = '0'
+      },
+    }
   })
 
   const page = await context.newPage()
@@ -307,6 +496,21 @@ async function emit(page, message) {
   await page.evaluate((msg) => {
     window.__IA_MOCK_WS__.emit(msg)
   }, message)
+}
+
+async function setCaption(page, text, tag = 'INTERVIEW FLOW') {
+  await page.evaluate(
+    ({ value, label }) => {
+      window.__IA_CAPTION__.set(value, label)
+    },
+    { value: text, label: tag },
+  )
+}
+
+async function clearCaption(page) {
+  await page.evaluate(() => {
+    window.__IA_CAPTION__.clear()
+  })
 }
 
 async function captureFrame(
@@ -357,35 +561,37 @@ async function runDemo(page) {
       'DeepSeek V3': { prompt: 1300, completion: 1700 },
     },
   })
-
-  await captureFrame(page, frames, { waitMs: 300, displayMs: 780 })
-  await captureFrame(page, frames, { waitMs: 220, displayMs: 720 })
+  await setCaption(page, '打开应用后，直接进入实时辅助主流程。', '00 / 起步')
+  await captureFrame(page, frames, { waitMs: 500, displayMs: 1800 })
+  await captureFrame(page, frames, { waitMs: 1200, displayMs: 1500 })
 
   const startBtn = page.locator('button:has-text("开始面试"), button:has-text("开始")').first()
-  // 等待按钮 enabled（auto-select 设备需要时间，或手动选一下）
   for (let i = 0; i < 30; i += 1) {
     const disabled = await startBtn.getAttribute('disabled').catch(() => null)
     if (disabled === null) break
-    // 尝试手动选一个 loopback 设备
     const deviceSelect = page.locator('select').filter({ hasText: /BlackHole|麦克风|Mic|System/i }).first()
     if (await deviceSelect.count().catch(() => 0)) {
       await deviceSelect.selectOption({ index: 1 }).catch(() => {})
     }
     await page.waitForTimeout(200)
   }
+
+  await setCaption(page, '选择系统音频或麦克风后，一键开始实时听题。', '01 / 听题')
+  await captureFrame(page, frames, { waitMs: 900, displayMs: 1800 })
   await startBtn.click({ force: true })
   await emit(page, { type: 'recording', value: true })
   await emit(page, { type: 'audio_level', value: 0.18 })
-  await captureFrame(page, frames, { waitMs: 220, displayMs: 620 })
+  await captureFrame(page, frames, { waitMs: 900, displayMs: 1500 })
 
   await emit(page, { type: 'transcribing', value: true })
   await emit(page, { type: 'audio_level', value: 0.46 })
-  await captureFrame(page, frames, { waitMs: 220, displayMs: 620 })
+  await captureFrame(page, frames, { waitMs: 900, displayMs: 1600 })
 
   const firstQuestion = '请你讲一下 Redis 持久化机制，以及 AOF 和 RDB 的取舍。'
   await emit(page, { type: 'transcription', text: firstQuestion })
   await emit(page, { type: 'transcribing', value: false })
-  await captureFrame(page, frames, { waitMs: 260, displayMs: 820 })
+  await setCaption(page, '问题一出来，左侧转写会实时落字。', '02 / 转写')
+  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1900 })
 
   await emit(page, {
     type: 'answer_start',
@@ -399,21 +605,22 @@ async function runDemo(page) {
     id: 'demo-1',
     chunk: '按正式面试长答来讲：先结论，再讲机制、取舍、线上做法和追问点。',
   })
-  await captureFrame(page, frames, { waitMs: 240, displayMs: 720 })
+  await setCaption(page, '右侧答案区会先组织思路，再流式生成正式回答。', '03 / 作答')
+  await captureFrame(page, frames, { waitMs: 1100, displayMs: 2000 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-1',
     chunk: `如果我是候选人，我不会把这个问题回答成“RDB 和 AOF 二选一”，而是先给结论：线上通常会同时开启两者，因为 RDB 解决的是“恢复速度”，AOF 解决的是“数据完整性”，真正要比较的是业务更怕恢复慢还是更怕丢数据。\n\n`,
   })
-  await captureFrame(page, frames, { waitMs: 240, displayMs: 760 })
+  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1800 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-1',
     chunk: `正式展开我会分五层来答：\n1. RDB 是周期性快照，优点是文件紧凑、恢复快，适合冷启动和全量恢复；缺点是两次快照之间如果实例宕机，会丢最后一段数据。\n2. AOF 是把写命令按策略追加到日志里，数据完整性更高，但文件更大、恢复更慢，而且 fsync 配置不当会把磁盘压力传导到延迟。\n3. 生产上通常会同时开启：恢复时优先用 AOF，没有 AOF 再回退到 RDB，这样能兼顾恢复能力和重启速度。\n4. 真正线上要继续看 AOF 重写时机、主从复制延迟、哨兵切换窗口、磁盘 IO 峰值，以及高峰流量下是否会放大抖动。\n5. 如果面试官继续追问，我会补一句：持久化只能解决“重启后怎么恢复”，不能单独解决“故障期间是否丢数据”，还要结合主从、故障转移和客户端重试一起看。\n`,
   })
-  await captureFrame(page, frames, { waitMs: 260, displayMs: 920 })
+  await captureFrame(page, frames, { waitMs: 1200, displayMs: 2300 })
 
   const firstAnswer = `如果我是候选人，我不会把这个问题回答成“RDB 和 AOF 二选一”，而是先给结论：线上通常会同时开启两者，因为 RDB 解决的是“恢复速度”，AOF 解决的是“数据完整性”，真正要比较的是业务更怕恢复慢还是更怕丢数据。
 
@@ -432,12 +639,13 @@ async function runDemo(page) {
     think: '按正式面试长答来讲：先结论，再讲机制、取舍、线上做法和追问点。',
     model_name: 'GPT-4.1 Mini',
   })
-  await captureFrame(page, frames, { waitMs: 300, displayMs: 1400 })
+  await captureFrame(page, frames, { waitMs: 1200, displayMs: 2100 })
 
   const input = page.getByPlaceholder('输入问题，Enter 发送')
   await input.click()
   await input.type('写代码实现：给一个 Redis 缓存穿透防护的 Java 示例', { delay: 28 })
-  await captureFrame(page, frames, { waitMs: 260, displayMs: 700 })
+  await setCaption(page, '如果面试官追问“写代码实现”，可以手动补一句继续追问。', '04 / 追问')
+  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1900 })
   await input.press('Enter')
   await emit(page, {
     type: 'answer_start',
@@ -446,21 +654,21 @@ async function runDemo(page) {
     source: 'manual_text',
     model_name: 'DeepSeek V3',
   })
-  await captureFrame(page, frames, { waitMs: 200, displayMs: 620 })
+  await captureFrame(page, frames, { waitMs: 900, displayMs: 1500 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-2',
     chunk: `这个题如果面试里让我写代码，我会先给一个“布隆过滤器 + 缓存空值”的可落地版本，因为它同时覆盖了非法 key 和热点空值两类缓存穿透。\n\n\`\`\`java\npublic String queryUser(String userId) {\n`,
   })
-  await captureFrame(page, frames, { waitMs: 220, displayMs: 720 })
+  await captureFrame(page, frames, { waitMs: 1100, displayMs: 1800 })
 
   await emit(page, {
     type: 'answer_chunk',
     id: 'demo-2',
     chunk: `    if (!bloomFilter.mightContain(userId)) return null;\n    String key = "user:" + userId;\n    String cached = redis.get(key);\n`,
   })
-  await captureFrame(page, frames, { waitMs: 220, displayMs: 820 })
+  await captureFrame(page, frames, { waitMs: 1000, displayMs: 1800 })
 
   const secondAnswer = `这个题如果面试里让我写代码，我会先给一个“布隆过滤器 + 缓存空值”的可落地版本，因为它同时覆盖了非法 key 和热点空值两类缓存穿透。
 
@@ -495,39 +703,62 @@ public String queryUser(String userId) {
     think: '',
     model_name: 'DeepSeek V3',
   })
+  await emit(page, {
+    type: 'kb_hits',
+    qa_id: 'demo-2',
+    latency_ms: 52,
+    degraded: false,
+    hit_count: 2,
+    hits: SAMPLE_KB_SEARCH.hits,
+  })
+  await captureFrame(page, frames, { waitMs: 1200, displayMs: 2100 })
 
-  await captureFrame(page, frames, { waitMs: 280, displayMs: 1400 })
-  await captureFrame(page, frames, { waitMs: 260, displayMs: 1100 })
-
-  // 额外演示：隐藏左侧实时转录面板，让回答区更聚焦
   const togglePanelBtn = page.getByRole('button', { name: /隐藏实时转录面板|显示实时转录面板/ })
   if (await togglePanelBtn.count().catch(() => 0)) {
+    await setCaption(page, '空间不够时，支持一键收起实时转录面板，把焦点留给答案。', '05 / 聚焦')
     await togglePanelBtn.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 260, displayMs: 900 })
-    await captureFrame(page, frames, { waitMs: 240, displayMs: 1100 })
+    await captureFrame(page, frames, { waitMs: 1000, displayMs: 1800 })
+    await captureFrame(page, frames, { waitMs: 1200, displayMs: 2000 })
     await togglePanelBtn.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 260, displayMs: 900 })
+    await captureFrame(page, frames, { waitMs: 900, displayMs: 1500 })
   }
 
-  // 额外演示：切到「能力分析」看看薄弱点雷达，再切回来
-  const knowledgeTab = page.getByRole('tab', { name: /能力分析/ })
-  if (await knowledgeTab.count().catch(() => 0)) {
-    await knowledgeTab.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 320, displayMs: 1300 })
-    await captureFrame(page, frames, { waitMs: 260, displayMs: 900 })
+  const kbButton = page.getByRole('button', { name: /打开知识库 Beta/ })
+  if (await kbButton.count().catch(() => 0)) {
+    await setCaption(page, '知识库可以挂载本地笔记，让回答引用你自己的材料。', '06 / KB')
+    await kbButton.first().click().catch(() => {})
+    await captureFrame(page, frames, { waitMs: 1200, displayMs: 2100 })
+
+    const recentTab = page.getByRole('button', { name: /最近命中/ })
+    if (await recentTab.count().catch(() => 0)) {
+      await recentTab.first().click().catch(() => {})
+      await captureFrame(page, frames, { waitMs: 1200, displayMs: 1900 })
+    }
+
+    const closeKb = page.getByRole('button', { name: /关闭/ })
+    if (await closeKb.count().catch(() => 0)) {
+      await closeKb.first().click().catch(() => {})
+      await captureFrame(page, frames, { waitMs: 900, displayMs: 1300 })
+    }
   }
+
   const assistTab = page.getByRole('tab', { name: /实时辅助/ })
   if (await assistTab.count().catch(() => 0)) {
     await assistTab.first().click().catch(() => {})
-    await captureFrame(page, frames, { waitMs: 300, displayMs: 1400 })
+    await captureFrame(page, frames, { waitMs: 500, displayMs: 1100 })
   }
 
-  await captureFrame(page, frames, { waitMs: 260, displayMs: 1600 })
+  await setCaption(page, '一边听题，一边组织答案，需要时再补追问或引用本地知识。', 'END / SUMMARY')
+  await captureFrame(page, frames, { waitMs: 1300, displayMs: 2200 })
+  await clearCaption(page)
+  await captureFrame(page, frames, { waitMs: 400, displayMs: 900 })
   return frames
 }
 
 async function main() {
   await mkdir(OUTPUT_DIR, { recursive: true })
+  await rm(VIDEO_TEMP_DIR, { recursive: true, force: true })
+  await mkdir(VIDEO_TEMP_DIR, { recursive: true })
 
   const port = await getFreePort()
   const baseUrl = `http://127.0.0.1:${port}`
@@ -556,6 +787,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true })
   try {
     const { context, page } = await preparePage(browser, baseUrl)
+    const recordedVideo = page.video()
     try {
       const frames = await runDemo(page)
       const gif = encodeGif(frames)
@@ -565,6 +797,12 @@ async function main() {
       console.log(`saved ${OUTPUT_POSTER}`)
     } finally {
       await context.close()
+      if (recordedVideo) {
+        const source = await recordedVideo.path()
+        await copyFile(source, OUTPUT_VIDEO)
+        console.log(`saved ${OUTPUT_VIDEO}`)
+      }
+      await rm(VIDEO_TEMP_DIR, { recursive: true, force: true })
     }
   } finally {
     await browser.close()

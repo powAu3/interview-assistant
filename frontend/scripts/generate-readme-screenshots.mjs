@@ -537,7 +537,8 @@ async function preparePage(browser, baseUrl, scenario) {
   }, initScriptConfig)
 
   const page = await context.newPage()
-  await page.goto(`${baseUrl}/?shot=${scenario}`, { waitUntil: 'networkidle' })
+  await page.goto(`${baseUrl}/?shot=${scenario}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForLoadState('networkidle').catch(() => {})
   return { context, page }
 }
 

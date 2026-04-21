@@ -1,112 +1,200 @@
 # 智能面试学习辅助助手
 
 实时听题，自动生成专业面试回答。你可以把它理解成一个开着就能用的面试辅助工具：你负责听题、追问和临场反应，它负责转写、答题、截图审题，卡壳的时候还能把问答框挂在旁边。
-面向真实技术面试场景：支持系统音频 / 麦克风转写、手动追问、截图审题、多模型切换；Electron 端提供共享隐身、Boss Key、托盘和轻量悬浮窗，绝大多数面试软件场景下都能避开屏幕共享检测。
 
-![AI 实时辅助演示](docs/screenshots/assist-demo.gif)
+面向真实技术面试场景：支持系统音频 / 麦克风转写、手动追问、截图审题、多模型切换、知识库引用；Electron 端提供共享隐身、Boss Key、托盘和轻量悬浮窗，绝大多数面试软件场景下都能避开屏幕共享检测。
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue" alt="License" />
-  <img src="https://img.shields.io/badge/python-3.10+-green" alt="Python" />
-  <img src="https://img.shields.io/badge/node-18+-orange" alt="Node" />
-  <img src="https://img.shields.io/badge/react-18-61dafb" alt="React" />
-  <img src="https://img.shields.io/badge/fastapi-0.100+-009688" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-284B63" alt="License" />
+  <img src="https://img.shields.io/badge/python-3.10+-2A9D8F" alt="Python" />
+  <img src="https://img.shields.io/badge/node-18+-E76F51" alt="Node" />
+  <img src="https://img.shields.io/badge/react-18-264653" alt="React" />
+  <img src="https://img.shields.io/badge/fastapi-WebSocket%20Streaming-F4A261" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/desktop-Electron-6D597A" alt="Electron" />
+</p>
+
+<p align="center">
+  <a href="docs/screenshots/assist-demo.webm">
+    <img src="docs/screenshots/assist-demo-poster.png" alt="58 秒主流程演示视频封面" width="100%" />
+  </a>
+  <br />
+  <sub>点击封面播放 58 秒主流程演示视频（WebM）：实时听题 → 自动作答 → 手动追问 → 知识库引用</sub>
+</p>
+
+<p align="center">
+  <a href="docs/screenshots/assist-demo.webm"><strong>▶ 播放演示视频</strong></a>
 </p>
 
 ## 为什么值得试
 
-- **实时转写**：采集系统音频或麦克风，把面试过程稳定转成文字。
-- **自动答题 + 手动追问**：识别到问题后直接生成回答，也可以临时补一句“写代码实现”继续追问。
-- **截图审题**：支持粘贴截图，把题目、代码或页面内容直接交给模型分析。
-- **多模型协同**：支持 OpenAI 兼容接口、优先模型、并行路数、自动降级、Think 与识图。
-- **桌面辅助更顺手**：Electron 端支持共享隐身、`Ctrl/Command + B` Boss Key、托盘和悬浮问答框。
-- **界面随你收放**：默认 VSCode Light+ 主题，提供 Dark+/高对比/Nord/Solarized Dark 等多套方案；主页左侧实时转录面板可 `⌘⇧J / Ctrl+Shift+J` 一键折叠，把空间让给回答区。
-- **不只是答题**：还带求职看板、能力分析、简历优化和模拟练习。
+> 不是“问答玩具”，而是围绕技术面试现场的节奏设计：听题、识别问题、生成答案、继续追问、必要时引用你自己的笔记。
 
-## 核心流程
+| 场景 | 能力 |
+| --- | --- |
+| **实时面试** | 系统音频 / 麦克风转写，自动识别问题，多模型并行生成回答，支持继续追问 |
+| **卡壳补位** | 一句话手动追问、代码实现提示词、截图审题、识图模型分析 |
+| **个人材料接入** | 简历上传、简历优化、知识库引用本地笔记，让答案更贴近你的经历 |
+| **桌面端使用体验** | 共享隐身、Boss Key、托盘、轻量悬浮问答框、移动到鼠标附近 |
+| **复盘与提升** | 模拟练习、知识点能力分析、求职看板、Offer 对比 |
 
-1. 选择系统音频或麦克风。
-2. 点击开始，实时转写面试内容。
-3. 识别到问题后自动生成回答。
-4. 需要时手动追问、补一句“写代码实现”、或直接截图审题。
-5. 如果不想一直盯主界面，可以打开悬浮问答框，把最近的问题和答案挂在旁边。
-6. 空间紧张时可以用 `⌘⇧J / Ctrl+Shift+J` 折叠左侧实时转录面板，回答区自动铺满。
+## 面试主流程
 
-静态界面预览：
+1. 选择系统音频或麦克风，点击开始。
+2. 左侧实时转写持续落字，系统自动识别“值得回答”的问题。
+3. 右侧答案区按当前模型配置流式生成正式回答。
+4. 遇到追问时，直接在底部输入一句补充，例如“写代码实现”或“对比区别”。
+5. 需要审图时，可粘贴截图，把题目、代码片段或页面内容交给模型分析。
+6. 开启知识库后，答案上方会显示引用角标，关联你的本地笔记或资料。
+7. 空间紧张时，可用 `⌘⇧J / Ctrl+Shift+J` 折叠左侧实时转录面板，让回答区铺满。
 
-![实时辅助主界面](docs/screenshots/assist-mode.png)
+## 主界面速览
+
+<p align="center">
+  <img src="docs/screenshots/assist-mode.png" alt="实时辅助主界面" width="100%" />
+</p>
+
+## 关键能力雷达
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>实时辅助</h3>
+      <p>ASR 转写、自动识别问题、流式回答、截图审题、手动追问、知识库引用、模型健康与 Token 统计。</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>桌面协同</h3>
+      <p>Electron 端提供共享隐身、Boss Key、托盘、悬浮问答框和快捷键，尽量减少主界面暴露。</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>训练与复盘</h3>
+      <p>模拟练习、问答记录、能力分析和薄弱点沉淀，方便把“答过的问题”变成“会讲的话题”。</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>求职材料</h3>
+      <p>简历上传与摘要、JD 对照优化、求职看板、Offer 对比，把面试前后动作收在一个工具里。</p>
+    </td>
+  </tr>
+</table>
+
+## 模块画廊
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/practice-mode.png" alt="模拟练习" /></td>
+    <td width="50%"><img src="docs/screenshots/knowledge-map.png" alt="能力分析" /></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>模拟练习</strong><br /><sub>AI 面试官逐题发问、打分、总结</sub></td>
+    <td align="center"><strong>能力分析</strong><br /><sub>知识点趋势、问答沉淀、薄弱项复盘</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/resume-optimizer.png" alt="简历优化" /></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><strong>简历优化</strong><br /><sub>把简历和 JD 放到一起，输出更像“能投出去”的版本</sub></td>
+  </tr>
+</table>
 
 ## 功能总览
 
-| 模块 | 说明 |
-|------|------|
-| **实时辅助** | ASR 转写 → 自动识别问题 → 多模型并行生成回答 → 手动追问 / 截图审题 |
-| **模拟练习** | AI 面试官出题、逐题评价、生成练习报告 |
-| **求职看板** | 投递进度看板（表格 / Kanban）、拖拽排序、Offer 对比、状态色彩标签 |
-| **能力分析** | 知识点 / 薄弱点沉淀、历史问答记录 |
-| **简历优化** | 上传简历，对照 JD 输出修改建议 |
-| **设置中心** | 多模型管理、STT 引擎切换、快捷键、偏好配置 |
+| 模块 | 现在能做什么 |
+| --- | --- |
+| **实时辅助** | ASR 转写 → 问题识别 → 多模型回答 → 手动追问 / 截图审题 / 知识库引用 |
+| **知识库 Beta** | 上传 `.md` / `.txt` / `.log` / `.docx` / `.pdf`，支持检索测试、最近命中和回答引用 |
+| **模拟练习** | AI 面试官出题、逐题评价、练习报告 |
+| **能力分析** | 知识点标签、历史问答记录、薄弱点趋势 |
+| **简历优化** | 上传简历，对照 JD 给出优化建议和改写方向 |
+| **求职看板** | 表格 / Kanban、状态标签、拖拽排序、Offer 对比 |
+| **设置中心** | 模型管理、STT 引擎、主题、偏好、快捷键、截图区域等配置 |
 
-## 架构
+## 技术结构
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      start.py (统一入口)                         │
-│          安装依赖 → 构建前端 → 启动后端 → (可选)启动 Electron      │
-└────────────┬────────────────────────────┬───────────────────────┘
-             │                            │
-             ▼                            ▼
-┌─────────────────────┐      ┌─────────────────────────┐
-│   desktop/ (Electron)│      │    浏览器直接访问         │
-│   main.js + preload  │      │    http://localhost:18080│
-│   窗口 · 托盘 · 快捷键 │      └────────────┬────────────┘
-└──────────┬──────────┘                     │
-           │        ┌───────────────────────┘
-           ▼        ▼
-┌──────────────────────────────────────────────────────────────┐
-│                 frontend/ (React + Vite + Zustand)            │
-│                                                              │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │实时辅助   │ │模拟练习   │ │求职看板   │ │能力分析/简历优化│  │
-│  │Answer +  │ │Practice  │ │Kanban +  │ │KnowledgeMap +  │  │
-│  │Control + │ │Mode      │ │Table +   │ │ResumeOptimizer │  │
-│  │Transcrip.│ │          │ │Offer对比  │ │                │  │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────────┘  │
-│                                                              │
-│  stores/configStore ─── hooks/useInterviewWS ─── lib/api    │
-└──────────────────────────────┬───────────────────────────────┘
-                               │  HTTP REST + WebSocket
-                               ▼
-┌──────────────────────────────────────────────────────────────┐
-│                  backend/ (FastAPI + Uvicorn)                 │
-│                                                              │
-│  api/                          services/                     │
-│  ├── assist/                   ├── stt/                      │
-│  │   ├── routes.py (HTTP)      │   ├── text_utils.py         │
-│  │   └── pipeline.py (核心)    │   ├── engines.py            │
-│  ├── common/  (通用配置)       │   └── factory.py            │
-│  ├── practice/ (模拟练习)      ├── llm/                      │
-│  ├── jobs/    (求职跟踪)       │   ├── prompts.py            │
-│  ├── analytics/(能力分析)      │   └── streaming.py          │
-│  ├── resume/  (简历优化)       ├── audio.py                  │
-│  └── realtime/ (WebSocket)     ├── storage/ (SQLite)         │
-│                                └── capture/ (截图)           │
-│  core/                                                       │
-│  ├── config.py                                               │
-│  └── session.py                                              │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    entry["start.py / quick-start.py"]
+
+    subgraph client["客户端入口层"]
+        desktop["Electron 桌面壳\n窗口 / 托盘 / Boss Key / 悬浮窗"]
+        web["浏览器访问\nhttp://localhost:18080"]
+    end
+
+    subgraph ui["前端交互层"]
+        frontend["React + Vite + Zustand"]
+        assist["实时辅助\n转写 / 回答 / 追问 / 截图审题"]
+        practice["模拟练习"]
+        knowledge["能力分析"]
+        resume["简历优化"]
+        jobs["求职看板"]
+        settings["设置中心"]
+    end
+
+    subgraph api["后端服务层"]
+        fastapi["FastAPI + WebSocket"]
+        assistApi["assist / realtime"]
+        practiceApi["practice"]
+        analyticsApi["analytics / knowledge"]
+        resumeApi["resume"]
+        jobsApi["job-tracker"]
+        commonApi["config / devices / options"]
+    end
+
+    subgraph engines["能力与基础设施"]
+        stt["STT 引擎\nfaster-whisper / 豆包 / 讯飞"]
+        llm["LLM 路由\nOpenAI 兼容接口 / Think / Vision"]
+        kb["知识库检索\n本地文档索引 / 命中引用"]
+        capture["音频与截图采集"]
+        storage["SQLite 本地存储\n配置 / 简历历史 / knowledge"]
+    end
+
+    entry --> desktop
+    entry --> web
+    desktop --> frontend
+    web --> frontend
+
+    frontend --> assist
+    frontend --> practice
+    frontend --> knowledge
+    frontend --> resume
+    frontend --> jobs
+    frontend --> settings
+
+    frontend <-->|"REST / WebSocket"| fastapi
+    fastapi --> assistApi
+    fastapi --> practiceApi
+    fastapi --> analyticsApi
+    fastapi --> resumeApi
+    fastapi --> jobsApi
+    fastapi --> commonApi
+
+    assistApi --> stt
+    assistApi --> llm
+    assistApi --> kb
+    assistApi --> capture
+    practiceApi --> llm
+    analyticsApi --> storage
+    analyticsApi --> kb
+    resumeApi --> llm
+    resumeApi --> storage
+    jobsApi --> storage
+    commonApi --> storage
+
+    stt --> capture
+    llm --> storage
+    kb --> storage
 ```
 
 ### 技术栈
 
 | 层 | 技术 |
-|---|------|
-| **前端** | React 18 · TypeScript · Vite · Zustand · Tailwind CSS · @dnd-kit · @tanstack/table |
+| --- | --- |
+| **前端** | React 18 · TypeScript · Vite · Zustand · Tailwind CSS · Playwright |
 | **后端** | Python 3.10+ · FastAPI · Uvicorn · WebSocket |
-| **语音识别** | faster-whisper (本地) · 豆包 (Volcengine) · 讯飞 |
+| **语音识别** | faster-whisper · 豆包 (Volcengine) · 讯飞 |
 | **LLM** | OpenAI 兼容接口 · 多模型并行 · Think 推理 · 识图 |
-| **存储** | SQLite (本地持久化) |
-| **桌面** | Electron (可选) |
+| **存储** | SQLite · 本地简历历史 · 知识库索引 |
+| **桌面** | Electron |
 
 ## 快速开始
 
@@ -115,7 +203,7 @@
 - Python `3.10+`
 - Node.js `18+`
 
-### 2. 安装与配置
+### 2. 安装依赖
 
 ```bash
 git clone https://github.com/powAu3/interview-assistant.git
@@ -123,32 +211,39 @@ cd interview-assistant
 
 pip install -r backend/requirements.txt
 
-# 安装并构建前端
 cd frontend
 npm install
 npm run build
 cd ..
 
 cp backend/config.example.json backend/config.json
-# 编辑 backend/config.json，填入你的模型 API Key
 ```
 
-### 3. 启动
+### 3. 配置模型
+
+- 编辑 `backend/config.json`
+- 填入你要使用的模型 API Key / Base URL / 模型名
+- 如果要启用识图、知识库、豆包语音识别，也在这里一并配置
+
+参考文档：
+
+- [配置说明](docs/配置说明.md)
+- [API 密钥与模型](docs/API密钥与模型.md)
+- [音频配置](docs/音频配置.md)
+- [豆包语音识别](docs/豆包语音识别.md)
+
+### 4. 启动应用
 
 ```bash
-python start.py                 # 桌面模式（Electron）
+python start.py                 # 桌面模式（推荐）
 python start.py --mode network  # 浏览器模式，默认 http://localhost:18080
 ```
 
 补充说明：
 
-- 首次启动若前端尚未构建，`start.py` 会自动安装前端依赖并构建，所以本机仍需要 Node.js。
-- `python quick-start.py` 等价于桌面模式的快捷启动，适合已经构建过前端的情况。
-
-推荐优先使用桌面模式：`python start.py`。
-如果只想用浏览器访问，可运行 `python start.py --mode network`。
-
-更多配置见：[配置说明](docs/配置说明.md)、[API 密钥与模型](docs/API密钥与模型.md)、[音频配置](docs/音频配置.md)、[豆包语音识别](docs/豆包语音识别.md)。
+- 首次启动如果前端尚未构建，`start.py` 会自动安装并构建前端，因此本机仍需要 Node.js。
+- `python quick-start.py` 适合已经构建过前端、想快速打开桌面模式的场景。
+- 只想在浏览器里体验时，可直接用 `--mode network`。
 
 ## 开发与自测
 
@@ -160,7 +255,7 @@ cd frontend && npm test
 python -m pytest backend/tests -q
 ```
 
-更新 README 截图：
+## README 素材更新
 
 ```bash
 cd frontend
@@ -169,41 +264,49 @@ npm run screenshots:readme
 npm run demo:readme
 ```
 
-截图和演示 GIF 都会自动输出到 `docs/screenshots/`，详细说明见 [docs/screenshots/README.md](docs/screenshots/README.md)。
+生成结果会输出到 `docs/screenshots/`：
+
+- `assist-demo.webm`：README 顶部主流程视频
+- `assist-demo-poster.png`：视频封面
+- `assist-demo.gif`：兼容旧用法保留的动图版本
+- `assist-mode.png`：实时辅助界面
+- `practice-mode.png`：模拟练习
+- `knowledge-map.png`：能力分析
+- `resume-optimizer.png`：简历优化
+
+更多说明见 [docs/screenshots/README.md](docs/screenshots/README.md)。
 
 ## 项目结构
 
-```
+```text
 interview-assistant/
-├── start.py                 # 统一入口：环境准备 → 前端构建 → 后端启动 → Electron
+├── start.py
+├── quick-start.py
 ├── backend/
-│   ├── main.py              # FastAPI 应用入口
-│   ├── api/                 # 路由层 (assist, common, practice, jobs, analytics, resume, realtime)
-│   ├── core/                # 配置 + 会话管理
-│   ├── services/            # 业务逻辑 (stt/, llm/, audio, storage/, capture/)
-│   └── tests/               # pytest 测试
+│   ├── main.py
+│   ├── api/
+│   ├── core/
+│   ├── services/
+│   └── tests/
 ├── frontend/
-│   └── src/
-│       ├── App.tsx           # 主入口组件
-│       ├── components/       # 功能组件 (实时辅助, 练习, 看板, 分析, 简历, 设置)
-│       ├── stores/           # Zustand 全局状态
-│       ├── hooks/            # WebSocket Hook
-│       └── lib/              # API 封装 + 工具函数
-├── desktop/                  # Electron 壳 (可选)
-└── docs/                     # 文档 + 截图
+│   ├── src/
+│   ├── scripts/
+│   └── package.json
+├── desktop/
+└── docs/
 ```
 
 ## 常见问题
 
 - **Node / npm 报错**：请确认 Node.js 版本为 `18+`。
-- **Electron 下载慢**：可先设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 后再在 `desktop/` 执行 `npm install`。
+- **Electron 下载慢**：可先设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`，再进入 `desktop/` 执行 `npm install`。
 - **macOS 下 sounddevice 安装失败**：先执行 `brew install portaudio`。
 - **Whisper 模型下载慢**：可设置 `export HF_ENDPOINT=https://hf-mirror.com`。
-- **端口冲突**：可改为 `python start.py --port 9090`。
+- **端口冲突**：可改用 `python start.py --port 9090`。
 
 ## 开源协议与免责
 
-- **协议**：[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)。
+- **协议**：[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)
 - **免责**：项目仅供学习研究，请勿用于学术不端、违规考试或其他不合规场景；使用后果自行承担。
 
 ## 赞赏
