@@ -22,6 +22,14 @@ from .streaming import (
     _broadcast_tokens,
     chat_stream,
     chat_stream_single_model,
+    LLMError,
+    LLMTimeout,
+    LLMAuthError,
+    LLMRateLimit,
+    LLMContextExceeded,
+    LLMServerError,
+    LLMConnectionError,
+    LLMProtocolError,
 )
 
 __all__ = [
@@ -43,4 +51,12 @@ __all__ = [
     "_broadcast_tokens",
     "chat_stream",
     "chat_stream_single_model",
+    "LLMError",
+    "LLMTimeout",
+    "LLMAuthError",
+    "LLMRateLimit",
+    "LLMContextExceeded",
+    "LLMServerError",
+    "LLMConnectionError",
+    "LLMProtocolError",
 ]

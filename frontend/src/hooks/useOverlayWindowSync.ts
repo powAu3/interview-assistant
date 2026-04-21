@@ -1,69 +1,48 @@
 import { useEffect, useRef } from 'react'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-export function useOverlayWindowSync(isRecording: boolean, appMode: string) {
+export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
+  void _isRecording
+  void _appMode
   const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
-  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
   const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
-  const interviewOverlayPanelFontSize = useUiPrefsStore((s) => s.interviewOverlayPanelFontSize)
-  const interviewOverlayPanelWidth = useUiPrefsStore((s) => s.interviewOverlayPanelWidth)
-  const interviewOverlayPanelShowBg = useUiPrefsStore((s) => s.interviewOverlayPanelShowBg)
-  const interviewOverlayPanelFontColor = useUiPrefsStore((s) => s.interviewOverlayPanelFontColor)
-  const interviewOverlayPanelHeight = useUiPrefsStore((s) => s.interviewOverlayPanelHeight)
-  const interviewOverlayLyricLines = useUiPrefsStore((s) => s.interviewOverlayLyricLines)
-  const interviewOverlayLyricFontSize = useUiPrefsStore((s) => s.interviewOverlayLyricFontSize)
-  const interviewOverlayLyricWidth = useUiPrefsStore((s) => s.interviewOverlayLyricWidth)
-  const interviewOverlayLyricColor = useUiPrefsStore((s) => s.interviewOverlayLyricColor)
+  const interviewOverlayFontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
+  const interviewOverlayFontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
+  const interviewOverlayShowBg = useUiPrefsStore((s) => s.interviewOverlayShowBg)
+  const interviewOverlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const applyInterviewOverlayState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
 
   const overlaySyncUntilRef = useRef(0)
-  const mainHiddenByOverlayRef = useRef(false)
+  const prevEnabledRef = useRef(interviewOverlayEnabled)
 
   useEffect(() => {
     if (!window.electronAPI?.syncOverlayWindow) return
     overlaySyncUntilRef.current = Date.now() + 500
-    window.electronAPI.syncOverlayWindow({
-      mode: interviewOverlayMode,
-      opacity: interviewOverlayOpacity,
-      panelFontSize: interviewOverlayPanelFontSize,
-      panelWidth: interviewOverlayPanelWidth,
-      panelShowBg: interviewOverlayPanelShowBg,
-      panelFontColor: interviewOverlayPanelFontColor,
-      panelHeight: interviewOverlayPanelHeight,
-      lyricLines: interviewOverlayLyricLines,
-      lyricFontSize: interviewOverlayLyricFontSize,
-      lyricWidth: interviewOverlayLyricWidth,
-      lyricColor: interviewOverlayLyricColor,
-    }).catch(() => {})
-  }, [
-    interviewOverlayLyricColor,
-    interviewOverlayLyricFontSize,
-    interviewOverlayLyricLines,
-    interviewOverlayLyricWidth,
-    interviewOverlayMode,
-    interviewOverlayOpacity,
-    interviewOverlayPanelFontColor,
-    interviewOverlayPanelFontSize,
-    interviewOverlayPanelHeight,
-    interviewOverlayPanelShowBg,
-    interviewOverlayPanelWidth,
-  ])
 
-  useEffect(() => {
-    if (!window.electronAPI?.hideWindow) return
-    const overlayVisible = interviewOverlayEnabled && isRecording && appMode === 'assist'
-    if (overlayVisible) {
-      window.electronAPI.getWindowState?.().then((state) => {
-        if (state?.visible) {
-          mainHiddenByOverlayRef.current = true
-          window.electronAPI!.hideWindow()
-        }
-      }).catch(() => {})
-    } else if (mainHiddenByOverlayRef.current) {
-      mainHiddenByOverlayRef.current = false
-      window.electronAPI.showWindow?.()
+    const payload: Record<string, unknown> = {
+      opacity: interviewOverlayOpacity,
+      fontSize: interviewOverlayFontSize,
+      fontColor: interviewOverlayFontColor,
+      showBg: interviewOverlayShowBg,
+      maxLines: interviewOverlayMaxLines,
     }
-  }, [appMode, interviewOverlayEnabled, isRecording])
+
+    // enabled OFF → force hide overlay + show main window
+    if (prevEnabledRef.current && !interviewOverlayEnabled) {
+      payload.enabled = false
+      payload.visible = false
+    }
+    prevEnabledRef.current = interviewOverlayEnabled
+
+    window.electronAPI.syncOverlayWindow(payload).catch(() => {})
+  }, [
+    interviewOverlayEnabled,
+    interviewOverlayOpacity,
+    interviewOverlayFontSize,
+    interviewOverlayFontColor,
+    interviewOverlayShowBg,
+    interviewOverlayMaxLines,
+  ])
 
   useEffect(() => {
     if (!window.electronAPI?.onOverlayState) return

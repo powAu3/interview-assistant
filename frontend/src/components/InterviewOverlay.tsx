@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { applyStoredColorSchemeToDocument, COLOR_SCHEME_STORAGE_KEY } from '@/lib/colorScheme'
 import {
@@ -9,54 +8,20 @@ import {
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-function compactAnswerText(text: string) {
-  return text
-    .replace(/```[\s\S]*?```/g, ' 代码片段 ')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[#>*_-]+/g, ' ')
-    .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function splitLyricLines(text: string, maxLines: number): string[] {
-  const normalized = compactAnswerText(text)
-  if (!normalized) return []
-  const segments = normalized
-    .split(/\n+|(?<=[。！？；;!?])\s*|(?<=[，、,:：])\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-
-  const lines = (segments.length > 0 ? segments : [normalized]).flatMap((segment) => {
-    if (segment.length <= 28) return [segment]
-    const chunks: string[] = []
-    for (let i = 0; i < segment.length; i += 28) chunks.push(segment.slice(i, i + 28))
-    return chunks
-  })
-
-  return lines.slice(-maxLines)
-}
-
 export default function InterviewOverlay() {
   useInterviewWS()
 
   const qaPairs = useInterviewStore((s) => s.qaPairs)
   const streamingIds = useInterviewStore((s) => s.streamingIds)
   const isRecording = useInterviewStore((s) => s.isRecording)
-  const interviewOverlayEnabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
-  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
-  const interviewOverlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
-  const interviewOverlayPanelFontSize = useUiPrefsStore((s) => s.interviewOverlayPanelFontSize)
-  const interviewOverlayPanelWidth = useUiPrefsStore((s) => s.interviewOverlayPanelWidth)
-  const interviewOverlayPanelShowBg = useUiPrefsStore((s) => s.interviewOverlayPanelShowBg)
-  const interviewOverlayPanelFontColor = useUiPrefsStore((s) => s.interviewOverlayPanelFontColor)
-  const interviewOverlayPanelHeight = useUiPrefsStore((s) => s.interviewOverlayPanelHeight)
-  const interviewOverlayLyricLines = useUiPrefsStore((s) => s.interviewOverlayLyricLines)
-  const interviewOverlayLyricFontSize = useUiPrefsStore((s) => s.interviewOverlayLyricFontSize)
-  const interviewOverlayLyricWidth = useUiPrefsStore((s) => s.interviewOverlayLyricWidth)
-  const interviewOverlayLyricColor = useUiPrefsStore((s) => s.interviewOverlayLyricColor)
-  const syncInterviewOverlayPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
-  const applyInterviewOverlayState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
+  const enabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
+  const opacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
+  const fontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
+  const fontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
+  const showBg = useUiPrefsStore((s) => s.interviewOverlayShowBg)
+  const maxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
+  const syncPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
+  const applyState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
 
   const latestQa = useMemo(() => {
     if (streamingIds.length > 0) {
@@ -67,66 +32,79 @@ export default function InterviewOverlay() {
     return qaPairs[qaPairs.length - 1] ?? null
   }, [qaPairs, streamingIds])
 
-  const waitingHint = isRecording ? '等待识别到问题…' : '开始面试后会自动出现'
-  const questionText = latestQa?.question?.trim() || waitingHint
+  const questionText = latestQa?.question?.trim() || ''
   const answerText =
     latestQa?.answer === '[已取消]'
       ? '上一条回答已取消'
-      : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : waitingHint)
+      : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : '')
   const isStreaming = latestQa ? streamingIds.includes(latestQa.id) : false
-  const lyricLines = useMemo(
-    () => splitLyricLines(answerText, interviewOverlayLyricLines),
-    [answerText, interviewOverlayLyricLines],
-  )
+  const hasContent = Boolean(latestQa)
+  const isThinking = Boolean(latestQa?.isThinking)
+
+  const statusLabel = !hasContent
+    ? (isRecording ? '聆听中' : '待命')
+    : (isThinking ? '思考中' : (isStreaming ? '输出中' : '就绪'))
+
+  const displayLines = useMemo(() => {
+    if (!answerText) return []
+    const lines = answerText.split('\n')
+    if (maxLines > 0 && lines.length > maxLines) return lines.slice(-maxLines)
+    return lines
+  }, [answerText, maxLines])
+
+  const answerScrollRef = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    if (!isStreaming) return
+    const el = answerScrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [answerText, isStreaming])
 
   useEffect(() => {
+    document.documentElement.classList.add('overlay-window')
     document.body.classList.add('overlay-window')
     applyStoredColorSchemeToDocument()
+
+    const fontHref = 'https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap'
+    let link = document.querySelector<HTMLLinkElement>(`link[href="${fontHref}"]`)
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = fontHref
+      document.head.appendChild(link)
+    }
+
     return () => {
+      document.documentElement.classList.remove('overlay-window')
       document.body.classList.remove('overlay-window')
     }
   }, [])
 
   useEffect(() => {
-    syncInterviewOverlayPrefs()
+    syncPrefs()
     window.electronAPI?.getOverlayState?.()
-      .then((payload) => {
-        if (!payload) return
-        applyInterviewOverlayState(payload)
-      })
-      .catch((error) => {
-        warnInterviewOverlaySyncIssue('failed to read overlay state during bootstrap', error)
-      })
+      .then((payload) => { if (payload) applyState(payload) })
+      .catch((error) => { warnInterviewOverlaySyncIssue('bootstrap overlay state', error) })
 
     const onStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === COLOR_SCHEME_STORAGE_KEY) {
-        applyStoredColorSchemeToDocument()
-      }
-      if (!event.key || isInterviewOverlayStorageKey(event.key)) {
-        syncInterviewOverlayPrefs()
-      }
+      if (!event.key || event.key === COLOR_SCHEME_STORAGE_KEY) applyStoredColorSchemeToDocument()
+      if (!event.key || isInterviewOverlayStorageKey(event.key)) syncPrefs()
     }
-
     window.addEventListener('storage', onStorage)
-    const removeOverlayListener = window.electronAPI?.onOverlayState?.((payload) => {
-      applyInterviewOverlayState(payload)
-    })
-
+    const removeOverlayListener = window.electronAPI?.onOverlayState?.((payload) => { applyState(payload) })
     return () => {
       window.removeEventListener('storage', onStorage)
       removeOverlayListener?.()
     }
-  }, [applyInterviewOverlayState, syncInterviewOverlayPrefs])
+  }, [applyState, syncPrefs])
 
+  // --- drag ---
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
-
-  useEffect(() => {
-    return () => dragCleanupRef.current?.()
-  }, [])
+  useEffect(() => { return () => dragCleanupRef.current?.() }, [])
 
   const onDragStart = useCallback((e: ReactMouseEvent) => {
-    if ((e.target as HTMLElement).closest('.ia-overlay-content')) return
+    if ((e.target as HTMLElement).closest('.ov-content')) return
     e.preventDefault()
     dragCleanupRef.current?.()
     dragOrigin.current = { x: e.screenX, y: e.screenY }
@@ -146,94 +124,68 @@ export default function InterviewOverlay() {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', cleanup)
     }
-
     dragCleanupRef.current = cleanup
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', cleanup)
   }, [])
 
-  if (!interviewOverlayEnabled) {
+  if (!enabled) {
     return <div className="h-screen w-screen bg-transparent" />
   }
 
-  if (interviewOverlayMode === 'lyrics') {
-    const secondaryColor = `${interviewOverlayLyricColor}99`
-    return (
-      <div className="h-screen w-screen bg-transparent flex items-start justify-center ia-overlay-drag" style={{ padding: 0 }} onMouseDown={onDragStart}>
-        <div
-          className="w-full px-4 py-1.5"
-          style={{ maxWidth: `${interviewOverlayLyricWidth}px`, opacity: interviewOverlayOpacity }}
-        >
-          {lyricLines.length > 0 ? (
-            lyricLines.map((line, index) => (
-              <p
-                key={`${index}-${line}`}
-                style={{
-                  margin: 0,
-                  fontWeight: 600,
-                  letterSpacing: '0.01em',
-                  fontSize: `${interviewOverlayLyricFontSize}px`,
-                  lineHeight: 1.26,
-                  color: index === lyricLines.length - 1 ? interviewOverlayLyricColor : secondaryColor,
-                  textShadow: '0 1px 4px rgba(0,0,0,0.7)',
-                }}
-              >
-                {line}
-                {isStreaming && index === lyricLines.length - 1 ? (
-                  <span className="inline-block w-2 h-2 ml-2 rounded-full bg-accent-green animate-pulse align-middle" />
-                ) : null}
-              </p>
-            ))
-          ) : (
-            <p style={{ color: secondaryColor, fontSize: '13px', margin: 0 }}>
-              {waitingHint}
-            </p>
-          )}
-        </div>
-      </div>
-    )
-  }
+  const questionFontSize = Math.max(11, fontSize - 2)
+  const answerFontSize = Math.max(12, fontSize)
+  const shellClass = `ov-shell ${showBg ? 'ov-shell--bg' : 'ov-shell--nobg'}`
+  const trimmedLines = maxLines > 0 ? displayLines : null
 
-  const shellClassName = interviewOverlayPanelShowBg
-    ? 'ia-overlay-shell rounded-xl'
-    : 'rounded-xl border border-white/10 bg-black/10 backdrop-blur-[6px]'
+  const renderedAnswer = hasContent ? (
+    <>
+      {trimmedLines
+        ? trimmedLines.map((line, i) => (
+            <span key={i}>
+              {line}
+              {i < trimmedLines.length - 1 && '\n'}
+            </span>
+          ))
+        : answerText}
+      {isStreaming && <span className="ov-caret" />}
+    </>
+  ) : (
+    <span className="ov-standby-hint">
+      {isRecording ? '正在聆听…' : '等待面试开始'}
+    </span>
+  )
 
   return (
-    <div className="h-screen w-screen bg-transparent flex items-start justify-end ia-overlay-drag" style={{ padding: 12 }} onMouseDown={onDragStart}>
-      <div
-          className={shellClassName}
-          style={{
-          opacity: interviewOverlayOpacity,
-          width: `${interviewOverlayPanelWidth}px`,
-          height: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight}px` : undefined,
-          color: interviewOverlayPanelFontColor,
-          minWidth: '220px',
-          maxWidth: '100vw',
-        }}
-      >
-        <div className="ia-overlay-header flex items-center gap-1.5 px-2.5 py-1 text-[8px] uppercase tracking-[0.12em] text-text-muted/55">
-          <span>overlay</span>
-          {isStreaming ? <Loader2 className="ml-auto w-3 h-3 animate-spin text-accent-green" /> : null}
-        </div>
+    <div
+      className="ov-root ov-drag"
+      onMouseDown={onDragStart}
+    >
+      <div className={shellClass} style={{ opacity, color: fontColor }}>
+        <div className="ov-grip" aria-hidden />
+
+        {showBg && (
+          <div className="ov-header">
+            <span className={`ov-dot ${isRecording ? 'ov-dot--rec' : isThinking ? 'ov-dot--think' : isStreaming ? 'ov-dot--stream' : ''}`} />
+            <span className="ov-status">{statusLabel}</span>
+            {hasContent && questionText && (
+              <span
+                className="ov-question"
+                style={{ fontSize: `${questionFontSize}px` }}
+                title={questionText}
+              >
+                {questionText}
+              </span>
+            )}
+          </div>
+        )}
+
         <div
-          className="ia-overlay-content px-2.5 py-2 space-y-2"
-          style={{
-            fontSize: `${interviewOverlayPanelFontSize}px`,
-            overflowY: 'auto',
-            maxHeight: interviewOverlayPanelHeight > 0 ? `${interviewOverlayPanelHeight - 36}px` : '100vh',
-          }}
+          ref={answerScrollRef}
+          className="ov-content ov-answer"
+          style={{ fontSize: `${answerFontSize}px` }}
         >
-          <div className="rounded-md border border-bg-hover/12 bg-bg-primary/8 px-2.5 py-1.5 leading-relaxed">
-            <span className="mr-1.5 text-[10px] font-medium text-text-muted/60">问题：</span>
-            <span style={{ fontSize: `${Math.max(interviewOverlayPanelFontSize - 1, 11)}px` }}>{questionText}</span>
-          </div>
-          <div
-            className="rounded-md border border-bg-hover/12 bg-bg-primary/8 px-2.5 py-1.75 leading-relaxed whitespace-pre-wrap break-words"
-            style={{ fontSize: `${Math.max(interviewOverlayPanelFontSize + 1, 13)}px`, lineHeight: 1.5 }}
-          >
-            <span className="mr-1.5 text-[10px] font-medium text-text-muted/60">回答：</span>
-            {answerText}
-          </div>
+          {renderedAnswer}
         </div>
       </div>
     </div>

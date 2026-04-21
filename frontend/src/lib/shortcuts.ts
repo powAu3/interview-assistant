@@ -1,4 +1,9 @@
-export type ShortcutAction = 'hideOrShowWindow' | 'hardClearSession' | 'askFromServerScreen' | 'toggleInterviewOverlay' | 'moveOverlayToMouse'
+export type ShortcutAction =
+  | 'hideOrShowWindow'
+  | 'hardClearSession'
+  | 'askFromServerScreen'
+  | 'toggleInterviewOverlay'
+  | 'moveOverlayToMouse'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
 
 export type ShortcutConfig = {
@@ -67,6 +72,10 @@ const supportedPhysicalKeys = new Map<string, string>([
   ['BracketLeft', '['],
   ['BracketRight', ']'],
   ['Backquote', '`'],
+  ['ArrowUp', 'Up'],
+  ['ArrowDown', 'Down'],
+  ['ArrowLeft', 'Left'],
+  ['ArrowRight', 'Right'],
 ])
 
 export function isMacPlatform() {
@@ -75,18 +84,33 @@ export function isMacPlatform() {
 }
 
 export function getShortcutAccelerator(event: KeyboardEvent): string | null {
-  if (event.altKey || event.shiftKey) return null
   if (!(event.metaKey || event.ctrlKey)) return null
   const key = supportedPhysicalKeys.get(event.code)
   if (!key) return null
-  return `CommandOrControl+${key}`
+  const parts: string[] = ['CommandOrControl']
+  if (event.shiftKey) parts.push('Shift')
+  if (event.altKey) parts.push('Alt')
+  parts.push(key)
+  return parts.join('+')
+}
+
+const KEY_DISPLAY: Record<string, string> = {
+  Up: '↑', Down: '↓', Left: '←', Right: '→',
 }
 
 export function getShortcutDisplay(accelerator: string) {
   const parts = accelerator.split('+')
-  const key = parts[parts.length - 1] || accelerator
   const ctrl = isMacPlatform() ? '⌘' : 'Ctrl'
-  return `${ctrl}+${key}`
+  const shiftSym = isMacPlatform() ? '⇧' : 'Shift'
+  const altSym = isMacPlatform() ? '⌥' : 'Alt'
+  const out: string[] = []
+  for (const p of parts) {
+    if (p === 'CommandOrControl') out.push(ctrl)
+    else if (p === 'Shift') out.push(shiftSym)
+    else if (p === 'Alt') out.push(altSym)
+    else out.push(KEY_DISPLAY[p] ?? p)
+  }
+  return out.join(isMacPlatform() ? '' : '+')
 }
 
 export function mergeShortcutConfigs(

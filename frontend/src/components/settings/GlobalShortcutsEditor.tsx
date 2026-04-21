@@ -57,7 +57,13 @@ export default function GlobalShortcutsEditor() {
 
   if (!window.electronAPI?.getShortcuts) return null
 
-  const items: ShortcutAction[] = ['hideOrShowWindow', 'hardClearSession', 'askFromServerScreen', 'toggleInterviewOverlay', 'moveOverlayToMouse']
+  const items: ShortcutAction[] = [
+    'hideOrShowWindow',
+    'hardClearSession',
+    'askFromServerScreen',
+    'toggleInterviewOverlay',
+    'moveOverlayToMouse',
+  ]
 
   const resetDefaults = async () => {
     if (!window.electronAPI?.resetShortcuts) return
@@ -92,8 +98,8 @@ export default function GlobalShortcutsEditor() {
   return (
     <Section title="全局快捷键" keywords="hotkey shortcut 快捷键 alt ctrl cmd shift 截图">
       <div className="bg-bg-tertiary/30 rounded-lg p-3 text-xs text-text-muted leading-relaxed">
-        统一使用 <code className="px-1 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">CommandOrControl + 单键</code>。
-        点击某项后直接按新快捷键；按 <code className="px-1 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">Esc</code> 取消录制。
+        必须以 <code className="px-1 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">⌘/Ctrl</code> 开头，可叠加 <code className="px-1 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">⇧Shift</code>、<code className="px-1 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">⌥Alt</code>。
+        支持字母、数字、方向键。点击某项后直接按新快捷键，<code className="px-1 py-0.5 rounded bg-bg-tertiary border border-bg-hover font-mono text-[11px]">Esc</code> 取消。
       </div>
       <div className="space-y-2">
         {items.map((action) => {

@@ -22,14 +22,14 @@ export default function KnowledgeButton({ className = '' }: KnowledgeButtonProps
           : '知识库 (Beta) — 让答案引用你的本地笔记'
       }
       aria-label="打开知识库 Beta"
-      className={`relative p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-amber-400 transition-all duration-200 border border-transparent hover:border-amber-500/30 flex items-center gap-1.5 ${className}`}
+      className={`relative p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-accent-amber transition-all duration-200 border border-transparent hover:border-accent-amber/40 flex items-center gap-1.5 ${className}`}
     >
       <BookOpen className="w-4 h-4" />
-      <BetaBadge className="hidden sm:inline-flex" />
+      <BetaBadge className="hidden lg:inline-flex" />
       {needsDocs && (
         <span
           aria-hidden
-          className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-bg-primary animate-pulse"
+          className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent-amber ring-2 ring-bg-primary animate-pulse"
         />
       )}
     </button>

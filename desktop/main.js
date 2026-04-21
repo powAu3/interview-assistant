@@ -4,10 +4,38 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 
+// Windows: 透明 BrowserWindow 需要 DWM 硬件加速。
+// 历史遗留 disableHardwareAcceleration() 已移除 ——
+// 它会让 setContentProtection 退化成「窗口被捕获时显示黑色」(WDA_MONITOR)，
+// 而非 Win10 2004+ 才支持的「直接从屏幕捕获中排除」(WDA_EXCLUDEFROMCAPTURE)，
+// 后者才是真正的屏幕共享隐身。
+// 如个别老 Win7/Win8 设备透明窗口出现渲染异常，可设环境变量 ELECTRON_DISABLE_HW_ACCEL=1 回退。
 if (process.platform === 'win32') {
-  app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('enable-transparent-visuals');
+  if (process.env.ELECTRON_DISABLE_HW_ACCEL === '1') {
+    app.disableHardwareAcceleration();
+  }
 }
+
+// 跨平台：阻止系统 occlusion / window list 计算把 overlay 暴露给屏幕共享 / 录屏 API。
+// 与 BrowserWindow 的 setContentProtection(true) (+ macOS type:'panel') 形成多重防御。
+//
+// macOS 真正生效的方案 (Electron PR #34362, refs issue #19880):
+// 1. enable ScreenCaptureKitMac —— 切换到 macOS 12.3+ 的 ScreenCaptureKit 实现，
+//    PR #34362 在这个 capturer 路径里 *硬编码* 跳过 setContentProtection(true) 的窗口，
+//    是目前唯一让 overlay 在「always-on-top + transparent」配置下真正隐身的方案。
+// 2. disable IOSurfaceCapturer / DesktopCaptureMacV2 —— 关掉旧 capturer 防回退,
+//    它们绕过 NSWindowSharingNone 让 setContentProtection 失效 (这正是 overlay 截图可见的根因)。
+// 3. disable CalculateNativeWinOcclusion —— 防 OS 把 overlay 列入 window list,
+//    被 CGWindowListCreateImage 类老 API 抓到。
+//
+// 三件齐备后, ScreenCaptureKit / CGWindowListCreateImage / Lark/钉钉/Zoom 屏幕共享、
+// macOS 系统截图 (Cmd+Shift+5) 都不再录到 overlay。
+app.commandLine.appendSwitch('enable-features', 'ScreenCaptureKitMac');
+app.commandLine.appendSwitch(
+  'disable-features',
+  'CalculateNativeWinOcclusion,IOSurfaceCapturer,DesktopCaptureMacV2',
+);
 const {
   ShortcutStatus,
   createShortcutState,
@@ -57,23 +85,41 @@ let overlayPositionSaveTimer = null;
 let lastOverlayState = {
   enabled: false,
   visible: false,
-  mode: 'panel',
-  opacity: 0.82,
-  panelFontSize: 13,
-  panelWidth: 420,
-  panelShowBg: true,
-  panelFontColor: '#ffffff',
-  panelHeight: 0,
-  lyricLines: 2,
-  lyricFontSize: 23,
-  lyricWidth: 760,
-  lyricColor: '#ffffff',
+  opacity: 0.88,
+  fontSize: 14,
+  fontColor: '#e2e8f0',
+  showBg: true,
+  maxLines: 0,
 };
 
-const OVERLAY_PRESETS = {
-  panel: { width: 480, height: 320, minWidth: 380, minHeight: 220, resizable: false },
-  lyrics: { width: 760, height: 160, minWidth: 420, minHeight: 120, resizable: false },
-};
+const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
+
+let _frontReassertTimer = null;
+const FRONT_REASSERT_LEVEL = 1;
+const FRONT_REASSERT_DURATION = 5000;
+const FRONT_REASSERT_INTERVAL = 500;
+
+function applyTopMost(win) {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
+  win.setContentProtection(true);
+  win.moveTop();
+}
+
+function keepWindowInFront(win) {
+  if (_frontReassertTimer) { clearInterval(_frontReassertTimer); _frontReassertTimer = null; }
+  if (!win || win.isDestroyed()) return;
+  const start = Date.now();
+  applyTopMost(win);
+  _frontReassertTimer = setInterval(() => {
+    if (!win || win.isDestroyed() || Date.now() - start > FRONT_REASSERT_DURATION) {
+      clearInterval(_frontReassertTimer);
+      _frontReassertTimer = null;
+      return;
+    }
+    applyTopMost(win);
+  }, FRONT_REASSERT_INTERVAL);
+}
 
 function getOverlayStateFilePath() {
   return path.join(app.getPath('userData'), 'overlay-window.json');
@@ -98,26 +144,9 @@ function saveOverlayWindowState(data) {
   }
 }
 
-function computeLyricWindowSize(state = lastOverlayState) {
-  const width = Math.max(420, Math.min(1200, Math.round(Number(state.lyricWidth) || 760)));
-  const lineCount = Math.max(1, Math.min(8, Math.round(Number(state.lyricLines) || 2)));
-  const fontSize = Math.max(1, Math.round(Number(state.lyricFontSize) || 23));
-  const height = Math.max(60, Math.round(fontSize * lineCount * 1.55 + 40));
-  return { width, height };
-}
-
-function getOverlayPreset(mode = 'panel', state = lastOverlayState) {
-  if (mode === 'lyrics') {
-    const { width, height } = computeLyricWindowSize(state);
-    return { width, height, minWidth: 420, minHeight: 120, resizable: false };
-  }
-  return OVERLAY_PRESETS.panel;
-}
-
-function getStoredOverlayPosition(mode = 'panel') {
-  const preset = getOverlayPreset(mode);
+function getStoredOverlayPosition() {
   const saved = loadOverlayWindowState();
-  const pos = saved?.positions?.[mode];
+  const pos = saved?.position;
   if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return null;
   const displays = screen.getAllDisplays();
   const fitsSomeDisplay = displays.some((display) => {
@@ -132,25 +161,24 @@ function getStoredOverlayPosition(mode = 'panel') {
   if (fitsSomeDisplay) return { x: pos.x, y: pos.y };
   const primary = screen.getPrimaryDisplay().workArea;
   return {
-    x: primary.x + Math.max(16, Math.round((primary.width - preset.width) / 2)),
-    y: primary.y + Math.max(16, Math.round((primary.height - preset.height) * 0.18)),
+    x: primary.x + Math.max(16, Math.round((primary.width - OVERLAY_PRESET.width) / 2)),
+    y: primary.y + Math.max(16, Math.round((primary.height - OVERLAY_PRESET.height) * 0.18)),
   };
 }
 
-function persistOverlayPosition(mode = 'panel') {
+function persistOverlayPosition() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const bounds = overlayWindow.getBounds();
   const saved = loadOverlayWindowState();
-  saved.positions = saved.positions || {};
-  saved.positions[mode] = { x: bounds.x, y: bounds.y };
+  saved.position = { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height };
   saveOverlayWindowState(saved);
 }
 
-function schedulePersistOverlayPosition(mode = 'panel') {
+function schedulePersistOverlayPosition() {
   if (overlayPositionSaveTimer) clearTimeout(overlayPositionSaveTimer);
   overlayPositionSaveTimer = setTimeout(() => {
     overlayPositionSaveTimer = null;
-    persistOverlayPosition(mode);
+    persistOverlayPosition();
   }, 180);
 }
 
@@ -259,40 +287,31 @@ function createWindow() {
   });
 }
 
-function applyOverlayPreset(mode = 'panel') {
-  if (!overlayWindow || overlayWindow.isDestroyed()) return;
-  const preset = getOverlayPreset(mode);
-  const bounds = overlayWindow.getBounds();
-  const storedPos = getStoredOverlayPosition(mode);
-  overlayWindow.setResizable(Boolean(preset.resizable));
-  overlayWindow.setMinimumSize(preset.minWidth, preset.minHeight);
-  overlayWindow.setBounds({
-    x: storedPos?.x ?? bounds.x,
-    y: storedPos?.y ?? bounds.y,
-    width: preset.width,
-    height: preset.height,
-  });
-  overlayWindow._overlayMode = mode;
-}
-
-function createOverlayWindow(mode = 'panel') {
+function createOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    applyOverlayPreset(mode);
     return overlayWindow;
   }
 
-  const preset = getOverlayPreset(mode);
-  const storedPos = getStoredOverlayPosition(mode);
+  const storedPos = getStoredOverlayPosition();
+  const saved = loadOverlayWindowState();
+  const storedSize = saved?.position;
+  const w = (storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width;
+  const h = (storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height;
+
+  // 透明浮窗: 视觉上能看到桌面, 需要 transparent: true + alpha=0 背景.
+  // 注意: setContentProtection 在 macOS 的透明窗口上只是 best effort,
+  // 对部分截图路径 (尤其是 ScreenCaptureKit) 可能无效; 这是 OS 级限制.
   overlayWindow = new BrowserWindow({
-    width: preset.width,
-    height: preset.height,
+    width: w,
+    height: h,
     ...(storedPos ? storedPos : {}),
-    minWidth: preset.minWidth,
-    minHeight: preset.minHeight,
+    minWidth: OVERLAY_PRESET.minWidth,
+    minHeight: OVERLAY_PRESET.minHeight,
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
     hasShadow: false,
-    resizable: preset.resizable,
+    resizable: OVERLAY_PRESET.resizable,
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
@@ -300,25 +319,43 @@ function createOverlayWindow(mode = 'panel') {
     alwaysOnTop: true,
     hiddenInMissionControl: true,
     show: false,
-    focusable: true,
+    autoHideMenuBar: true,
+    roundedCorners: true,
     title: `${APP_DISPLAY_NAME} Overlay`,
-    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
+  // Content protection 必须尽早调用 —— 等到 ready-to-show 时,
+  // 窗口可能已经被 window server 登记过一次, 导致 NSWindowSharingNone 漏掉初始帧
   overlayWindow.setContentProtection(true);
-  overlayWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  overlayWindow._overlayMode = mode;
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  if (process.platform === 'darwin') {
+    // macOS: NSWindowCollectionBehaviorCanJoinAllSpaces + Transient
+    // 让窗口不进入 Cmd+Tab, Mission Control, Exposé, 以及 CGWindowList
+    try {
+      overlayWindow.setHiddenInMissionControl(true);
+    } catch { /* older electron */ }
+  }
+
   overlayWindow._overlayReady = false;
+
+  overlayWindow.once('ready-to-show', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    overlayWindow.setContentProtection(true);
+    overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
+  });
   overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
   overlayWindow.webContents.on('did-finish-load', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    overlayWindow.setContentProtection(true);
     if (lastOverlayState) {
-      overlayWindow?.webContents.send('overlay-state', lastOverlayState);
+      overlayWindow.webContents.send('overlay-state', lastOverlayState);
     }
     setTimeout(() => {
       if (!overlayWindow || overlayWindow.isDestroyed()) return;
@@ -329,16 +366,19 @@ function createOverlayWindow(mode = 'panel') {
       }
     }, process.platform === 'win32' ? 120 : 0);
   });
+  overlayWindow.on('show', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    overlayWindow.setContentProtection(true);
+  });
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
     _overlayDragging = false;
     if (_blurTimer) { clearTimeout(_blurTimer); _blurTimer = null; }
+    if (_frontReassertTimer) { clearInterval(_frontReassertTimer); _frontReassertTimer = null; }
   });
-  overlayWindow.on('moved', () => {
-    const currentMode = overlayWindow?._overlayMode || lastOverlayState.mode || 'panel';
-    schedulePersistOverlayPosition(currentMode);
-  });
+  overlayWindow.on('moved', () => schedulePersistOverlayPosition());
+  overlayWindow.on('resize', () => schedulePersistOverlayPosition());
   overlayWindow.on('focus', () => {
     if (_blurTimer) clearTimeout(_blurTimer);
     _blurTimer = setTimeout(() => {
@@ -362,15 +402,13 @@ function sendOverlayState(payload) {
 
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
-  if (!overlayWindow._overlayReady) {
-    overlayWindow._pendingShow = true;
-    return;
-  }
   if (process.platform === 'darwin' || process.platform === 'win32') {
     overlayWindow.showInactive();
   } else {
     overlayWindow.show();
   }
+  overlayWindow.setContentProtection(true);
+  keepWindowInFront(overlayWindow);
 }
 
 function toggleWindow() {
@@ -536,21 +574,26 @@ const shortcutCallbacks = {
     }
   },
   toggleInterviewOverlay: () => {
-    const nextEnabled = !Boolean(lastOverlayState.enabled);
+    const nextVisible = !Boolean(lastOverlayState.visible);
     const nextState = {
       ...lastOverlayState,
-      enabled: nextEnabled,
-      visible: nextEnabled,
+      enabled: nextVisible || lastOverlayState.enabled,
+      visible: nextVisible,
     };
     sendOverlayState(nextState);
-    if (!nextEnabled) {
+
+    if (nextVisible) {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+        mainWindow._hiddenByOverlay = true;
+        mainWindow.hide();
+      }
+      createOverlayWindow();
+      showOverlayWindow();
+    } else {
+      // 快捷键仅切换 overlay 可见性, 主窗口保持原状 (用户可通过 Cmd+B 或托盘唤回).
+      // 只有 ControlBar 的 "结束面试" 按钮会走 sync-overlay-window IPC 恢复主窗口.
       if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
-      return;
     }
-    const win = createOverlayWindow(nextState.mode);
-    applyOverlayPreset(nextState.mode);
-    if (nextState.visible) showOverlayWindow();
-    else if (win && !win.isDestroyed()) win.hide();
   },
   moveOverlayToMouse: () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
@@ -559,8 +602,7 @@ const shortcutCallbacks = {
       Math.round(cursor.x + 16),
       Math.round(cursor.y + 16),
     );
-    const mode = overlayWindow._overlayMode || lastOverlayState.mode || 'panel';
-    schedulePersistOverlayPosition(mode);
+    schedulePersistOverlayPosition();
   },
 };
 
@@ -601,37 +643,48 @@ ipcMain.handle('get-window-state', () => ({
 }));
 ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   const style = {
-    mode: payload.mode === 'lyrics' ? 'lyrics' : 'panel',
     opacity: Math.max(0, Math.min(1, Number(payload.opacity) || 0)),
-    panelFontSize: Math.max(1, Math.round(Number(payload.panelFontSize) || 13)),
-    panelWidth: Math.max(180, Math.round(Number(payload.panelWidth) || 420)),
-    panelShowBg: payload.panelShowBg !== false,
-    panelFontColor: typeof payload.panelFontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.panelFontColor) ? payload.panelFontColor : '#ffffff',
-    panelHeight: Math.max(0, Math.min(1200, Math.round(Number(payload.panelHeight) || 0))),
-    lyricLines: Math.max(1, Math.min(8, Math.round(Number(payload.lyricLines) || 2))),
-    lyricFontSize: Math.max(1, Math.round(Number(payload.lyricFontSize) || 23)),
-    lyricWidth: Math.max(420, Math.min(1200, Math.round(Number(payload.lyricWidth) || 760))),
-    lyricColor: typeof payload.lyricColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.lyricColor) ? payload.lyricColor : '#ffffff',
+    fontSize: Math.max(10, Math.min(48, Math.round(Number(payload.fontSize) || 14))),
+    fontColor: typeof payload.fontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.fontColor) ? payload.fontColor : '#e2e8f0',
+    showBg: payload.showBg !== false,
+    maxLines: Math.max(0, Math.min(50, Math.round(Number(payload.maxLines) || 0))),
   };
 
-  const state = { ...lastOverlayState, ...style };
-  const modeChanged = lastOverlayState.mode !== state.mode;
+  const nextEnabled = typeof payload.enabled === 'boolean' ? payload.enabled : Boolean(lastOverlayState.enabled);
+  const nextVisible = typeof payload.visible === 'boolean' ? payload.visible : Boolean(lastOverlayState.visible);
+
+  const state = { ...lastOverlayState, ...style, enabled: nextEnabled, visible: nextVisible };
+  const visibleChanged = Boolean(lastOverlayState.visible) !== state.visible;
 
   lastOverlayState = state;
   sendOverlayState(state);
 
-  if (!state.enabled) {
+  if (visibleChanged) {
+    if (state.visible) {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+        mainWindow._hiddenByOverlay = true;
+        mainWindow.hide();
+      }
+    } else {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow._hiddenByOverlay) {
+        mainWindow._hiddenByOverlay = false;
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  }
+
+  if (!state.visible) {
     if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
     return { ok: true, visible: false };
   }
 
-  if (modeChanged) {
-    const win = createOverlayWindow(state.mode);
-    applyOverlayPreset(state.mode);
-    if (state.visible) showOverlayWindow();
-    else if (win && !win.isDestroyed()) win.hide();
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow();
   }
-  return { ok: true, visible: state.visible };
+
+  showOverlayWindow();
+  return { ok: true, visible: true };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
 ipcMain.handle('move-overlay-window', (_event, dx, dy) => {
@@ -677,8 +730,42 @@ function createAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.on('before-quit', () => {
+// 优雅停止后端：发 SIGTERM,等 timeout 后兜底 SIGKILL,
+// 让 SQLite/FTS5 有机会刷盘 wal/-shm,避免下次启动恢复缓慢或索引异常。
+let pythonStopPromise = null;
+function gracefulStopPython(timeoutMs = 5000) {
+  if (pythonStopPromise) return pythonStopPromise;
+  const proc = pythonProcess;
+  if (!proc) return Promise.resolve();
+  pythonStopPromise = new Promise((resolve) => {
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; resolve(); };
+    proc.once('exit', finish);
+    try { proc.kill('SIGTERM'); } catch (err) { console.warn('[py] SIGTERM failed:', err.message); }
+    setTimeout(() => {
+      if (settled) return;
+      try {
+        if (!proc.killed) {
+          console.warn('[py] graceful timeout, escalating to SIGKILL');
+          proc.kill('SIGKILL');
+        }
+      } catch (err) {
+        console.warn('[py] SIGKILL failed:', err.message);
+      }
+      finish();
+    }, timeoutMs);
+  });
+  return pythonStopPromise;
+}
+
+app.on('before-quit', (event) => {
   isQuitting = true;
+  if (!pythonProcess || pythonStopPromise) return;
+  event.preventDefault();
+  gracefulStopPython().then(() => {
+    pythonProcess = null;
+    app.quit();
+  });
 });
 
 app.whenReady().then(async () => {
@@ -703,6 +790,15 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   registerShortcuts();
+
+  setImmediate(() => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) return;
+    try {
+      createOverlayWindow();
+    } catch (error) {
+      console.warn('overlay preheat failed:', error?.message || error);
+    }
+  });
 });
 
 app.on('window-all-closed', () => {
@@ -724,8 +820,10 @@ app.on('will-quit', () => {
     overlayWindow.destroy();
     overlayWindow = null;
   }
+  // 兜底:before-quit 通常已经 graceful 停过 pythonProcess,
+  // 这里 fallback 防止异常路径泄漏子进程。
   if (pythonProcess) {
-    pythonProcess.kill('SIGTERM');
+    try { pythonProcess.kill('SIGKILL'); } catch (_) { /* ignore */ }
     pythonProcess = null;
   }
 });

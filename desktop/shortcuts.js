@@ -49,6 +49,7 @@ const SUPPORTED_KEYS = new Set([
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
   ...'0123456789'.split(''),
   '.', '/', '\\', '-', '=', ',', ';', "'", '[', ']', '`',
+  'Up', 'Down', 'Left', 'Right',
 ]);
 
 function createShortcutState(overrides = {}) {
@@ -71,6 +72,7 @@ function getShortcutsFilePath(app) {
 function isValidShortcutKey(key) {
   if (typeof key !== 'string' || !key.trim()) return false;
   const parts = key.trim().split('+');
+  // 严格形式：CommandOrControl + 单个 SUPPORTED_KEYS 项；不允许中间修饰键
   if (parts.length !== 2) return false;
   if (parts[0] !== 'CommandOrControl') return false;
   return SUPPORTED_KEYS.has(parts[1]);

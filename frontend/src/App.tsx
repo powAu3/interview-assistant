@@ -15,6 +15,7 @@ import TranscriptionPanel from '@/components/TranscriptionPanel'
 import AnswerPanel from '@/components/AnswerPanel'
 import ControlBar from '@/components/ControlBar'
 import SettingsDrawer from '@/components/SettingsDrawer'
+import SessionSettingsPopover from '@/components/SessionSettingsPopover'
 import KnowledgeButton from '@/components/kb/KnowledgeButton'
 import KnowledgeDrawer from '@/components/kb/KnowledgeDrawer'
 const PracticeMode = lazy(() => import('@/components/PracticeMode'))
@@ -25,11 +26,10 @@ const JobTracker = lazy(() => import('@/components/JobTracker'))
 export default function App() {
   useInterviewWS()
   // 精确订阅, 避免 store 任意字段变化(LLM token 流式 / toast 等)触发 App 重渲染
-  const { config, toggleSettings, openConfigDrawer, openModelsDrawer } = useInterviewStore(
+  const { config, toggleSettings, openModelsDrawer } = useInterviewStore(
     useShallow((s) => ({
       config: s.config,
       toggleSettings: s.toggleSettings,
-      openConfigDrawer: s.openConfigDrawer,
       openModelsDrawer: s.openModelsDrawer,
     })),
   )
@@ -44,11 +44,9 @@ export default function App() {
   const toggleAssistTranscriptCollapsed = useUiPrefsStore((s) => s.toggleAssistTranscriptCollapsed)
   useOverlayWindowSync(isRecording, appMode)
 
-  // job-tracker is now available on both web and Electron
-  const [editingPos, setEditingPos] = useState(false)
-  const [editingLang, setEditingLang] = useState(false)
-  const [customInput, setCustomInput] = useState('')
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
+  const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
+  const sessionAnchorRef = useRef<HTMLButtonElement | null>(null)
 
   const {
     assistSplitContainerRef,
@@ -98,25 +96,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [appMode, toggleAssistTranscriptCollapsed])
 
-  const handlePositionChange = useCallback(async (val: string) => {
-    const v = val.trim()
-    if (v && v !== useInterviewStore.getState().config?.position) {
-      await updateConfigAndRefresh({ position: v })
-    }
-  }, [])
-  const handleLanguageChange = useCallback(async (val: string) => {
-    const v = val.trim()
-    if (v && v !== useInterviewStore.getState().config?.language) {
-      await updateConfigAndRefresh({ language: v })
-    }
-  }, [])
   const handleModelChange = useCallback(async (active_model: number) => {
     await updateConfigAndRefresh({ active_model })
     useInterviewStore.getState().setToastMessage('已设为优先答题模型（实时辅助优先占用该路）')
-  }, [])
-  const handleThinkToggle = useCallback(async () => {
-    const cur = useInterviewStore.getState().config?.think_mode
-    await updateConfigAndRefresh({ think_mode: !cur })
   }, [])
 
   const handleServerScreenAsk = useCallback(async () => {
@@ -131,21 +113,13 @@ export default function App() {
     }
   }, [])
 
-  const options = useInterviewStore((s) => s.options)
   const activeModel = config?.models?.[config.active_model]
   const modelHealth = useInterviewStore((s) => s.modelHealth)
-  const tokenUsage = useInterviewStore((s) => s.tokenUsage)
   const fallbackToast = useInterviewStore((s) => s.fallbackToast)
   const toastMessage = useInterviewStore((s) => s.toastMessage)
   const toasts = useInterviewStore((s) => s.toasts)
   const dismissToast = useInterviewStore((s) => s.dismissToast)
   const wsIsLeader = useInterviewStore((s) => s.wsIsLeader)
-
-  const formatTokens = (n: number) => {
-    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
-    return String(n)
-  }
 
   useEffect(() => {
     if (!fallbackToast) return
@@ -220,9 +194,9 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden noise-bg">
-      {/* Header */}
-      <header className="header-gradient flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 md:px-5 py-2.5 flex-shrink-0 gap-y-2">
-        <div className="flex items-center gap-2 md:gap-2.5 flex-shrink-0 min-w-0 flex-wrap">
+      {/* Header — 强制单行不换行, 各按钮文字按宽度阶梯隐藏, 实在不够再让左区横向滚动 */}
+      <header className="header-gradient flex flex-row items-center justify-between gap-2 px-3 md:px-5 py-2.5 flex-shrink-0 min-w-0">
+        <div className="flex items-center gap-2 md:gap-2.5 flex-shrink min-w-0 overflow-hidden">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-blue/20 to-accent-blue/5 flex items-center justify-center border border-accent-blue/10">
               <span className="text-sm">🎙️</span>
@@ -247,23 +221,21 @@ export default function App() {
             ))}
           </div>
 
-          <div className="flex items-center gap-1.5 ml-1.5 flex-shrink-0 bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20">
-            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
-            <span className="text-[10px] text-text-muted hidden lg:inline font-medium">
-              {sttLoaded ? 'STT就绪' : sttLoading ? '加载中' : '未加载'}
-            </span>
-          </div>
-
-          {isRecording && (
+          {/* 状态 chip:合并 STT + REC,录音中优先显示 REC,平时显示 STT 状态 */}
+          {isRecording ? (
             <div
-              className={`flex items-center gap-1.5 ml-1 flex-shrink-0 rounded-lg px-2 py-1 border animate-fade-up ${
+              className={`flex items-center gap-1.5 ml-1.5 flex-shrink-0 rounded-lg px-2 py-1 border animate-fade-up ${
                 isPaused
                   ? 'bg-accent-amber/10 border-accent-amber/30'
                   : 'bg-accent-red/10 border-accent-red/30'
               }`}
               role="status"
               aria-live="polite"
-              title={isPaused ? '录音已暂停' : '正在录音中'}
+              title={
+                isPaused
+                  ? `录音已暂停 · STT ${sttLoaded ? '就绪' : sttLoading ? '加载中' : '未加载'}`
+                  : `正在录音中 · STT ${sttLoaded ? '就绪' : sttLoading ? '加载中' : '未加载'}`
+              }
             >
               <span className="relative inline-flex w-1.5 h-1.5 flex-shrink-0">
                 {!isPaused && (
@@ -275,66 +247,45 @@ export default function App() {
                 />
               </span>
               <span
-                className={`text-[10px] font-semibold leading-none hidden md:inline ${isPaused ? 'text-accent-amber' : 'text-accent-red'}`}
+                className={`text-[10px] font-semibold leading-none hidden sm:inline ${isPaused ? 'text-accent-amber' : 'text-accent-red'}`}
               >
                 {isPaused ? 'PAUSED' : 'REC'}
               </span>
             </div>
-          )}
-
-          {tokenUsage.total > 0 && (
+          ) : (
             <div
-              className="hidden xl:flex items-center gap-1.5 ml-1 cursor-help bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20"
-              title={[
-                `总计 ${tokenUsage.total}（Prompt ${tokenUsage.prompt} + Completion ${tokenUsage.completion}）`,
-                ...Object.entries(tokenUsage.byModel || {}).map(
-                  ([name, v]) => `${name}: P ${v.prompt} · C ${v.completion}`,
-                ),
-              ].join('\n')}
+              className="flex items-center gap-1.5 ml-1.5 flex-shrink-0 bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20"
+              title={
+                sttLoaded
+                  ? 'STT 模型已加载 · 等待录音'
+                  : sttLoading
+                  ? 'STT 模型加载中…'
+                  : 'STT 模型尚未加载,首次录音时会自动加载'
+              }
             >
-              <span className="text-[10px] text-text-muted font-medium">Token</span>
-              <span className="text-[10px] text-accent-blue font-mono font-medium">{formatTokens(tokenUsage.total)}</span>
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
+              <span className="text-[10px] text-text-muted hidden md:inline font-medium">
+                {sttLoaded ? 'STT 就绪' : sttLoading ? '加载中' : '未加载'}
+              </span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-wrap w-full sm:w-auto justify-end sm:justify-start border-t border-bg-tertiary/30 pt-2 sm:border-t-0 sm:pt-0">
-          <button
-            type="button"
-            onClick={handleThinkToggle}
-            className={`flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-xl border transition-all duration-200 cursor-pointer select-none flex-shrink-0 mr-auto sm:mr-0 order-first sm:order-none
-              ${config?.think_mode
-                ? 'border-accent-green/40 bg-accent-green/10 text-accent-green shadow-sm shadow-accent-green/10'
-                : 'border-bg-hover/60 bg-bg-tertiary/50 text-text-secondary hover:border-text-muted/30 hover:text-text-primary'}`}
-            title="Think·全局：开启后请求模型思考能力（与配置页同步）"
-            aria-label={`Think 全局 ${config?.think_mode ? '开启' : '关闭'}`}
-          >
-            <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap leading-none">
-              Think
-            </span>
-            <span
-              className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 flex-shrink-0 ${config?.think_mode ? 'bg-accent-green' : 'bg-bg-hover/80'}`}
-              aria-hidden
-            >
-              <span
-                className={`absolute top-[2px] left-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200 ${config?.think_mode ? 'translate-x-[14px]' : ''}`}
-              />
-            </span>
-          </button>
+        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-nowrap justify-end">
           {config?.models && config.models.length > 0 && (
             <div className="relative" ref={modelDropdownRef}>
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                title={`优先答题模型 · ${activeModel?.name ?? ''}\n状态：${healthLabel(config.active_model)}`}
-                aria-label={`优先答题模型 ${activeModel?.name ?? ''}，${healthLabel(config.active_model)}`}
-                className="flex items-center gap-1.5 bg-bg-tertiary/50 text-text-primary text-xs rounded-xl px-2.5 py-1.5 border border-bg-hover/50 hover:border-accent-blue/40 transition-all duration-200 max-w-[130px] md:max-w-[160px]"
+                title={`优先答题模型 · ${activeModel?.name ?? ''}\n状态:${healthLabel(config.active_model)}`}
+                aria-label={`优先答题模型 ${activeModel?.name ?? ''},${healthLabel(config.active_model)}`}
+                className="flex items-center gap-1.5 bg-bg-tertiary/50 text-text-primary text-xs rounded-xl px-2 py-1.5 sm:px-2.5 border border-bg-hover/50 hover:border-accent-blue/40 transition-all duration-200 max-w-[110px] md:max-w-[160px]"
               >
                 <div
                   className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`}
                   aria-hidden
                 />
-                <span className="truncate min-w-0 font-medium">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
+                <span className="truncate min-w-0 font-medium hidden sm:inline">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
                 <svg className={`w-3 h-3 flex-shrink-0 text-text-muted transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
               {modelDropdownOpen && (
@@ -359,40 +310,39 @@ export default function App() {
               )}
             </div>
           )}
-          {editingPos ? (
-            <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
-              onBlur={() => { if (customInput.trim()) handlePositionChange(customInput.trim()); setEditingPos(false) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingPos(false) }}
-              placeholder="输入岗位" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[80px] sm:w-[100px]" />
-          ) : (
-            <select value={config?.position ?? ''} onChange={(e) => {
-              if (e.target.value === '__custom__') { setCustomInput(''); setEditingPos(true) }
-              else handlePositionChange(e.target.value)
-            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[70px] sm:max-w-[90px] md:max-w-[120px]">
-              {(options?.positions ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
-              {config?.position && !(options?.positions ?? []).includes(config.position) && (
-                <option value={config.position}>{config.position}</option>
+
+          {/* 会场设置:聚合 Think + 岗位 + 语言 + Token */}
+          <div className="relative">
+            <button
+              ref={sessionAnchorRef}
+              type="button"
+              onClick={() => setSessionPopoverOpen((v) => !v)}
+              title="会场设置:Think 思考模式 / 岗位 / 语言 / Token 用量"
+              aria-haspopup="dialog"
+              aria-expanded={sessionPopoverOpen}
+              aria-label="打开会场设置"
+              className={`relative inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs border transition-all duration-200 flex-shrink-0
+                ${sessionPopoverOpen
+                  ? 'border-accent-blue/50 bg-accent-blue/10 text-accent-blue shadow-sm shadow-accent-blue/10'
+                  : 'border-bg-hover/50 bg-bg-tertiary/50 text-text-secondary hover:border-accent-blue/40 hover:text-text-primary'}`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="font-medium hidden sm:inline">会场</span>
+              {config?.think_mode && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-green ring-2 ring-bg-primary shadow-[0_0_6px] shadow-accent-green/60"
+                  aria-hidden
+                  title="Think 已开启"
+                />
               )}
-              <option value="__custom__">自定义...</option>
-            </select>
-          )}
-          {editingLang ? (
-            <input value={customInput} onChange={(e) => setCustomInput(e.target.value)} autoFocus
-              onBlur={() => { if (customInput.trim()) handleLanguageChange(customInput.trim()); setEditingLang(false) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingLang(false) }}
-              placeholder="输入语言" className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-accent-blue focus:outline-none w-[70px] sm:w-[90px]" />
-          ) : (
-            <select value={config?.language ?? ''} onChange={(e) => {
-              if (e.target.value === '__custom__') { setCustomInput(''); setEditingLang(true) }
-              else handleLanguageChange(e.target.value)
-            }} className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-1.5 border border-bg-hover focus:outline-none focus:border-accent-blue max-w-[60px] sm:max-w-[80px] md:max-w-[100px]">
-              {(options?.languages ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
-              {config?.language && !(options?.languages ?? []).includes(config.language) && (
-                <option value={config.language}>{config.language}</option>
-              )}
-              <option value="__custom__">自定义...</option>
-            </select>
-          )}
+            </button>
+            <SessionSettingsPopover
+              open={sessionPopoverOpen}
+              onClose={() => setSessionPopoverOpen(false)}
+              anchorRef={sessionAnchorRef}
+            />
+          </div>
+
           {appMode === 'assist' && (
             <button
               type="button"
@@ -414,19 +364,10 @@ export default function App() {
             type="button"
             onClick={toggleSettings}
             className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
-            title="设置 (外观 / 偏好 / 隐私 / 快捷提示词)"
+            title="设置中心 (外观 / 偏好 / 模型 / 隐私 / 快捷键)"
             aria-label="打开设置"
           >
             <Settings className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={openConfigDrawer}
-            className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-accent-blue transition-all duration-200 border border-transparent hover:border-accent-blue/20 flex-shrink-0"
-            title="参数调节:模型并行 / VAD / LLM"
-            aria-label="打开参数调节抽屉"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
       </header>
