@@ -16,12 +16,14 @@ tts_service = importlib.import_module("services.tts")
 
 class _FakeCfg:
     practice_tts_provider = "volcengine"
+    edge_tts_voice_female = "zh-CN-XiaoxiaoNeural"
+    edge_tts_voice_male = "zh-CN-YunxiNeural"
+    edge_tts_rate = "+0%"
+    edge_tts_pitch = "+0Hz"
     volcengine_tts_appkey = "appkey-demo"
     volcengine_tts_token = "token-demo"
     practice_tts_speaker_female = "zh_female_qingxin"
     practice_tts_speaker_male = "zh_male_chunhou"
-    melo_tts_cmd = "melo"
-    melo_tts_speed = 1.0
 
 
 class _FakeResponse:
@@ -138,58 +140,3 @@ def test_synthesize_edge_tts_uses_selected_voice(monkeypatch):
     assert "sequel" in seen["text"]
     assert "瑞迪斯" in seen["text"]
 
-
-def test_synthesize_melo_tts_uses_cli_and_returns_wav(monkeypatch, tmp_path):
-    seen: dict[str, object] = {}
-
-    def fake_which(cmd):
-        return f"/usr/local/bin/{cmd}" if cmd == "melo" else None
-
-    def fake_run(args, check, capture_output, text, timeout):
-        seen["args"] = args
-        Path(args[2]).write_bytes(b"RIFFdemo")
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(tts_service, "get_config", lambda: _FakeCfg())
-    monkeypatch.setattr(tts_service.shutil, "which", fake_which)
-    monkeypatch.setattr(tts_service.subprocess, "run", fake_run)
-
-    result = tts_service.synthesize_melo_tts("请讲一下 SQL 和 Redis。")
-
-    assert result["provider"] == "melo_local"
-    assert result["speaker"] == "ZH"
-    assert result["audio_bytes"] == b"RIFFdemo"
-    assert result["content_type"] == "audio/wav"
-    assert seen["args"][0].endswith("melo")
-    assert "-l" in seen["args"]
-    assert "ZH" in seen["args"]
-    assert "sequel" in seen["args"][1]
-    assert "瑞迪斯" in seen["args"][1]
-
-
-def test_synthesize_melo_tts_rejects_when_cli_missing(monkeypatch):
-    class _MeloCfg(_FakeCfg):
-        practice_tts_provider = "melo_local"
-
-    monkeypatch.setattr(tts_service, "get_config", lambda: _MeloCfg())
-    monkeypatch.setattr(tts_service.shutil, "which", lambda _cmd: None)
-
-    try:
-        tts_service.synthesize_melo_tts("你好")
-    except ValueError as exc:
-        assert "MeloTTS" in str(exc)
-    else:
-        raise AssertionError("expected ValueError for missing melo command")
-
-
-def test_get_melo_tts_status_reports_availability(monkeypatch):
-    class _MeloCfg(_FakeCfg):
-        practice_tts_provider = "melo_local"
-
-    monkeypatch.setattr(tts_service, "get_config", lambda: _MeloCfg())
-    monkeypatch.setattr(tts_service.shutil, "which", lambda cmd: f"/usr/local/bin/{cmd}" if cmd == "melo" else None)
-
-    status = tts_service.get_melo_tts_status()
-
-    assert status["melo_tts_available"] is True
-    assert status["melo_tts_resolved_cmd"].endswith("melo")

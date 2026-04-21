@@ -17,7 +17,7 @@ from core.config import (
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
-from services.tts import get_melo_tts_status
+from services.tts import get_edge_tts_status
 from services.storage.resume_history import (
     MAX_UPLOAD_BYTES as RESUME_UPLOAD_MAX_BYTES,
     add_upload,
@@ -87,8 +87,6 @@ class ConfigUpdate(BaseModel):
     volcengine_tts_token: Optional[str] = None
     practice_tts_speaker_female: Optional[str] = None
     practice_tts_speaker_male: Optional[str] = None
-    melo_tts_cmd: Optional[str] = None
-    melo_tts_speed: Optional[float] = None
     # KB (Beta) - 详细字段(min_score / OCR / Vision / chunk_size 等)仍走 config.json
     kb_enabled: Optional[bool] = None
     kb_top_k: Optional[int] = None
@@ -102,7 +100,7 @@ async def api_get_config():
     m = cfg.get_active_model()
     resume_active_history_id = getattr(cfg, "resume_active_history_id", None)
     return {
-        **get_melo_tts_status(),
+        **get_edge_tts_status(),
         "models": [
             {
                 "name": mdl.name,
@@ -137,8 +135,6 @@ async def api_get_config():
         "volcengine_tts_token": getattr(cfg, "volcengine_tts_token", "") or "",
         "practice_tts_speaker_female": getattr(cfg, "practice_tts_speaker_female", "zh_female_qingxin") or "zh_female_qingxin",
         "practice_tts_speaker_male": getattr(cfg, "practice_tts_speaker_male", "zh_male_chunhou") or "zh_male_chunhou",
-        "melo_tts_cmd": getattr(cfg, "melo_tts_cmd", "melo") or "melo",
-        "melo_tts_speed": float(getattr(cfg, "melo_tts_speed", 1.0) or 1.0),
         "position": cfg.position,
         "language": cfg.language,
         "practice_audience": getattr(cfg, "practice_audience", "campus_intern"),
@@ -322,10 +318,6 @@ async def api_update_config(body: ConfigUpdate):
             d["edge_tts_rate"] = str(d["edge_tts_rate"]).strip()
         if "edge_tts_pitch" in d:
             d["edge_tts_pitch"] = str(d["edge_tts_pitch"]).strip()
-        if "melo_tts_cmd" in d:
-            d["melo_tts_cmd"] = str(d["melo_tts_cmd"]).strip()
-        if "melo_tts_speed" in d:
-            d["melo_tts_speed"] = max(0.6, min(1.8, float(d["melo_tts_speed"])))
         if "kb_top_k" in d:
             d["kb_top_k"] = max(1, min(20, int(d["kb_top_k"])))
         if "kb_deadline_ms" in d:

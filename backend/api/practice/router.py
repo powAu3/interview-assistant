@@ -32,8 +32,6 @@ from services.stt import get_stt_engine, transcription_for_publish
 from services.tts import (
     edge_tts_configured,
     synthesize_edge_tts,
-    melo_tts_configured,
-    synthesize_melo_tts,
     synthesize_volcengine_tts,
     volcengine_tts_configured,
 )
@@ -222,13 +220,6 @@ async def api_practice_tts(body: PracticeTtsBody):
                 text,
                 preferred_gender=(body.preferred_gender or "auto"),
                 voice=body.speaker,
-            )
-        elif provider == "melo_local":
-            if not melo_tts_configured():
-                raise HTTPException(400, "MeloTTS 未安装或命令不可用，请先安装 melotts 并确认 melo 命令可执行")
-            result = await run_in_threadpool(
-                synthesize_melo_tts,
-                text,
             )
         else:
             raise HTTPException(400, "当前播报方案不走后端 TTS 服务")

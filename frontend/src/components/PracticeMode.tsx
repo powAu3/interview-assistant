@@ -212,7 +212,7 @@ export default function PracticeMode() {
   )
   const [selectedVoiceURI, setSelectedVoiceURI] = useState(() => readStorage(VOICE_URI_STORAGE_KEY))
   const [voices, setVoices] = useState<BrowserVoice[]>([])
-  const [ttsPlaybackSource, setTtsPlaybackSource] = useState<'idle' | 'volcengine' | 'melo_local' | 'system' | 'browser'>('idle')
+  const [ttsPlaybackSource, setTtsPlaybackSource] = useState<'idle' | 'volcengine' | 'edge_tts' | 'system' | 'browser'>('idle')
   const turnStartRef = useRef<number | null>(null)
   const spokenTurnRef = useRef<string | null>(null)
 
@@ -368,7 +368,7 @@ export default function PracticeMode() {
     const run = async () => {
       const provider = config?.practice_tts_provider ?? 'edge_tts'
       let ok = false
-      if (provider === 'volcengine' || provider === 'melo_local') {
+      if (provider === 'volcengine' || provider === 'edge_tts') {
         try {
           const cloud = await api.practiceTts({
             text: currentTurn.prompt_script || currentTurn.question,
@@ -380,7 +380,7 @@ export default function PracticeMode() {
             contentType: cloud.content_type,
             onStart: () => {
               setPracticeTtsSpeaking(true)
-              setTtsPlaybackSource(provider === 'melo_local' ? 'melo_local' : 'volcengine')
+              setTtsPlaybackSource(provider === 'edge_tts' ? 'edge_tts' : 'volcengine')
             },
             onEnd: () => {
               setPracticeTtsSpeaking(false)
@@ -892,16 +892,16 @@ export default function PracticeMode() {
                 当前来源：
                 {ttsPlaybackSource === 'volcengine'
                   ? ' 火山引擎 TTS'
-                  : ttsPlaybackSource === 'melo_local'
-                    ? ' MeloTTS 本地神经语音'
+                  : ttsPlaybackSource === 'edge_tts'
+                    ? ' EdgeTTS 在线神经语音'
                   : ttsPlaybackSource === 'system'
                     ? ' 桌面系统语音'
                     : ttsPlaybackSource === 'browser'
                       ? ' 浏览器本地语音'
                       : config?.practice_tts_provider === 'volcengine'
                         ? ' 预设火山引擎，失败时静默展示题目'
-                        : config?.practice_tts_provider === 'melo_local'
-                          ? ' 实验态 MeloTTS，未就绪时静默展示题目'
+                        : config?.practice_tts_provider === 'edge_tts'
+                          ? ' 预设 EdgeTTS，未就绪时静默展示题目'
                           : ' 无播报'}
               </div>
             </div>

@@ -41,8 +41,6 @@ export default function SpeechTab() {
     volcengine_tts_token: '',
     practice_tts_speaker_female: 'zh_female_qingxin',
     practice_tts_speaker_male: 'zh_male_chunhou',
-    melo_tts_cmd: 'melo',
-    melo_tts_speed: 1.0,
     silence_threshold: 0.01,
     silence_duration: 1.2,
     transcription_min_sig_chars: 2,
@@ -79,8 +77,6 @@ export default function SpeechTab() {
         volcengine_tts_token: config.volcengine_tts_token ?? '',
         practice_tts_speaker_female: config.practice_tts_speaker_female ?? 'zh_female_qingxin',
         practice_tts_speaker_male: config.practice_tts_speaker_male ?? 'zh_male_chunhou',
-        melo_tts_cmd: config.melo_tts_cmd ?? 'melo',
-        melo_tts_speed: config.melo_tts_speed ?? 1.0,
         silence_threshold: config.silence_threshold,
         silence_duration: config.silence_duration,
         transcription_min_sig_chars: config.transcription_min_sig_chars ?? 2,
@@ -171,7 +167,7 @@ export default function SpeechTab() {
   }
 
   const providers = options?.stt_providers ?? ['whisper', 'doubao', 'iflytek']
-  const practiceTtsProviders = options?.practice_tts_providers ?? ['edge_tts', 'volcengine']
+  const practiceTtsProviders = options?.practice_tts_providers ?? ['edge_tts', 'local', 'volcengine']
 
   const providerMeta: Record<string, { label: string; desc: string; icon: React.ReactNode; brandClass: string }> = {
     whisper: { label: 'Whisper', desc: '本地运行，免费无限', icon: <Volume2 className="w-5 h-5" />, brandClass: 'sky' },
@@ -315,7 +311,7 @@ export default function SpeechTab() {
           >
             {practiceTtsProviders.map((provider) => (
               <option key={provider} value={provider}>
-                {provider === 'volcengine' ? '火山引擎 TTS' : 'EdgeTTS 在线神经语音'}
+                {provider === 'volcengine' ? '火山引擎 TTS' : provider === 'local' ? '本地合成兜底' : 'EdgeTTS 在线神经语音'}
               </option>
             ))}
           </select>

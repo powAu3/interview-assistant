@@ -65,8 +65,6 @@ class AppConfig(BaseModel):
     volcengine_tts_token: str = ""
     practice_tts_speaker_female: str = "zh_female_qingxin"
     practice_tts_speaker_male: str = "zh_male_chunhou"
-    melo_tts_cmd: str = "melo"
-    melo_tts_speed: float = 1.0
 
     position: str = "后端开发"
     language: str = "Python"
@@ -203,6 +201,6 @@ PRACTICE_AUDIENCE_OPTIONS = ["campus_intern", "social"]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API
 STT_PROVIDER_OPTIONS = ["whisper", "doubao", "iflytek"]
-PRACTICE_TTS_PROVIDER_OPTIONS = ["edge_tts", "volcengine"]
+PRACTICE_TTS_PROVIDER_OPTIONS = ["edge_tts", "local", "volcengine"]
 # 电脑截图区域
 SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]

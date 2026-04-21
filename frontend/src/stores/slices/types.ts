@@ -26,9 +26,6 @@ export interface ModelFullInfo {
 }
 
 export interface AppConfig {
-  melo_tts_available?: boolean
-  melo_tts_resolved_cmd?: string
-  melo_tts_status_detail?: string
   models: ModelInfo[]
   active_model: number
   model_name: string
@@ -56,8 +53,6 @@ export interface AppConfig {
   volcengine_tts_token?: string
   practice_tts_speaker_female?: string
   practice_tts_speaker_male?: string
-  melo_tts_cmd?: string
-  melo_tts_speed?: number
   position: string
   language: string
   /** 模拟练习候选人维度：campus_intern=校招/实习，social=社招 */

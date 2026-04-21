@@ -4,8 +4,6 @@ import base64
 import importlib.util
 import json
 import re
-import shutil
-import subprocess
 import tempfile
 import asyncio
 from pathlib import Path
@@ -31,7 +29,6 @@ _TTS_TERM_REPLACEMENTS = [
     ("API", "A P I"),
     ("SDK", "S D K"),
 ]
-_MELO_COMMAND_CANDIDATES = ("melo", "melotts")
 
 
 def _speaker_for_gender(preferred_gender: VoiceGender) -> str:
@@ -81,42 +78,12 @@ def _volcengine_tts_url() -> str:
     return f"{VOLCENGINE_SAMI_DOMAIN}/api/v1/invoke?{query}"
 
 
-def _resolve_melo_command() -> str:
-    cfg = get_config()
-    configured = (getattr(cfg, "melo_tts_cmd", "") or "").strip()
-    candidates = [configured] if configured else []
-    candidates.extend(_MELO_COMMAND_CANDIDATES)
-    for candidate in candidates:
-        if not candidate:
-            continue
-        found = shutil.which(candidate)
-        if found:
-            return found
-    raise ValueError("MeloTTS 未安装或命令不可用，请先确保 `melo` / `melotts` 在 PATH 中")
-
-
 def get_edge_tts_status() -> dict:
     available = importlib.util.find_spec("edge_tts") is not None
     return {
         "edge_tts_available": available,
         "edge_tts_status_detail": "edge-tts Python 包可用" if available else "未安装 edge-tts，请执行 pip install edge-tts",
     }
-
-
-def get_melo_tts_status() -> dict:
-    try:
-        cmd = _resolve_melo_command()
-        return {
-            "melo_tts_available": True,
-            "melo_tts_resolved_cmd": cmd,
-            "melo_tts_status_detail": "MeloTTS 命令可用",
-        }
-    except ValueError as exc:
-        return {
-            "melo_tts_available": False,
-            "melo_tts_resolved_cmd": "",
-            "melo_tts_status_detail": str(exc),
-        }
 
 
 def synthesize_volcengine_tts(
@@ -223,54 +190,6 @@ def synthesize_edge_tts(
             pass
 
 
-def synthesize_melo_tts(
-    text: str,
-    *,
-    speed: float | None = None,
-) -> dict:
-    clean_text = normalize_tts_text(text)
-    if not clean_text:
-        raise ValueError("TTS 文本不能为空")
-
-    cfg = get_config()
-    cmd = _resolve_melo_command()
-    resolved_speed = max(0.6, min(1.8, float(speed or getattr(cfg, "melo_tts_speed", 1.0) or 1.0)))
-    tmpdir = Path(tempfile.mkdtemp(prefix="ia-melo-tts-"))
-    output_path = tmpdir / "out.wav"
-    args = [
-        cmd,
-        clean_text,
-        str(output_path),
-        "-l",
-        "ZH",
-        "--speed",
-        str(resolved_speed),
-    ]
-    try:
-        proc = subprocess.run(args, check=False, capture_output=True, text=True, timeout=120)
-        if proc.returncode != 0:
-            stderr = (proc.stderr or proc.stdout or "").strip()
-            raise ValueError(stderr or f"MeloTTS 执行失败: {proc.returncode}")
-        if not output_path.exists():
-            raise ValueError("MeloTTS 未生成输出音频")
-        audio_bytes = output_path.read_bytes()
-        return {
-            "provider": "melo_local",
-            "speaker": "ZH",
-            "audio_bytes": audio_bytes,
-            "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
-            "content_type": "audio/wav",
-            "duration": 0.0,
-        }
-    finally:
-        try:
-            if output_path.exists():
-                output_path.unlink()
-            tmpdir.rmdir()
-        except Exception:
-            pass
-
-
 def volcengine_tts_configured() -> bool:
     cfg = get_config()
     return bool(
@@ -285,10 +204,3 @@ def edge_tts_configured() -> bool:
     if (getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts") != "edge_tts":
         return False
     return bool(get_edge_tts_status()["edge_tts_available"])
-
-
-def melo_tts_configured() -> bool:
-    cfg = get_config()
-    if (getattr(cfg, "practice_tts_provider", "local") or "local") != "melo_local":
-        return False
-    return bool(get_melo_tts_status()["melo_tts_available"])

@@ -62,8 +62,6 @@
   "volcengine_tts_token": "",
   "practice_tts_speaker_female": "zh_female_qingxin",
   "practice_tts_speaker_male": "zh_male_chunhou",
-  "melo_tts_cmd": "melo",
-  "melo_tts_speed": 1.0,
   "position": "后端开发",
   "language": "Python",
   "practice_audience": "campus_intern",
