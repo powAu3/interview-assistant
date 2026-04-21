@@ -1,82 +1,92 @@
 import type { StateCreator } from 'zustand'
+
 import type { RootState } from './rootState'
-import type { PracticeEvaluation, PracticeQuestion, PracticeStatus } from './types'
+import type { PracticeSessionSnapshot, PracticeStatus } from './types'
 
 export interface PracticeSliceState {
   practiceStatus: PracticeStatus
-  practiceQuestions: PracticeQuestion[]
-  practiceIndex: number
-  practiceEvals: PracticeEvaluation[]
-  practiceEvalStreaming: string
-  practiceReport: string
-  practiceReportStreaming: string
+  practiceSession: PracticeSessionSnapshot | null
   practiceRecording: boolean
   practiceAnswerDraft: string
+  practiceCodeDraft: string
+  practiceTtsSpeaking: boolean
+  practiceElapsedMs: number
 }
 
 export interface PracticeSliceActions {
   setPracticeStatus: (s: PracticeStatus) => void
-  setPracticeQuestions: (qs: PracticeQuestion[]) => void
-  setPracticeIndex: (i: number) => void
-  appendPracticeEvalChunk: (chunk: string) => void
-  finalizePracticeEval: (ev: PracticeEvaluation) => void
-  appendPracticeReportChunk: (chunk: string) => void
-  finalizePracticeReport: (report: string) => void
+  setPracticeSession: (session: PracticeSessionSnapshot | null) => void
   setPracticeRecording: (v: boolean) => void
   setPracticeAnswerDraft: (text: string) => void
   appendPracticeAnswerDraft: (text: string) => void
+  setPracticeCodeDraft: (text: string) => void
+  setPracticeTtsSpeaking: (value: boolean) => void
+  setPracticeElapsedMs: (value: number) => void
   resetPractice: () => void
 }
 
 export type PracticeSlice = PracticeSliceState & PracticeSliceActions
 
+function shouldResetDrafts(
+  previous: PracticeSessionSnapshot | null,
+  next: PracticeSessionSnapshot | null,
+): boolean {
+  const prevTurnId = previous?.current_turn?.turn_id ?? null
+  const nextTurnId = next?.current_turn?.turn_id ?? null
+  return prevTurnId !== nextTurnId
+}
+
 export const createPracticeSlice: StateCreator<RootState, [], [], PracticeSlice> = (set) => ({
   practiceStatus: 'idle',
-  practiceQuestions: [],
-  practiceIndex: 0,
-  practiceEvals: [],
-  practiceEvalStreaming: '',
-  practiceReport: '',
-  practiceReportStreaming: '',
+  practiceSession: null,
   practiceRecording: false,
   practiceAnswerDraft: '',
+  practiceCodeDraft: '',
+  practiceTtsSpeaking: false,
+  practiceElapsedMs: 0,
 
   setPracticeStatus: (status) =>
-    set(() =>
-      status === 'idle' || status === 'generating'
-        ? { practiceStatus: status, practiceAnswerDraft: '' }
+    set((state) =>
+      status === 'idle'
+        ? {
+            ...state,
+            practiceStatus: status,
+            practiceRecording: false,
+            practiceTtsSpeaking: false,
+            practiceElapsedMs: 0,
+          }
         : { practiceStatus: status },
     ),
-  setPracticeQuestions: (qs) =>
-    set({ practiceQuestions: qs, practiceIndex: 0, practiceAnswerDraft: '' }),
-  setPracticeIndex: (i) => set({ practiceIndex: i, practiceAnswerDraft: '' }),
-  appendPracticeEvalChunk: (chunk) =>
-    set((s) => ({ practiceEvalStreaming: s.practiceEvalStreaming + chunk })),
-  finalizePracticeEval: (ev) =>
-    set((s) => ({
-      practiceEvals: [...s.practiceEvals, ev],
-      practiceEvalStreaming: '',
-    })),
-  appendPracticeReportChunk: (chunk) =>
-    set((s) => ({ practiceReportStreaming: s.practiceReportStreaming + chunk })),
-  finalizePracticeReport: (report) =>
-    set({ practiceReport: report, practiceReportStreaming: '' }),
-  setPracticeRecording: (v) => set({ practiceRecording: v }),
+  setPracticeSession: (session) =>
+    set((state) => {
+      const resetDrafts = shouldResetDrafts(state.practiceSession, session)
+      return {
+        practiceSession: session,
+        practiceStatus: session?.status ?? state.practiceStatus,
+        practiceAnswerDraft: resetDrafts ? '' : state.practiceAnswerDraft,
+        practiceCodeDraft: resetDrafts ? '' : state.practiceCodeDraft,
+        practiceElapsedMs: resetDrafts ? 0 : state.practiceElapsedMs,
+      }
+    }),
+  setPracticeRecording: (value) => set({ practiceRecording: value }),
   setPracticeAnswerDraft: (text) => set({ practiceAnswerDraft: text }),
   appendPracticeAnswerDraft: (text) =>
-    set((s) => ({
-      practiceAnswerDraft: s.practiceAnswerDraft ? `${s.practiceAnswerDraft} ${text}` : text,
+    set((state) => ({
+      practiceAnswerDraft: state.practiceAnswerDraft
+        ? `${state.practiceAnswerDraft} ${text}`
+        : text,
     })),
+  setPracticeCodeDraft: (text) => set({ practiceCodeDraft: text }),
+  setPracticeTtsSpeaking: (value) => set({ practiceTtsSpeaking: value }),
+  setPracticeElapsedMs: (value) => set({ practiceElapsedMs: Math.max(0, value) }),
   resetPractice: () =>
     set({
       practiceStatus: 'idle',
-      practiceQuestions: [],
-      practiceIndex: 0,
-      practiceEvals: [],
-      practiceEvalStreaming: '',
-      practiceReport: '',
-      practiceReportStreaming: '',
+      practiceSession: null,
       practiceRecording: false,
       practiceAnswerDraft: '',
+      practiceCodeDraft: '',
+      practiceTtsSpeaking: false,
+      practiceElapsedMs: 0,
     }),
 })

@@ -1,23 +1,40 @@
-import time
+from __future__ import annotations
+
 import threading
+import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
+from api.realtime.ws import broadcast
 from core.background import BoundedTaskWorker
 from core.config import get_config
 from core.logger import get_logger
-from services.audio import AudioCapture, AudioBusyError, VADBuffer, audio_capture
-from services.stt import get_stt_engine, transcription_for_publish
-from services.practice import (
-    get_practice, reset_practice,
-    generate_questions, evaluate_answer_stream, generate_report_stream,
-    parse_score_from_feedback, PracticeEvaluation,
-)
+from services.audio import AudioBusyError, AudioCapture, VADBuffer, audio_capture
 from services.llm import get_token_stats
-from api.realtime.ws import broadcast
+from services.practice import (
+    PRACTICE_STATUS_AWAITING_ANSWER,
+    PRACTICE_STATUS_DEBRIEFING,
+    PRACTICE_STATUS_FINISHED,
+    PRACTICE_STATUS_IDLE,
+    PRACTICE_STATUS_INTERVIEWER_SPEAKING,
+    PRACTICE_STATUS_PREPARING,
+    PRACTICE_STATUS_THINKING,
+    finish_practice_session,
+    get_practice,
+    reset_practice,
+    start_practice_session,
+    submit_practice_answer,
+)
+from services.stt import get_stt_engine, transcription_for_publish
+from services.tts import (
+    melo_tts_configured,
+    synthesize_melo_tts,
+    synthesize_volcengine_tts,
+    volcengine_tts_configured,
+)
 
 router = APIRouter()
 _log = get_logger("practice")
@@ -30,6 +47,7 @@ _practice_answer_buf: list[str] = []
 def _save_practice_record(question: str, answer: str, score: Optional[int]):
     try:
         from services.storage.knowledge import save_record
+
         save_record("practice", question, answer, score)
     except Exception:
         _log.exception("save practice record failed")
@@ -45,144 +63,200 @@ _practice_record_worker = BoundedTaskWorker(
 def _submit_practice_record(question: str, answer: str, score: Optional[int]) -> None:
     if not _practice_record_worker.submit(question, answer, score):
         _log.warning(
-            "practice record dropped (queue full): q=%r len_a=%d", question[:60], len(answer)
+            "practice record dropped (queue full): q=%r len_a=%d",
+            question[:60],
+            len(answer),
         )
+
+
+def _broadcast_practice_status(status: str) -> None:
+    broadcast({"type": "practice_status", "status": status, "scope": "practice"})
+
+
+def _broadcast_practice_session(session=None, *, reveal_feedback: bool = False) -> None:
+    session = session or get_practice()
+    broadcast(
+        {
+            "type": "practice_session",
+            "scope": "practice",
+            "session": session.to_dict(reveal_feedback=reveal_feedback),
+        }
+    )
+
+
+def _broadcast_token_update() -> None:
+    stats = get_token_stats()
+    broadcast(
+        {
+            "type": "token_update",
+            "prompt": stats["prompt"],
+            "completion": stats["completion"],
+            "total": stats["total"],
+            "by_model": stats.get("by_model", {}),
+        }
+    )
 
 
 @router.get("/practice/status")
 async def api_practice_status():
-    return get_practice().to_dict()
+    session = get_practice()
+    return session.to_dict(reveal_feedback=session.status == PRACTICE_STATUS_FINISHED)
 
 
 @router.post("/practice/generate")
 async def api_practice_generate(body: Optional[dict] = None):
-    count = (body or {}).get("count", 6)
-    practice = reset_practice()
-    practice.status = "generating"
-    broadcast({"type": "practice_status", "status": "generating", "scope": "practice"})
+    jd_text = str(((body or {}).get("jd_text") or "")).strip()
+    interviewer_style = str(((body or {}).get("interviewer_style") or "")).strip()
+    reset_practice()
+    get_practice().status = PRACTICE_STATUS_PREPARING
+    _broadcast_practice_status(PRACTICE_STATUS_PREPARING)
 
     def _gen():
         try:
-            qs = generate_questions(count)
-            practice.questions = qs
-            practice.current_index = 0
-            practice.status = "questioning"
-            broadcast({
-                "type": "practice_questions",
-                "scope": "practice",
-                "questions": [{"id": q.id, "question": q.question, "category": q.category} for q in qs],
-            })
-            broadcast({"type": "practice_status", "status": "questioning", "scope": "practice"})
+            session = start_practice_session(jd_text=jd_text, interviewer_style=interviewer_style)
+            _broadcast_practice_status(PRACTICE_STATUS_INTERVIEWER_SPEAKING)
+            _broadcast_practice_session(session, reveal_feedback=False)
+            _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
+            _broadcast_token_update()
         except Exception as e:
-            practice.status = "idle"
-            broadcast({"type": "error", "message": f"生成题目失败: {e}"})
-            broadcast({"type": "practice_status", "status": "idle", "scope": "practice"})
+            reset_practice()
+            _broadcast_practice_status(PRACTICE_STATUS_IDLE)
+            broadcast({"type": "error", "message": f"启动模拟面试失败: {e}"})
 
     threading.Thread(target=_gen, daemon=True).start()
     return {"ok": True}
 
 
 class PracticeSubmitBody(BaseModel):
-    answer: str
+    transcript: str = ""
+    code_text: str = ""
+    answer_mode: str = "voice"
+    duration_ms: int = 0
+    answer: str = ""
+
+    def effective_transcript(self) -> str:
+        return (self.transcript or self.answer or "").strip()
+
+
+class PracticeTtsBody(BaseModel):
+    text: str
+    preferred_gender: str = "auto"
+    speaker: Optional[str] = None
 
 
 @router.post("/practice/submit")
 async def api_practice_submit(body: PracticeSubmitBody):
-    practice = get_practice()
-    q = practice.current_question()
-    if not q:
+    if not get_practice().current_turn:
         raise HTTPException(400, "没有当前题目")
-    if not body.answer.strip():
+    if not body.effective_transcript() and not body.code_text.strip():
         raise HTTPException(400, "回答不能为空")
-    practice.status = "evaluating"
-    broadcast({"type": "practice_status", "status": "evaluating", "scope": "practice"})
-    answer_text = body.answer.strip()
+
+    get_practice().status = PRACTICE_STATUS_THINKING
+    _broadcast_practice_status(PRACTICE_STATUS_THINKING)
+
+    transcript = body.effective_transcript()
+    code_text = body.code_text.strip()
+    duration_ms = max(0, int(body.duration_ms or 0))
+    answer_mode = body.answer_mode
 
     def _eval():
         try:
-            full = ""
-            broadcast({"type": "practice_eval_start", "question_id": q.id, "scope": "practice"})
-            for chunk in evaluate_answer_stream(q.question, answer_text):
-                full += chunk
-                broadcast({"type": "practice_eval_chunk", "chunk": chunk, "scope": "practice"})
-            score = parse_score_from_feedback(full)
-            ev = PracticeEvaluation(
-                question_id=q.id, question=q.question,
-                answer=answer_text, score=score, feedback=full,
+            previous_question = get_practice().current_turn.question if get_practice().current_turn else ""
+            session = submit_practice_answer(
+                transcript=transcript,
+                code_text=code_text,
+                answer_mode=answer_mode,
+                duration_ms=duration_ms,
             )
-            practice.evaluations.append(ev)
-            practice.status = "questioning"
-            broadcast({
-                "type": "practice_eval_done",
-                "question_id": q.id,
-                "question": q.question,
-                "answer": answer_text,
-                "score": score,
-                "feedback": full,
-                "scope": "practice",
-            })
-            broadcast({"type": "practice_status", "status": "questioning", "scope": "practice"})
-            stats = get_token_stats()
-            broadcast({
-                "type": "token_update",
-                "prompt": stats["prompt"],
-                "completion": stats["completion"],
-                "total": stats["total"],
-                "by_model": stats.get("by_model", {}),
-            })
-            _submit_practice_record(q.question, answer_text, score)
+            combined_answer = transcript.strip()
+            if code_text:
+                combined_answer = f"{combined_answer}\n\n[code]\n{code_text}" if combined_answer else code_text
+            if previous_question:
+                scores = session.hidden_score_ledger[-1].scorecard if session.hidden_score_ledger else {}
+                score_values = list(scores.values())
+                score = int(round(sum(score_values) / len(score_values))) if score_values else None
+                _submit_practice_record(previous_question, combined_answer, score)
+
+            if session.status == PRACTICE_STATUS_FINISHED:
+                _broadcast_practice_status(PRACTICE_STATUS_DEBRIEFING)
+                _broadcast_practice_session(session, reveal_feedback=True)
+                _broadcast_practice_status(PRACTICE_STATUS_FINISHED)
+            else:
+                _broadcast_practice_status(PRACTICE_STATUS_INTERVIEWER_SPEAKING)
+                _broadcast_practice_session(session, reveal_feedback=False)
+                _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
+            _broadcast_token_update()
         except Exception as e:
-            practice.status = "questioning"
-            broadcast({"type": "error", "message": f"评价失败: {e}"})
-            broadcast({"type": "practice_status", "status": "questioning", "scope": "practice"})
+            get_practice().status = PRACTICE_STATUS_AWAITING_ANSWER
+            _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
+            broadcast({"type": "error", "message": f"处理回答失败: {e}"})
 
     threading.Thread(target=_eval, daemon=True).start()
     return {"ok": True}
 
 
+@router.post("/practice/tts")
+async def api_practice_tts(body: PracticeTtsBody):
+    cfg = get_config()
+    provider = (getattr(cfg, "practice_tts_provider", "local") or "local").strip()
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "播报文本不能为空")
+    try:
+        if provider == "volcengine":
+            if not volcengine_tts_configured():
+                raise HTTPException(400, "火山引擎 TTS 未配置完成，请先在设置里填写 appkey / token")
+            result = await run_in_threadpool(
+                synthesize_volcengine_tts,
+                text,
+                preferred_gender=(body.preferred_gender or "auto"),
+                speaker=body.speaker,
+            )
+        elif provider == "melo_local":
+            if not melo_tts_configured():
+                raise HTTPException(400, "MeloTTS 未安装或命令不可用，请先安装 melotts 并确认 melo 命令可执行")
+            result = await run_in_threadpool(
+                synthesize_melo_tts,
+                text,
+            )
+        else:
+            raise HTTPException(400, "当前播报方案不走后端 TTS 服务")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "provider": result["provider"],
+        "speaker": result["speaker"],
+        "audio_base64": result["audio_base64"],
+        "content_type": result["content_type"],
+        "duration": result["duration"],
+    }
+
+
 @router.post("/practice/next")
 async def api_practice_next():
-    practice = get_practice()
-    if practice.current_index < len(practice.questions) - 1:
-        practice.current_index += 1
-        broadcast({"type": "practice_next", "index": practice.current_index, "scope": "practice"})
-        return {"ok": True, "index": practice.current_index}
-    raise HTTPException(400, "已经是最后一题")
+    raise HTTPException(410, "新版模拟面试由系统自动推进，不再支持手动下一题")
 
 
 @router.post("/practice/finish")
 async def api_practice_finish():
-    practice = get_practice()
-    if not practice.evaluations:
+    if not get_practice().turn_history:
         raise HTTPException(400, "还没有完成任何题目")
-    practice.status = "report"
-    broadcast({"type": "practice_status", "status": "report", "scope": "practice"})
+    get_practice().status = PRACTICE_STATUS_DEBRIEFING
+    _broadcast_practice_status(PRACTICE_STATUS_DEBRIEFING)
 
-    def _report():
+    def _finish():
         try:
-            full = ""
-            broadcast({"type": "practice_report_start", "scope": "practice"})
-            for chunk in generate_report_stream(practice.evaluations):
-                full += chunk
-                broadcast({"type": "practice_report_chunk", "chunk": chunk, "scope": "practice"})
-            practice.report = full
-            practice.status = "finished"
-            broadcast({"type": "practice_report_done", "report": full, "scope": "practice"})
-            broadcast({"type": "practice_status", "status": "finished", "scope": "practice"})
-            stats = get_token_stats()
-            broadcast({
-                "type": "token_update",
-                "prompt": stats["prompt"],
-                "completion": stats["completion"],
-                "total": stats["total"],
-                "by_model": stats.get("by_model", {}),
-            })
+            session = finish_practice_session()
+            _broadcast_practice_session(session, reveal_feedback=True)
+            _broadcast_practice_status(PRACTICE_STATUS_FINISHED)
+            _broadcast_token_update()
         except Exception as e:
-            practice.status = "finished"
-            broadcast({"type": "error", "message": f"报告生成失败: {e}"})
-            broadcast({"type": "practice_status", "status": "finished", "scope": "practice"})
+            get_practice().status = PRACTICE_STATUS_AWAITING_ANSWER
+            _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
+            broadcast({"type": "error", "message": f"结束模拟面试失败: {e}"})
 
-    threading.Thread(target=_report, daemon=True).start()
+    threading.Thread(target=_finish, daemon=True).start()
     return {"ok": True}
 
 
@@ -190,7 +264,8 @@ async def api_practice_finish():
 async def api_practice_reset():
     await run_in_threadpool(_stop_practice_recording)
     reset_practice()
-    broadcast({"type": "practice_status", "status": "idle", "scope": "practice"})
+    _broadcast_practice_session(reveal_feedback=False)
+    _broadcast_practice_status(PRACTICE_STATUS_IDLE)
     return {"ok": True}
 
 
@@ -206,9 +281,9 @@ async def api_practice_record(body: dict):
         except AudioBusyError as e:
             raise HTTPException(409, str(e))
         return {"ok": True}
-    else:
-        await run_in_threadpool(_stop_practice_recording)
-        return {"ok": True, "text": "\n".join(_practice_answer_buf)}
+
+    await run_in_threadpool(_stop_practice_recording)
+    return {"ok": True, "text": "\n".join(_practice_answer_buf)}
 
 
 def _start_practice_recording(device_id: int):
@@ -262,11 +337,13 @@ def _practice_record_worker():
             speech_audio = vad.feed(chunk)
             if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
                 try:
-                    text = engine.transcribe(speech_audio, AudioCapture.SAMPLE_RATE,
-                                            position=cfg.position, language=cfg.language)
-                    min_sig = getattr(
-                        get_config(), "transcription_min_sig_chars", 2
+                    text = engine.transcribe(
+                        speech_audio,
+                        AudioCapture.SAMPLE_RATE,
+                        position=cfg.position,
+                        language=cfg.language,
                     )
+                    min_sig = getattr(get_config(), "transcription_min_sig_chars", 2)
                     pub = transcription_for_publish(text, min_sig)
                     if pub:
                         _practice_answer_buf.append(pub)
@@ -277,11 +354,13 @@ def _practice_record_worker():
         remaining = vad.flush()
         if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
             try:
-                text = engine.transcribe(remaining, AudioCapture.SAMPLE_RATE,
-                                         position=cfg.position, language=cfg.language)
-                min_sig = getattr(
-                    get_config(), "transcription_min_sig_chars", 2
+                text = engine.transcribe(
+                    remaining,
+                    AudioCapture.SAMPLE_RATE,
+                    position=cfg.position,
+                    language=cfg.language,
                 )
+                min_sig = getattr(get_config(), "transcription_min_sig_chars", 2)
                 pub = transcription_for_publish(text, min_sig)
                 if pub:
                     _practice_answer_buf.append(pub)

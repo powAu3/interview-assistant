@@ -120,6 +120,12 @@ export function useInterviewWS() {
     switch (msg.type) {
       case 'init':
         s.setInitData(msg as Parameters<typeof s.setInitData>[0])
+        if (msg.practice_session) {
+          s.setPracticeSession(msg.practice_session as Parameters<typeof s.setPracticeSession>[0])
+          if ((msg.practice_session as { status?: string })?.status) {
+            s.setPracticeStatus((msg.practice_session as { status: Parameters<typeof s.setPracticeStatus>[0] }).status)
+          }
+        }
         break
       case 'recording':
         s.setRecording(msg.value as boolean)
@@ -177,33 +183,8 @@ export function useInterviewWS() {
       case 'practice_status':
         s.setPracticeStatus(msg.status as Parameters<typeof s.setPracticeStatus>[0])
         break
-      case 'practice_questions':
-        s.setPracticeQuestions(msg.questions as Parameters<typeof s.setPracticeQuestions>[0])
-        break
-      case 'practice_eval_start':
-        break
-      case 'practice_eval_chunk':
-        s.appendPracticeEvalChunk(msg.chunk as string)
-        break
-      case 'practice_eval_done':
-        s.finalizePracticeEval({
-          question_id: msg.question_id as number,
-          question: (msg.question as string) ?? '',
-          answer: (msg.answer as string) ?? '',
-          score: msg.score as number,
-          feedback: msg.feedback as string,
-        })
-        break
-      case 'practice_next':
-        s.setPracticeIndex(msg.index as number)
-        break
-      case 'practice_report_start':
-        break
-      case 'practice_report_chunk':
-        s.appendPracticeReportChunk(msg.chunk as string)
-        break
-      case 'practice_report_done':
-        s.finalizePracticeReport(msg.report as Parameters<typeof s.finalizePracticeReport>[0])
+      case 'practice_session':
+        s.setPracticeSession(msg.session as Parameters<typeof s.setPracticeSession>[0])
         break
       case 'practice_recording':
         s.setPracticeRecording(msg.value as boolean)

@@ -14,6 +14,7 @@ import {
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
+import { normalizePracticeTtsText, playBase64Audio, speakWithBrowserTts } from '@/lib/practiceTts'
 import { Section, Field, GradientCard, StatusBadge, useSettingsSearch } from './shared'
 import SttGuideCard from './SttGuideCard'
 
@@ -31,6 +32,13 @@ export default function SpeechTab() {
     iflytek_stt_app_id: '',
     iflytek_stt_api_key: '',
     iflytek_stt_api_secret: '',
+    practice_tts_provider: 'melo_local' as string,
+    volcengine_tts_appkey: '',
+    volcengine_tts_token: '',
+    practice_tts_speaker_female: 'zh_female_qingxin',
+    practice_tts_speaker_male: 'zh_male_chunhou',
+    melo_tts_cmd: 'melo',
+    melo_tts_speed: 1.0,
     silence_threshold: 0.01,
     silence_duration: 1.2,
     transcription_min_sig_chars: 2,
@@ -42,6 +50,8 @@ export default function SpeechTab() {
   const [saving, setSaving] = useState(false)
   const [sttTesting, setSttTesting] = useState(false)
   const [sttTestResult, setSttTestResult] = useState<{ ok: boolean; detail?: string } | null>(null)
+  const [ttsPreviewing, setTtsPreviewing] = useState(false)
+  const [ttsPreviewText, setTtsPreviewText] = useState('欢迎来到模拟面试，现在请你用九十秒介绍一下自己。')
 
   useEffect(() => {
     if (config) {
@@ -56,6 +66,13 @@ export default function SpeechTab() {
         iflytek_stt_app_id: config.iflytek_stt_app_id ?? '',
         iflytek_stt_api_key: config.iflytek_stt_api_key ?? '',
         iflytek_stt_api_secret: config.iflytek_stt_api_secret ?? '',
+        practice_tts_provider: config.practice_tts_provider ?? 'melo_local',
+        volcengine_tts_appkey: config.volcengine_tts_appkey ?? '',
+        volcengine_tts_token: config.volcengine_tts_token ?? '',
+        practice_tts_speaker_female: config.practice_tts_speaker_female ?? 'zh_female_qingxin',
+        practice_tts_speaker_male: config.practice_tts_speaker_male ?? 'zh_male_chunhou',
+        melo_tts_cmd: config.melo_tts_cmd ?? 'melo',
+        melo_tts_speed: config.melo_tts_speed ?? 1.0,
         silence_threshold: config.silence_threshold,
         silence_duration: config.silence_duration,
         transcription_min_sig_chars: config.transcription_min_sig_chars ?? 2,
@@ -95,7 +112,56 @@ export default function SpeechTab() {
     }
   }
 
+  const handleTtsPreview = async () => {
+    setTtsPreviewing(true)
+    try {
+      const text = ttsPreviewText.trim()
+      if (!text) throw new Error('试听文本不能为空')
+      const normalizedText = normalizePracticeTtsText(text)
+      if (form.practice_tts_provider === 'volcengine' || form.practice_tts_provider === 'melo_local') {
+        const result = await api.practiceTts({
+          text: normalizedText,
+          preferred_gender: 'female',
+          speaker: form.practice_tts_speaker_female || undefined,
+        })
+        await playBase64Audio({
+          audioBase64: result.audio_base64,
+          contentType: result.content_type,
+        })
+        useInterviewStore.getState().setToastMessage(
+          form.practice_tts_provider === 'melo_local'
+            ? '已试听 MeloTTS 本地神经语音'
+            : `已试听火山引擎音色：${result.speaker}`,
+        )
+      } else if (window.electronAPI?.synthesizeSystemTts) {
+        const result = await window.electronAPI.synthesizeSystemTts({
+          text: normalizedText,
+          rate: 185,
+        })
+        await playBase64Audio({
+          audioBase64: result.audio_base64,
+          contentType: result.content_type,
+        })
+        useInterviewStore.getState().setToastMessage('已试听桌面系统语音')
+      } else {
+        const ok = await speakWithBrowserTts({
+          text: normalizedText,
+          synthesis: typeof window !== 'undefined' ? window.speechSynthesis : undefined,
+          preferredGender: 'female',
+          selectedVoiceURI: '',
+        })
+        if (!ok) throw new Error('本地试听失败')
+        useInterviewStore.getState().setToastMessage('已试听浏览器本地语音')
+      }
+    } catch (e: any) {
+      useInterviewStore.getState().setToastMessage(e?.message ?? '试听失败')
+    } finally {
+      setTtsPreviewing(false)
+    }
+  }
+
   const providers = options?.stt_providers ?? ['whisper', 'doubao', 'iflytek']
+  const practiceTtsProviders = options?.practice_tts_providers ?? ['melo_local', 'volcengine']
 
   const providerMeta: Record<string, { label: string; desc: string; icon: React.ReactNode; brandClass: string }> = {
     whisper: { label: 'Whisper', desc: '本地运行，免费无限', icon: <Volume2 className="w-5 h-5" />, brandClass: 'sky' },
@@ -229,6 +295,118 @@ export default function SpeechTab() {
           )}
         </div>
       </GradientCard>
+
+      <Section title="模拟面试播报 (TTS)" icon={<Volume2 className="w-3.5 h-3.5" />} keywords="tts 发音人 播报 面试官 音色 男声 女声 volcengine">
+        <Field label="播报方案" hint="本地 speechSynthesis 作为 fallback；云端只保留火山引擎">
+          <select
+            value={form.practice_tts_provider}
+            onChange={(e) => setForm({ ...form, practice_tts_provider: e.target.value })}
+            className="input-field"
+          >
+            {practiceTtsProviders.map((provider) => (
+              <option key={provider} value={provider}>
+                {provider === 'volcengine' ? '火山引擎 TTS' : provider === 'melo_local' ? 'MeloTTS 本地神经语音' : '系统语音兜底'}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {form.practice_tts_provider === 'melo_local' && (
+          <GradientCard className="p-4 space-y-3 border-emerald-400/30">
+            <div className="flex items-center gap-3">
+              <StatusBadge
+                status={config?.melo_tts_available ? 'ok' : 'error'}
+                label={config?.melo_tts_available ? 'MeloTTS 已安装' : 'MeloTTS 未就绪'}
+              />
+              <span className="text-xs text-text-muted">
+                {config?.melo_tts_available
+                  ? (config?.melo_tts_resolved_cmd || '已检测到可执行命令')
+                  : (config?.melo_tts_status_detail || '请先安装 melotts 并确认 melo 命令可执行')}
+              </span>
+            </div>
+            <Field label="MeloTTS 命令" hint="默认用 PATH 里的 melo；如果你装在别的位置，可以手填绝对路径">
+              <input
+                type="text"
+                value={form.melo_tts_cmd}
+                onChange={(e) => setForm({ ...form, melo_tts_cmd: e.target.value })}
+                placeholder="如：melo 或 /opt/homebrew/bin/melo"
+                className="input-field"
+              />
+            </Field>
+            <Field label="MeloTTS 语速" hint="1.0 最自然；偏快可调到 1.1 ~ 1.2">
+              <input
+                type="number"
+                min={0.6}
+                max={1.8}
+                step={0.05}
+                value={form.melo_tts_speed}
+                onChange={(e) => setForm({ ...form, melo_tts_speed: Number(e.target.value) || 1.0 })}
+                className="input-field"
+              />
+            </Field>
+          </GradientCard>
+        )}
+
+        {form.practice_tts_provider === 'volcengine' && (
+          <GradientCard className="p-4 space-y-3 border-orange-400/30">
+            <Field label="Appkey" hint="音频技术控制台创建应用后获得">
+              <input
+                type="text"
+                value={form.volcengine_tts_appkey}
+                onChange={(e) => setForm({ ...form, volcengine_tts_appkey: e.target.value })}
+                placeholder="填入火山引擎 TTS appkey"
+                className="input-field"
+              />
+            </Field>
+            <Field label="Token" hint="可先使用控制台临时 token；正式接入再换成稳定 token 管理">
+              <input
+                type="password"
+                value={form.volcengine_tts_token}
+                onChange={(e) => setForm({ ...form, volcengine_tts_token: e.target.value })}
+                placeholder="填入火山引擎 TTS token"
+                className="input-field"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="默认女声 Speaker" hint="例如 zh_female_qingxin / zh_female_zhixing">
+                <input
+                  type="text"
+                  value={form.practice_tts_speaker_female}
+                  onChange={(e) => setForm({ ...form, practice_tts_speaker_female: e.target.value })}
+                  className="input-field"
+                />
+              </Field>
+              <Field label="默认男声 Speaker" hint="例如 zh_male_chunhou / zh_male_qinqie">
+                <input
+                  type="text"
+                  value={form.practice_tts_speaker_male}
+                  onChange={(e) => setForm({ ...form, practice_tts_speaker_male: e.target.value })}
+                  className="input-field"
+                />
+              </Field>
+            </div>
+          </GradientCard>
+        )}
+        <GradientCard className="p-4 space-y-3 border-accent-blue/25">
+          <Field label="试听文本" hint="保存前可以先快速听一下当前播报链路的效果">
+            <textarea
+              value={ttsPreviewText}
+              onChange={(e) => setTtsPreviewText(e.target.value)}
+              rows={3}
+              className="input-field min-h-[88px] resize-y"
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={handleTtsPreview}
+            disabled={ttsPreviewing}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
+          >
+            {ttsPreviewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+            {ttsPreviewing ? '试听中…' : '试听当前播报方案'}
+          </button>
+        </GradientCard>
+      </Section>
 
       <Section title="语音活动检测 (VAD)" icon={<Settings2 className="w-3.5 h-3.5" />} keywords="vad silence 静音 断句 阈值 silero 语音活动">
         <div className="bg-bg-tertiary/30 rounded-lg p-3 text-xs text-text-muted space-y-1.5 mb-2">

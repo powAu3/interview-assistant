@@ -15,6 +15,7 @@ qrcode>=7.4
 # 手机端「左屏审题」：服务端截取本机主屏左半部分
 mss>=9.0.0
 opencc-python-reimplemented>=0.1.7
+melotts>=0.1.2
 
 # --- Knowledge base (MVP, 必装) ---
 python-docx>=1.1.0

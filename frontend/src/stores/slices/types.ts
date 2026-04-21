@@ -26,6 +26,9 @@ export interface ModelFullInfo {
 }
 
 export interface AppConfig {
+  melo_tts_available?: boolean
+  melo_tts_resolved_cmd?: string
+  melo_tts_status_detail?: string
   models: ModelInfo[]
   active_model: number
   model_name: string
@@ -42,6 +45,13 @@ export interface AppConfig {
   iflytek_stt_app_id: string
   iflytek_stt_api_key: string
   iflytek_stt_api_secret: string
+  practice_tts_provider?: string
+  volcengine_tts_appkey?: string
+  volcengine_tts_token?: string
+  practice_tts_speaker_female?: string
+  practice_tts_speaker_male?: string
+  melo_tts_cmd?: string
+  melo_tts_speed?: number
   position: string
   language: string
   /** 模拟练习候选人维度：campus_intern=校招/实习，social=社招 */
@@ -95,18 +105,72 @@ export interface QAPair {
   visionVerify?: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }
 }
 
-export interface PracticeQuestion {
-  id: number
-  question: string
-  category: string
+export type PracticeAnswerMode = 'voice' | 'code' | 'voice+code'
+
+export interface PracticeContext {
+  position: string
+  language: string
+  audience: string
+  audience_label: string
+  resume_text: string
+  jd_text: string
+  interviewer_style?: string
 }
 
-export interface PracticeEvaluation {
-  question_id: number
+export interface PracticePhase {
+  phase_id: string
+  label: string
+  category: string
+  focus: string[]
+  follow_up_budget: number
+  answer_mode: PracticeAnswerMode
   question: string
-  answer: string
-  score: number
-  feedback: string
+  written_prompt?: string
+  artifact_notes?: string[]
+}
+
+export interface PracticeBlueprint {
+  opening_script: string
+  phases: PracticePhase[]
+}
+
+export interface PracticeTurn {
+  turn_id: string
+  phase_id: string
+  phase_label: string
+  category: string
+  answer_mode: PracticeAnswerMode
+  question: string
+  prompt_script: string
+  stage_prompt?: string
+  interviewer_signal?: string
+  transition_line?: string
+  written_prompt?: string
+  artifact_notes?: string[]
+  asked_at: number
+  follow_up_of?: string | null
+  transcript: string
+  code_text: string
+  duration_ms: number
+  decision?: string
+  decision_reason?: string
+  evidence?: string[]
+  strengths?: string[]
+  risks?: string[]
+  scorecard?: Record<string, number>
+}
+
+export interface PracticeSessionSnapshot {
+  status: PracticeStatus
+  context: PracticeContext | null
+  blueprint: PracticeBlueprint | null
+  current_phase_index: number
+  current_turn: PracticeTurn | null
+  turn_history: PracticeTurn[]
+  interviewer_persona?: Record<string, string>
+  report_markdown: string
+  created_at: number
+  finished_at?: number | null
 }
 
 export interface DeviceItem {
@@ -127,6 +191,7 @@ export interface OptionsInfo {
   positions: string[]
   languages: string[]
   practice_audiences?: string[]
+  practice_tts_providers?: string[]
   stt_providers?: string[]
   whisper_models: string[]
   screen_capture_regions?: string[]
@@ -143,8 +208,9 @@ export type SettingsDrawerTab = 'general' | 'config' | 'models'
 export type ModelHealthStatus = 'checking' | 'ok' | 'error'
 export type PracticeStatus =
   | 'idle'
-  | 'generating'
-  | 'questioning'
-  | 'evaluating'
-  | 'report'
+  | 'preparing'
+  | 'interviewer_speaking'
+  | 'awaiting_answer'
+  | 'thinking_next_turn'
+  | 'debriefing'
   | 'finished'

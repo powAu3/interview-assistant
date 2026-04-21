@@ -18,6 +18,13 @@ declare global {
       overlayDragStart?: () => void
       overlayDragEnd?: () => void
       getOverlayState?: () => Promise<(OverlayStatePayload & { visible: boolean }) | null>
+      listSystemTtsVoices?: () => Promise<Array<{ voiceURI: string; name: string; lang: string; source: string; genderHint?: string }>>
+      synthesizeSystemTts?: (payload: { text: string; voiceName?: string; rate?: number }) => Promise<{
+        provider: string
+        voice: string
+        audio_base64: string
+        content_type: string
+      }>
       onOverlayState?: (callback: (payload: OverlayStatePayload) => void) => (() => void)
       removeOverlayStateListener?: (listener?: (...args: unknown[]) => void) => void
     }
