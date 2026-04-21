@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Square, Mic, Send, RotateCcw, FileText, Upload, ChevronRight, Trophy, X, Loader2 } from 'lucide-react'
+import { Play, Square, Mic, Send, RotateCcw, FileText, Upload, ChevronRight, Trophy, X, Loader2, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useInterviewStore } from '@/stores/configStore'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/lib/api'
-import { refreshConfig } from '@/lib/configSync'
+import { refreshConfig, updateConfigAndRefresh } from '@/lib/configSync'
 
 const CATEGORY_LABELS: Record<string, string> = {
   project: '📁 项目经历',
@@ -165,6 +165,78 @@ export default function PracticeMode() {
               <span className="text-text-primary font-medium">
                 {config?.practice_audience === 'social' ? '社招' : '校招（实习）'}
               </span>
+            </div>
+          </div>
+
+          {/* Think 模式说明 — 评分质量 vs 速度的权衡 */}
+          <div
+            className={`rounded-2xl border text-left transition-colors ${
+              config?.think_mode
+                ? 'border-accent-green/30 bg-gradient-to-br from-accent-green/[0.06] to-transparent'
+                : 'border-bg-hover/50 bg-bg-tertiary/25'
+            }`}
+          >
+            <div className="flex items-start gap-3 p-3.5">
+              <div
+                className={`mt-0.5 w-7 h-7 rounded-xl flex-shrink-0 flex items-center justify-center ${
+                  config?.think_mode
+                    ? 'bg-accent-green/15 border border-accent-green/30'
+                    : 'bg-bg-hover/30 border border-bg-hover/40'
+                }`}
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${config?.think_mode ? 'text-accent-green' : 'text-text-muted'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-text-primary">评分模式</span>
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-[1px] rounded-md tracking-wider ${
+                      config?.think_mode
+                        ? 'text-accent-green border border-accent-green/30 bg-accent-green/10'
+                        : 'text-text-muted border border-bg-hover/60 bg-bg-tertiary/40'
+                    }`}
+                  >
+                    Think · {config?.think_mode ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-text-muted">
+                  {config?.think_mode ? (
+                    <>
+                      模型会先「想一下」再给评分,理由更扎实、维度更细;每题约多耗 5–15 秒并多消耗一些 token。
+                    </>
+                  ) : (
+                    <>
+                      模型会直出评分与理由,秒级返回;理由偏简洁,适合快速过题练手。
+                    </>
+                  )}
+                </p>
+                <p className="text-[10.5px] leading-snug text-text-muted/80 mt-1">
+                  建议:系统设计 / 行为面深挖时开启;基础八股 / 项目讲述时关闭。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => { await updateConfigAndRefresh({ think_mode: !config?.think_mode }) }}
+                title={config?.think_mode ? '关闭 Think' : '开启 Think'}
+                aria-pressed={!!config?.think_mode}
+                aria-label={`Think 模式 ${config?.think_mode ? '已开启,点击关闭' : '已关闭,点击开启'}`}
+                className="flex-shrink-0 mt-0.5"
+              >
+                <span
+                  className={`relative inline-flex w-9 h-5 rounded-full transition-colors duration-200 ${
+                    config?.think_mode
+                      ? 'bg-accent-green shadow-[0_0_10px_-2px] shadow-accent-green/50'
+                      : 'bg-bg-hover'
+                  }`}
+                  aria-hidden
+                >
+                  <span
+                    className={`absolute top-[2px] left-[2px] h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      config?.think_mode ? 'translate-x-4' : ''
+                    }`}
+                  />
+                </span>
+              </button>
             </div>
           </div>
 

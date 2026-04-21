@@ -19,6 +19,7 @@ import { Section, Field, matchSettingsSearch, useSettingsSearch } from './shared
 import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
+import BetaBadge from '@/components/kb/BetaBadge'
 
 function Collapsible({ title, searchTitle, icon, defaultOpen = false, badge, keywords, children }: {
   title: React.ReactNode
@@ -181,9 +182,7 @@ export default function PreferencesTab() {
         title={
           <span className="inline-flex items-center gap-1.5">
             悬浮提示窗
-            <span className="px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded bg-accent-amber/15 text-accent-amber border border-accent-amber/30">
-              Beta
-            </span>
+            <BetaBadge title="悬浮提示窗 — 仍在测试中" />
           </span>
         }
         searchTitle="悬浮提示窗"
@@ -279,7 +278,7 @@ export default function PreferencesTab() {
                 <div className="flex items-center gap-2">
                   <PenLine className="w-3.5 h-3.5 text-text-muted" />
                   <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">笔试模式</span>
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-accent-amber/20 text-accent-amber leading-none">BETA</span>
+                  <BetaBadge title="笔试模式 — 仍在测试中" />
                 </div>
                 <Toggle
                   checked={config?.written_exam_mode ?? false}
@@ -329,11 +328,7 @@ export default function PreferencesTab() {
         title="知识库"
         icon={<BookOpen className="w-3.5 h-3.5" />}
         keywords="kb knowledge base 笔记 参考 rag retrieval 引用"
-        badge={
-          <span className="ml-1 text-[9px] font-bold tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1 py-0 rounded">
-            BETA
-          </span>
-        }
+        badge={<BetaBadge title="知识库 — 仍在测试中" className="ml-1" />}
       >
         <Field
           label="主流程引用本地笔记"
