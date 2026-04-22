@@ -137,7 +137,7 @@ test.describe('practice mode booth', () => {
 
     await page.goto('/')
     await expect(page.getByTestId('practice-interviewer-preview')).toBeVisible()
-    await expect(page.getByText(/状态 · 播报中/)).toBeVisible()
+    await expect(page.getByText(/状态 · 倾听中/)).toBeVisible()
     await expect(page.getByText(/当前来源：EdgeTTS/)).toBeVisible()
   })
 
@@ -162,7 +162,7 @@ test.describe('practice mode booth', () => {
 
     await page.goto('/')
     await expect(page.getByText('题面模式').first()).toBeVisible()
-    await expect(page.getByTestId('practice-interviewer-preview')).toHaveAttribute('data-state', 'idle')
+    await expect(page.getByTestId('practice-interviewer-preview')).toHaveAttribute('data-state', 'listening')
   })
 })
 

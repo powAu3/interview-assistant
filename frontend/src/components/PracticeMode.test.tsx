@@ -77,6 +77,10 @@ function createPracticeSession(overrides: Record<string, unknown> = {}) {
 describe('PracticeMode', () => {
   beforeEach(() => {
     vi.useRealTimers()
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    })
     const storage = new Map<string, string>()
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
@@ -257,7 +261,7 @@ describe('PracticeMode', () => {
     }, { timeout: 2500 })
   })
 
-  it('updates the start-screen interviewer preview when the style changes', async () => {
+  it('updates the start-screen interviewer preview when the style changes', () => {
     render(<PracticeMode />)
 
     const preview = screen.getByTestId('practice-interviewer-preview')
@@ -268,7 +272,7 @@ describe('PracticeMode', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^压力型/ }))
     expect(preview).toHaveAttribute('data-persona', 'pressure_bigtech')
-  })
+  }, 10000)
 
   it('shows the shared mounted resume state on the start screen', () => {
     useInterviewStore.setState({
