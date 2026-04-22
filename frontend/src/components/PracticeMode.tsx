@@ -187,6 +187,7 @@ export default function PracticeMode() {
   const [interviewerStyle, setInterviewerStyle] = useState(
     () => readStorage(INTERVIEWER_STYLE_STORAGE_KEY, 'calm_pressing'),
   )
+  const [startingPractice, setStartingPractice] = useState(false)
   const [selectedVoiceURI, setSelectedVoiceURI] = useState(() => readStorage(VOICE_URI_STORAGE_KEY))
   const [voices, setVoices] = useState<BrowserVoice[]>([])
   const [ttsPlaybackSource, setTtsPlaybackSource] = useState<'idle' | 'volcengine' | 'edge_tts' | 'system' | 'browser'>('idle')
@@ -200,6 +201,7 @@ export default function PracticeMode() {
   const currentPhaseLabel = currentTurn?.phase_label ?? '模拟面试'
   const isReportStage = practiceStatus === 'debriefing' || practiceStatus === 'finished'
   const isIdle = practiceStatus === 'idle'
+  const isPreparingView = startingPractice || practiceStatus === 'preparing'
   const useEdgeTts = (config?.practice_tts_provider ?? 'edge_tts') === 'edge_tts'
   const selectedDesktopVoice = selectedVoiceURI.startsWith('say:')
     ? selectedVoiceURI.replace(/^say:/, '')
@@ -234,6 +236,40 @@ export default function PracticeMode() {
   })
   const interviewerSignalLabel = getInterviewerSignalLabel(currentTurn?.interviewer_signal)
   const ttsSourceLabel = getPracticeSourceLabel(ttsPlaybackSource, config?.practice_tts_provider)
+
+  const syncPracticeSession = async (
+    shouldStop: (
+      session: ReturnType<typeof useInterviewStore.getState>['practiceSession'],
+      status: ReturnType<typeof useInterviewStore.getState>['practiceStatus'],
+    ) => boolean,
+    options?: { attempts?: number; firstDelayMs?: number; nextDelayMs?: number },
+  ) => {
+    const attempts = options?.attempts ?? 20
+    const firstDelayMs = options?.firstDelayMs ?? 200
+    const nextDelayMs = options?.nextDelayMs ?? 500
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const state = useInterviewStore.getState()
+      if (shouldStop(state.practiceSession, state.practiceStatus)) return
+
+      const session = await api.practiceStatus()
+      useInterviewStore.getState().setPracticeSession(session)
+
+      const nextState = useInterviewStore.getState()
+      if (shouldStop(nextState.practiceSession, nextState.practiceStatus)) return
+
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, attempt === 0 ? firstDelayMs : nextDelayMs)
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (!startingPractice) return
+    if (practiceSession?.current_turn || practiceStatus !== 'idle') {
+      setStartingPractice(false)
+    }
+  }, [practiceSession?.current_turn, practiceStatus, startingPractice])
 
   useEffect(() => {
     if (mics.length === 0) {
@@ -451,9 +487,15 @@ export default function PracticeMode() {
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
+    setStartingPractice(true)
     try {
       await api.practiceGenerate({ jd_text: jdDraft.trim(), interviewer_style: interviewerStyle })
+      await syncPracticeSession((session, status) => (
+        Boolean(session?.current_turn)
+        || (status !== 'idle' && status !== 'preparing')
+      ))
     } catch (err) {
+      setStartingPractice(false)
       setError(err instanceof Error ? err.message : '启动失败')
     } finally {
       setLoading(false)
@@ -463,6 +505,7 @@ export default function PracticeMode() {
   const handleSubmit = async () => {
     if (!currentTurn) return
     if (!practiceAnswerDraft.trim() && !practiceCodeDraft.trim()) return
+    const submittedTurnId = currentTurn.turn_id
     setLoading(true)
     setError(null)
     try {
@@ -472,6 +515,11 @@ export default function PracticeMode() {
         answer_mode: currentTurn.answer_mode,
         duration_ms: practiceElapsedMs,
       })
+      await syncPracticeSession((session) => (
+        Boolean(session?.current_turn?.turn_id && session.current_turn.turn_id !== submittedTurnId)
+        || session?.status === 'debriefing'
+        || session?.status === 'finished'
+      ))
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败')
     } finally {
@@ -484,6 +532,11 @@ export default function PracticeMode() {
     setError(null)
     try {
       await api.practiceFinish()
+      await syncPracticeSession((session) => (
+        session?.status === 'debriefing'
+        || session?.status === 'finished'
+        || Boolean(session?.report_markdown)
+      ))
     } catch (err) {
       setError(err instanceof Error ? err.message : '结束失败')
     } finally {
@@ -523,7 +576,7 @@ export default function PracticeMode() {
 
   const averageScore = averageTurnScore(completedTurns)
 
-  if (isIdle || practiceStatus === 'preparing') {
+  if (isIdle || isPreparingView) {
     return (
       <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#fbf8f0_0%,#f4efe3_46%,#efe6d6_100%)] text-[#122137]">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-6 xl:grid xl:grid-cols-[1.05fr_0.95fr]">
@@ -557,7 +610,7 @@ export default function PracticeMode() {
                 <VirtualInterviewer
                   data-testid="practice-interviewer-preview"
                   persona={selectedPersona.key}
-                  state={practiceStatus === 'preparing' ? 'speaking' : 'idle'}
+                  state={isPreparingView ? 'speaking' : 'idle'}
                   signal="warm-open"
                   subtitle={selectedPersona.description}
                 />
@@ -725,7 +778,7 @@ export default function PracticeMode() {
                 disabled={loading}
                 className="inline-flex items-center gap-2 rounded-full bg-[#f4b88a] px-5 py-2.5 text-sm font-semibold text-[#10233a] transition hover:translate-y-[-1px] hover:bg-[#f6c298] disabled:opacity-50"
               >
-                {practiceStatus === 'preparing' ? (
+                {isPreparingView ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     正在搭建面试现场...

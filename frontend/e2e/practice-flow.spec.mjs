@@ -208,7 +208,7 @@ test.describe('practice flow', () => {
 
     await page.getByRole('button', { name: '开始真实模拟面试' }).click()
     await expect(page.getByPlaceholder('在这里补充 SQL / 伪代码 / 接口结构...')).toBeVisible({
-      timeout: 8000,
+      timeout: 10000,
     })
 
     await page.getByPlaceholder('语音转写会持续写到这里，你也可以手动修句子，让它更像真正对面试官说出口的话。').fill(

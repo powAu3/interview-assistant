@@ -6,6 +6,7 @@ import { useInterviewStore } from '@/stores/configStore'
 
 const apiMock = vi.hoisted(() => ({
   practiceGenerate: vi.fn(),
+  practiceStatus: vi.fn(),
   practiceSubmit: vi.fn(),
   practiceFinish: vi.fn(),
   practiceReset: vi.fn(),
@@ -95,6 +96,7 @@ describe('PracticeMode', () => {
       content_type: 'audio/mpeg',
       duration: 1.2,
     })
+    apiMock.practiceStatus.mockResolvedValue({ status: 'idle', current_turn: null })
     useInterviewStore.setState({
       config: {
         position: '后端开发',
@@ -187,6 +189,70 @@ describe('PracticeMode', () => {
     })
   })
 
+  it('shows preparing feedback immediately after starting a practice session', async () => {
+    let releaseGenerate: (() => void) | null = null
+    apiMock.practiceGenerate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseGenerate = () => resolve({ ok: true })
+        }),
+    )
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '开始真实模拟面试' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /正在搭建面试现场/ })).toBeDisabled()
+    })
+
+    expect(releaseGenerate).not.toBeNull()
+    if (releaseGenerate === null) throw new Error('generate promise was not captured')
+    const completeGenerate: () => void = releaseGenerate
+    completeGenerate()
+    await waitFor(() => {
+      expect(apiMock.practiceGenerate).toHaveBeenCalled()
+    })
+  })
+
+  it('hydrates the first practice turn from the status endpoint when websocket updates lag', async () => {
+    apiMock.practiceGenerate.mockResolvedValue({ ok: true })
+    apiMock.practiceStatus.mockResolvedValue(
+      createPracticeSession({
+        status: 'awaiting_answer',
+      }),
+    )
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '开始真实模拟面试' }))
+
+    await waitFor(() => {
+      expect(apiMock.practiceStatus).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('项目深挖')).toBeInTheDocument()
+      expect(screen.getByText('讲讲你做过的高并发接口优化。')).toBeInTheDocument()
+    })
+  })
+
+  it('keeps polling while the backend is still in preparing state', async () => {
+    apiMock.practiceGenerate.mockResolvedValue({ ok: true })
+    apiMock.practiceStatus
+      .mockResolvedValueOnce({ status: 'preparing', current_turn: null })
+      .mockResolvedValueOnce(
+        createPracticeSession({
+          status: 'awaiting_answer',
+        }),
+      )
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '开始真实模拟面试' }))
+
+    await waitFor(() => {
+      expect(apiMock.practiceStatus).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('项目深挖')).toBeInTheDocument()
+    })
+  })
+
   it('updates the start-screen interviewer preview when the style changes', async () => {
     render(<PracticeMode />)
 
@@ -249,6 +315,81 @@ describe('PracticeMode', () => {
           duration_ms: expect.any(Number),
         }),
       )
+    })
+  })
+
+  it('hydrates the next turn from the status endpoint when submit websocket updates lag', async () => {
+    apiMock.practiceSubmit.mockResolvedValue({ ok: true })
+    apiMock.practiceStatus.mockResolvedValue(
+      createPracticeSession({
+        status: 'awaiting_answer',
+        current_phase_index: 1,
+        current_turn: {
+          turn_id: 'turn-2',
+          phase_id: 'project',
+          phase_label: '项目深挖',
+          category: 'project',
+          answer_mode: 'voice',
+          question: '讲一个你真正主导过、并且最能代表你能力边界的项目。',
+          prompt_script: '讲一个你真正主导过、并且最能代表你能力边界的项目。',
+          stage_prompt: '项目深挖：本轮重点盯判断、验证和取舍。',
+          interviewer_signal: 'probe',
+          transition_line: '现在我想往项目里压一层，重点听你的判断和验证。',
+          asked_at: Date.now(),
+          follow_up_of: null,
+          transcript: '',
+          code_text: '',
+          duration_ms: 0,
+        },
+        turn_history: [
+          {
+            turn_id: 'turn-1',
+            phase_id: 'opening',
+            phase_label: '开场与岗位匹配',
+            category: 'behavioral',
+            answer_mode: 'voice',
+            question: '先做一个自我介绍。',
+            prompt_script: '先做一个自我介绍。',
+            asked_at: Date.now(),
+            follow_up_of: null,
+            transcript: '我是计算机专业背景。',
+            code_text: '',
+            duration_ms: 42000,
+          },
+        ],
+      }),
+    )
+
+    useInterviewStore.setState({
+      practiceStatus: 'awaiting_answer',
+      practiceAnswerDraft: '我是计算机专业背景。',
+      practiceCodeDraft: '',
+      practiceSession: createPracticeSession({
+        current_phase_index: 0,
+        current_turn: {
+          turn_id: 'turn-1',
+          phase_id: 'opening',
+          phase_label: '开场与岗位匹配',
+          category: 'behavioral',
+          answer_mode: 'voice',
+          question: '先做一个自我介绍。',
+          prompt_script: '先做一个自我介绍。',
+          asked_at: Date.now(),
+          follow_up_of: null,
+          transcript: '',
+          code_text: '',
+          duration_ms: 0,
+        },
+      }),
+    } as any)
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '提交本轮回答' }))
+
+    await waitFor(() => {
+      expect(apiMock.practiceStatus).toHaveBeenCalled()
+      expect(screen.getByText('项目深挖')).toBeInTheDocument()
+      expect(screen.getByText('讲一个你真正主导过、并且最能代表你能力边界的项目。')).toBeInTheDocument()
     })
   })
 
