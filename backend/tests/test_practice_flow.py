@@ -356,9 +356,9 @@ def test_generate_route_broadcasts_new_status_sequence(monkeypatch):
     assert result == {"ok": True}
     assert [e["status"] for e in events if e.get("type") == "practice_status"] == [
         "preparing",
-        "interviewer_speaking",
         "awaiting_answer",
     ]
     snapshots = [e for e in events if e.get("type") == "practice_session"]
     assert len(snapshots) == 1
     assert snapshots[0]["session"]["context"]["jd_text"] == "熟悉 Redis、MySQL"
+    assert snapshots[0]["session"]["status"] == "awaiting_answer"

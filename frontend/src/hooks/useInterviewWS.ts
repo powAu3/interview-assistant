@@ -24,6 +24,10 @@ interface WsMsg {
   [k: string]: unknown
 }
 
+function normalizePracticeStatus(status: unknown) {
+  return status === 'interviewer_speaking' ? 'awaiting_answer' : status
+}
+
 function shouldDeliver(msg: WsMsg): boolean {
   const scope = msg.scope
   if (!scope) return true
@@ -123,7 +127,11 @@ export function useInterviewWS() {
         if (msg.practice_session) {
           s.setPracticeSession(msg.practice_session as Parameters<typeof s.setPracticeSession>[0])
           if ((msg.practice_session as { status?: string })?.status) {
-            s.setPracticeStatus((msg.practice_session as { status: Parameters<typeof s.setPracticeStatus>[0] }).status)
+            s.setPracticeStatus(
+              normalizePracticeStatus(
+                (msg.practice_session as { status: Parameters<typeof s.setPracticeStatus>[0] }).status,
+              ) as Parameters<typeof s.setPracticeStatus>[0],
+            )
           }
         }
         break
@@ -181,7 +189,7 @@ export function useInterviewWS() {
         break
       // Practice mode messages
       case 'practice_status':
-        s.setPracticeStatus(msg.status as Parameters<typeof s.setPracticeStatus>[0])
+        s.setPracticeStatus(normalizePracticeStatus(msg.status) as Parameters<typeof s.setPracticeStatus>[0])
         break
       case 'practice_session':
         s.setPracticeSession(msg.session as Parameters<typeof s.setPracticeSession>[0])

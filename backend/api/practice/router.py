@@ -19,7 +19,6 @@ from services.practice import (
     PRACTICE_STATUS_DEBRIEFING,
     PRACTICE_STATUS_FINISHED,
     PRACTICE_STATUS_IDLE,
-    PRACTICE_STATUS_INTERVIEWER_SPEAKING,
     PRACTICE_STATUS_PREPARING,
     PRACTICE_STATUS_THINKING,
     finish_practice_session,
@@ -84,6 +83,12 @@ def _broadcast_practice_session(session=None, *, reveal_feedback: bool = False) 
     )
 
 
+def _broadcast_practice_snapshot(session=None, *, reveal_feedback: bool = False) -> None:
+    session = session or get_practice()
+    _broadcast_practice_session(session, reveal_feedback=reveal_feedback)
+    _broadcast_practice_status(session.status)
+
+
 def _broadcast_token_update() -> None:
     stats = get_token_stats()
     broadcast(
@@ -114,13 +119,11 @@ async def api_practice_generate(body: Optional[dict] = None):
     def _gen():
         try:
             session = start_practice_session(jd_text=jd_text, interviewer_style=interviewer_style)
-            _broadcast_practice_status(PRACTICE_STATUS_INTERVIEWER_SPEAKING)
-            _broadcast_practice_session(session, reveal_feedback=False)
-            _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
+            _broadcast_practice_snapshot(session, reveal_feedback=False)
             _broadcast_token_update()
         except Exception as e:
             reset_practice()
-            _broadcast_practice_status(PRACTICE_STATUS_IDLE)
+            _broadcast_practice_snapshot(get_practice(), reveal_feedback=False)
             broadcast({"type": "error", "message": f"启动模拟面试失败: {e}"})
 
     threading.Thread(target=_gen, daemon=True).start()
@@ -178,13 +181,12 @@ async def api_practice_submit(body: PracticeSubmitBody):
                 _submit_practice_record(previous_question, combined_answer, score)
 
             if session.status == PRACTICE_STATUS_FINISHED:
-                _broadcast_practice_status(PRACTICE_STATUS_DEBRIEFING)
-                _broadcast_practice_session(session, reveal_feedback=True)
-                _broadcast_practice_status(PRACTICE_STATUS_FINISHED)
+                session.status = PRACTICE_STATUS_DEBRIEFING
+                _broadcast_practice_snapshot(session, reveal_feedback=False)
+                session.status = PRACTICE_STATUS_FINISHED
+                _broadcast_practice_snapshot(session, reveal_feedback=True)
             else:
-                _broadcast_practice_status(PRACTICE_STATUS_INTERVIEWER_SPEAKING)
-                _broadcast_practice_session(session, reveal_feedback=False)
-                _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
+                _broadcast_practice_snapshot(session, reveal_feedback=False)
             _broadcast_token_update()
         except Exception as e:
             get_practice().status = PRACTICE_STATUS_AWAITING_ANSWER
@@ -245,13 +247,12 @@ async def api_practice_finish():
     if not get_practice().turn_history:
         raise HTTPException(400, "还没有完成任何题目")
     get_practice().status = PRACTICE_STATUS_DEBRIEFING
-    _broadcast_practice_status(PRACTICE_STATUS_DEBRIEFING)
+    _broadcast_practice_snapshot(get_practice(), reveal_feedback=False)
 
     def _finish():
         try:
             session = finish_practice_session()
-            _broadcast_practice_session(session, reveal_feedback=True)
-            _broadcast_practice_status(PRACTICE_STATUS_FINISHED)
+            _broadcast_practice_snapshot(session, reveal_feedback=True)
             _broadcast_token_update()
         except Exception as e:
             get_practice().status = PRACTICE_STATUS_AWAITING_ANSWER
@@ -266,8 +267,7 @@ async def api_practice_finish():
 async def api_practice_reset():
     await run_in_threadpool(_stop_practice_recording)
     reset_practice()
-    _broadcast_practice_session(reveal_feedback=False)
-    _broadcast_practice_status(PRACTICE_STATUS_IDLE)
+    _broadcast_practice_snapshot(get_practice(), reveal_feedback=False)
     return {"ok": True}
 
 

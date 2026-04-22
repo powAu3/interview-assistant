@@ -1,3 +1,5 @@
+import practiceTtsTermsData from '../../../shared/practice_tts_terms.json'
+
 export type PracticeVoiceGender = 'auto' | 'female' | 'male'
 export interface PracticeVoiceLike {
   voiceURI: string
@@ -55,52 +57,13 @@ const MALE_HINTS = [
   'grandpa',
 ]
 
-const COMMON_TERM_REPLACEMENTS: Array<[string, string]> = [
-  ['PostgreSQL', 'Postgres sequel'],
-  ['MySQL', 'My sequel'],
-  ['SQL', 'sequel'],
-  ['JVM', 'J V M'],
-  ['API', 'A P I'],
-  ['SDK', 'S D K'],
-  ['HTTP', 'H T T P'],
-  ['HTTPS', 'H T T P S'],
-  ['TCP', 'T C P'],
-  ['UDP', 'U D P'],
-  ['RPC', 'R P C'],
-  ['gRPC', 'G R P C'],
-  ['JWT', 'J W T'],
-  ['JSON', 'J S O N'],
-  ['YAML', 'Y A M L'],
-  ['CDN', 'C D N'],
-  ['DNS', 'D N S'],
-]
+interface PracticeTtsTermsData {
+  common: Array<[string, string]>
+  zh: Array<[string, string]>
+  en: Array<[string, string]>
+}
 
-const ZH_TERM_REPLACEMENTS: Array<[string, string]> = [
-  ['Redis', 'Ree dis'],
-  ['Kafka', 'Kaf ka'],
-  ['Nginx', 'Engine X'],
-  ['Linux', 'Linucks'],
-  ['MongoDB', 'Mongo D B'],
-  ['RabbitMQ', 'Rabbit M Q'],
-  ['Elasticsearch', 'Elastic Search'],
-  ['OpenTelemetry', 'Open Telemetry'],
-  ['ClickHouse', 'Click House'],
-  ['Prometheus', 'Prometheus'],
-  ['Grafana', 'Grafana'],
-  ['Kubernetes', 'Kuber net ease'],
-  ['TypeScript', 'Type Script'],
-  ['JavaScript', 'Java Script'],
-  ['OAuth', 'Oh Auth'],
-]
-
-const EN_TERM_REPLACEMENTS: Array<[string, string]> = [
-  ['ClickHouse', 'Click House'],
-  ['OpenTelemetry', 'Open Telemetry'],
-  ['RabbitMQ', 'Rabbit M Q'],
-  ['MongoDB', 'Mongo D B'],
-  ['Nginx', 'Engine X'],
-  ['OAuth', 'Oh Auth'],
-]
+const PRACTICE_TTS_TERMS = practiceTtsTermsData as PracticeTtsTermsData
 
 function includesAny(name: string, hints: string[]): boolean {
   const lower = name.toLowerCase()
@@ -110,8 +73,8 @@ function includesAny(name: string, hints: string[]): boolean {
 export function normalizePracticeTtsText(text: string, localeHint = 'zh'): string {
   let normalized = String(text || '').trim()
   const replacements = [
-    ...COMMON_TERM_REPLACEMENTS,
-    ...(localeHint.toLowerCase().startsWith('en') ? EN_TERM_REPLACEMENTS : ZH_TERM_REPLACEMENTS),
+    ...PRACTICE_TTS_TERMS.common,
+    ...(localeHint.toLowerCase().startsWith('en') ? PRACTICE_TTS_TERMS.en : PRACTICE_TTS_TERMS.zh),
   ]
   for (const [source, target] of replacements) {
     const escaped = source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -1,0 +1,46 @@
+{
+  "common": [
+    ["PostgreSQL", "Postgres sequel"],
+    ["MySQL", "My sequel"],
+    ["SQL", "sequel"],
+    ["JVM", "J V M"],
+    ["API", "A P I"],
+    ["SDK", "S D K"],
+    ["HTTP", "H T T P"],
+    ["HTTPS", "H T T P S"],
+    ["TCP", "T C P"],
+    ["UDP", "U D P"],
+    ["RPC", "R P C"],
+    ["gRPC", "G R P C"],
+    ["JWT", "J W T"],
+    ["JSON", "J S O N"],
+    ["YAML", "Y A M L"],
+    ["CDN", "C D N"],
+    ["DNS", "D N S"]
+  ],
+  "zh": [
+    ["Redis", "Ree dis"],
+    ["Kafka", "Kaf ka"],
+    ["Nginx", "Engine X"],
+    ["Linux", "Linucks"],
+    ["MongoDB", "Mongo D B"],
+    ["RabbitMQ", "Rabbit M Q"],
+    ["Elasticsearch", "Elastic Search"],
+    ["OpenTelemetry", "Open Telemetry"],
+    ["ClickHouse", "Click House"],
+    ["Prometheus", "Prometheus"],
+    ["Grafana", "Grafana"],
+    ["Kubernetes", "Kuber net ease"],
+    ["TypeScript", "Type Script"],
+    ["JavaScript", "Java Script"],
+    ["OAuth", "Oh Auth"]
+  ],
+  "en": [
+    ["ClickHouse", "Click House"],
+    ["OpenTelemetry", "Open Telemetry"],
+    ["RabbitMQ", "Rabbit M Q"],
+    ["MongoDB", "Mongo D B"],
+    ["Nginx", "Engine X"],
+    ["OAuth", "Oh Auth"]
+  ]
+}

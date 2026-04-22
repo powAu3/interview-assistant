@@ -28,10 +28,10 @@ export function resolveVirtualInterviewerState(input: {
   if (input.practiceStatus === 'debriefing') return 'debrief'
   if (input.practiceStatus === 'finished') return 'debrief'
   if (input.practiceStatus === 'thinking_next_turn') return 'thinking'
-  if (input.practiceRecording || input.practiceStatus === 'awaiting_answer') return 'listening'
-  if (!writtenPromptMode && (input.practiceTtsSpeaking || input.practiceStatus === 'interviewer_speaking')) {
+  if (!writtenPromptMode && input.practiceTtsSpeaking) {
     return 'speaking'
   }
+  if (input.practiceRecording || input.practiceStatus === 'awaiting_answer') return 'listening'
   return 'idle'
 }
 

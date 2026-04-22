@@ -6,6 +6,7 @@ import json
 import re
 import tempfile
 import asyncio
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode
@@ -19,53 +20,21 @@ VOLCENGINE_TTS_VERSION = "v4"
 VOLCENGINE_TTS_NAMESPACE = "TTS"
 
 VoiceGender = Literal["auto", "female", "male"]
+_TERM_RULES_PATH = Path(__file__).resolve().parents[2] / "shared" / "practice_tts_terms.json"
 
-_COMMON_TERM_REPLACEMENTS = [
-    ("PostgreSQL", "Postgres sequel"),
-    ("MySQL", "My sequel"),
-    ("SQL", "sequel"),
-    ("JVM", "J V M"),
-    ("API", "A P I"),
-    ("SDK", "S D K"),
-    ("HTTP", "H T T P"),
-    ("HTTPS", "H T T P S"),
-    ("TCP", "T C P"),
-    ("UDP", "U D P"),
-    ("RPC", "R P C"),
-    ("gRPC", "G R P C"),
-    ("JWT", "J W T"),
-    ("JSON", "J S O N"),
-    ("YAML", "Y A M L"),
-    ("CDN", "C D N"),
-    ("DNS", "D N S"),
-]
 
-_ZH_TERM_REPLACEMENTS = [
-    ("Redis", "Ree dis"),
-    ("Kafka", "Kaf ka"),
-    ("Nginx", "Engine X"),
-    ("Linux", "Linucks"),
-    ("MongoDB", "Mongo D B"),
-    ("RabbitMQ", "Rabbit M Q"),
-    ("Elasticsearch", "Elastic Search"),
-    ("OpenTelemetry", "Open Telemetry"),
-    ("ClickHouse", "Click House"),
-    ("Prometheus", "Prometheus"),
-    ("Grafana", "Grafana"),
-    ("Kubernetes", "Kuber net ease"),
-    ("TypeScript", "Type Script"),
-    ("JavaScript", "Java Script"),
-    ("OAuth", "Oh Auth"),
-]
-
-_EN_TERM_REPLACEMENTS = [
-    ("ClickHouse", "Click House"),
-    ("OpenTelemetry", "Open Telemetry"),
-    ("RabbitMQ", "Rabbit M Q"),
-    ("MongoDB", "Mongo D B"),
-    ("Nginx", "Engine X"),
-    ("OAuth", "Oh Auth"),
-]
+@lru_cache(maxsize=1)
+def _load_term_replacements() -> dict[str, list[tuple[str, str]]]:
+    raw = json.loads(_TERM_RULES_PATH.read_text(encoding="utf-8"))
+    result: dict[str, list[tuple[str, str]]] = {}
+    for key in ("common", "zh", "en"):
+        pairs = raw.get(key) or []
+        result[key] = [
+            (str(source), str(target))
+            for source, target in pairs
+            if isinstance(source, str) and isinstance(target, str)
+        ]
+    return result
 
 
 def _speaker_for_gender(preferred_gender: VoiceGender) -> str:
@@ -88,8 +57,12 @@ def _edge_voice_for_gender(preferred_gender: VoiceGender) -> str:
 
 def normalize_tts_text(text: str, locale_hint: str = "zh") -> str:
     normalized = str(text or "").strip()
-    replacements = list(_COMMON_TERM_REPLACEMENTS)
-    replacements.extend(_EN_TERM_REPLACEMENTS if locale_hint.lower().startswith("en") else _ZH_TERM_REPLACEMENTS)
+    replacements = list(_load_term_replacements()["common"])
+    replacements.extend(
+        _load_term_replacements()["en"]
+        if locale_hint.lower().startswith("en")
+        else _load_term_replacements()["zh"]
+    )
     for src, target in replacements:
         escaped = re.escape(src)
         normalized = re.sub(

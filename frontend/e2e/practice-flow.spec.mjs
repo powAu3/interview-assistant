@@ -5,15 +5,9 @@ import { COMMON_WS_BOOTSTRAP, installMocks } from './fixtures/setup.mjs'
 const PRACTICE_FLOW_MESSAGES = [
   ...COMMON_WS_BOOTSTRAP,
   {
-    type: 'practice_status',
-    status: 'interviewer_speaking',
-    scope: 'practice',
-    delay: 8000,
-  },
-  {
     type: 'practice_session',
     scope: 'practice',
-    delay: 8200,
+    delay: 8000,
     session: {
       status: 'awaiting_answer',
       context: {
@@ -82,12 +76,6 @@ const PRACTICE_FLOW_MESSAGES = [
       created_at: 1710000000,
       finished_at: null,
     },
-  },
-  {
-    type: 'practice_status',
-    status: 'awaiting_answer',
-    scope: 'practice',
-    delay: 8240,
   },
   {
     type: 'practice_status',

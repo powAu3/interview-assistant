@@ -76,6 +76,7 @@ function createPracticeSession(overrides: Record<string, unknown> = {}) {
 
 describe('PracticeMode', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     const storage = new Map<string, string>()
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
@@ -227,30 +228,33 @@ describe('PracticeMode', () => {
 
     await waitFor(() => {
       expect(apiMock.practiceStatus).toHaveBeenCalled()
-    })
+    }, { timeout: 2500 })
+    await waitFor(() => {
+      expect(apiMock.practiceStatus).toHaveBeenCalledTimes(1)
+    }, { timeout: 2500 })
     await waitFor(() => {
       expect(screen.getByText('项目深挖')).toBeInTheDocument()
       expect(screen.getByText('讲讲你做过的高并发接口优化。')).toBeInTheDocument()
     })
   })
 
-  it('keeps polling while the backend is still in preparing state', async () => {
+  it('uses a one-shot watchdog refresh when websocket hydration does not arrive', async () => {
     apiMock.practiceGenerate.mockResolvedValue({ ok: true })
-    apiMock.practiceStatus
-      .mockResolvedValueOnce({ status: 'preparing', current_turn: null })
-      .mockResolvedValueOnce(
-        createPracticeSession({
-          status: 'awaiting_answer',
-        }),
-      )
+    apiMock.practiceStatus.mockResolvedValue(
+      createPracticeSession({
+        status: 'awaiting_answer',
+      }),
+    )
 
     render(<PracticeMode />)
     fireEvent.click(screen.getByRole('button', { name: '开始真实模拟面试' }))
 
+    expect(apiMock.practiceStatus).not.toHaveBeenCalled()
+
     await waitFor(() => {
-      expect(apiMock.practiceStatus).toHaveBeenCalledTimes(2)
+      expect(apiMock.practiceStatus).toHaveBeenCalledTimes(1)
       expect(screen.getByText('项目深挖')).toBeInTheDocument()
-    })
+    }, { timeout: 2500 })
   })
 
   it('updates the start-screen interviewer preview when the style changes', async () => {
@@ -336,7 +340,7 @@ describe('PracticeMode', () => {
     })
   })
 
-  it('hydrates the next turn from the status endpoint when submit websocket updates lag', async () => {
+  it('uses a one-shot watchdog refresh when submit websocket hydration does not arrive', async () => {
     apiMock.practiceSubmit.mockResolvedValue({ ok: true })
     apiMock.practiceStatus.mockResolvedValue(
       createPracticeSession({
@@ -404,11 +408,13 @@ describe('PracticeMode', () => {
     render(<PracticeMode />)
     fireEvent.click(screen.getByRole('button', { name: '提交本轮回答' }))
 
+    expect(apiMock.practiceStatus).not.toHaveBeenCalled()
+
     await waitFor(() => {
-      expect(apiMock.practiceStatus).toHaveBeenCalled()
+      expect(apiMock.practiceStatus).toHaveBeenCalledTimes(1)
       expect(screen.getByText('项目深挖')).toBeInTheDocument()
       expect(screen.getByText('讲一个你真正主导过、并且最能代表你能力边界的项目。')).toBeInTheDocument()
-    })
+    }, { timeout: 2500 })
   })
 
   it('keeps the interviewer in prompt mode for coding turns', () => {

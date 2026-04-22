@@ -11,7 +11,7 @@ describe('resolveVirtualInterviewerState', () => {
         practiceRecording: false,
         turn: { category: 'project', answer_mode: 'voice' },
       }),
-    ).toBe('speaking')
+    ).toBe('idle')
 
     expect(
       resolveVirtualInterviewerState({
@@ -57,6 +57,17 @@ describe('resolveVirtualInterviewerState', () => {
         turn: null,
       }),
     ).toBe('idle')
+  })
+
+  it('prefers active playback over awaiting-answer status for voice turns', () => {
+    expect(
+      resolveVirtualInterviewerState({
+        practiceStatus: 'awaiting_answer',
+        practiceTtsSpeaking: true,
+        practiceRecording: false,
+        turn: { category: 'project', answer_mode: 'voice' },
+      }),
+    ).toBe('speaking')
   })
 
   it('does not enter speaking during coding prompt mode', () => {

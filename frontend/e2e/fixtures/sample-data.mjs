@@ -262,11 +262,11 @@ export function createSamplePracticeSession(overrides = {}) {
 }
 
 export const SAMPLE_PRACTICE_SPEAKING_SESSION = createSamplePracticeSession({
-  status: 'interviewer_speaking',
+  status: 'awaiting_answer',
 })
 
 export const SAMPLE_PRACTICE_CODING_SESSION = createSamplePracticeSession({
-  status: 'interviewer_speaking',
+  status: 'awaiting_answer',
   current_phase_index: 2,
   current_turn: {
     turn_id: 'turn-coding-1',
