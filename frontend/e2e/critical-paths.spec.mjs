@@ -47,7 +47,7 @@ test.describe('app shell', () => {
 
     await resumeTab.click()
     await expect(resumeTab).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByText('粘贴目标岗位 JD')).toBeVisible({ timeout: 8000 })
+    await expect(page.getByPlaceholder('将招聘 JD 粘贴到这里...')).toBeVisible({ timeout: 8000 })
 
     await jobTab.click()
     await expect(jobTab).toHaveAttribute('aria-selected', 'true')

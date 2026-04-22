@@ -74,7 +74,7 @@ test.describe('@visual main pages', () => {
   test('resume page', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('tab', { name: '简历优化' }).click()
-    await expect(page.getByText('粘贴目标岗位 JD')).toBeVisible({ timeout: 8000 })
+    await expect(page.getByPlaceholder('将招聘 JD 粘贴到这里...')).toBeVisible({ timeout: 8000 })
     await page.waitForTimeout(500)
     await expect(page).toHaveScreenshot('resume.png', { fullPage: false })
   })
