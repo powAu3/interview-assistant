@@ -1,9 +1,59 @@
 import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
+import c from 'react-syntax-highlighter/dist/esm/languages/prism/c'
+import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp'
+import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp'
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go'
+import java from 'react-syntax-highlighter/dist/esm/languages/prism/java'
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown'
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python'
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust'
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
+import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
 import { oneDark, oneLight, a11yDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Copy, Check } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ColorSchemeId } from '@/lib/colorScheme'
+
+const PRISM_LANGUAGE_REGISTRY: Record<string, unknown> = {
+  bash,
+  shell: bash,
+  sh: bash,
+  zsh: bash,
+  c,
+  cpp,
+  'c++': cpp,
+  csharp,
+  cs: csharp,
+  go,
+  java,
+  javascript,
+  js: javascript,
+  json,
+  jsx,
+  markdown,
+  md: markdown,
+  python,
+  py: python,
+  rust,
+  rs: rust,
+  sql,
+  tsx,
+  typescript,
+  ts: typescript,
+  yaml,
+  yml: yaml,
+}
+
+for (const [languageName, languageModule] of Object.entries(PRISM_LANGUAGE_REGISTRY)) {
+  SyntaxHighlighter.registerLanguage(languageName, languageModule)
+}
 
 function prismThemeForScheme(id: ColorSchemeId) {
   if (id === 'vscode-light-plus') return oneLight
@@ -46,11 +96,12 @@ function useMarkdownComponents(colorScheme: ColorSchemeId) {
         const match = /language-(\w+)/.exec(className || '')
         const codeStr = String(children).replace(/\n$/, '')
         if (match) {
-          const lang = match[1].toLowerCase()
+          const requestedLang = match[1].toLowerCase()
+          const lang = requestedLang in PRISM_LANGUAGE_REGISTRY ? requestedLang : 'markdown'
           return (
             <div className="code-block-shell my-3 rounded-xl overflow-hidden">
               <div className="code-block-head flex items-center justify-between px-3 py-2">
-                <span className="text-[11px] uppercase tracking-wide text-accent-blue font-semibold">{lang}</span>
+                <span className="text-[11px] uppercase tracking-wide text-accent-blue font-semibold">{requestedLang}</span>
                 <CopyButton text={codeStr} />
               </div>
               <SyntaxHighlighter

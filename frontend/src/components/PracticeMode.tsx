@@ -779,6 +779,7 @@ export default function PracticeMode() {
               emptyHint="当前没有挂载简历，系统会按岗位常见能力默认出题。"
               sharedNote="这里和主流程、简历优化共用同一份简历历史与当前挂载记录。"
               historyMode="popover"
+              variant="dark"
               className="mt-6"
             />
 

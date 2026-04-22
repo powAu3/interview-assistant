@@ -162,6 +162,7 @@ export function ResumeMountPanel({
   emptyHint,
   sharedNote,
   historyMode = 'panel',
+  variant = 'light',
   className = '',
 }: {
   title: string
@@ -170,6 +171,7 @@ export function ResumeMountPanel({
   emptyHint?: string
   sharedNote?: string
   historyMode?: 'panel' | 'popover'
+  variant?: 'light' | 'dark'
   className?: string
 }) {
   const {
@@ -184,9 +186,44 @@ export function ResumeMountPanel({
     handleRemove,
   } = useResumeMountState()
 
+  const isDark = variant === 'dark'
+
+  const shellClass = isDark
+    ? 'rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3 text-[#f5efe3]'
+    : 'rounded-2xl border border-bg-hover/40 bg-bg-secondary/60 p-4 space-y-3'
+  const kickerClass = isDark
+    ? 'text-xs uppercase tracking-[0.16em] text-[#8bb0d6]'
+    : 'text-xs uppercase tracking-[0.16em] text-accent-blue'
+  const bodyClass = isDark ? 'mt-1 text-sm text-[#f6efe4]' : 'mt-1 text-sm text-text-primary'
+  const noteClass = isDark ? 'mt-2 text-[11px] text-[#cdbda5]' : 'mt-2 text-[11px] text-text-muted'
+  const statusClass = hasResume
+    ? (isDark
+      ? 'bg-accent-green/10 text-[#cde7d7] border border-accent-green/20'
+      : 'bg-accent-green/10 text-accent-green border border-accent-green/20')
+    : (isDark
+      ? 'bg-white/6 text-[#e6d9c4] border border-white/10'
+      : 'bg-bg-primary/60 text-text-secondary border border-bg-hover/50')
+  const filenameShellClass = hasResume
+    ? (isDark
+      ? 'rounded-xl border px-3 py-3 text-xs border-[#f4b88a]/20 bg-[#f4b88a]/8 text-[#f8f1e4]'
+      : 'rounded-xl border px-3 py-3 text-xs border-accent-green/20 bg-accent-green/5 text-text-primary')
+    : (isDark
+      ? 'rounded-xl border px-3 py-3 text-xs border-dashed border-white/10 bg-white/4 text-[#d7cab4]'
+      : 'rounded-xl border px-3 py-3 text-xs border-dashed border-bg-hover/60 bg-bg-primary/40 text-text-muted')
+  const secondaryTextClass = isDark ? 'mt-1 text-[11px] text-[#cdbda5]' : 'mt-1 text-[11px] text-text-muted'
+  const primaryButtonClass = isDark
+    ? 'inline-flex items-center gap-2 rounded-lg bg-[#f4b88a] text-[#10233a] text-xs font-medium px-3 py-2 hover:bg-[#f6c298] disabled:opacity-50'
+    : 'inline-flex items-center gap-2 rounded-lg bg-accent-blue text-white text-xs font-medium px-3 py-2 hover:bg-accent-blue/90 disabled:opacity-50'
+  const secondaryButtonClass = isDark
+    ? 'inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs text-[#d9ccb6] hover:text-accent-red hover:bg-accent-red/10'
+    : 'inline-flex items-center gap-1.5 rounded-lg border border-bg-hover/60 px-3 py-2 text-xs text-text-secondary hover:text-accent-red hover:bg-accent-red/5'
+  const errorClass = isDark
+    ? 'flex items-center gap-2 bg-accent-red/12 text-[#ffd3ca] text-xs px-3 py-2 rounded-lg border border-accent-red/15'
+    : 'flex items-center gap-2 bg-accent-red/10 text-accent-red text-xs px-3 py-2 rounded-lg'
+
   return (
     <section
-      className={`rounded-2xl border border-bg-hover/40 bg-bg-secondary/60 p-4 space-y-3 ${className}`}
+      className={`${shellClass} ${className}`}
       data-testid="resume-mount-panel"
     >
       <input
@@ -198,31 +235,23 @@ export function ResumeMountPanel({
       />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.16em] text-accent-blue">{title}</p>
-          <p className="mt-1 text-sm text-text-primary">{description}</p>
-          {sharedNote && <p className="mt-2 text-[11px] text-text-muted">{sharedNote}</p>}
+          <p className={kickerClass}>{title}</p>
+          <p className={bodyClass}>{description}</p>
+          {sharedNote && <p className={noteClass}>{sharedNote}</p>}
         </div>
-        <span className={`rounded-full px-3 py-1 text-[11px] ${
-          hasResume
-            ? 'bg-accent-green/10 text-accent-green border border-accent-green/20'
-            : 'bg-bg-primary/60 text-text-secondary border border-bg-hover/50'
-        }`}>
+        <span className={`rounded-full px-3 py-1 text-[11px] ${statusClass}`}>
           {statusLabel || (hasResume ? '已挂载' : '待挂载')}
         </span>
       </div>
 
-      <div className={`rounded-xl border px-3 py-3 text-xs ${
-        hasResume
-          ? 'border-accent-green/20 bg-accent-green/5 text-text-primary'
-          : 'border-dashed border-bg-hover/60 bg-bg-primary/40 text-text-muted'
-      }`}>
+      <div className={filenameShellClass}>
         <div className="flex items-center gap-2 min-w-0">
           <FileText className={`w-3.5 h-3.5 flex-shrink-0 ${hasResume ? 'text-accent-green' : 'text-text-muted'}`} />
           <div className="min-w-0 flex-1">
             <p className="font-medium truncate" data-testid="resume-mount-filename">
               {activeFilename || emptyHint || '当前没有挂载简历'}
             </p>
-            <p className="mt-1 text-[11px] text-text-muted">
+            <p className={secondaryTextClass}>
               {hasResume
                 ? `当前挂载记录 ID：${activeHistoryId ?? '—'}`
                 : '上传或从历史中选用一份简历后，主流程、模拟练习和简历优化都会一起切换。'}
@@ -236,7 +265,7 @@ export function ResumeMountPanel({
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="inline-flex items-center gap-2 rounded-lg bg-accent-blue text-white text-xs font-medium px-3 py-2 hover:bg-accent-blue/90 disabled:opacity-50"
+          className={primaryButtonClass}
         >
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
           {hasResume ? (uploading ? '替换中...' : '替换简历') : (uploading ? '上传中...' : '上传简历')}
@@ -245,7 +274,7 @@ export function ResumeMountPanel({
           <button
             type="button"
             onClick={handleRemove}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-bg-hover/60 px-3 py-2 text-xs text-text-secondary hover:text-accent-red hover:bg-accent-red/5"
+            className={secondaryButtonClass}
           >
             <X className="w-3.5 h-3.5" />
             取消挂载
@@ -255,7 +284,7 @@ export function ResumeMountPanel({
       </div>
 
       {uploadError && (
-        <div className="flex items-center gap-2 bg-accent-red/10 text-accent-red text-xs px-3 py-2 rounded-lg">
+        <div className={errorClass}>
           <span className="flex-1">{uploadError}</span>
           <button type="button" onClick={clearUploadError}><X className="w-3 h-3" /></button>
         </div>

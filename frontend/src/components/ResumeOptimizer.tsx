@@ -106,11 +106,6 @@ export default function ResumeOptimizer() {
               <p className={`mt-1 font-medium ${config?.has_resume ? 'text-accent-green' : 'text-text-primary'}`}>
                 {config?.has_resume ? '已挂载' : '未上传'}
               </p>
-              {config?.resume_active_filename && (
-                <p className="mt-1 truncate text-[10px] text-text-muted">
-                  {config.resume_active_filename}
-                </p>
-              )}
             </div>
             <div className="rounded-xl border border-bg-hover/40 bg-bg-primary/60 px-3 py-2">
               <p className="text-text-muted">JD 字数</p>
@@ -127,6 +122,7 @@ export default function ResumeOptimizer() {
           title="Resume Mount"
           description="这里的分析直接使用当前挂载简历，不会维护另一份独立副本。"
           sharedNote="和主流程、模拟练习共用同一份简历历史与当前挂载记录。"
+          variant="light"
         />
 
         {uploadError && (
