@@ -7,6 +7,10 @@
  */
 import { test, expect } from '@playwright/test'
 import { installMocks, COMMON_WS_BOOTSTRAP } from './fixtures/setup.mjs'
+import {
+  SAMPLE_PRACTICE_CODING_SESSION,
+  SAMPLE_PRACTICE_SPEAKING_SESSION,
+} from './fixtures/sample-data.mjs'
 
 test.describe('app shell', () => {
   test.beforeEach(async ({ context }) => {
@@ -108,6 +112,57 @@ test.describe('assist mode with WebSocket-driven Q/A', () => {
     await expect(
       page.getByText('核心要点是先讲背景与目标、再讲关键决策、最后讲量化结果。'),
     ).toBeVisible({ timeout: 5000 })
+  })
+})
+
+test.describe('practice mode booth', () => {
+  test('shows the virtual interviewer during an active practice session', async ({ context, page }) => {
+    await installMocks(context, {
+      messages: [
+        ...COMMON_WS_BOOTSTRAP,
+        {
+          type: 'init',
+          delay: 50,
+          stt_loaded: true,
+          is_recording: false,
+          is_paused: false,
+          practice_session: SAMPLE_PRACTICE_SPEAKING_SESSION,
+        },
+      ],
+      localStorage: {
+        'ia-color-scheme': 'vscode-light-plus',
+        'ia_app_mode': 'practice',
+      },
+    })
+
+    await page.goto('/')
+    await expect(page.getByTestId('practice-interviewer-preview')).toBeVisible()
+    await expect(page.getByText(/状态 · 播报中/)).toBeVisible()
+    await expect(page.getByText(/当前来源：EdgeTTS/)).toBeVisible()
+  })
+
+  test('keeps coding prompt mode out of speaking animation', async ({ context, page }) => {
+    await installMocks(context, {
+      messages: [
+        ...COMMON_WS_BOOTSTRAP,
+        {
+          type: 'init',
+          delay: 50,
+          stt_loaded: true,
+          is_recording: false,
+          is_paused: false,
+          practice_session: SAMPLE_PRACTICE_CODING_SESSION,
+        },
+      ],
+      localStorage: {
+        'ia-color-scheme': 'vscode-light-plus',
+        'ia_app_mode': 'practice',
+      },
+    })
+
+    await page.goto('/')
+    await expect(page.getByText('题面模式').first()).toBeVisible()
+    await expect(page.getByTestId('practice-interviewer-preview')).toHaveAttribute('data-state', 'idle')
   })
 })
 

@@ -12,6 +12,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installMocks, COMMON_WS_BOOTSTRAP } from './fixtures/setup.mjs'
+import { SAMPLE_PRACTICE_SPEAKING_SESSION } from './fixtures/sample-data.mjs'
 
 test.describe('@visual main pages', () => {
   test.beforeEach(async ({ context }) => {
@@ -32,8 +33,25 @@ test.describe('@visual main pages', () => {
   })
 
   test('practice page', async ({ page }) => {
+    await installMocks(page.context(), {
+      messages: [
+        ...COMMON_WS_BOOTSTRAP,
+        {
+          type: 'init',
+          delay: 50,
+          stt_loaded: true,
+          is_recording: false,
+          is_paused: false,
+          practice_session: SAMPLE_PRACTICE_SPEAKING_SESSION,
+        },
+      ],
+      localStorage: {
+        'ia-color-scheme': 'vscode-light-plus',
+        'ia_answer_panel_layout': 'stream',
+        'ia_app_mode': 'practice',
+      },
+    })
     await page.goto('/')
-    await page.getByRole('tab', { name: '模拟练习' }).click()
     await page.waitForTimeout(700)
     // PracticeMode 顶部 Think 提示卡等布局变更后，与旧 Linux baseline 约 3% 像素差；
     // 全局默认 maxDiffPixelRatio 为 0.005，此处单独放宽；后续可用 workflow_dispatch
@@ -41,6 +59,7 @@ test.describe('@visual main pages', () => {
     await expect(page).toHaveScreenshot('practice.png', {
       fullPage: false,
       maxDiffPixelRatio: 0.04,
+      timeout: 30_000,
     })
   })
 

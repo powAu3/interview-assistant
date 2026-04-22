@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Bot,
   Code2,
   Loader2,
   Mic,
@@ -27,18 +26,22 @@ import {
 } from '@/lib/practiceTts'
 import { refreshConfig } from '@/lib/configSync'
 import { useInterviewStore } from '@/stores/configStore'
+import { VirtualInterviewer } from '@/components/practice/VirtualInterviewer'
+import {
+  resolveVirtualInterviewerPersona,
+  VIRTUAL_INTERVIEWER_PERSONA_OPTIONS as INTERVIEWER_STYLE_OPTIONS,
+} from '@/components/practice/virtualInterviewerPersona'
+import {
+  getVirtualInterviewerStateLabel,
+  isPracticeWrittenPromptMode,
+  resolveVirtualInterviewerState,
+} from '@/components/practice/virtualInterviewerState'
 
 const JD_STORAGE_KEY = 'ia-practice-jd-draft'
 const VOICE_GENDER_STORAGE_KEY = 'ia-practice-voice-gender'
 const VOICE_URI_STORAGE_KEY = 'ia-practice-voice-uri'
 const INTERVIEWER_STYLE_STORAGE_KEY = 'ia-practice-interviewer-style'
 const PRACTICE_TTS_TO_RECORDING_GAP_MS = 180
-
-const INTERVIEWER_STYLE_OPTIONS = [
-  { value: 'calm_pressing', label: '稳压型', hint: '礼貌但不放水，像常规技术一面。' },
-  { value: 'supportive_senior', label: '带教型', hint: '更温和，会帮你起主线，但仍然追细节。' },
-  { value: 'pressure_bigtech', label: '压力型', hint: '切题更快、追问更尖，偏大厂技术面。' },
-] as const
 
 type BrowserVoice = Pick<SpeechSynthesisVoice, 'voiceURI' | 'name' | 'lang'> & {
   source?: string
@@ -107,60 +110,34 @@ function getPhaseGuidance(category?: string) {
   }
 }
 
-function InterviewerAvatar({
-  speaking,
-  listening,
-}: {
-  speaking: boolean
-  listening: boolean
-}) {
-  return (
-    <div className="relative h-44 w-44 shrink-0">
-      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,245,232,0.95),rgba(221,227,238,0.55)_42%,rgba(18,33,55,0)_74%)]" />
-      <div
-        className={`absolute inset-4 rounded-full border transition-all duration-300 ${
-          speaking
-            ? 'border-[#c74f2e]/60 shadow-[0_0_40px_rgba(199,79,46,0.25)]'
-            : listening
-              ? 'border-[#335d88]/50 shadow-[0_0_30px_rgba(51,93,136,0.18)]'
-              : 'border-[#64748b]/30'
-        }`}
-      />
-      <div
-        className={`absolute inset-10 rounded-full border transition-all duration-300 ${
-          speaking ? 'border-[#16324f] bg-[#f3ede1]/90' : 'border-[#16324f]/40 bg-[#f7f4ec]/85'
-        }`}
-      />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-[#10233a] text-[#f6efe4] shadow-[0_12px_40px_rgba(10,20,35,0.22)]">
-          <Bot className="h-9 w-9" strokeWidth={1.7} />
-          <span
-            className={`absolute -bottom-2 h-3 w-12 rounded-full transition-all ${
-              speaking
-                ? 'animate-pulse bg-[#c74f2e]'
-                : listening
-                  ? 'bg-[#335d88]'
-                  : 'bg-[#64748b]/60'
-            }`}
-          />
-        </div>
-      </div>
-      <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5">
-        {[0.45, 0.72, 1, 0.72, 0.45].map((scale, index) => (
-          <span
-            key={index}
-            className={`w-2 rounded-full transition-all duration-150 ${
-              speaking ? 'bg-[#c74f2e]' : listening ? 'bg-[#335d88]' : 'bg-[#94a3b8]/70'
-            }`}
-            style={{
-              height: `${speaking ? 16 + scale * 18 : listening ? 10 + scale * 8 : 8}px`,
-              opacity: speaking ? 0.75 + scale * 0.2 : 0.55 + scale * 0.1,
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  )
+function getInterviewerSignalLabel(signal?: string | null) {
+  switch (signal) {
+    case 'probe':
+      return '追问'
+    case 'pressure-check':
+      return '校验'
+    case 'stress-test':
+      return '压问'
+    case 'implementation-check':
+      return '实现校验'
+    case 'wrap-up':
+      return '收束'
+    default:
+      return '引导'
+  }
+}
+
+function getPracticeSourceLabel(
+  source: 'idle' | 'volcengine' | 'edge_tts' | 'system' | 'browser',
+  provider?: string,
+) {
+  if (source === 'volcengine') return 'Volcengine'
+  if (source === 'edge_tts') return 'EdgeTTS'
+  if (source === 'system' || source === 'browser') return 'local'
+  if (provider === 'volcengine') return 'Volcengine'
+  if (provider === 'edge_tts') return 'EdgeTTS'
+  if (provider === 'local') return 'local'
+  return 'local'
 }
 
 export default function PracticeMode() {
@@ -221,7 +198,7 @@ export default function PracticeMode() {
   const phases = practiceSession?.blueprint?.phases ?? []
   const completedTurns = practiceSession?.turn_history ?? []
   const currentPhaseLabel = currentTurn?.phase_label ?? '模拟面试'
-  const isFinished = practiceStatus === 'finished'
+  const isReportStage = practiceStatus === 'debriefing' || practiceStatus === 'finished'
   const isIdle = practiceStatus === 'idle'
   const useEdgeTts = (config?.practice_tts_provider ?? 'edge_tts') === 'edge_tts'
   const selectedDesktopVoice = selectedVoiceURI.startsWith('say:')
@@ -236,13 +213,27 @@ export default function PracticeMode() {
     || (autoPreferredLocalVoice?.voiceURI.startsWith('say:')
       ? autoPreferredLocalVoice.voiceURI.replace(/^say:/, '')
       : '')
-  const isWrittenPromptMode = Boolean(
-    currentTurn && (currentTurn.category === 'coding' || currentTurn.answer_mode === 'code' || currentTurn.answer_mode === 'voice+code'),
-  )
+  const selectedPersona = resolveVirtualInterviewerPersona({ style: interviewerStyle })
+  const activePersona = resolveVirtualInterviewerPersona({
+    tone: practiceSession?.interviewer_persona?.tone,
+    style: practiceSession?.context?.interviewer_style ?? interviewerStyle,
+  })
+  const isWrittenPromptMode = isPracticeWrittenPromptMode(currentTurn)
   const canSpeakAnswer = Boolean(
     currentTurn && (currentTurn.answer_mode === 'voice' || currentTurn.answer_mode === 'voice+code'),
   )
   const phaseGuidance = getPhaseGuidance(currentTurn?.category)
+  const interviewerState = resolveVirtualInterviewerState({
+    practiceStatus,
+    practiceTtsSpeaking,
+    practiceRecording,
+    turn: currentTurn,
+  })
+  const interviewerStateLabel = getVirtualInterviewerStateLabel(interviewerState, {
+    writtenPromptMode: isWrittenPromptMode,
+  })
+  const interviewerSignalLabel = getInterviewerSignalLabel(currentTurn?.interviewer_signal)
+  const ttsSourceLabel = getPracticeSourceLabel(ttsPlaybackSource, config?.practice_tts_provider)
 
   useEffect(() => {
     if (mics.length === 0) {
@@ -322,13 +313,13 @@ export default function PracticeMode() {
   }, [currentTurn?.turn_id, setPracticeElapsedMs])
 
   useEffect(() => {
-    if (!turnStartRef.current || !currentTurn || isFinished) return
+    if (!turnStartRef.current || !currentTurn || isReportStage) return
     const timer = window.setInterval(() => {
       if (!turnStartRef.current) return
       setPracticeElapsedMs(Date.now() - turnStartRef.current)
     }, 200)
     return () => window.clearInterval(timer)
-  }, [currentTurn?.turn_id, isFinished, setPracticeElapsedMs])
+  }, [currentTurn?.turn_id, isReportStage, setPracticeElapsedMs])
 
   const startRecording = async () => {
     if (!sttLoaded) return
@@ -553,8 +544,24 @@ export default function PracticeMode() {
                   题目不再是一列静态清单。面试官会根据你的简历、岗位 JD、当前回答和阶段目标动态推进，
                   结束后再统一复盘，不在中途打断你。
                 </p>
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-[#10233a]/10 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#335d88]">
+                    当前风格 · {selectedPersona.label}
+                  </span>
+                  <span className="rounded-full border border-[#c77445]/15 bg-[#c77445]/8 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#8c5a39]">
+                    {selectedPersona.summary}
+                  </span>
+                </div>
               </div>
-              <InterviewerAvatar speaking={practiceStatus === 'preparing'} listening={false} />
+              <div className="w-full max-w-[260px]">
+                <VirtualInterviewer
+                  data-testid="practice-interviewer-preview"
+                  persona={selectedPersona.key}
+                  state={practiceStatus === 'preparing' ? 'speaking' : 'idle'}
+                  signal="warm-open"
+                  subtitle={selectedPersona.description}
+                />
+              </div>
             </div>
 
             <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -652,8 +659,21 @@ export default function PracticeMode() {
                             : 'border-white/10 bg-transparent text-[#d9ccb6]'
                         }`}
                       >
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em]">{option.label}</div>
-                        <div className="mt-1 text-[11px] leading-5 text-[#c5b79f]">{option.hint}</div>
+                        <div className="flex items-center gap-3">
+                          <VirtualInterviewer
+                            persona={option.value}
+                            state={interviewerStyle === option.value ? 'listening' : 'idle'}
+                            signal="warm-open"
+                            compact
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold uppercase tracking-[0.14em]">{option.label}</div>
+                            <div className="mt-1 text-[11px] leading-5 text-[#c5b79f]">{option.hint}</div>
+                            <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[#8bb0d6]">
+                              {option.summary}
+                            </div>
+                          </div>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -731,7 +751,7 @@ export default function PracticeMode() {
     )
   }
 
-  if (isFinished) {
+  if (isReportStage) {
     return (
       <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f7f3ea_0%,#efe5d5_100%)] px-4 py-6 text-[#10233a] md:px-6">
         <div className="mx-auto grid max-w-6xl gap-5 xl:grid-cols-[0.72fr_1.28fr]">
@@ -741,9 +761,34 @@ export default function PracticeMode() {
               className="mt-3 text-[2rem] leading-[1.05] tracking-[-0.04em]"
               style={{ fontFamily: '"Iowan Old Style", "Palatino Linotype", Georgia, serif' }}
             >
-              这场模拟面试已经结束，现在看整场复盘。
+              {practiceStatus === 'debriefing'
+                ? '整场复盘正在生成，先把关键信息收口。'
+                : '这场模拟面试已经结束，现在看整场复盘。'}
             </h2>
+            {practiceStatus === 'debriefing' && (
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#f4b88a]/20 bg-[#f4b88a]/10 px-3 py-1.5 text-xs text-[#f6dcc0]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                正在生成整场复盘...
+              </div>
+            )}
             <div className="mt-6 grid gap-3">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[#8bb0d6]">面试官画像</p>
+                <div className="mt-3 flex items-center gap-3">
+                  <VirtualInterviewer
+                    data-testid="practice-interviewer-preview"
+                    persona={activePersona.key}
+                    state="debrief"
+                    signal="wrap-up"
+                    compact
+                  />
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold text-[#f4b88a]">{activePersona.label}</p>
+                    <p className="mt-1 text-xs leading-6 text-[#dbcdb8]">{activePersona.summary}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-[#dbcdb8]">{activePersona.description}</p>
+              </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[#8bb0d6]">总轮次</p>
                 <p className="mt-2 text-2xl font-semibold text-[#f4b88a]">{completedTurns.length}</p>
@@ -759,6 +804,11 @@ export default function PracticeMode() {
                 <p className="mt-2 text-sm leading-6 text-[#dbcdb8]">
                   {practiceSession?.context?.jd_text || '本轮未填写 JD，主要按岗位与简历推进。'}
                 </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[#8bb0d6]">整体气质</p>
+                <p className="mt-2 text-sm leading-6 text-[#dbcdb8]">{activePersona.projectBias}</p>
+                <p className="mt-2 text-xs leading-6 text-[#b8ab95]">{activePersona.barRule}</p>
               </div>
             </div>
             <button
@@ -813,7 +863,7 @@ export default function PracticeMode() {
               </div>
             )}
             <div className="prose prose-sm mt-5 max-w-none text-[#23384f] prose-headings:text-[#10233a] prose-strong:text-[#10233a]">
-              <ReactMarkdown>{practiceSession?.report_markdown || '暂无复盘输出。'}</ReactMarkdown>
+              <ReactMarkdown>{practiceSession?.report_markdown || '正在整理本场表现与改进建议...'}</ReactMarkdown>
             </div>
           </section>
         </div>
@@ -837,15 +887,31 @@ export default function PracticeMode() {
               <p className="mt-3 text-sm leading-7 text-[#d9ccb6]">
                 现在不是逐题打分训练，而是一场会自动推进的面试现场。
               </p>
-              {currentTurn?.transition_line && (
-                <p className="mt-3 rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-xs leading-6 text-[#f2dfc3]">
-                  {currentTurn.transition_line}
-                </p>
-              )}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#f2dfc3]">
+                  风格 · {activePersona.label}
+                </span>
+                <span className="rounded-full border border-[#f4b88a]/18 bg-[#f4b88a]/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#f4c69e]">
+                  状态 · {interviewerStateLabel}
+                </span>
+                <span className="rounded-full border border-[#8bb0d6]/20 bg-[#8bb0d6]/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#a8c3df]">
+                  氛围 · {interviewerSignalLabel}
+                </span>
+                {isWrittenPromptMode && (
+                  <span className="rounded-full border border-[#c77445]/18 bg-[#c77445]/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#f3c7a0]">
+                    题面模式
+                  </span>
+                )}
+              </div>
+              <p className="mt-4 text-sm leading-7 text-[#cdbda5]">{activePersona.description}</p>
             </div>
-            <InterviewerAvatar
-              speaking={practiceTtsSpeaking || practiceStatus === 'interviewer_speaking'}
-              listening={practiceRecording || practiceStatus === 'awaiting_answer'}
+            <VirtualInterviewer
+              data-testid="practice-interviewer-preview"
+              persona={activePersona.key}
+              state={interviewerState}
+              signal={currentTurn?.interviewer_signal}
+              subtitle={currentTurn?.transition_line}
+              writtenPromptMode={isWrittenPromptMode}
             />
           </div>
 
@@ -883,26 +949,13 @@ export default function PracticeMode() {
 
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-1">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-[#8bb0d6]">播报状态</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[#8bb0d6]">当前展示层</p>
               <div className="mt-3 flex items-center gap-3 text-sm text-[#f7f1e6]">
                 <Volume2 className="h-4 w-4 text-[#f4b88a]" />
-                {practiceTtsSpeaking ? '面试官正在播报问题' : '播报完成，等待你的回答'}
+                {interviewerStateLabel}
               </div>
               <div className="mt-2 text-xs text-[#cdbda5]">
-                当前来源：
-                {ttsPlaybackSource === 'volcengine'
-                  ? ' 火山引擎 TTS'
-                  : ttsPlaybackSource === 'edge_tts'
-                    ? ' EdgeTTS 在线神经语音'
-                  : ttsPlaybackSource === 'system'
-                    ? ' 桌面系统语音'
-                    : ttsPlaybackSource === 'browser'
-                      ? ' 浏览器本地语音'
-                      : config?.practice_tts_provider === 'volcengine'
-                        ? ' 预设火山引擎，失败时静默展示题目'
-                        : config?.practice_tts_provider === 'edge_tts'
-                          ? ' 预设 EdgeTTS，未就绪时静默展示题目'
-                          : ' 无播报'}
+                当前来源：{ttsSourceLabel}
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">

@@ -10,6 +10,7 @@ const apiMock = vi.hoisted(() => ({
   practiceFinish: vi.fn(),
   practiceReset: vi.fn(),
   practiceRecord: vi.fn(),
+  practiceTts: vi.fn(),
   uploadResume: vi.fn(),
 }))
 
@@ -28,6 +29,50 @@ vi.mock('react-markdown', () => ({
 
 const JD_STORAGE_KEY = 'ia-practice-jd-draft'
 
+function createPracticeSession(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'awaiting_answer',
+    context: {
+      position: '后端开发',
+      language: 'Python',
+      audience: 'social',
+      audience_label: '社招',
+      resume_text: '做过交易系统',
+      jd_text: '熟悉 SQL',
+      interviewer_style: 'calm_pressing',
+    },
+    blueprint: { opening_script: '开始吧。', phases: [] },
+    current_phase_index: 0,
+    current_turn: {
+      turn_id: 'turn-1',
+      phase_id: 'project',
+      phase_label: '项目深挖',
+      category: 'project',
+      answer_mode: 'voice',
+      question: '讲讲你做过的高并发接口优化。',
+      prompt_script: '讲讲你做过的高并发接口优化。',
+      stage_prompt: '项目深挖：本轮重点盯判断、验证和取舍。',
+      interviewer_signal: 'probe',
+      transition_line: '现在我想往项目里压一层，重点听你的判断和验证。',
+      asked_at: Date.now(),
+      follow_up_of: null,
+      transcript: '',
+      code_text: '',
+      duration_ms: 0,
+    },
+    turn_history: [],
+    interviewer_persona: {
+      tone: 'calm-pressing',
+      style: '像国内一线技术面试官，礼貌但不放水，会追问证据、取舍和复盘。',
+      project_bias: '项目题优先追 why / how / validation，不让候选人停在结果层。',
+      bar_raising_rule: '回答一旦缺少证据、边界或实现，就优先追问而不是轻易放过。',
+    },
+    report_markdown: '',
+    created_at: Date.now(),
+    ...overrides,
+  }
+}
+
 describe('PracticeMode', () => {
   beforeEach(() => {
     const storage = new Map<string, string>()
@@ -42,6 +87,14 @@ describe('PracticeMode', () => {
     })
     window.localStorage.clear()
     vi.clearAllMocks()
+    apiMock.practiceTts.mockResolvedValue({
+      ok: true,
+      provider: 'edge_tts',
+      speaker: 'zh-CN-XiaoxiaoNeural',
+      audio_base64: 'ZmFrZQ==',
+      content_type: 'audio/mpeg',
+      duration: 1.2,
+    })
     useInterviewStore.setState({
       config: {
         position: '后端开发',
@@ -134,6 +187,19 @@ describe('PracticeMode', () => {
     })
   })
 
+  it('updates the start-screen interviewer preview when the style changes', async () => {
+    render(<PracticeMode />)
+
+    const preview = screen.getByTestId('practice-interviewer-preview')
+    expect(preview).toHaveAttribute('data-persona', 'calm_pressing')
+
+    fireEvent.click(screen.getByRole('button', { name: /^带教型/ }))
+    expect(preview).toHaveAttribute('data-persona', 'supportive_senior')
+
+    fireEvent.click(screen.getByRole('button', { name: /^压力型/ }))
+    expect(preview).toHaveAttribute('data-persona', 'pressure_bigtech')
+  })
+
   it('submits structured practice payload instead of legacy answer-only text', async () => {
     apiMock.practiceSubmit.mockResolvedValue({ ok: true })
     useInterviewStore.setState({
@@ -184,5 +250,91 @@ describe('PracticeMode', () => {
         }),
       )
     })
+  })
+
+  it('keeps the interviewer in prompt mode for coding turns', () => {
+    useInterviewStore.setState({
+      practiceStatus: 'interviewer_speaking',
+      practiceTtsSpeaking: true,
+      practiceSession: createPracticeSession({
+        current_phase_index: 4,
+        current_turn: {
+          turn_id: 'turn-1',
+          phase_id: 'coding',
+          phase_label: '代码与 SQL',
+          category: 'coding',
+          answer_mode: 'voice+code',
+          question: '写一段 SQL，统计每个用户最近 7 天的订单数。',
+          prompt_script: '写一段 SQL，统计每个用户最近 7 天的订单数。',
+          stage_prompt: '代码 / SQL 与实现解释：本轮重点盯正确性、边界和说明。',
+          interviewer_signal: 'implementation-check',
+          transition_line: '最后来一道实现题，边写边解释你的边界处理。',
+          written_prompt: '给定 orders 表，请统计最近 7 天每个用户的订单数。',
+          artifact_notes: ['orders(user_id, created_at, amount)', '只统计最近 7 天', '返回 user_id 和订单数'],
+          asked_at: Date.now(),
+          follow_up_of: null,
+          transcript: '',
+          code_text: '',
+          duration_ms: 0,
+        },
+      }),
+    } as any)
+
+    render(<PracticeMode />)
+
+    expect(screen.getAllByText('题面模式')).toHaveLength(2)
+    expect(screen.getByText('最后来一道实现题，边写边解释你的边界处理。')).toBeInTheDocument()
+    expect(screen.getByTestId('practice-interviewer-preview')).not.toHaveAttribute('data-state', 'speaking')
+  })
+
+  it('renders the persona summary card on the finished screen', () => {
+    useInterviewStore.setState({
+      practiceStatus: 'finished',
+      practiceSession: createPracticeSession({
+        status: 'finished',
+        report_markdown: '### 综合评价\n这场表现稳健。',
+        current_turn: null,
+        turn_history: [
+          {
+            turn_id: 'turn-1',
+            phase_id: 'project',
+            phase_label: '项目深挖',
+            category: 'project',
+            answer_mode: 'voice',
+            question: '讲讲你做过的高并发接口优化。',
+            prompt_script: '讲讲你做过的高并发接口优化。',
+            transition_line: '现在我想往项目里压一层，重点听你的判断和验证。',
+            asked_at: Date.now(),
+            transcript: '我会先说明目标和瓶颈。',
+            code_text: '',
+            duration_ms: 120000,
+            scorecard: { accuracy: 8, structure: 7 },
+          },
+        ],
+      }),
+    } as any)
+
+    render(<PracticeMode />)
+
+    expect(screen.getByText('面试官画像')).toBeInTheDocument()
+    expect(screen.getByText('稳压型')).toBeInTheDocument()
+    expect(screen.getByText(/礼貌但不放水/)).toBeInTheDocument()
+  })
+
+  it('switches to the debrief view while the final report is generating', () => {
+    useInterviewStore.setState({
+      practiceStatus: 'debriefing',
+      practiceSession: createPracticeSession({
+        status: 'debriefing',
+        current_turn: null,
+        report_markdown: '',
+      }),
+    } as any)
+
+    render(<PracticeMode />)
+
+    expect(screen.getByText('Debrief')).toBeInTheDocument()
+    expect(screen.getByText(/正在生成整场复盘/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '提交本轮回答' })).not.toBeInTheDocument()
   })
 })
