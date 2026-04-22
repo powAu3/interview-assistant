@@ -87,11 +87,17 @@ describe('ResumeOptimizer', () => {
         has_resume: true,
         position: '后端开发',
         language: 'Python',
+        resume_active_filename: '张三_后端开发.pdf',
+        resume_active_history_id: 3,
       },
       resumeOptResult: '### 综合建议\n- 强化项目 impact 描述',
     } as any)
 
     render(<ResumeOptimizer />)
+
+    expect(screen.getAllByText('张三_后端开发.pdf')).toHaveLength(2)
+    expect(screen.getByText('和主流程、模拟练习共用同一份简历历史与当前挂载记录。')).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
 
     await waitFor(() => {

@@ -27,6 +27,7 @@ import {
 import { refreshConfig } from '@/lib/configSync'
 import { useInterviewStore } from '@/stores/configStore'
 import { VirtualInterviewer } from '@/components/practice/VirtualInterviewer'
+import { ResumeMountPanel } from '@/components/resume/ResumeMount'
 import {
   resolveVirtualInterviewerPersona,
   VIRTUAL_INTERVIEWER_PERSONA_OPTIONS as INTERVIEWER_STYLE_OPTIONS,
@@ -771,6 +772,16 @@ export default function PracticeMode() {
               </div>
             </div>
 
+            <ResumeMountPanel
+              title="Resume Mount"
+              description="这场模拟面试会直接使用当前挂载简历来生成项目深挖和追问。"
+              statusLabel={config?.has_resume ? '已同步' : '建议挂载'}
+              emptyHint="当前没有挂载简历，系统会按岗位常见能力默认出题。"
+              sharedNote="这里和主流程、简历优化共用同一份简历历史与当前挂载记录。"
+              historyMode="popover"
+              className="mt-6"
+            />
+
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -792,12 +803,11 @@ export default function PracticeMode() {
               </button>
               {!config?.has_resume && (
                 <div className="rounded-full border border-[#f4b88a]/25 bg-[#f4b88a]/10 px-3 py-2 text-xs text-[#f6dcc0]">
-                  建议先上传简历，这样项目深挖会更像真正的一面。
+                  建议先挂载简历，这样项目深挖会更像真正的一面。
                 </div>
               )}
             </div>
             {error && <p className="mt-4 text-sm text-[#ffcabd]">{error}</p>}
-            {!config?.has_resume && <UploadResumeButton />}
           </section>
         </div>
       </div>
@@ -1219,52 +1229,5 @@ export default function PracticeMode() {
         </section>
       </div>
     </div>
-  )
-}
-
-function UploadResumeButton() {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
-
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const result = await api.uploadResume(file)
-      await refreshConfig()
-      if (result.parsed) {
-        useInterviewStore.getState().setToastMessage('简历已解析并选用')
-      } else {
-        useInterviewStore.getState().setToastMessage(
-          `已保存到历史，解析未成功：${result.parse_error || '可在底栏「历史」中重试'}`,
-        )
-      }
-    } catch (err) {
-      useInterviewStore.getState().setToastMessage(err instanceof Error ? err.message : '上传失败')
-    }
-    setUploading(false)
-    if (fileRef.current) fileRef.current.value = ''
-  }
-
-  return (
-    <>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".pdf,.txt,.md,.doc,.docx"
-        onChange={handleUpload}
-        className="hidden"
-      />
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={uploading}
-        className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#f4b88a]/25 bg-[#f4b88a]/10 px-4 py-2 text-sm text-[#f4d1ad] transition hover:bg-[#f4b88a]/14"
-      >
-        <Upload className="h-4 w-4" />
-        {uploading ? '上传中...' : '上传简历'}
-      </button>
-    </>
   )
 }

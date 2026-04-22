@@ -4,10 +4,9 @@ import { useShallow } from 'zustand/react/shallow'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import { api } from '@/lib/api'
-import { refreshConfig } from '@/lib/configSync'
-import { Clipboard, FileSearch, FileText, Sparkles, Upload, X } from 'lucide-react'
+import { Clipboard, FileSearch, Sparkles, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { ResumeHistoryPanel } from '@/components/ResumeHistory'
+import { ResumeMountPanel } from '@/components/resume/ResumeMount'
 
 const JD_STORAGE_KEY = 'ia-resume-opt-jd-draft'
 
@@ -43,8 +42,6 @@ export default function ResumeOptimizer() {
     )
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
   const lightMarkdown = isLightColorScheme(colorScheme)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   const displayText = resumeOptResult || resumeOptStreaming
@@ -61,33 +58,6 @@ export default function ResumeOptimizer() {
       setOptimizingLocal(false)
     }
   }, [displayText, optimizingLocal, resumeOptLoading])
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setUploadError(null)
-    try {
-      const res = await api.uploadResume(file)
-      await refreshConfig()
-      if (res.parsed) {
-        setToastMessage('简历已解析并选用')
-        setUploadError(null)
-      } else {
-        setUploadError(`已保存到历史，解析未成功：${res.parse_error || '请检查格式'}`)
-        setToastMessage('文件已保存，可在历史中「选用」重试解析')
-      }
-    } catch (err: any) {
-      setUploadError(err.message || '上传失败')
-    }
-    setUploading(false)
-    if (fileRef.current) fileRef.current.value = ''
-  }
-
-  const handleRemoveResume = async () => {
-    await api.deleteResume()
-    await refreshConfig()
-  }
 
   const handleAnalyze = async () => {
     if (!jdText.trim()) return
@@ -153,34 +123,11 @@ export default function ResumeOptimizer() {
           </div>
         </div>
 
-        {/* Resume upload area */}
-        <div className="space-y-2 rounded-2xl border border-bg-hover/40 bg-bg-secondary/60 p-4">
-          <label className="text-xs text-text-muted">简历</label>
-          <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleUpload} className="hidden" />
-          {config?.has_resume ? (
-            <div className="flex items-center gap-2 bg-accent-green/10 text-accent-green text-xs px-3 py-2 rounded-lg">
-              <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="flex-1 truncate">{config?.resume_active_filename || '简历已上传'}</span>
-              <button onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline">
-                更换
-              </button>
-              <button onClick={handleRemoveResume} className="text-text-muted hover:text-accent-red">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => fileRef.current?.click()} disabled={uploading}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-bg-tertiary hover:bg-bg-hover text-text-secondary text-xs rounded-lg transition-colors border border-dashed border-bg-hover disabled:opacity-50">
-              <Upload className="w-4 h-4" />
-              <span>{uploading ? '上传中...' : '上传简历（PDF / DOCX / TXT / MD）'}</span>
-            </button>
-          )}
-        </div>
-
-        <ResumeHistoryPanel />
-        <p className="text-[11px] text-text-muted px-1">
-          这里和主流程共用同一份简历历史与当前挂载记录。
-        </p>
+        <ResumeMountPanel
+          title="Resume Mount"
+          description="这里的分析直接使用当前挂载简历，不会维护另一份独立副本。"
+          sharedNote="和主流程、模拟练习共用同一份简历历史与当前挂载记录。"
+        />
 
         {uploadError && (
           <div className="flex items-center gap-2 bg-accent-red/10 text-accent-red text-xs px-3 py-2 rounded-lg">

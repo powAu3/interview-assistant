@@ -266,6 +266,24 @@ describe('PracticeMode', () => {
     expect(preview).toHaveAttribute('data-persona', 'pressure_bigtech')
   })
 
+  it('shows the shared mounted resume state on the start screen', () => {
+    useInterviewStore.setState({
+      config: {
+        position: '后端开发',
+        language: 'Python',
+        practice_audience: 'social',
+        has_resume: true,
+        resume_active_filename: '张三_后端开发.pdf',
+        resume_active_history_id: 3,
+      },
+    } as any)
+
+    render(<PracticeMode />)
+
+    expect(screen.getByText('张三_后端开发.pdf')).toBeInTheDocument()
+    expect(screen.getByText('这里和主流程、简历优化共用同一份简历历史与当前挂载记录。')).toBeInTheDocument()
+  })
+
   it('submits structured practice payload instead of legacy answer-only text', async () => {
     apiMock.practiceSubmit.mockResolvedValue({ ok: true })
     useInterviewStore.setState({
