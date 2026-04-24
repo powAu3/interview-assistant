@@ -93,3 +93,24 @@ def test_high_churn_branch_has_followup_coherence_rule():
 def test_normal_asr_still_has_followup_rule():
     p = _asr_prompt(high_churn=False)
     assert "[追问上下文]" in p
+
+
+# ---- 4.5 candidate voice / anti-template polish -------------------------
+
+def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
+    p = _asr_prompt(high_churn=False)
+    assert "真人候选人口吻" in p
+    assert "像在现场回答面试官" in p
+    assert "不要把“结论 -> 机制/步骤 -> 线上做法 -> 风险边界 -> 可追问点”当成固定标题" in p
+
+
+def test_asr_high_churn_keeps_oral_short_answer_shape():
+    p = _asr_prompt(high_churn=True)
+    assert "像现场接一句话" in p
+    assert "不要像摘要模板" in p
+
+
+def test_manual_prompt_warns_not_to_emit_template_labels():
+    p = _manual_prompt()
+    assert "真人候选人口吻" in p
+    assert "不要把题型模板标题原样输出" in p
