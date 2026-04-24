@@ -1,4 +1,4 @@
-import { Loader2, RotateCcw } from 'lucide-react'
+import { Clipboard, Loader2, RotateCcw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
 import { VirtualInterviewer } from '@/components/practice/VirtualInterviewer'
@@ -14,7 +14,30 @@ interface PracticeDebriefViewProps {
   practiceStatus: PracticeStatus
 }
 
+function extractMarkdownSection(markdown: string, heading: string): string {
+  const text = String(markdown || '').trim()
+  if (!text) return ''
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = text.match(new RegExp(`^#{2,3}\\s*${escaped}\\s*$`, 'm'))
+  if (!match || match.index == null) return ''
+  const rest = text.slice(match.index).trim()
+  const nextHeading = rest.slice(match[0].length).search(/\n#{2,3}\s+/)
+  if (nextHeading < 0) return rest
+  return rest.slice(0, match[0].length + nextHeading).trim()
+}
+
 export function PracticeDebriefView(props: PracticeDebriefViewProps) {
+  const reportMarkdown = props.practiceSession?.report_markdown || ''
+  const resumeReadySection = extractMarkdownSection(reportMarkdown, '可回填简历表达')
+  const copyText = async (text: string) => {
+    if (!text || typeof navigator === 'undefined' || !navigator.clipboard) return
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      /* ignore clipboard permission errors */
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f7f3ea_0%,#efe5d5_100%)] px-4 py-6 text-[#10233a] md:px-6">
       <div className="mx-auto grid max-w-6xl gap-5 xl:grid-cols-[0.72fr_1.28fr]">
@@ -73,6 +96,32 @@ export function PracticeDebriefView(props: PracticeDebriefViewProps) {
               <p className="mt-2 text-sm leading-6 text-[#dbcdb8]">{props.activePersona.projectBias}</p>
               <p className="mt-2 text-xs leading-6 text-[#b8ab95]">{props.activePersona.barRule}</p>
             </div>
+            <div className="rounded-2xl border border-[#f4b88a]/18 bg-[#f4b88a]/8 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-[#f4c69e]">下一步动作</p>
+              <div className="mt-3 grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyText(reportMarkdown)}
+                  disabled={!reportMarkdown}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-[#f6efe4] transition hover:bg-white/8 disabled:opacity-45"
+                >
+                  <Clipboard className="h-3.5 w-3.5" />
+                  复制完整复盘
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copyText(resumeReadySection)}
+                  disabled={!resumeReadySection}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-[#f6efe4] transition hover:bg-white/8 disabled:opacity-45"
+                >
+                  <Clipboard className="h-3.5 w-3.5" />
+                  复制可回填简历表达
+                </button>
+              </div>
+              <p className="mt-3 text-[11px] leading-5 text-[#cdbda5]">
+                把复盘里的表达问题带回简历优化，下一轮再按同一 JD 练。
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -126,7 +175,7 @@ export function PracticeDebriefView(props: PracticeDebriefViewProps) {
             </div>
           )}
           <div className="prose prose-sm mt-5 max-w-none text-[#23384f] prose-headings:text-[#10233a] prose-strong:text-[#10233a]">
-            <ReactMarkdown>{props.practiceSession?.report_markdown || '正在整理本场表现与改进建议...'}</ReactMarkdown>
+            <ReactMarkdown>{reportMarkdown || '正在整理本场表现与改进建议...'}</ReactMarkdown>
           </div>
         </section>
       </div>

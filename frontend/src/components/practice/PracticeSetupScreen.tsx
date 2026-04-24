@@ -7,6 +7,15 @@ import type { BrowserVoice } from '@/hooks/usePracticeVoiceCatalog'
 import type { PracticeVoiceGender } from '@/lib/practiceTts'
 import type { AppConfig } from '@/stores/configStore'
 
+const PRACTICE_STAGE_PREVIEW = [
+  '开场与岗位匹配',
+  '项目深挖',
+  '基础与八股',
+  '设计与综合场景',
+  '代码与 SQL',
+  '收尾与反问',
+]
+
 interface PracticeSetupScreenProps {
   autoPreferredLocalVoice: BrowserVoice | null
   config: AppConfig | null
@@ -79,6 +88,39 @@ export function PracticeSetupScreen(props: PracticeSetupScreenProps) {
                 <p className="mt-2 text-sm leading-6 text-[#42556c]">{body}</p>
               </div>
             ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-2xl border border-[#10233a]/8 bg-white/72 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#335d88]">本场材料</p>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-[#42556c]">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[#10233a]/8 bg-[#fffaf1] px-3 py-2">
+                  <span>简历</span>
+                  <span className="max-w-[220px] truncate font-medium text-[#10233a]">
+                    {props.config?.resume_active_filename || (props.config?.has_resume ? '简历已挂载' : '未挂载')}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[#10233a]/8 bg-[#fffaf1] px-3 py-2">
+                  <span>JD</span>
+                  <span className="font-medium text-[#10233a]">
+                    {props.jdDraft.trim() ? `JD 已填写 · ${props.jdDraft.trim().length} chars` : '未填写，将按岗位默认出题'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[#10233a]/8 bg-white/72 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#335d88]">六段流程</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {PRACTICE_STAGE_PREVIEW.map((stage, index) => (
+                  <span
+                    key={stage}
+                    className="rounded-full border border-[#10233a]/10 bg-[#fffaf1] px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-[#42556c]"
+                  >
+                    {index + 1}. {stage}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 

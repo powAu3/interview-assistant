@@ -222,15 +222,14 @@ export function useInterviewWS() {
         })
         break
       case 'resume_opt_start':
-        s.resetResumeOpt()
+        s.resetResumeOpt(typeof msg.job_id === 'string' ? msg.job_id : null)
         s.setResumeOptLoading(true)
         break
       case 'resume_opt_chunk':
-        s.appendResumeOptChunk(msg.chunk as string)
+        s.appendResumeOptChunk(msg.chunk as string, typeof msg.job_id === 'string' ? msg.job_id : null)
         break
       case 'resume_opt_done':
-        s.setResumeOptResult(msg.text as string)
-        s.setResumeOptLoading(false)
+        s.setResumeOptResult(msg.text as string, typeof msg.job_id === 'string' ? msg.job_id : null)
         break
       case 'error':
         s.setLastWSError((msg.message as string) || '未知错误')

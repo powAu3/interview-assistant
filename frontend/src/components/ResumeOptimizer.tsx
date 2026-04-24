@@ -26,6 +26,14 @@ function writeStorage(key: string, value: string) {
   }
 }
 
+function extractRewriteSuggestions(text: string): string {
+  const normalized = String(text || '').trim()
+  if (!normalized) return ''
+  const match = normalized.match(/^#{2,3}\s*(?:✏️|📝)?\s*(?:简历)?改写建议.*$/m)
+  if (!match || match.index == null) return normalized
+  return normalized.slice(match.index).trim()
+}
+
 export default function ResumeOptimizer() {
   const [jdText, setJdText] = useState(() => readStorage(JD_STORAGE_KEY))
   const [optimizingLocal, setOptimizingLocal] = useState(false)
@@ -68,7 +76,7 @@ export default function ResumeOptimizer() {
     try {
       setUploadError(null)
       setOptimizingLocal(true)
-      resetResumeOpt()
+      resetResumeOpt('__pending__')
       await api.resumeOptimize(jdText.trim())
     } catch (e: any) {
       setOptimizingLocal(false)
@@ -81,6 +89,17 @@ export default function ResumeOptimizer() {
     try {
       await navigator.clipboard.writeText(displayText)
       setToastMessage('分析结果已复制')
+    } catch {
+      setToastMessage('复制失败，请检查浏览器权限')
+    }
+  }
+
+  const handleCopyRewrite = async () => {
+    if (!displayText) return
+    const rewrite = extractRewriteSuggestions(displayText)
+    try {
+      await navigator.clipboard.writeText(rewrite || displayText)
+      setToastMessage(rewrite && rewrite !== displayText ? '改写建议已复制' : '未识别到改写建议，已复制完整结果')
     } catch {
       setToastMessage('复制失败，请检查浏览器权限')
     }
@@ -180,6 +199,16 @@ export default function ResumeOptimizer() {
                 <Clipboard className="w-3.5 h-3.5" />
                 复制
               </button>
+              {displayText && (
+                <button
+                  type="button"
+                  onClick={handleCopyRewrite}
+                  className="inline-flex items-center gap-1 rounded-lg border border-bg-hover/50 px-3 py-1.5 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-hover/40"
+                >
+                  <Clipboard className="w-3.5 h-3.5" />
+                  复制改写建议
+                </button>
+              )}
             </div>
           </div>
           <div className="p-4">
@@ -219,23 +248,32 @@ export default function ResumeOptimizer() {
             </div>
           </div>
         ) : (
-          <div
-            className={`prose prose-sm max-w-none markdown-body
-            ${lightMarkdown ? '' : 'prose-invert'}
-            prose-headings:text-text-primary prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
-            prose-p:text-text-secondary prose-p:text-xs prose-p:leading-relaxed
-            prose-li:text-text-secondary prose-li:text-xs
-            prose-strong:text-text-primary
-            prose-table:text-xs
-            prose-th:text-text-primary prose-th:bg-bg-tertiary prose-th:px-2 prose-th:py-1
-            prose-td:text-text-secondary prose-td:px-2 prose-td:py-1 prose-td:border-bg-hover
-          `}
-          >
-            <ReactMarkdown>{displayText}</ReactMarkdown>
-            {isAnalyzing && (
-              <span className="inline-block w-1.5 h-3 bg-accent-blue animate-pulse rounded-sm ml-0.5" />
-            )}
-          </div>
+          <>
+            <div className="mb-4 flex flex-wrap gap-2 text-[11px] text-text-muted">
+              {['JD 关键能力', '命中 / 缺失', '改写建议'].map((label) => (
+                <span key={label} className="rounded-full border border-bg-hover/50 bg-bg-primary/70 px-2.5 py-1">
+                  {label}
+                </span>
+              ))}
+            </div>
+            <div
+              className={`prose prose-sm max-w-none markdown-body
+              ${lightMarkdown ? '' : 'prose-invert'}
+              prose-headings:text-text-primary prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
+              prose-p:text-text-secondary prose-p:text-xs prose-p:leading-relaxed
+              prose-li:text-text-secondary prose-li:text-xs
+              prose-strong:text-text-primary
+              prose-table:text-xs
+              prose-th:text-text-primary prose-th:bg-bg-tertiary prose-th:px-2 prose-th:py-1
+              prose-td:text-text-secondary prose-td:px-2 prose-td:py-1 prose-td:border-bg-hover
+            `}
+            >
+              <ReactMarkdown>{displayText}</ReactMarkdown>
+              {isAnalyzing && (
+                <span className="inline-block w-1.5 h-3 bg-accent-blue animate-pulse rounded-sm ml-0.5" />
+              )}
+            </div>
+          </>
         )}
           </div>
         </div>

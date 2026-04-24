@@ -104,4 +104,37 @@ describe('ResumeOptimizer', () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('### 综合建议\n- 强化项目 impact 描述')
     })
   })
+
+  it('copies only the rewrite suggestions when that section exists', async () => {
+    useInterviewStore.setState({
+      config: {
+        has_resume: true,
+        position: '后端开发',
+        language: 'Python',
+        resume_active_filename: '张三_后端开发.pdf',
+        resume_active_history_id: 3,
+      },
+      resumeOptResult: [
+        '## 📊 JD 关键能力抽取',
+        '- Python',
+        '',
+        '## 🎯 命中 / 缺失分析',
+        '- **Python** — L1',
+        '',
+        '## ✏️ 简历改写建议',
+        '#### 建议 1 — 强化量化结果',
+        '- 引用: **L1** / "负责接口优化"',
+        '- 改写: 负责接口优化，将 p95 延迟降低 35%。',
+      ].join('\n'),
+    } as any)
+
+    render(<ResumeOptimizer />)
+
+    fireEvent.click(screen.getByRole('button', { name: '复制改写建议' }))
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('#### 建议 1'))
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.not.stringContaining('JD 关键能力抽取'))
+    })
+  })
 })

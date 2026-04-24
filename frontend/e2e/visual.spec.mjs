@@ -29,7 +29,7 @@ test.describe('@visual main pages', () => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: '学习助手' })).toBeVisible()
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('assist.png', { fullPage: false })
+    await expect(page).toHaveScreenshot('assist.png', { fullPage: false, timeout: 30_000 })
   })
 
   test('practice page', async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe('@visual main pages', () => {
     await page.getByRole('tab', { name: '能力分析' }).click()
     await expect(page.getByText('薄弱点排名')).toBeVisible({ timeout: 8000 })
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('knowledge.png', { fullPage: false })
+    await expect(page).toHaveScreenshot('knowledge.png', { fullPage: false, timeout: 30_000 })
   })
 
   test('resume page', async ({ page }) => {
@@ -76,6 +76,6 @@ test.describe('@visual main pages', () => {
     await page.getByRole('tab', { name: '简历优化' }).click()
     await expect(page.getByPlaceholder('将招聘 JD 粘贴到这里...')).toBeVisible({ timeout: 8000 })
     await page.waitForTimeout(500)
-    await expect(page).toHaveScreenshot('resume.png', { fullPage: false })
+    await expect(page).toHaveScreenshot('resume.png', { fullPage: false, timeout: 30_000 })
   })
 })

@@ -34,6 +34,10 @@ DEBRIEF_PROMPT = """你是一位技术面试官，请基于整场模拟面试记
 ### 表达与临场问题
 - ...
 
+### 可回填简历表达
+- 只基于候选人在本场回答中已经提到的事实，整理 1-3 条可带回简历优化的表达。
+- 如果缺少指标或证据，明确写“待补充证据”，不要编造量化结果。
+
 ### 知识盲点
 - ...
 
@@ -54,6 +58,7 @@ def _fallback_debrief_report(session: PracticeSession) -> str:
         risks.extend(entry.risks)
     strengths = strengths[:3] or ["回答整体有主线，不会完全失控。"]
     risks = risks[:3] or ["部分问题还可以继续深挖到证据和取舍。"]
+    jd_text = session.context.jd_text if session.context else ""
     return "\n".join(
         [
             "### 综合 verdict",
@@ -68,10 +73,13 @@ def _fallback_debrief_report(session: PracticeSession) -> str:
             "- 代码 / SQL：把核心实现和边界条件写得更清楚。",
             "",
             "### 与简历/JD 的贴合度",
-            f"- JD 重点：{session.context.jd_text or '未提供 JD，按岗位常见要求评估。'}",
+            f"- JD 重点：{jd_text or '未提供 JD，按岗位常见要求评估。'}",
             "",
             "### 表达与临场问题",
             "- 尽量把回答压缩成“结论 -> 过程 -> 验证 -> 结果”。",
+            "",
+            "### 可回填简历表达",
+            "- 将本轮项目经历整理成“负责事项 -> 技术动作 -> 可验证结果”的一句话；暂无明确指标时标注待补充证据。",
             "",
             "### 知识盲点",
             *[f"- {item}" for item in risks],

@@ -292,8 +292,32 @@ describe('PracticeMode', () => {
 
     render(<PracticeMode />)
 
-    expect(screen.getByText('张三_后端开发.pdf')).toBeInTheDocument()
+    expect(screen.getAllByText('张三_后端开发.pdf').length).toBeGreaterThan(0)
     expect(screen.getByText('这里和主流程、简历优化共用同一份简历历史与当前挂载记录。')).toBeInTheDocument()
+  })
+
+  it('previews the interview stages and current material context on the start screen', () => {
+    window.localStorage.setItem(JD_STORAGE_KEY, '负责交易链路稳定性和 Redis 缓存治理。')
+    useInterviewStore.setState({
+      config: {
+        position: '后端开发',
+        language: 'Python',
+        practice_audience: 'social',
+        has_resume: true,
+        resume_active_filename: '张三_后端开发.pdf',
+        resume_active_history_id: 3,
+        think_mode: false,
+      },
+    } as any)
+
+    render(<PracticeMode />)
+
+    expect(screen.getByText('本场材料')).toBeInTheDocument()
+    expect(screen.getAllByText('张三_后端开发.pdf').length).toBeGreaterThan(0)
+    expect(screen.getByText(/JD 已填写/)).toBeInTheDocument()
+    expect(screen.getByText('六段流程')).toBeInTheDocument()
+    expect(screen.getByText(/开场与岗位匹配/)).toBeInTheDocument()
+    expect(screen.getByText(/代码与 SQL/)).toBeInTheDocument()
   })
 
   it('submits structured practice payload instead of legacy answer-only text', async () => {
@@ -492,6 +516,56 @@ describe('PracticeMode', () => {
     expect(screen.getByText('面试官画像')).toBeInTheDocument()
     expect(screen.getByText('稳压型')).toBeInTheDocument()
     expect(screen.getByText(/礼貌但不放水/)).toBeInTheDocument()
+  })
+
+  it('offers debrief next actions and copies resume-ready feedback', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    })
+    useInterviewStore.setState({
+      practiceStatus: 'finished',
+      practiceSession: createPracticeSession({
+        status: 'finished',
+        current_turn: null,
+        report_markdown: [
+          '### 下一步练习',
+          '- 项目题先补充指标。',
+          '',
+          '### 可回填简历表达',
+          '- 将“负责接口优化”改成“主导接口优化，将 p95 延迟降低 35%”。',
+        ].join('\n'),
+        turn_history: [
+          {
+            turn_id: 'turn-1',
+            phase_id: 'project',
+            phase_label: '项目深挖',
+            category: 'project',
+            answer_mode: 'voice',
+            question: '讲讲项目。',
+            prompt_script: '讲讲项目。',
+            asked_at: Date.now(),
+            transcript: '回答',
+            code_text: '',
+            duration_ms: 1000,
+            decision: 'advance',
+            scorecard: { evidence: 7 },
+          },
+        ],
+      }),
+    } as any)
+
+    render(<PracticeMode />)
+
+    expect(screen.getByText('下一步动作')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '复制可回填简历表达' }))
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('p95 延迟降低 35%'))
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.not.stringContaining('下一步练习'))
+    })
   })
 
   it('switches to the debrief view while the final report is generating', () => {

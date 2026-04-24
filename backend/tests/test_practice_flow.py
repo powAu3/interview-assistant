@@ -311,6 +311,25 @@ def test_submit_practice_answer_finishes_with_debrief(monkeypatch):
     assert updated.hidden_score_ledger[0].decision == "finish"
 
 
+def test_fallback_debrief_includes_resume_ready_section():
+    session = practice_service.PracticeSession(
+        hidden_score_ledger=[
+            practice_service.PracticeScoreLedgerEntry(
+                turn_id="turn-1",
+                phase_id="project",
+                decision="finish",
+                strengths=["项目主线清楚"],
+                risks=["缺少量化指标"],
+            )
+        ]
+    )
+
+    report = practice_service._fallback_debrief_report(session)
+
+    assert "### 可回填简历表达" in report
+    assert "待补充证据" in report
+
+
 def test_fallback_review_escalates_when_code_phase_has_no_code(monkeypatch):
     fake_cfg = _FakeCfg()
     calls = iter(
