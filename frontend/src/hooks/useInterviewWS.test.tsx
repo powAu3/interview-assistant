@@ -71,6 +71,7 @@ describe('useInterviewWS', () => {
       resumeOptLoading: false,
       resumeOptStreaming: '',
       resumeOptResult: '',
+      resumeOptJobId: null,
       lastWSError: null,
     } as any)
   })
@@ -122,5 +123,26 @@ describe('useInterviewWS', () => {
     })
 
     expect(FakeWebSocket.instances.length).toBe(2)
+  })
+
+  it('ignores stale resume optimization chunks from older jobs', () => {
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({ type: 'resume_opt_start', job_id: 'job-old' })
+      ws.emitMessage({ type: 'resume_opt_chunk', job_id: 'job-old', chunk: 'old-1' })
+      ws.emitMessage({ type: 'resume_opt_start', job_id: 'job-new' })
+      ws.emitMessage({ type: 'resume_opt_chunk', job_id: 'job-old', chunk: 'stale-old' })
+      ws.emitMessage({ type: 'resume_opt_chunk', job_id: 'job-new', chunk: 'new-1' })
+      ws.emitMessage({ type: 'resume_opt_done', job_id: 'job-new', text: 'new-final' })
+      ws.emitMessage({ type: 'resume_opt_done', job_id: 'job-old', text: 'old-final' })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.resumeOptResult).toBe('new-final')
+    expect(state.resumeOptStreaming).toBe('')
+    expect(state.resumeOptLoading).toBe(false)
   })
 })

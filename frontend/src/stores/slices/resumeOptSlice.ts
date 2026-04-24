@@ -5,13 +5,14 @@ export interface ResumeOptSliceState {
   resumeOptStreaming: string
   resumeOptResult: string
   resumeOptLoading: boolean
+  resumeOptJobId: string | null
 }
 
 export interface ResumeOptSliceActions {
-  appendResumeOptChunk: (chunk: string) => void
-  setResumeOptResult: (text: string) => void
+  appendResumeOptChunk: (chunk: string, jobId?: string | null) => void
+  setResumeOptResult: (text: string, jobId?: string | null) => void
   setResumeOptLoading: (v: boolean) => void
-  resetResumeOpt: () => void
+  resetResumeOpt: (jobId?: string | null) => void
 }
 
 export type ResumeOptSlice = ResumeOptSliceState & ResumeOptSliceActions
@@ -20,11 +21,19 @@ export const createResumeOptSlice: StateCreator<RootState, [], [], ResumeOptSlic
   resumeOptStreaming: '',
   resumeOptResult: '',
   resumeOptLoading: false,
+  resumeOptJobId: null,
 
-  appendResumeOptChunk: (chunk) =>
-    set((s) => ({ resumeOptStreaming: s.resumeOptStreaming + chunk })),
-  setResumeOptResult: (text) => set({ resumeOptResult: text, resumeOptStreaming: '' }),
+  appendResumeOptChunk: (chunk, jobId) =>
+    set((s) => {
+      if (jobId && s.resumeOptJobId && jobId !== s.resumeOptJobId) return {}
+      return { resumeOptStreaming: s.resumeOptStreaming + chunk }
+    }),
+  setResumeOptResult: (text, jobId) =>
+    set((s) => {
+      if (jobId && s.resumeOptJobId && jobId !== s.resumeOptJobId) return {}
+      return { resumeOptResult: text, resumeOptStreaming: '', resumeOptLoading: false }
+    }),
   setResumeOptLoading: (v) => set({ resumeOptLoading: v }),
-  resetResumeOpt: () =>
-    set({ resumeOptStreaming: '', resumeOptResult: '', resumeOptLoading: false }),
+  resetResumeOpt: (jobId = null) =>
+    set({ resumeOptStreaming: '', resumeOptResult: '', resumeOptLoading: false, resumeOptJobId: jobId }),
 })

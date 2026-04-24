@@ -1,4 +1,5 @@
 import threading
+import uuid
 from fastapi import APIRouter
 from pydantic import BaseModel
 from services.resume_optimizer import optimize_resume_stream
@@ -7,6 +8,8 @@ from api.realtime.ws import broadcast
 
 
 router = APIRouter()
+_resume_opt_lock = threading.Lock()
+_resume_opt_current_job_id: str | None = None
 
 
 class OptimizeRequest(BaseModel):
@@ -15,22 +18,43 @@ class OptimizeRequest(BaseModel):
 
 @router.post("/resume/optimize")
 async def api_resume_optimize(body: OptimizeRequest):
-    threading.Thread(target=_run_optimize, args=(body.jd,), daemon=True).start()
-    return {"ok": True}
+    global _resume_opt_current_job_id
+    job_id = uuid.uuid4().hex
+    with _resume_opt_lock:
+        _resume_opt_current_job_id = job_id
+    threading.Thread(target=_run_optimize, args=(body.jd, job_id), daemon=True).start()
+    return {"ok": True, "job_id": job_id}
 
 
-def _run_optimize(jd: str):
-    broadcast({"type": "resume_opt_start", "scope": "resume-opt"})
+def _is_current_resume_opt_job(job_id: str) -> bool:
+    with _resume_opt_lock:
+        return _resume_opt_current_job_id == job_id
+
+
+def _resume_opt_payload(event_type: str, job_id: str, **extra):
+    return {"type": event_type, "scope": "resume-opt", "job_id": job_id, **extra}
+
+
+def _run_optimize(jd: str, job_id: str):
+    if not _is_current_resume_opt_job(job_id):
+        return
+    broadcast(_resume_opt_payload("resume_opt_start", job_id))
     full_text = ""
     try:
         for chunk in optimize_resume_stream(jd):
+            if not _is_current_resume_opt_job(job_id):
+                return
             full_text += chunk
-            broadcast({"type": "resume_opt_chunk", "chunk": chunk, "scope": "resume-opt"})
+            broadcast(_resume_opt_payload("resume_opt_chunk", job_id, chunk=chunk))
     except Exception as e:
+        if not _is_current_resume_opt_job(job_id):
+            return
         full_text += f"\n\n[错误: {e}]"
-        broadcast({"type": "resume_opt_chunk", "chunk": f"\n\n[错误: {e}]", "scope": "resume-opt"})
+        broadcast(_resume_opt_payload("resume_opt_chunk", job_id, chunk=f"\n\n[错误: {e}]"))
     try:
-        broadcast({"type": "resume_opt_done", "text": full_text, "scope": "resume-opt"})
+        if not _is_current_resume_opt_job(job_id):
+            return
+        broadcast(_resume_opt_payload("resume_opt_done", job_id, text=full_text))
         stats = get_token_stats()
         broadcast({
             "type": "token_update",

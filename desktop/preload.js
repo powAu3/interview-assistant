@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   overlayDragStart: () => ipcRenderer.sendSync('overlay-drag-start'),
   overlayDragEnd: () => ipcRenderer.send('overlay-drag-end'),
   getOverlayState: () => ipcRenderer.invoke('get-overlay-state'),
+  listSystemTtsVoices: () => ipcRenderer.invoke('list-system-tts-voices'),
+  synthesizeSystemTts: (payload) => ipcRenderer.invoke('synthesize-system-tts', payload),
   onOverlayState: (listener) => {
     const wrapped = (_event, payload) => listener(payload);
     ipcRenderer.on('overlay-state', wrapped);

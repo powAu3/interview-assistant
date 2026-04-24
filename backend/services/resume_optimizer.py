@@ -207,6 +207,17 @@ def _requirements_for_prompt(parsed: Dict[str, Any], raw_fallback: str) -> str:
     return "\n".join(c for c in chunks if c) or raw_fallback.strip()
 
 
+_LINE_REF_RE = re.compile(r"\bL\d+\b")
+
+
+def _rewrite_needs_line_reference_warning(text: str) -> bool:
+    """改写建议必须能追溯到简历行号；缺失时提示人工确认。"""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return False
+    return _LINE_REF_RE.search(cleaned) is None
+
+
 def _stream_chat(
     client,
     model_cfg,
@@ -341,6 +352,7 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
 
     # ----- Step 3: 改写建议 -----
     yield "## ✏️ 简历改写建议\n\n"
+    rewrite_chunks: List[str] = []
     try:
         for piece in _stream_chat(
             client,
@@ -353,7 +365,14 @@ def optimize_resume_stream(jd_text: str) -> Generator[str, None, None]:
             temperature=0.45,
             max_tokens=1800,
         ):
+            rewrite_chunks.append(piece)
             yield piece
+        rewrite_text = "".join(rewrite_chunks)
+        if _rewrite_needs_line_reference_warning(rewrite_text):
+            yield (
+                "\n\n> 需人工确认：部分改写建议缺少行号引用，"
+                "请回到原简历逐条核对后再采用。"
+            )
     except Exception as e:  # noqa: BLE001
         eid = _new_eid()
         _log.warning("resume agent step3 failed [%s]: %s", eid, e)

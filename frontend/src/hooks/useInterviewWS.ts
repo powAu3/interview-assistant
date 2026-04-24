@@ -24,6 +24,10 @@ interface WsMsg {
   [k: string]: unknown
 }
 
+function normalizePracticeStatus(status: unknown) {
+  return status === 'interviewer_speaking' ? 'awaiting_answer' : status
+}
+
 function shouldDeliver(msg: WsMsg): boolean {
   const scope = msg.scope
   if (!scope) return true
@@ -120,6 +124,16 @@ export function useInterviewWS() {
     switch (msg.type) {
       case 'init':
         s.setInitData(msg as Parameters<typeof s.setInitData>[0])
+        if (msg.practice_session) {
+          s.setPracticeSession(msg.practice_session as Parameters<typeof s.setPracticeSession>[0])
+          if ((msg.practice_session as { status?: string })?.status) {
+            s.setPracticeStatus(
+              normalizePracticeStatus(
+                (msg.practice_session as { status: Parameters<typeof s.setPracticeStatus>[0] }).status,
+              ) as Parameters<typeof s.setPracticeStatus>[0],
+            )
+          }
+        }
         break
       case 'recording':
         s.setRecording(msg.value as boolean)
@@ -175,35 +189,10 @@ export function useInterviewWS() {
         break
       // Practice mode messages
       case 'practice_status':
-        s.setPracticeStatus(msg.status as Parameters<typeof s.setPracticeStatus>[0])
+        s.setPracticeStatus(normalizePracticeStatus(msg.status) as Parameters<typeof s.setPracticeStatus>[0])
         break
-      case 'practice_questions':
-        s.setPracticeQuestions(msg.questions as Parameters<typeof s.setPracticeQuestions>[0])
-        break
-      case 'practice_eval_start':
-        break
-      case 'practice_eval_chunk':
-        s.appendPracticeEvalChunk(msg.chunk as string)
-        break
-      case 'practice_eval_done':
-        s.finalizePracticeEval({
-          question_id: msg.question_id as number,
-          question: (msg.question as string) ?? '',
-          answer: (msg.answer as string) ?? '',
-          score: msg.score as number,
-          feedback: msg.feedback as string,
-        })
-        break
-      case 'practice_next':
-        s.setPracticeIndex(msg.index as number)
-        break
-      case 'practice_report_start':
-        break
-      case 'practice_report_chunk':
-        s.appendPracticeReportChunk(msg.chunk as string)
-        break
-      case 'practice_report_done':
-        s.finalizePracticeReport(msg.report as Parameters<typeof s.finalizePracticeReport>[0])
+      case 'practice_session':
+        s.setPracticeSession(msg.session as Parameters<typeof s.setPracticeSession>[0])
         break
       case 'practice_recording':
         s.setPracticeRecording(msg.value as boolean)
@@ -233,15 +222,14 @@ export function useInterviewWS() {
         })
         break
       case 'resume_opt_start':
-        s.resetResumeOpt()
+        s.resetResumeOpt(typeof msg.job_id === 'string' ? msg.job_id : null)
         s.setResumeOptLoading(true)
         break
       case 'resume_opt_chunk':
-        s.appendResumeOptChunk(msg.chunk as string)
+        s.appendResumeOptChunk(msg.chunk as string, typeof msg.job_id === 'string' ? msg.job_id : null)
         break
       case 'resume_opt_done':
-        s.setResumeOptResult(msg.text as string)
-        s.setResumeOptLoading(false)
+        s.setResumeOptResult(msg.text as string, typeof msg.job_id === 'string' ? msg.job_id : null)
         break
       case 'error':
         s.setLastWSError((msg.message as string) || '未知错误')

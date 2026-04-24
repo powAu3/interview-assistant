@@ -18,8 +18,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
-import { refreshConfig } from '@/lib/configSync'
-import { ResumeHistoryPopover } from '@/components/ResumeHistory'
+import { ResumeMountInline } from '@/components/resume/ResumeMount'
 
 const DEFAULT_QUICK_PROMPTS = [
   '写代码实现',
@@ -284,8 +283,6 @@ export default function ControlBar() {
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [cancellingAsk, setCancellingAsk] = useState(false)
-  const [resumeUploading, setResumeUploading] = useState(false)
-  const [resumeFile, setResumeFile] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const allModelsUnavailable = config?.models && config.models.length > 0 &&
@@ -295,7 +292,6 @@ export default function ControlBar() {
     transcriptions.length === 0 &&
     qaPairs.length === 0 &&
     (devices.length === 0 || selectedDevice === null)
-  const fileRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
@@ -333,12 +329,6 @@ export default function ControlBar() {
       window.removeEventListener('quick-prompts-updated', onStorage)
     }
   }, [])
-
-  useEffect(() => {
-    const name = config?.resume_active_filename
-    if (name) setResumeFile(name)
-    else if (!config?.has_resume) setResumeFile(null)
-  }, [config?.resume_active_filename, config?.has_resume])
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const hasLoopback = devices.some((d) => d.is_loopback)
@@ -456,29 +446,6 @@ export default function ControlBar() {
     if (isComposingRef.current) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk() }
   }, [handleAsk])
-
-  const handleResumeUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setResumeUploading(true)
-    setError(null)
-    try {
-      const res = await api.uploadResume(file)
-      setResumeFile(file.name)
-      await refreshConfig()
-      if (res.parsed) {
-        setToastMessage('简历已解析并选用')
-      } else {
-        setToastMessage(`已保存到历史，解析未成功：${res.parse_error || '请检查格式或稍后重试'}`)
-      }
-    } catch (err: any) { setError(err.message) }
-    finally { setResumeUploading(false) }
-    if (fileRef.current) fileRef.current.value = ''
-  }, [setToastMessage])
-  const handleRemoveResume = useCallback(async () => {
-    await api.deleteResume(); setResumeFile(null)
-    await refreshConfig()
-  }, [])
 
   const handleQuickPromptPick = useCallback((prompt: string) => {
     setManualQuestion((prev) => (prev ? `${prev} ${prompt}` : prompt))
@@ -618,47 +585,7 @@ export default function ControlBar() {
           </button>
         )}
 
-        <div
-          className={`hidden md:inline-flex items-stretch flex-shrink-0 rounded-lg border bg-bg-tertiary overflow-visible ${
-            resumeUploading || resumeFile || config?.has_resume
-              ? 'border-bg-hover'
-              : 'border-dashed border-bg-hover/90'
-          }`}
-        >
-          <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={handleResumeUpload} className="hidden" />
-          {resumeUploading ? (
-            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs text-text-muted rounded-l-lg">
-              <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-              <span className="hidden sm:inline">解析中…</span>
-            </div>
-          ) : resumeFile || config?.has_resume ? (
-            <div className="flex items-center gap-1 pl-2 pr-1 py-2 text-xs rounded-l-lg min-w-0 max-w-[200px]">
-              <FileText className="w-3.5 h-3.5 text-accent-green flex-shrink-0" />
-              <span className="text-text-secondary truncate hidden sm:inline">{resumeFile || config?.resume_active_filename || '简历已上传'}</span>
-              <button type="button" onClick={() => fileRef.current?.click()} className="text-accent-blue text-[10px] hover:underline hidden sm:inline flex-shrink-0">
-                更换
-              </button>
-              <button
-                type="button"
-                onClick={handleRemoveResume}
-                className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] rounded-md text-text-muted hover:text-accent-red hover:bg-bg-hover/60 transition-colors flex-shrink-0"
-                aria-label="移除已上传的简历"
-                title="移除简历 (仅取消挂载,不会删除历史文件)"
-              ><X className="w-3 h-3" /></button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1 pl-2 pr-1 py-2 text-text-secondary text-xs transition-colors rounded-l-lg hover:bg-bg-hover/60"
-            >
-              <Upload className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="hidden sm:inline whitespace-nowrap">简历</span>
-            </button>
-          )}
-          <div className="w-px shrink-0 bg-bg-hover/70 self-stretch my-1" aria-hidden />
-          <ResumeHistoryPopover />
-        </div>
+        <ResumeMountInline />
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}

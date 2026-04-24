@@ -177,10 +177,23 @@ export const api = {
   tokenStats: () => request('/api/token/stats'),
 
   // Practice
-  practiceGenerate: (count?: number) =>
-    request('/api/practice/generate', { method: 'POST', body: JSON.stringify({ count: count ?? 6 }) }),
-  practiceSubmit: (answer: string) =>
-    request('/api/practice/submit', { method: 'POST', body: JSON.stringify({ answer }) }),
+  practiceGenerate: (payload: { jd_text?: string; interviewer_style?: string }) =>
+    request('/api/practice/generate', { method: 'POST', body: JSON.stringify(payload) }),
+  practiceSubmit: (payload: {
+    transcript: string
+    code_text?: string
+    answer_mode: 'voice' | 'code' | 'voice+code'
+    duration_ms: number
+  }) => request('/api/practice/submit', { method: 'POST', body: JSON.stringify(payload) }),
+  practiceTts: (payload: { text: string; preferred_gender?: 'auto' | 'female' | 'male'; speaker?: string }) =>
+    request<{
+      ok: boolean
+      provider: string
+      speaker: string
+      audio_base64: string
+      content_type: string
+      duration: number
+    }>('/api/practice/tts', { method: 'POST', body: JSON.stringify(payload) }),
   practiceNext: () => request('/api/practice/next', { method: 'POST' }),
   practiceFinish: () => request('/api/practice/finish', { method: 'POST' }),
   practiceReset: () => request('/api/practice/reset', { method: 'POST' }),

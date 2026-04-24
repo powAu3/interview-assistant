@@ -12,10 +12,12 @@ from core.auth import get_token, is_auth_disabled, is_loopback_host
 from core.config import (
     get_config, update_config,
     POSITION_OPTIONS, LANGUAGE_OPTIONS, PRACTICE_AUDIENCE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
+    PRACTICE_TTS_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
+from services.tts import get_edge_tts_status
 from services.storage.resume_history import (
     MAX_UPLOAD_BYTES as RESUME_UPLOAD_MAX_BYTES,
     add_upload,
@@ -76,6 +78,15 @@ class ConfigUpdate(BaseModel):
     iflytek_stt_app_id: Optional[str] = None
     iflytek_stt_api_key: Optional[str] = None
     iflytek_stt_api_secret: Optional[str] = None
+    practice_tts_provider: Optional[str] = None
+    edge_tts_voice_female: Optional[str] = None
+    edge_tts_voice_male: Optional[str] = None
+    edge_tts_rate: Optional[str] = None
+    edge_tts_pitch: Optional[str] = None
+    volcengine_tts_appkey: Optional[str] = None
+    volcengine_tts_token: Optional[str] = None
+    practice_tts_speaker_female: Optional[str] = None
+    practice_tts_speaker_male: Optional[str] = None
     # KB (Beta) - 详细字段(min_score / OCR / Vision / chunk_size 等)仍走 config.json
     kb_enabled: Optional[bool] = None
     kb_top_k: Optional[int] = None
@@ -89,6 +100,7 @@ async def api_get_config():
     m = cfg.get_active_model()
     resume_active_history_id = getattr(cfg, "resume_active_history_id", None)
     return {
+        **get_edge_tts_status(),
         "models": [
             {
                 "name": mdl.name,
@@ -114,6 +126,15 @@ async def api_get_config():
         "iflytek_stt_app_id": cfg.iflytek_stt_app_id or "",
         "iflytek_stt_api_key": cfg.iflytek_stt_api_key or "",
         "iflytek_stt_api_secret": cfg.iflytek_stt_api_secret or "",
+        "practice_tts_provider": getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts",
+        "edge_tts_voice_female": getattr(cfg, "edge_tts_voice_female", "zh-CN-XiaoxiaoNeural") or "zh-CN-XiaoxiaoNeural",
+        "edge_tts_voice_male": getattr(cfg, "edge_tts_voice_male", "zh-CN-YunxiNeural") or "zh-CN-YunxiNeural",
+        "edge_tts_rate": getattr(cfg, "edge_tts_rate", "+0%") or "+0%",
+        "edge_tts_pitch": getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz",
+        "volcengine_tts_appkey": getattr(cfg, "volcengine_tts_appkey", "") or "",
+        "volcengine_tts_token": getattr(cfg, "volcengine_tts_token", "") or "",
+        "practice_tts_speaker_female": getattr(cfg, "practice_tts_speaker_female", "zh_female_qingxin") or "zh_female_qingxin",
+        "practice_tts_speaker_male": getattr(cfg, "practice_tts_speaker_male", "zh_male_chunhou") or "zh_male_chunhou",
         "position": cfg.position,
         "language": cfg.language,
         "practice_audience": getattr(cfg, "practice_audience", "campus_intern"),
@@ -278,6 +299,25 @@ async def api_update_config(body: ConfigUpdate):
                 422,
                 f"practice_audience 必须是 {list(PRACTICE_AUDIENCE_OPTIONS)} 之一",
             )
+        if d.get("practice_tts_provider") == "":
+            d.pop("practice_tts_provider", None)
+        elif "practice_tts_provider" in d and d["practice_tts_provider"] not in PRACTICE_TTS_PROVIDER_OPTIONS:
+            raise HTTPException(
+                422,
+                f"practice_tts_provider 必须是 {list(PRACTICE_TTS_PROVIDER_OPTIONS)} 之一",
+            )
+        if "practice_tts_speaker_female" in d:
+            d["practice_tts_speaker_female"] = str(d["practice_tts_speaker_female"]).strip()
+        if "practice_tts_speaker_male" in d:
+            d["practice_tts_speaker_male"] = str(d["practice_tts_speaker_male"]).strip()
+        if "edge_tts_voice_female" in d:
+            d["edge_tts_voice_female"] = str(d["edge_tts_voice_female"]).strip()
+        if "edge_tts_voice_male" in d:
+            d["edge_tts_voice_male"] = str(d["edge_tts_voice_male"]).strip()
+        if "edge_tts_rate" in d:
+            d["edge_tts_rate"] = str(d["edge_tts_rate"]).strip()
+        if "edge_tts_pitch" in d:
+            d["edge_tts_pitch"] = str(d["edge_tts_pitch"]).strip()
         if "kb_top_k" in d:
             d["kb_top_k"] = max(1, min(20, int(d["kb_top_k"])))
         if "kb_deadline_ms" in d:
@@ -337,6 +377,7 @@ async def api_options():
         "positions": POSITION_OPTIONS,
         "languages": LANGUAGE_OPTIONS,
         "practice_audiences": PRACTICE_AUDIENCE_OPTIONS,
+        "practice_tts_providers": PRACTICE_TTS_PROVIDER_OPTIONS,
         "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
         "screen_capture_regions": SCREEN_CAPTURE_REGION_OPTIONS,
