@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -159,6 +160,8 @@ def test_submit_practice_answer_creates_follow_up_turn(monkeypatch):
     )
 
     session = practice_service.start_practice_session(jd_text="偏交易链路经验。")
+    session.current_phase_index = 1
+    session.current_turn = practice_service._make_turn(session.blueprint.phases[1])  # type: ignore[attr-defined]
     updated = practice_service.submit_practice_answer(
         transcript="我负责过一个高并发交易系统，主要做缓存和降级。",
         code_text="",
@@ -178,6 +181,69 @@ def test_submit_practice_answer_creates_follow_up_turn(monkeypatch):
     assert len(updated.hidden_score_ledger) == 1
     assert updated.hidden_score_ledger[0].decision == "follow_up"
     assert updated.current_turn.interviewer_signal in {"probe", "stress-test"}
+
+
+def test_submit_practice_answer_does_not_create_follow_up_when_budget_is_zero(monkeypatch):
+    fake_cfg = _FakeCfg()
+    responses = iter(
+        [
+            {
+                "opening_script": "开始吧。",
+                "phases": [
+                    {
+                        "phase_id": "opening",
+                        "label": "开场与岗位匹配",
+                        "category": "behavioral",
+                        "focus": ["岗位动机"],
+                        "follow_up_budget": 0,
+                        "answer_mode": "voice",
+                        "question": "先做一个自我介绍。",
+                    },
+                    {
+                        "phase_id": "project",
+                        "label": "项目深挖",
+                        "category": "project",
+                        "focus": ["项目取舍"],
+                        "follow_up_budget": 1,
+                        "answer_mode": "voice",
+                        "question": "讲一个你真正主导过的项目。",
+                    },
+                ],
+            },
+            {
+                "decision": "follow_up",
+                "reason": "模型想追问，但本阶段预算为 0。",
+                "next_question": "继续追问一个不应出现的问题。",
+                "next_answer_mode": "voice",
+                "scorecard": {"technical_depth": 5},
+            },
+        ]
+    )
+
+    monkeypatch.setattr(practice_service, "get_config", lambda: fake_cfg)
+    monkeypatch.setattr(practice_service, "_pick_practice_model", lambda: fake_cfg.models[0], raising=False)
+    monkeypatch.setattr(
+        practice_service,
+        "_request_json_completion",
+        lambda *args, **kwargs: next(responses),
+        raising=False,
+    )
+
+    updated = practice_service.start_practice_session(jd_text="偏交易链路经验。")
+    updated = practice_service.submit_practice_answer(
+        transcript="我是后端开发，主要做交易链路。",
+        code_text="",
+        answer_mode="voice",
+        duration_ms=30_000,
+    )
+
+    assert updated.status == "awaiting_answer"
+    assert len(updated.turn_history) == 1
+    assert updated.turn_history[0].decision == "advance"
+    assert updated.current_turn is not None
+    assert updated.current_turn.follow_up_of is None
+    assert updated.current_turn.phase_id == "project"
+    assert "不应出现" not in updated.current_turn.question
 
 
 def test_submit_practice_answer_finishes_with_debrief(monkeypatch):
@@ -362,3 +428,196 @@ def test_generate_route_broadcasts_new_status_sequence(monkeypatch):
     assert len(snapshots) == 1
     assert snapshots[0]["session"]["context"]["jd_text"] == "熟悉 Redis、MySQL"
     assert snapshots[0]["session"]["status"] == "awaiting_answer"
+
+
+def test_submit_worker_ignores_stale_session_after_reset(monkeypatch):
+    pending: list[Callable[[], None]] = []
+    calls: list[dict] = []
+
+    class _DeferredThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            if self._target:
+                pending.append(lambda: self._target(*self._args, **self._kwargs))
+
+    session = practice_service.reset_practice()
+    session.status = "awaiting_answer"
+    session.current_turn = practice_service.PracticeTurn(
+        turn_id="turn-old",
+        phase_id="opening",
+        phase_label="开场",
+        category="behavioral",
+        answer_mode="voice",
+        question="旧会话问题",
+        prompt_script="旧会话问题",
+    )
+
+    monkeypatch.setattr(practice_router, "threading", type("T", (), {"Thread": _DeferredThread}))
+    monkeypatch.setattr(practice_router, "submit_practice_answer", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(practice_router, "broadcast", lambda payload: None)
+
+    result = _run(practice_router.api_practice_submit(practice_router.PracticeSubmitBody(transcript="旧回答")))
+    assert result == {"ok": True}
+    assert len(pending) == 1
+
+    practice_service.reset_practice()
+    pending[0]()
+
+    assert calls == []
+
+
+def test_submit_worker_does_not_publish_when_session_resets_after_guard(monkeypatch):
+    pending: list[Callable[[], None]] = []
+    calls: list[dict] = []
+    snapshots: list[object] = []
+    records: list[tuple] = []
+    token_updates: list[bool] = []
+
+    class _DeferredThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            if self._target:
+                pending.append(lambda: self._target(*self._args, **self._kwargs))
+
+    session = practice_service.reset_practice()
+    session.status = "awaiting_answer"
+    session.current_turn = practice_service.PracticeTurn(
+        turn_id="turn-old",
+        phase_id="opening",
+        phase_label="开场",
+        category="behavioral",
+        answer_mode="voice",
+        question="旧会话问题",
+        prompt_script="旧会话问题",
+    )
+
+    def guard_then_reset(_session, _turn_id):
+        practice_service.reset_practice()
+        return True
+
+    def fake_submit(**kwargs):
+        calls.append(kwargs)
+        return kwargs["session"]
+
+    monkeypatch.setattr(practice_router, "threading", type("T", (), {"Thread": _DeferredThread}))
+    monkeypatch.setattr(practice_router, "_is_current_practice_turn", guard_then_reset)
+    monkeypatch.setattr(practice_router, "submit_practice_answer", fake_submit)
+    monkeypatch.setattr(practice_router, "_broadcast_practice_snapshot", lambda *args, **kwargs: snapshots.append(args))
+    monkeypatch.setattr(practice_router, "_submit_practice_record", lambda *args: records.append(args))
+    monkeypatch.setattr(practice_router, "_broadcast_token_update", lambda: token_updates.append(True))
+    monkeypatch.setattr(practice_router, "broadcast", lambda payload: None)
+
+    result = _run(practice_router.api_practice_submit(practice_router.PracticeSubmitBody(transcript="旧回答")))
+    assert result == {"ok": True}
+    assert len(pending) == 1
+
+    pending[0]()
+
+    assert calls
+    assert calls[0]["session"] is session
+    assert calls[0]["expected_turn_id"] == "turn-old"
+    assert snapshots == []
+    assert records == []
+    assert token_updates == []
+
+
+def test_finish_worker_ignores_stale_session_after_reset(monkeypatch):
+    pending: list[Callable[[], None]] = []
+    calls: list[str] = []
+
+    class _DeferredThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            if self._target:
+                pending.append(lambda: self._target(*self._args, **self._kwargs))
+
+    session = practice_service.reset_practice()
+    session.status = "awaiting_answer"
+    session.turn_history.append(
+        practice_service.PracticeTurn(
+            turn_id="turn-old",
+            phase_id="opening",
+            phase_label="开场",
+            category="behavioral",
+            answer_mode="voice",
+            question="旧会话问题",
+            prompt_script="旧会话问题",
+        )
+    )
+
+    monkeypatch.setattr(practice_router, "threading", type("T", (), {"Thread": _DeferredThread}))
+    monkeypatch.setattr(practice_router, "finish_practice_session", lambda *_args: calls.append("finish"))
+    monkeypatch.setattr(practice_router, "broadcast", lambda payload: None)
+
+    result = _run(practice_router.api_practice_finish())
+    assert result == {"ok": True}
+    assert len(pending) == 1
+
+    practice_service.reset_practice()
+    pending[0]()
+
+    assert calls == []
+
+
+def test_finish_worker_does_not_publish_when_session_resets_after_finish(monkeypatch):
+    pending: list[Callable[[], None]] = []
+    snapshots: list[object] = []
+    token_updates: list[bool] = []
+
+    class _DeferredThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+
+        def start(self):
+            if self._target:
+                pending.append(lambda: self._target(*self._args, **self._kwargs))
+
+    session = practice_service.reset_practice()
+    session.status = "awaiting_answer"
+    session.turn_history.append(
+        practice_service.PracticeTurn(
+            turn_id="turn-old",
+            phase_id="opening",
+            phase_label="开场",
+            category="behavioral",
+            answer_mode="voice",
+            question="旧会话问题",
+            prompt_script="旧会话问题",
+        )
+    )
+
+    def fake_finish(finished_session):
+        assert finished_session is session
+        practice_service.reset_practice()
+        return finished_session
+
+    monkeypatch.setattr(practice_router, "threading", type("T", (), {"Thread": _DeferredThread}))
+    monkeypatch.setattr(practice_router, "finish_practice_session", fake_finish)
+    monkeypatch.setattr(practice_router, "_broadcast_practice_snapshot", lambda *args, **kwargs: snapshots.append(args))
+    monkeypatch.setattr(practice_router, "_broadcast_token_update", lambda: token_updates.append(True))
+    monkeypatch.setattr(practice_router, "broadcast", lambda payload: None)
+
+    result = _run(practice_router.api_practice_finish())
+    assert result == {"ok": True}
+    assert len(pending) == 1
+    assert len(snapshots) == 1
+    snapshots.clear()
+
+    pending[0]()
+
+    assert snapshots == []
+    assert token_updates == []

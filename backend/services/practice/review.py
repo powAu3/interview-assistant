@@ -172,9 +172,17 @@ def _apply_turn_review(
     normalize_answer_mode: Callable[..., str],
     generate_debrief_report: Callable[[PracticeSession], str],
 ) -> PracticeSession:
-    decision = str(review.get("decision") or DECISION_ADVANCE).strip().lower()
-    if decision not in {DECISION_FOLLOW_UP, DECISION_ADVANCE, DECISION_FINISH}:
-        decision = DECISION_ADVANCE
+    requested_decision = str(review.get("decision") or DECISION_ADVANCE).strip().lower()
+    if requested_decision not in {DECISION_FOLLOW_UP, DECISION_ADVANCE, DECISION_FINISH}:
+        requested_decision = DECISION_ADVANCE
+
+    follow_up_count_after_answer = _phase_follow_up_count(session, phase.phase_id) + (1 if turn.follow_up_of else 0)
+    follow_up_budget_exhausted = follow_up_count_after_answer >= phase.follow_up_budget
+    is_last_phase = bool(session.blueprint and session.current_phase_index >= len(session.blueprint.phases) - 1)
+    decision = requested_decision
+    coerced_over_budget_follow_up = requested_decision == DECISION_FOLLOW_UP and follow_up_budget_exhausted
+    if coerced_over_budget_follow_up:
+        decision = DECISION_FINISH if is_last_phase else DECISION_ADVANCE
 
     turn.decision = decision
     turn.decision_reason = str(review.get("reason") or "").strip()
@@ -203,8 +211,7 @@ def _apply_turn_review(
         )
     )
 
-    follow_up_count = _phase_follow_up_count(session, phase.phase_id)
-    if decision == DECISION_FOLLOW_UP and follow_up_count <= phase.follow_up_budget:
+    if decision == DECISION_FOLLOW_UP and follow_up_count_after_answer < phase.follow_up_budget:
         session.current_turn = make_turn(
             phase,
             question=str(review.get("next_question") or phase.question),
@@ -215,7 +222,6 @@ def _apply_turn_review(
         session.status = PRACTICE_STATUS_AWAITING_ANSWER
         return session
 
-    is_last_phase = bool(session.blueprint and session.current_phase_index >= len(session.blueprint.phases) - 1)
     if decision == DECISION_FINISH or is_last_phase:
         session.current_turn = None
         session.status = PRACTICE_STATUS_DEBRIEFING
@@ -226,9 +232,10 @@ def _apply_turn_review(
 
     session.current_phase_index += 1
     next_phase = _current_phase(session)
+    next_question = "" if coerced_over_budget_follow_up else str(review.get("next_question") or "").strip()
     session.current_turn = make_turn(
         next_phase,
-        question=str(review.get("next_question") or next_phase.question).strip(),
+        question=next_question or next_phase.question,
         answer_mode=normalize_answer_mode(review.get("next_answer_mode"), next_phase.answer_mode),
         interviewer_style=session.context.interviewer_style if session.context else INTERVIEWER_STYLE_CALM,
     )

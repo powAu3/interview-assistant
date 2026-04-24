@@ -81,6 +81,10 @@ describe('PracticeMode', () => {
       configurable: true,
       value: vi.fn().mockResolvedValue(undefined),
     })
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      configurable: true,
+      value: vi.fn(),
+    })
     const storage = new Map<string, string>()
     Object.defineProperty(window, 'localStorage', {
       configurable: true,

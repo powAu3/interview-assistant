@@ -102,6 +102,15 @@ def _broadcast_token_update() -> None:
     )
 
 
+def _is_current_practice_session(session) -> bool:
+    return get_practice() is session
+
+
+def _is_current_practice_turn(session, turn_id: str) -> bool:
+    current = get_practice()
+    return current is session and bool(current.current_turn and current.current_turn.turn_id == turn_id)
+
+
 @router.get("/practice/status")
 async def api_practice_status():
     session = get_practice()
@@ -149,28 +158,37 @@ class PracticeTtsBody(BaseModel):
 
 @router.post("/practice/submit")
 async def api_practice_submit(body: PracticeSubmitBody):
-    if not get_practice().current_turn:
+    session_at_submit = get_practice()
+    current_turn = session_at_submit.current_turn
+    if not current_turn:
         raise HTTPException(400, "没有当前题目")
     if not body.effective_transcript() and not body.code_text.strip():
         raise HTTPException(400, "回答不能为空")
 
-    get_practice().status = PRACTICE_STATUS_THINKING
+    session_at_submit.status = PRACTICE_STATUS_THINKING
     _broadcast_practice_status(PRACTICE_STATUS_THINKING)
 
     transcript = body.effective_transcript()
     code_text = body.code_text.strip()
     duration_ms = max(0, int(body.duration_ms or 0))
     answer_mode = body.answer_mode
+    submitted_turn_id = current_turn.turn_id
 
     def _eval():
+        if not _is_current_practice_turn(session_at_submit, submitted_turn_id):
+            return
         try:
-            previous_question = get_practice().current_turn.question if get_practice().current_turn else ""
+            previous_question = session_at_submit.current_turn.question if session_at_submit.current_turn else ""
             session = submit_practice_answer(
                 transcript=transcript,
                 code_text=code_text,
                 answer_mode=answer_mode,
                 duration_ms=duration_ms,
+                session=session_at_submit,
+                expected_turn_id=submitted_turn_id,
             )
+            if not _is_current_practice_session(session_at_submit):
+                return
             combined_answer = transcript.strip()
             if code_text:
                 combined_answer = f"{combined_answer}\n\n[code]\n{code_text}" if combined_answer else code_text
@@ -189,7 +207,9 @@ async def api_practice_submit(body: PracticeSubmitBody):
                 _broadcast_practice_snapshot(session, reveal_feedback=False)
             _broadcast_token_update()
         except Exception as e:
-            get_practice().status = PRACTICE_STATUS_AWAITING_ANSWER
+            if not _is_current_practice_session(session_at_submit):
+                return
+            session_at_submit.status = PRACTICE_STATUS_AWAITING_ANSWER
             _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
             broadcast({"type": "error", "message": f"处理回答失败: {e}"})
 
@@ -244,18 +264,25 @@ async def api_practice_next():
 
 @router.post("/practice/finish")
 async def api_practice_finish():
-    if not get_practice().turn_history:
+    session_at_finish = get_practice()
+    if not session_at_finish.turn_history:
         raise HTTPException(400, "还没有完成任何题目")
-    get_practice().status = PRACTICE_STATUS_DEBRIEFING
-    _broadcast_practice_snapshot(get_practice(), reveal_feedback=False)
+    session_at_finish.status = PRACTICE_STATUS_DEBRIEFING
+    _broadcast_practice_snapshot(session_at_finish, reveal_feedback=False)
 
     def _finish():
+        if not _is_current_practice_session(session_at_finish):
+            return
         try:
-            session = finish_practice_session()
+            session = finish_practice_session(session_at_finish)
+            if not _is_current_practice_session(session_at_finish):
+                return
             _broadcast_practice_snapshot(session, reveal_feedback=True)
             _broadcast_token_update()
         except Exception as e:
-            get_practice().status = PRACTICE_STATUS_AWAITING_ANSWER
+            if not _is_current_practice_session(session_at_finish):
+                return
+            session_at_finish.status = PRACTICE_STATUS_AWAITING_ANSWER
             _broadcast_practice_status(PRACTICE_STATUS_AWAITING_ANSWER)
             broadcast({"type": "error", "message": f"结束模拟面试失败: {e}"})
 

@@ -26,6 +26,8 @@ interface RemoteSpeakOptions {
   onStart?: () => void
   onEnd?: () => void
   onError?: (message: string) => void
+  onAudio?: (audio: HTMLAudioElement) => void
+  signal?: AbortSignal
 }
 
 const FEMALE_HINTS = [
@@ -151,23 +153,53 @@ export async function playBase64Audio(options: RemoteSpeakOptions): Promise<bool
     options.onError?.('当前环境不支持音频播放')
     return false
   }
+  if (options.signal?.aborted) return false
   return new Promise<boolean>((resolve) => {
     const audio = new Audio(`data:${options.contentType};base64,${options.audioBase64}`)
-    audio.onplay = () => options.onStart?.()
+    let settled = false
+    const settle = (value: boolean) => {
+      if (settled) return
+      settled = true
+      options.signal?.removeEventListener('abort', abortPlayback)
+      resolve(value)
+    }
+    const abortPlayback = () => {
+      try {
+        audio.pause()
+        audio.removeAttribute('src')
+      } catch {
+        /* ignore */
+      }
+      settle(false)
+    }
+
+    options.onAudio?.(audio)
+    options.signal?.addEventListener('abort', abortPlayback, { once: true })
+    audio.onplay = () => {
+      if (options.signal?.aborted) {
+        abortPlayback()
+        return
+      }
+      options.onStart?.()
+    }
     audio.onended = () => {
+      if (options.signal?.aborted) {
+        abortPlayback()
+        return
+      }
       options.onEnd?.()
-      resolve(true)
+      settle(true)
     }
     audio.onerror = () => {
       options.onError?.('云端语音播报失败，已降级为本地语音')
-      resolve(false)
+      settle(false)
     }
     audio
       .play()
       .then(() => undefined)
       .catch(() => {
         options.onError?.('云端语音播报失败，已降级为本地语音')
-        resolve(false)
+        settle(false)
       })
   })
 }

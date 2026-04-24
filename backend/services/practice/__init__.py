@@ -5,7 +5,17 @@ from core.config import get_config as _get_config
 from . import blueprint as _blueprint
 from . import debrief as _debrief
 from . import review as _review
+from .constants import (
+    ANSWER_MODE_VOICE,
+    INTERVIEWER_PERSONA_MAP,
+    INTERVIEWER_STYLE_CALM,
+    PRACTICE_STATUS_AWAITING_ANSWER,
+    PRACTICE_STATUS_DEBRIEFING,
+    PRACTICE_STATUS_FINISHED,
+    PRACTICE_STATUS_PREPARING,
+)
 from .constants import *
+from .models import PracticePhase, PracticeSession, PracticeTurn
 from .models import *
 from .service import (
     _pick_practice_model as _pick_practice_model_impl,
@@ -93,10 +103,14 @@ def submit_practice_answer(
     code_text: str = "",
     answer_mode: str = ANSWER_MODE_VOICE,
     duration_ms: int = 0,
+    session: PracticeSession | None = None,
+    expected_turn_id: str | None = None,
 ) -> PracticeSession:
-    session = get_practice()
+    session = session or get_practice()
     if not session.current_turn:
         raise ValueError("没有当前面试问题")
+    if expected_turn_id and session.current_turn.turn_id != expected_turn_id:
+        raise ValueError("当前面试问题已变化，请重新提交")
 
     transcript = (transcript or "").strip()
     code_text = (code_text or "").strip()
@@ -122,8 +136,8 @@ def submit_practice_answer(
     )
 
 
-def finish_practice_session() -> PracticeSession:
-    session = get_practice()
+def finish_practice_session(session: PracticeSession | None = None) -> PracticeSession:
+    session = session or get_practice()
     if session.status == PRACTICE_STATUS_FINISHED:
         return session
     if not session.turn_history:

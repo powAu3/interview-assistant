@@ -67,7 +67,7 @@ def normalize_tts_text(text: str, locale_hint: str = "zh") -> str:
         escaped = re.escape(src)
         normalized = re.sub(
             rf"(^|[^A-Za-z])({escaped})(?=[^A-Za-z]|$)",
-            lambda match: f"{match.group(1)}{target}",
+            lambda match, replacement=target: f"{match.group(1)}{replacement}",
             normalized,
         )
     return normalized
