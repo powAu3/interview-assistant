@@ -6,6 +6,7 @@ import { useInterviewStore } from '@/stores/configStore'
 
 const apiMock = vi.hoisted(() => ({
   ask: vi.fn(),
+  getDevices: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -27,10 +28,12 @@ class MockFileReader {
   }
 }
 
-describe('ControlBar screenshot review flow', () => {
+describe('ControlBar', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.stubGlobal('FileReader', MockFileReader as any)
     apiMock.ask.mockResolvedValue({ ok: true })
+    apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
     useInterviewStore.setState({
       config: {
         models: [{ name: 'TextOnly', supports_think: false, supports_vision: false, enabled: true }],
@@ -91,5 +94,64 @@ describe('ControlBar screenshot review flow', () => {
 
     expect(apiMock.ask).not.toHaveBeenCalled()
     expect(screen.getByText(/当前模型「TextOnly」不支持图片识别/)).toBeInTheDocument()
+  })
+
+  it('hides noisy software audio devices by default with a show all escape hatch', () => {
+    useInterviewStore.setState({
+      devices: [
+        { id: 1, name: 'BlackHole 2ch', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 2, name: 'ZoomAudioDevice', channels: 2, is_loopback: false, host_api: 'Core Audio' },
+        { id: 3, name: 'Microsoft Teams Audio', channels: 2, is_loopback: false, host_api: 'Core Audio' },
+        { id: 4, name: 'MacBook Pro Microphone', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择音频输入设备' }))
+
+    expect(screen.getAllByText(/BlackHole 2ch/).length).toBeGreaterThan(0)
+    expect(screen.getByText('MacBook Pro Microphone')).toBeInTheDocument()
+    expect(screen.queryByText('ZoomAudioDevice')).not.toBeInTheDocument()
+    expect(screen.queryByText('Microsoft Teams Audio')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /显示全部设备/ }))
+
+    expect(screen.getByText('ZoomAudioDevice')).toBeInTheDocument()
+    expect(screen.getByText('Microsoft Teams Audio')).toBeInTheDocument()
+  })
+
+  it('allows selecting a hidden audio device after showing all devices', () => {
+    useInterviewStore.setState({
+      devices: [
+        { id: 1, name: 'MacBook Pro Microphone', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+        { id: 2, name: 'ZoomAudioDevice', channels: 2, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择音频输入设备' }))
+    fireEvent.click(screen.getByRole('button', { name: /显示全部设备/ }))
+    fireEvent.click(screen.getByText('ZoomAudioDevice'))
+
+    expect(screen.getByRole('button', { name: '选择音频输入设备' })).toHaveTextContent('当前: ZoomAudioDevice')
+  })
+
+  it('refreshes audio devices from the picker', async () => {
+    apiMock.getDevices.mockResolvedValue({
+      devices: [
+        { id: 9, name: 'USB Headset Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+      platform: { platform: 'Darwin', needs_virtual_device: false, instructions: '' },
+    })
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择音频输入设备' }))
+    fireEvent.click(screen.getByRole('button', { name: '刷新设备列表' }))
+
+    expect(apiMock.getDevices).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('USB Headset Mic')).toBeInTheDocument()
   })
 })

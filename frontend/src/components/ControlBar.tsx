@@ -13,9 +13,16 @@ import {
   PlayCircle,
   Zap,
   Loader2,
+  ChevronDown,
+  Check,
+  Eye,
+  EyeOff,
+  Mic,
+  RefreshCw,
+  Volume2,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useInterviewStore } from '@/stores/configStore'
+import { useInterviewStore, type DeviceItem } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
 import { ResumeMountInline } from '@/components/resume/ResumeMount'
@@ -55,6 +62,50 @@ export function saveQuickPrompts(prompts: string[]) {
  */
 const RECENT_KEY = 'quick_prompts_recent_v1'
 const RECENT_MAX = 16
+
+const USEFUL_SYSTEM_AUDIO_TERMS = [
+  'blackhole',
+  'soundflower',
+  'loopback',
+  'stereo mix',
+  '立体声混音',
+  'what u hear',
+  'ishowu',
+]
+
+const NOISY_AUDIO_DEVICE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /zoomaudiodevice|zoom audio/i, reason: '会议软件虚拟设备' },
+  { pattern: /microsoft teams audio|teams audio/i, reason: '会议软件虚拟设备' },
+  { pattern: /webex|slack audio|discord/i, reason: '软件虚拟设备' },
+  { pattern: /obs virtual|obs audio|obs-audio/i, reason: '录屏软件虚拟设备' },
+  { pattern: /background music|eqmac|krisp|nvidia broadcast/i, reason: '音频增强/路由软件' },
+  { pattern: /ndi audio|screenflow|sound siphon|audio hijack/i, reason: '音频路由软件' },
+  { pattern: /aggregate device|multi-output device|multi output/i, reason: '聚合/多输出设备' },
+  { pattern: /virtual/i, reason: '虚拟设备' },
+]
+
+function normalizeAudioDeviceName(name: string) {
+  return name.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function getHiddenAudioDeviceReason(device: DeviceItem): string | null {
+  const name = normalizeAudioDeviceName(device.name)
+  if (device.is_loopback || USEFUL_SYSTEM_AUDIO_TERMS.some((term) => name.includes(term))) {
+    return null
+  }
+  return NOISY_AUDIO_DEVICE_PATTERNS.find(({ pattern }) => pattern.test(device.name))?.reason ?? null
+}
+
+function splitAudioDevices(devices: DeviceItem[]) {
+  const visible: DeviceItem[] = []
+  const hidden: Array<{ device: DeviceItem; reason: string }> = []
+  for (const device of devices) {
+    const reason = getHiddenAudioDeviceReason(device)
+    if (reason) hidden.push({ device, reason })
+    else visible.push(device)
+  }
+  return { visible, hidden }
+}
 
 export function readQuickPromptRecent(): Record<string, number> {
   try {
@@ -242,12 +293,243 @@ function QuickPromptsRow({
   )
 }
 
+function DeviceGroup({
+  title,
+  devices,
+  selectedDevice,
+  selectionDisabled,
+  hidden,
+  onSelect,
+}: {
+  title: string
+  devices: Array<DeviceItem | { device: DeviceItem; reason: string }>
+  selectedDevice: number | null
+  selectionDisabled: boolean
+  hidden?: boolean
+  onSelect: (deviceId: number) => void
+}) {
+  if (devices.length === 0) return null
+  return (
+    <div className="space-y-1">
+      <div className="px-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
+        {title}
+      </div>
+      <div className="space-y-1">
+        {devices.map((entry) => {
+          const device = 'device' in entry ? entry.device : entry
+          const reason = 'reason' in entry ? entry.reason : null
+          const selected = device.id === selectedDevice
+          const Icon = device.is_loopback ? Volume2 : Mic
+          return (
+            <button
+              key={device.id}
+              type="button"
+              onClick={() => onSelect(device.id)}
+              disabled={selectionDisabled}
+              aria-current={selected ? 'true' : undefined}
+              title={selectionDisabled ? '录音中不可切换设备，请先暂停' : device.name}
+              className={`w-full min-h-[38px] px-2.5 py-2 rounded-lg text-left flex items-center gap-2 border transition-colors ${
+                selected
+                  ? 'border-accent-blue/70 bg-accent-blue/10 text-text-primary'
+                  : 'border-transparent hover:border-bg-hover hover:bg-bg-hover/60 text-text-secondary'
+              } ${selectionDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${device.is_loopback ? 'text-accent-blue' : 'text-text-muted'}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium text-text-primary">
+                  {device.name}
+                  {device.is_loopback ? ' ⟳' : ''}
+                </span>
+                <span className="block truncate text-[10px] text-text-muted">
+                  {hidden && reason ? `${reason} · ` : ''}
+                  {device.host_api}
+                  {device.channels ? ` · ${device.channels}ch` : ''}
+                </span>
+              </span>
+              {selected && <Check className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function AudioDevicePicker({
+  devices,
+  selectedDevice,
+  onSelect,
+  onRefresh,
+  refreshing,
+  selectionDisabled,
+}: {
+  devices: DeviceItem[]
+  selectedDevice: number | null
+  onSelect: (deviceId: number) => void
+  onRefresh: () => Promise<void>
+  refreshing: boolean
+  selectionDisabled: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [showHidden, setShowHidden] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const { visible, hidden } = useMemo(() => splitAudioDevices(devices), [devices])
+  const selected = devices.find((d) => d.id === selectedDevice) ?? null
+  const visibleLoopbacks = visible.filter((d) => d.is_loopback)
+  const visibleMics = visible.filter((d) => !d.is_loopback)
+  const hiddenLoopbacks = hidden.filter(({ device }) => device.is_loopback)
+  const hiddenMics = hidden.filter(({ device }) => !device.is_loopback)
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  const handleSelect = (deviceId: number) => {
+    onSelect(deviceId)
+    setOpen(false)
+  }
+
+  const handleRefresh = async () => {
+    await onRefresh()
+    setOpen(true)
+  }
+
+  return (
+    <div ref={rootRef} className="relative flex-1 min-w-0 max-w-[190px] md:max-w-[230px]">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        disabled={selectionDisabled}
+        aria-label="选择音频输入设备"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={selectionDisabled ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
+        className="w-full min-h-[36px] bg-bg-tertiary text-text-primary text-xs rounded-lg pl-2.5 pr-2 py-2 border border-bg-hover hover:bg-bg-hover/70 focus:outline-none focus:border-accent-blue flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {selected?.is_loopback ? (
+          <Volume2 className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />
+        ) : (
+          <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 text-left truncate">
+          {selected ? `当前: ${selected.name}${selected.is_loopback ? ' ⟳' : ''}` : '选择音频输入'}
+        </span>
+        {hidden.length > 0 && (
+          <span
+            className="hidden md:inline-flex rounded-md bg-accent-amber/15 px-1.5 py-0.5 text-[10px] text-accent-amber"
+            title={`已自动隐藏 ${hidden.length} 个疑似无用设备`}
+          >
+            -{hidden.length}
+          </span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div
+          role="dialog"
+          aria-label="音频输入设备列表"
+          className="absolute left-0 bottom-full mb-2 z-50 w-[min(360px,calc(100vw-1.5rem))] rounded-xl border border-bg-hover bg-bg-primary shadow-2xl shadow-black/20 p-2"
+        >
+          <div className="flex items-center gap-2 px-1 pb-2 border-b border-bg-hover/60">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-text-primary">音频输入</div>
+              <div className="text-[10px] text-text-muted">
+                {hidden.length > 0 ? `已自动隐藏 ${hidden.length} 个疑似无用设备` : '未隐藏设备'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="刷新设备列表"
+              title="刷新设备列表"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-bg-tertiary hover:bg-bg-hover text-text-secondary disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          <div className="max-h-[280px] overflow-y-auto py-2 space-y-3">
+            {visible.length === 0 && (
+              <div className="rounded-lg bg-accent-amber/10 px-3 py-2 text-xs text-accent-amber">
+                当前列表被自动过滤为空，可以显示全部设备后手动选择。
+              </div>
+            )}
+            <DeviceGroup
+              title="系统音频 (推荐)"
+              devices={visibleLoopbacks}
+              selectedDevice={selectedDevice}
+              selectionDisabled={selectionDisabled}
+              onSelect={handleSelect}
+            />
+            <DeviceGroup
+              title="麦克风"
+              devices={visibleMics}
+              selectedDevice={selectedDevice}
+              selectionDisabled={selectionDisabled}
+              onSelect={handleSelect}
+            />
+            {showHidden && (
+              <>
+                <DeviceGroup
+                  title="已隐藏的系统音频"
+                  devices={hiddenLoopbacks}
+                  selectedDevice={selectedDevice}
+                  selectionDisabled={selectionDisabled}
+                  hidden
+                  onSelect={handleSelect}
+                />
+                <DeviceGroup
+                  title="已隐藏设备"
+                  devices={hiddenMics}
+                  selectedDevice={selectedDevice}
+                  selectionDisabled={selectionDisabled}
+                  hidden
+                  onSelect={handleSelect}
+                />
+              </>
+            )}
+          </div>
+
+          {hidden.length > 0 && (
+            <div className="pt-2 border-t border-bg-hover/60">
+              <button
+                type="button"
+                onClick={() => setShowHidden((value) => !value)}
+                aria-label={showHidden ? '隐藏无用设备' : '显示全部设备'}
+                className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-text-secondary hover:bg-bg-hover"
+              >
+                {showHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showHidden ? '隐藏无用设备' : `显示全部设备 (${hidden.length})`}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ControlBar() {
-  // 精确订阅 14 个字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
+  // 精确订阅字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
   const {
     isRecording,
     isPaused,
     devices,
+    setDevices,
     config,
     platformInfo,
     clearSession,
@@ -264,6 +546,7 @@ export default function ControlBar() {
       isRecording: s.isRecording,
       isPaused: s.isPaused,
       devices: s.devices,
+      setDevices: s.setDevices,
       config: s.config,
       platformInfo: s.platformInfo,
       clearSession: s.clearSession,
@@ -283,6 +566,7 @@ export default function ControlBar() {
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [cancellingAsk, setCancellingAsk] = useState(false)
+  const [refreshingDevices, setRefreshingDevices] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const allModelsUnavailable = config?.models && config.models.length > 0 &&
@@ -310,6 +594,8 @@ export default function ControlBar() {
     for (const p of withTs) s.add(p)
     return s
   }, [quickPrompts, quickPromptRecent])
+
+  const visibleDevices = useMemo(() => splitAudioDevices(devices).visible, [devices])
 
   // WebSocket 从断开恢复时 toast 通知,避免用户误以为系统没反应
   const prevWsConnectedRef = useRef(wsConnected)
@@ -341,9 +627,10 @@ export default function ControlBar() {
       return
     }
     if (selectedDevice !== null && devices.some((d) => d.id === selectedDevice)) return
-    const loopback = devices.find((d) => d.is_loopback)
-    setSelectedDevice(loopback?.id ?? devices[0].id)
-  }, [devices, selectedDevice])
+    const defaultDevices = visibleDevices.length > 0 ? visibleDevices : devices
+    const loopback = defaultDevices.find((d) => d.is_loopback)
+    setSelectedDevice(loopback?.id ?? defaultDevices[0]?.id ?? null)
+  }, [devices, visibleDevices, selectedDevice])
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
@@ -453,6 +740,20 @@ export default function ControlBar() {
     setQuickPromptRecent(bumpQuickPromptRecent(prompt))
   }, [])
 
+  const handleRefreshDevices = useCallback(async () => {
+    setRefreshingDevices(true)
+    setError(null)
+    try {
+      const next = await api.getDevices()
+      setDevices(next.devices ?? [], next.platform ?? null)
+      setToastMessage('音频设备已刷新')
+    } catch (e: any) {
+      setError(e.message || '刷新音频设备失败')
+    } finally {
+      setRefreshingDevices(false)
+    }
+  }, [setDevices, setToastMessage])
+
   return (
     <div className="control-bar px-3 md:px-5 py-2.5 flex-shrink-0 space-y-1.5">
       {showColdStartHint && (
@@ -531,30 +832,14 @@ export default function ControlBar() {
 
       {/* 主控制行 */}
       <div className="flex items-center gap-2">
-        <select
-          value={selectedDevice ?? ''}
-          onChange={async (e) => {
-            const newId = Number(e.target.value)
-            setSelectedDevice(newId)
-            // 暂停中切换设备：只更新选中的设备，不自动恢复，让用户手动点"继续"
-          }}
-          className="bg-bg-tertiary text-text-primary text-xs rounded-lg px-2 py-2 border border-bg-hover focus:outline-none focus:border-accent-blue flex-1 min-w-0 max-w-[180px] md:max-w-[200px]"
-          disabled={isRecording && !isPaused}
-          title={isRecording && !isPaused ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
-        >
-          {devices.some((d) => d.is_loopback) && (
-            <optgroup label="🔊 系统音频 (推荐)">
-              {devices.filter((d) => d.is_loopback).map((d) => (
-                <option key={d.id} value={d.id}>{d.name} ⟳</option>
-              ))}
-            </optgroup>
-          )}
-          <optgroup label="🎤 麦克风">
-            {devices.filter((d) => !d.is_loopback).map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </optgroup>
-        </select>
+        <AudioDevicePicker
+          devices={devices}
+          selectedDevice={selectedDevice}
+          onSelect={setSelectedDevice}
+          onRefresh={handleRefreshDevices}
+          refreshing={refreshingDevices}
+          selectionDisabled={isRecording && !isPaused}
+        />
 
         {isRecording ? (
           <>
