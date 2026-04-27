@@ -43,6 +43,7 @@ const {
   saveShortcutConfig,
   validateShortcutMap,
 } = require('./shortcuts');
+const { createOverlayChromeOptions } = require('./windowOptions');
 
 const pkg = require('./package.json');
 
@@ -395,11 +396,7 @@ function createOverlayWindow() {
     ...(storedPos ? storedPos : {}),
     minWidth: OVERLAY_PRESET.minWidth,
     minHeight: OVERLAY_PRESET.minHeight,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    hasShadow: false,
-    resizable: OVERLAY_PRESET.resizable,
+    ...createOverlayChromeOptions(process.platform, OVERLAY_PRESET.resizable),
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
