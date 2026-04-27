@@ -210,7 +210,7 @@ export function PracticeSetupScreen(props: PracticeSetupScreenProps) {
                           : 'border-white/10 bg-transparent text-[#d9ccb6]'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-2">
                         <VirtualInterviewer
                           persona={option.value}
                           state={props.interviewerStyle === option.value ? 'listening' : 'idle'}

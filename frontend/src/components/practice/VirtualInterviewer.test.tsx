@@ -48,7 +48,7 @@ describe('VirtualInterviewer', () => {
     )
   })
 
-  it('renders a sourced virtual-human portrait asset', () => {
+  it('reserves a mature Live2D stage instead of a flat portrait asset', () => {
     render(
       <VirtualInterviewer
         persona="calm_pressing"
@@ -57,8 +57,11 @@ describe('VirtualInterviewer', () => {
       />,
     )
 
-    const portrait = screen.getByTestId('virtual-interviewer-portrait')
-    expect(portrait).toHaveAttribute('src', expect.stringContaining('open-peeps'))
-    expect(screen.getByTestId('virtual-interviewer-portrait-frame')).toBeInTheDocument()
+    expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute(
+      'data-renderer',
+      'live2d',
+    )
+    expect(screen.getByTestId('virtual-interviewer-live2d-stage')).toBeInTheDocument()
+    expect(screen.queryByTestId('virtual-interviewer-portrait')).not.toBeInTheDocument()
   })
 })
