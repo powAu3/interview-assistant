@@ -7,6 +7,8 @@ import {
 } from 'react'
 
 import clsx from 'clsx'
+import type * as Three from 'three'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 import {
   resolveVirtualInterviewerPersona,
@@ -17,21 +19,26 @@ import {
   type VirtualInterviewerState,
 } from './virtualInterviewerState'
 
-const LIVE2D_MODEL_PATH = '/live2d/Natori/Natori.model3.json'
-const LIVE2D_BASE_WIDTH = 137
-const LIVE2D_BASE_HEIGHT = 175
-const LIVE2D_BASE_SCALE = 0.052
+const ROCKETBOX_MODEL_PATH = '/avatars/rocketbox-interviewer.glb'
+const ROCKETBOX_POSTER_PATH = '/avatars/rocketbox-interviewer-poster.png'
 
-type Live2DLoadStatus = 'loading' | 'ready' | 'fallback'
-type Live2DInstance = {
-  clearTips?: () => void
-  onLoad?: (fn: (status: 'loading' | 'success' | 'fail') => void) => void
-  setModelPosition?: (position: { x?: number; y?: number }) => void
-  setModelScale?: (scale: number) => void
-  stageSlideOut?: () => Promise<void>
-}
+type RocketboxLoadStatus = 'loading' | 'ready' | 'fallback'
+type BoneRig = Partial<
+  Record<
+    | 'head'
+    | 'neck'
+    | 'spine'
+    | 'jaw'
+    | 'mouthBottom'
+    | 'lowerLip'
+    | 'upperLip'
+    | 'leftEyeTop'
+    | 'rightEyeTop',
+    Three.Object3D
+  >
+>
 
-function canRenderLive2D() {
+function canRenderWebGL() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false
   if (!('WebGLRenderingContext' in window)) return false
   const canvas = document.createElement('canvas')
@@ -40,19 +47,284 @@ function canRenderLive2D() {
   )
 }
 
-function fitLive2DModel(live2d: Live2DInstance, parentElement: HTMLElement) {
-  const rect = parentElement.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return
+function disposeObject(root: Three.Object3D) {
+  root.traverse((object) => {
+    const mesh = object as Three.Mesh
+    mesh.geometry?.dispose()
 
-  const stageRatio = Math.min(
-    rect.width / LIVE2D_BASE_WIDTH,
-    rect.height / LIVE2D_BASE_HEIGHT,
-  )
-  live2d.setModelScale?.(LIVE2D_BASE_SCALE * stageRatio)
-  live2d.setModelPosition?.({
-    x: rect.width * 0.5,
-    y: rect.height * 0.503,
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : mesh.material
+        ? [mesh.material]
+        : []
+
+    materials.forEach((material) => {
+      Object.values(material).forEach((value) => {
+        if (value && typeof value === 'object' && 'isTexture' in value) {
+          ;(value as Three.Texture).dispose()
+        }
+      })
+      material.dispose()
+    })
   })
+}
+
+function collectRig(root: Three.Object3D): BoneRig {
+  return {
+    head: root.getObjectByName('Bip01 Head') ?? undefined,
+    neck: root.getObjectByName('Bip01 Neck') ?? undefined,
+    spine: root.getObjectByName('Bip01 Spine2') ?? undefined,
+    jaw: root.getObjectByName('Bip01 MJaw') ?? undefined,
+    mouthBottom: root.getObjectByName('Bip01 MMouthBottom') ?? root.getObjectByName('Bip01 LMouthBottom') ?? undefined,
+    lowerLip: root.getObjectByName('Bip01 MBottomLip') ?? undefined,
+    upperLip: root.getObjectByName('Bip01 MUpperLip') ?? undefined,
+    leftEyeTop: root.getObjectByName('Bip01 LEyeBlinkTop') ?? undefined,
+    rightEyeTop: root.getObjectByName('Bip01 REyeBlinkTop') ?? undefined,
+  }
+}
+
+function tuneRocketboxMaterials(root: Three.Object3D) {
+  root.traverse((object) => {
+    const mesh = object as Three.Mesh
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : mesh.material
+        ? [mesh.material]
+        : []
+
+    materials.forEach((material) => {
+      const standardMaterial = material as Three.MeshStandardMaterial
+      standardMaterial.metalness = 0
+      standardMaterial.roughness = material.name.includes('head') ? 0.68 : 0.82
+      standardMaterial.toneMapped = true
+      if (material.name.includes('opacity')) {
+        standardMaterial.transparent = true
+        standardMaterial.opacity = 0
+        standardMaterial.colorWrite = false
+        standardMaterial.depthWrite = false
+      }
+      standardMaterial.needsUpdate = true
+    })
+  })
+}
+
+function rememberBaseRotations(rig: BoneRig) {
+  return Object.fromEntries(
+    Object.entries(rig).map(([key, bone]) => [key, bone?.rotation.clone()]),
+  ) as Partial<Record<keyof BoneRig, Three.Euler>>
+}
+
+function applyRigState(args: {
+  rig: BoneRig
+  base: Partial<Record<keyof BoneRig, Three.Euler>>
+  root: Three.Object3D
+  state: VirtualInterviewerState
+  time: number
+}) {
+  const { rig, base, root, state, time } = args
+  const speakingPulse = state === 'speaking' ? (Math.sin(time * 11.5) + 1) * 0.5 : 0
+  const listeningNod = state === 'listening' ? Math.sin(time * 1.7) * 0.035 : 0
+  const thinkingTurn = state === 'thinking' ? -0.1 + Math.sin(time * 0.8) * 0.02 : 0
+  const debriefStillness = state === 'debrief' ? 0.25 : 1
+  const idleBreathe = Math.sin(time * 1.25) * 0.008 * debriefStillness
+
+  root.position.y = -0.32 + idleBreathe
+  root.rotation.y = -0.12 + thinkingTurn + Math.sin(time * 0.45) * 0.015 * debriefStillness
+
+  if (rig.head && base.head) {
+    rig.head.rotation.x = base.head.x + listeningNod + speakingPulse * 0.018
+    rig.head.rotation.y = base.head.y + thinkingTurn * 0.65 + Math.sin(time * 0.65) * 0.025 * debriefStillness
+    rig.head.rotation.z = base.head.z + Math.sin(time * 0.9) * 0.01 * debriefStillness
+  }
+
+  if (rig.neck && base.neck) {
+    rig.neck.rotation.x = base.neck.x + listeningNod * 0.45
+    rig.neck.rotation.y = base.neck.y + thinkingTurn * 0.28
+  }
+
+  if (rig.spine && base.spine) {
+    rig.spine.rotation.x = base.spine.x + idleBreathe * 0.9
+  }
+
+  if (rig.jaw && base.jaw) {
+    rig.jaw.rotation.x = base.jaw.x + speakingPulse * 0.11
+  }
+
+  if (rig.mouthBottom && base.mouthBottom) {
+    rig.mouthBottom.rotation.x = base.mouthBottom.x + speakingPulse * 0.08
+  }
+
+  if (rig.lowerLip && base.lowerLip) {
+    rig.lowerLip.rotation.x = base.lowerLip.x + speakingPulse * 0.05
+  }
+
+  if (rig.upperLip && base.upperLip) {
+    rig.upperLip.rotation.x = base.upperLip.x - speakingPulse * 0.025
+  }
+
+  const blinkPhase = time % 4.8
+  const blink = blinkPhase < 0.12 ? Math.sin((blinkPhase / 0.12) * Math.PI) : 0
+  if (rig.leftEyeTop && base.leftEyeTop) {
+    rig.leftEyeTop.rotation.x = base.leftEyeTop.x + blink * 0.08
+  }
+  if (rig.rightEyeTop && base.rightEyeTop) {
+    rig.rightEyeTop.rotation.x = base.rightEyeTop.x + blink * 0.08
+  }
+}
+
+function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const stateRef = useRef(state)
+  const [status, setStatus] = useState<RocketboxLoadStatus>('loading')
+
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  useEffect(() => {
+    const parentElement = stageRef.current
+    if (!parentElement) return
+
+    parentElement.innerHTML = ''
+    if (!canRenderWebGL()) {
+      setStatus('fallback')
+      return
+    }
+
+    let disposed = false
+    let resizeObserver: ResizeObserver | null = null
+    let loadedRoot: Three.Object3D | null = null
+    let renderer: Three.WebGLRenderer | null = null
+
+    setStatus('loading')
+
+    Promise.all([
+      import('three'),
+      import('three/examples/jsm/loaders/GLTFLoader.js'),
+    ])
+      .then(([THREE, { GLTFLoader }]) => {
+        if (disposed || !parentElement.isConnected) return
+
+        const scene = new THREE.Scene()
+        const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 20)
+        camera.position.set(0.02, 1.02, 2.65)
+        camera.lookAt(0, 1.36, 0)
+
+        renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+          powerPreference: 'high-performance',
+        })
+        renderer.setClearColor(0x000000, 0)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+        renderer.outputColorSpace = THREE.SRGBColorSpace
+        renderer.toneMapping = THREE.ACESFilmicToneMapping
+        renderer.toneMappingExposure = 1.04
+        renderer.domElement.setAttribute('aria-hidden', 'true')
+        parentElement.appendChild(renderer.domElement)
+
+        const keyLight = new THREE.DirectionalLight(0xf4f7fb, 3.6)
+        keyLight.position.set(0.7, 2.35, 3)
+        scene.add(keyLight)
+        const fillLight = new THREE.HemisphereLight(0xd8e2ec, 0x34383f, 1.75)
+        scene.add(fillLight)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.42)
+        scene.add(ambientLight)
+        const rimLight = new THREE.DirectionalLight(0x9eb7cf, 0.7)
+        rimLight.position.set(1.5, 1.9, -2.4)
+        scene.add(rimLight)
+
+        const resize = () => {
+          const rect = parentElement.getBoundingClientRect()
+          if (rect.width <= 0 || rect.height <= 0) return
+          camera.aspect = rect.width / rect.height
+          camera.updateProjectionMatrix()
+          renderer?.setSize(rect.width, rect.height, false)
+        }
+
+        const loader = new GLTFLoader()
+        loader.load(
+          ROCKETBOX_MODEL_PATH,
+          (gltf: GLTF) => {
+            if (disposed) {
+              disposeObject(gltf.scene)
+              return
+            }
+
+            const root = gltf.scene
+            loadedRoot = root
+            root.position.set(0, -0.32, 0)
+            root.rotation.y = -0.12
+            root.scale.setScalar(1.08)
+            tuneRocketboxMaterials(root)
+            scene.add(root)
+
+            const rig = collectRig(root)
+            const baseRotations = rememberBaseRotations(rig)
+            const startedAt = performance.now()
+
+            const renderOnce = () => {
+              if (disposed) return
+              const time = (performance.now() - startedAt) / 1000
+              applyRigState({
+                rig,
+                base: baseRotations,
+                root,
+                state: stateRef.current,
+                time,
+              })
+              renderer?.render(scene, camera)
+            }
+
+            resize()
+            renderOnce()
+            setStatus('ready')
+          },
+          undefined,
+          () => {
+            if (!disposed) setStatus('fallback')
+          },
+        )
+
+        resizeObserver = new ResizeObserver(resize)
+        resizeObserver.observe(parentElement)
+        resize()
+      })
+      .catch(() => {
+        if (!disposed) setStatus('fallback')
+      })
+
+    return () => {
+      disposed = true
+      resizeObserver?.disconnect()
+      if (loadedRoot) disposeObject(loadedRoot)
+      renderer?.dispose()
+      parentElement.innerHTML = ''
+    }
+  }, [])
+
+  return (
+    <div className="virtual-interviewer__three-shell" aria-hidden>
+      <div
+        ref={stageRef}
+        className="virtual-interviewer__three-stage"
+        data-rocketbox-status={status}
+        data-testid="virtual-interviewer-three-stage"
+      />
+      {/* The converted GLB keeps the Three.js path alive; the Rocketbox poster avoids broken facial cards until a retarget pass lands. */}
+      {status === 'ready' ? (
+        <div className="virtual-interviewer__three-poster">
+          <img src={ROCKETBOX_POSTER_PATH} alt="" />
+        </div>
+      ) : null}
+      {status !== 'ready' ? (
+        <div className="virtual-interviewer__three-fallback">
+          <img src={ROCKETBOX_POSTER_PATH} alt="" />
+          <small>{status === 'loading' ? 'loading model' : 'webgl unavailable'}</small>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export interface VirtualInterviewerProps extends HTMLAttributes<HTMLDivElement> {
@@ -77,10 +349,7 @@ export function VirtualInterviewer({
 }: VirtualInterviewerProps) {
   const spec = resolveVirtualInterviewerPersona({ style: persona })
   const stateLabel = getVirtualInterviewerStateLabel(state, { writtenPromptMode })
-  const live2dStageRef = useRef<HTMLDivElement | null>(null)
-  const live2dInstanceRef = useRef<Live2DInstance | null>(null)
-  const [live2dStatus, setLive2dStatus] = useState<Live2DLoadStatus>('loading')
-  const renderer = compact ? 'compact-2d' : 'live2d'
+  const renderer = compact ? 'rocketbox-poster' : 'rocketbox-three'
 
   const visualStyle = {
     '--vi-line': spec.palette.line,
@@ -89,140 +358,6 @@ export function VirtualInterviewer({
     '--vi-wave': spec.palette.wave,
     ...style,
   } as CSSProperties
-
-  useEffect(() => {
-    if (compact) return
-    const parentElement = live2dStageRef.current
-    if (!parentElement) return
-
-    parentElement.innerHTML = ''
-    live2dInstanceRef.current = null
-
-    if (!canRenderLive2D()) {
-      setLive2dStatus('fallback')
-      return
-    }
-
-    let disposed = false
-    let resizeObserver: ResizeObserver | null = null
-    let resizeHandler: (() => void) | null = null
-    let readinessFallback: number | null = null
-    let loadFailed = false
-    setLive2dStatus('loading')
-
-    import('oh-my-live2d')
-      .then(({ loadOml2d }) => {
-        if (disposed || !parentElement.isConnected) return
-
-        const live2d = loadOml2d({
-          parentElement,
-          dockedPosition: 'left',
-          initialStatus: 'active',
-          mobileDisplay: true,
-          primaryColor: spec.palette.accent,
-          sayHello: false,
-          transitionTime: 280,
-          menus: { disable: true },
-          statusBar: { disable: true },
-          tips: {
-            style: { display: 'none' },
-            mobileStyle: { display: 'none' },
-            idleTips: {
-              wordTheDay: false,
-              message: [],
-              duration: 1,
-              interval: 60_000,
-              priority: 0,
-            },
-            welcomeTips: {
-              duration: 1,
-              priority: 0,
-              message: {},
-            },
-            copyTips: {
-              duration: 1,
-              priority: 0,
-              message: [],
-            },
-          },
-          stageStyle: {
-            position: 'absolute',
-            left: 0,
-            right: 'auto',
-            bottom: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 1,
-            pointerEvents: 'none',
-          },
-          models: [
-            {
-              name: 'natori-technical-interviewer',
-              path: LIVE2D_MODEL_PATH,
-              scale: LIVE2D_BASE_SCALE,
-              anchor: [0.5, 0.35],
-              position: [LIVE2D_BASE_WIDTH * 0.5, LIVE2D_BASE_HEIGHT * 0.503],
-              motionPreloadStrategy: 'IDLE',
-              volume: 0,
-              stageStyle: {
-                position: 'absolute',
-                left: 0,
-                right: 'auto',
-                bottom: 0,
-                width: '100%',
-                height: '100%',
-                zIndex: 1,
-                pointerEvents: 'none',
-              },
-            },
-          ],
-        })
-
-        live2dInstanceRef.current = live2d
-        live2d.clearTips?.()
-        const fit = () => fitLive2DModel(live2d, parentElement)
-        if (typeof ResizeObserver !== 'undefined') {
-          resizeObserver = new ResizeObserver(() => fit())
-          resizeObserver.observe(parentElement)
-        } else {
-          resizeHandler = fit
-          window.addEventListener('resize', resizeHandler)
-        }
-        live2d.onLoad?.((status) => {
-          if (disposed) return
-          if (status === 'success') {
-            setLive2dStatus('ready')
-            requestAnimationFrame(fit)
-            window.setTimeout(fit, 250)
-            return
-          }
-          if (status === 'fail') loadFailed = true
-          setLive2dStatus(status === 'fail' ? 'fallback' : 'loading')
-        })
-        readinessFallback = window.setTimeout(() => {
-          if (disposed) return
-          const canvas = parentElement.querySelector('canvas')
-          if (!loadFailed && canvas && canvas.width > 0 && canvas.height > 0) {
-            setLive2dStatus('ready')
-            fit()
-          }
-        }, 3_000)
-      })
-      .catch(() => {
-        loadFailed = true
-        if (!disposed) setLive2dStatus('fallback')
-      })
-
-    return () => {
-      disposed = true
-      if (readinessFallback != null) window.clearTimeout(readinessFallback)
-      resizeObserver?.disconnect()
-      if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-      live2dInstanceRef.current?.stageSlideOut?.().catch(() => undefined)
-      live2dInstanceRef.current = null
-      parentElement.innerHTML = ''
-    }
-  }, [compact, spec.key, spec.palette.accent])
 
   return (
     <div
@@ -247,31 +382,14 @@ export function VirtualInterviewer({
 
         {compact ? (
           <div
-            className="virtual-interviewer__rig-preview"
-            data-testid="virtual-interviewer-rig-preview"
+            className="virtual-interviewer__rocketbox-poster"
+            data-testid="virtual-interviewer-rocketbox-poster"
             aria-hidden
           >
-            <span className="virtual-interviewer__rig-dot virtual-interviewer__rig-dot--head" />
-            <span className="virtual-interviewer__rig-dot virtual-interviewer__rig-dot--core" />
-            <span className="virtual-interviewer__rig-line virtual-interviewer__rig-line--left" />
-            <span className="virtual-interviewer__rig-line virtual-interviewer__rig-line--right" />
-            <span className="virtual-interviewer__rig-label">2D</span>
+            <img src={ROCKETBOX_POSTER_PATH} alt="" />
           </div>
         ) : (
-          <div className="virtual-interviewer__live2d-shell" aria-hidden>
-            <div
-              ref={live2dStageRef}
-              className="virtual-interviewer__live2d-stage"
-              data-live2d-status={live2dStatus}
-              data-testid="virtual-interviewer-live2d-stage"
-            />
-            {live2dStatus !== 'ready' ? (
-              <div className="virtual-interviewer__live2d-fallback">
-                <span>LIVE2D</span>
-                <small>{live2dStatus === 'loading' ? 'loading model' : 'webgl unavailable'}</small>
-              </div>
-            ) : null}
-          </div>
+          <RocketboxStage state={state} />
         )}
 
         <div className="virtual-interviewer__wave" aria-hidden>

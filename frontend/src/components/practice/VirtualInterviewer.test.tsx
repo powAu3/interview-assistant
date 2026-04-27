@@ -48,7 +48,7 @@ describe('VirtualInterviewer', () => {
     )
   })
 
-  it('reserves a mature Live2D stage instead of a flat portrait asset', () => {
+  it('reserves a Rocketbox Three stage instead of the rejected Live2D avatar', () => {
     render(
       <VirtualInterviewer
         persona="calm_pressing"
@@ -59,9 +59,28 @@ describe('VirtualInterviewer', () => {
 
     expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute(
       'data-renderer',
-      'live2d',
+      'rocketbox-three',
     )
-    expect(screen.getByTestId('virtual-interviewer-live2d-stage')).toBeInTheDocument()
+    expect(screen.getByTestId('virtual-interviewer-three-stage')).toBeInTheDocument()
     expect(screen.queryByTestId('virtual-interviewer-portrait')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('virtual-interviewer-live2d-stage')).not.toBeInTheDocument()
+  })
+
+  it('uses the Rocketbox poster for compact persona cards', () => {
+    render(
+      <VirtualInterviewer
+        persona="pressure_bigtech"
+        state="listening"
+        compact
+        data-testid="virtual-interviewer"
+      />,
+    )
+
+    expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute(
+      'data-renderer',
+      'rocketbox-poster',
+    )
+    expect(screen.getByTestId('virtual-interviewer-rocketbox-poster')).toBeInTheDocument()
+    expect(screen.queryByTestId('virtual-interviewer-rig-preview')).not.toBeInTheDocument()
   })
 })
