@@ -990,10 +990,14 @@ select:focus-visible {
   aspect-ratio: 14 / 17;
   border-radius: 2rem;
   overflow: hidden;
+  display: grid;
+  place-items: center;
   background:
-    radial-gradient(circle at 50% 24%, rgba(255, 251, 243, 0.95), rgba(255, 251, 243, 0.1) 42%, transparent 68%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.02));
+    radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--vi-accent) 16%, transparent 84%), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04));
   border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  isolation: isolate;
 }
 
 .virtual-interviewer__aura,
@@ -1006,10 +1010,10 @@ select:focus-visible {
 
 .virtual-interviewer__aura {
   background:
-    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--vi-accent) 32%, white 68%), transparent 56%),
-    radial-gradient(circle at 50% 72%, color-mix(in srgb, var(--vi-accent) 18%, transparent 82%), transparent 68%);
-  opacity: 0.42;
-  filter: blur(10px);
+    radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--vi-accent) 24%, transparent 76%), transparent 56%),
+    radial-gradient(circle at 50% 76%, color-mix(in srgb, var(--vi-accent) 12%, transparent 88%), transparent 70%);
+  opacity: 0.46;
+  filter: blur(12px);
 }
 
 .virtual-interviewer__pulse {
@@ -1022,127 +1026,70 @@ select:focus-visible {
 
 .virtual-interviewer__scan {
   inset: 16% 12%;
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.14), transparent);
   opacity: 0;
   filter: blur(6px);
 }
 
-.virtual-interviewer__svg {
+.virtual-interviewer__portrait-frame {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 76%;
+  height: 82%;
+  overflow: hidden;
+  border-radius: 1.65rem;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.96), rgba(232, 236, 243, 0.9) 58%, rgba(190, 201, 216, 0.84) 100%),
+    linear-gradient(180deg, #f6f7f9, #cbd3de);
+  box-shadow:
+    inset 0 0 0 1px rgba(16, 35, 58, 0.12),
+    inset 0 -22px 40px rgba(28, 45, 68, 0.09),
+    0 22px 54px rgba(10, 18, 30, 0.18);
+  transform-origin: 50% 70%;
+  animation: virtual-interviewer-breathe 4.8s ease-in-out infinite;
+}
+
+.virtual-interviewer__portrait {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 108%;
+  height: 108%;
+  object-fit: contain;
+  object-position: center bottom;
+  pointer-events: none;
+  user-select: none;
+  transform: translateY(4%);
 }
 
-.virtual-interviewer__shadow {
-  fill: rgba(14, 28, 47, 0.12);
-}
-
-.virtual-interviewer__bust {
-  transform-origin: 50% 58%;
-  animation: virtual-interviewer-breathe 4.4s ease-in-out infinite;
-}
-
-.virtual-interviewer__jacket {
-  fill: color-mix(in srgb, var(--vi-jacket) 92%, black 8%);
-  stroke: color-mix(in srgb, var(--vi-line) 78%, black 22%);
-  stroke-width: 2;
-}
-
-.virtual-interviewer__shirt,
-.virtual-interviewer__neck {
-  fill: var(--vi-shirt);
-}
-
-.virtual-interviewer__lapel {
-  fill: color-mix(in srgb, var(--vi-jacket) 76%, white 24%);
-  opacity: 0.95;
-}
-
-.virtual-interviewer__head {
-  stroke: color-mix(in srgb, var(--vi-line) 42%, transparent 58%);
-  stroke-width: 1.8;
-}
-
-.virtual-interviewer__hairline {
-  fill: color-mix(in srgb, var(--vi-line) 90%, black 10%);
-  opacity: 0.12;
-}
-
-.virtual-interviewer__brow,
-.virtual-interviewer__nose,
-.virtual-interviewer__mouth {
-  fill: none;
-  stroke: var(--vi-line);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.virtual-interviewer__brow {
-  stroke-width: 4.2;
-  transform-origin: center;
-  transform: rotate(var(--vi-brow-tilt));
-}
-
-.virtual-interviewer__brow--right {
-  transform: rotate(calc(var(--vi-brow-tilt) * -1));
-}
-
-.virtual-interviewer__eyes {
-  transform-origin: center;
-  animation: virtual-interviewer-blink 7.8s ease-in-out infinite;
-}
-
-.virtual-interviewer__eye {
-  fill: var(--vi-eye);
-}
-
-.virtual-interviewer__eyelid {
-  fill: color-mix(in srgb, var(--vi-skin) 84%, white 16%);
-  opacity: 0;
-}
-
-.virtual-interviewer__nose {
-  stroke-width: 2.2;
-  opacity: 0.34;
-}
-
-.virtual-interviewer__mouths {
-  transform-origin: center;
-}
-
-.virtual-interviewer__mouth {
-  stroke: var(--vi-lip);
-  stroke-width: 3;
-  opacity: 0;
-}
-
-.virtual-interviewer__mouth--rest {
-  opacity: 1;
+.virtual-interviewer--compact .virtual-interviewer__portrait-frame {
+  width: 78%;
+  height: 82%;
+  border-radius: 1.35rem;
 }
 
 .virtual-interviewer__wave {
   position: absolute;
   z-index: 2;
-  left: 50%;
-  right: auto;
-  bottom: 10%;
-  transform: translateX(-50%);
+  left: auto;
+  right: 10%;
+  bottom: 8%;
+  transform: none;
   display: flex;
   align-items: flex-end;
-  gap: 0.35rem;
-  width: 56%;
+  gap: 0.22rem;
+  width: 28%;
   justify-content: center;
 }
 
 .virtual-interviewer__wave-bar {
-  width: 0.36rem;
-  min-height: 0.45rem;
+  width: 0.22rem;
+  min-height: 0.28rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--vi-wave) 88%, white 12%);
-  opacity: 0.48;
-  height: calc(0.55rem + 1.65rem * var(--vi-wave-scale));
+  opacity: 0.38;
+  height: calc(0.35rem + 1rem * var(--vi-wave-scale));
   transform-origin: center bottom;
 }
 
@@ -1166,20 +1113,11 @@ select:focus-visible {
   animation: virtual-interviewer-speaking-ring 1.2s ease-in-out infinite;
 }
 
-.virtual-interviewer[data-state='speaking'] .virtual-interviewer__mouth--rest {
-  opacity: 0.15;
-}
-
-.virtual-interviewer[data-state='speaking'] .virtual-interviewer__mouth--speak-a {
-  animation: virtual-interviewer-mouth-a 0.88s steps(1, end) infinite;
-}
-
-.virtual-interviewer[data-state='speaking'] .virtual-interviewer__mouth--speak-b {
-  animation: virtual-interviewer-mouth-b 0.88s steps(1, end) infinite;
-}
-
-.virtual-interviewer[data-state='speaking'] .virtual-interviewer__mouth--speak-c {
-  animation: virtual-interviewer-mouth-c 0.88s steps(1, end) infinite;
+.virtual-interviewer[data-state='speaking'] .virtual-interviewer__portrait-frame {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--vi-accent) 30%, rgba(16, 35, 58, 0.12) 70%),
+    inset 0 -22px 40px rgba(28, 45, 68, 0.09),
+    0 24px 58px rgba(10, 18, 30, 0.2);
 }
 
 .virtual-interviewer[data-state='speaking'] .virtual-interviewer__wave-bar {
@@ -1192,26 +1130,18 @@ select:focus-visible {
   animation: virtual-interviewer-listening-ring 1.6s ease-in-out infinite;
 }
 
-.virtual-interviewer[data-state='listening'] .virtual-interviewer__eye {
-  transform: scale(1.02, 0.92);
-}
-
 .virtual-interviewer[data-state='listening'] .virtual-interviewer__wave-bar {
   opacity: 0.62;
-  height: calc(0.55rem + 0.8rem * var(--vi-wave-scale));
+  height: calc(0.35rem + 0.52rem * var(--vi-wave-scale));
 }
 
 .virtual-interviewer[data-state='thinking'] .virtual-interviewer__scan {
   animation: virtual-interviewer-thinking-scan 2.4s ease-in-out infinite;
 }
 
-.virtual-interviewer[data-state='thinking'] .virtual-interviewer__eye {
-  transform: translateY(1px) scale(1, 0.8);
-}
-
 .virtual-interviewer[data-state='thinking'] .virtual-interviewer__wave-bar {
   opacity: 0.34;
-  height: calc(0.55rem + 0.35rem * var(--vi-wave-scale));
+  height: calc(0.35rem + 0.22rem * var(--vi-wave-scale));
 }
 
 .virtual-interviewer[data-state='debrief'] .virtual-interviewer__aura {
@@ -1220,7 +1150,7 @@ select:focus-visible {
 
 .virtual-interviewer[data-state='debrief'] .virtual-interviewer__wave-bar {
   opacity: 0.22;
-  height: 0.55rem;
+  height: 0.35rem;
 }
 
 .virtual-interviewer[data-signal='stress-test'] .virtual-interviewer__aura,
@@ -1237,16 +1167,7 @@ select:focus-visible {
     transform: translateY(0) scale(1);
   }
   50% {
-    transform: translateY(2px) scale(1.012);
-  }
-}
-
-@keyframes virtual-interviewer-blink {
-  0%, 45%, 47%, 100% {
-    transform: scaleY(1);
-  }
-  46% {
-    transform: scaleY(0.08);
+    transform: translateY(2px) scale(1.01);
   }
 }
 
@@ -1301,20 +1222,4 @@ select:focus-visible {
   70% {
     transform: scaleY(0.75);
   }
-}
-
-@keyframes virtual-interviewer-mouth-a {
-  0%, 32%, 100% { opacity: 1; }
-  33%, 99% { opacity: 0; }
-}
-
-@keyframes virtual-interviewer-mouth-b {
-  0%, 33% { opacity: 0; }
-  34%, 66% { opacity: 1; }
-  67%, 100% { opacity: 0; }
-}
-
-@keyframes virtual-interviewer-mouth-c {
-  0%, 66% { opacity: 0; }
-  67%, 100% { opacity: 1; }
 }

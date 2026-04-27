@@ -47,4 +47,18 @@ describe('VirtualInterviewer', () => {
       expect.stringContaining('静读题面'),
     )
   })
+
+  it('renders a sourced virtual-human portrait asset', () => {
+    render(
+      <VirtualInterviewer
+        persona="calm_pressing"
+        state="idle"
+        data-testid="virtual-interviewer"
+      />,
+    )
+
+    const portrait = screen.getByTestId('virtual-interviewer-portrait')
+    expect(portrait).toHaveAttribute('src', expect.stringContaining('open-peeps'))
+    expect(screen.getByTestId('virtual-interviewer-portrait-frame')).toBeInTheDocument()
+  })
 })
