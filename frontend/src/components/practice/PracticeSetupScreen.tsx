@@ -34,11 +34,16 @@ interface PracticeSetupScreenProps {
   useEdgeTts: boolean
   voiceGender: PracticeVoiceGender
   voices: BrowserVoice[]
+  practiceTheme: 'light' | 'dark'
 }
 
 export function PracticeSetupScreen(props: PracticeSetupScreenProps) {
   return (
-    <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#fbf8f0_0%,#f4efe3_46%,#efe6d6_100%)] text-[#122137]">
+    <div
+      className="practice-page flex-1 overflow-y-auto"
+      data-practice-theme={props.practiceTheme}
+      data-testid="practice-setup-screen"
+    >
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-6 xl:grid xl:grid-cols-[1.05fr_0.95fr]">
         <section className="overflow-hidden rounded-[28px] border border-[#10233a]/10 bg-[linear-gradient(140deg,#fffaf1_0%,#f3ebdd_62%,#efe5d3_100%)] p-6 shadow-[0_24px_70px_rgba(16,35,58,0.10)]">
           <div className="flex items-start justify-between gap-4">

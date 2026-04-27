@@ -12,6 +12,7 @@ interface PracticeDebriefViewProps {
   handleReset: () => Promise<void>
   practiceSession: PracticeSessionSnapshot | null
   practiceStatus: PracticeStatus
+  practiceTheme: 'light' | 'dark'
 }
 
 function extractMarkdownSection(markdown: string, heading: string): string {
@@ -39,7 +40,10 @@ export function PracticeDebriefView(props: PracticeDebriefViewProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f7f3ea_0%,#efe5d5_100%)] px-4 py-6 text-[#10233a] md:px-6">
+    <div
+      className="practice-page flex-1 overflow-y-auto px-4 py-6 md:px-6"
+      data-practice-theme={props.practiceTheme}
+    >
       <div className="mx-auto grid max-w-6xl gap-5 xl:grid-cols-[0.72fr_1.28fr]">
         <aside className="rounded-[28px] border border-[#10233a]/10 bg-[#10233a] p-5 text-[#f6efe4] shadow-[0_22px_60px_rgba(16,35,58,0.16)]">
           <p className="text-[11px] uppercase tracking-[0.22em] text-[#8bb0d6]">Debrief</p>

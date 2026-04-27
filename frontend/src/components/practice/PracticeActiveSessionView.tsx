@@ -35,6 +35,7 @@ interface PracticeActiveSessionViewProps {
   sttLoaded: boolean
   ttsSourceLabel: string
   activePersona: ReturnType<typeof resolveVirtualInterviewerPersona>
+  practiceTheme: 'light' | 'dark'
 }
 
 function stageLabel(index: number, total: number) {
@@ -43,7 +44,10 @@ function stageLabel(index: number, total: number) {
 
 export function PracticeActiveSessionView(props: PracticeActiveSessionViewProps) {
   return (
-    <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#f7f3ea_0%,#efe4d1_100%)] px-4 py-5 text-[#10233a] md:px-6">
+    <div
+      className="practice-page flex-1 overflow-y-auto px-4 py-5 md:px-6"
+      data-practice-theme={props.practiceTheme}
+    >
       <div className="mx-auto grid max-w-6xl gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <aside className="rounded-[28px] border border-[#10233a]/10 bg-[#10233a] p-5 text-[#f5efe2] shadow-[0_24px_70px_rgba(16,35,58,0.18)]">
           <div className="flex items-start justify-between gap-4">

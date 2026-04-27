@@ -620,6 +620,93 @@ code, pre, .font-mono {
   text-transform: uppercase;
 }
 
+/* ========== Practice mode theme bridge ==========
+ * Practice mode keeps its editorial warm light art direction, but in app dark
+ * themes its former hard-coded cream/amber palette is cooled back to global
+ * theme tokens so text does not turn yellow.
+ */
+.practice-page {
+  background: linear-gradient(180deg, #fbf8f0 0%, #f4efe3 46%, #efe6d6 100%);
+  color: #122137;
+}
+
+.practice-page[data-practice-theme='dark'] {
+  background: rgb(var(--c-bg-primary));
+  color: rgb(var(--c-text-primary));
+}
+
+.practice-page[data-practice-theme='dark'] [class^='bg-[linear-gradient'],
+.practice-page[data-practice-theme='dark'] [class*=' bg-[linear-gradient'],
+.practice-page[data-practice-theme='dark'] [class^='bg-[#f'],
+.practice-page[data-practice-theme='dark'] [class*=' bg-[#f'],
+.practice-page[data-practice-theme='dark'] [class^='bg-white'],
+.practice-page[data-practice-theme='dark'] [class*=' bg-white'] {
+  background: rgb(var(--c-bg-secondary) / 0.72) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='bg-[#10233a'],
+.practice-page[data-practice-theme='dark'] [class*=' bg-[#10233a'],
+.practice-page[data-practice-theme='dark'] [class^='bg-[#0'],
+.practice-page[data-practice-theme='dark'] [class*=' bg-[#0'] {
+  background: rgb(var(--c-bg-tertiary) / 0.78) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='border-[#'],
+.practice-page[data-practice-theme='dark'] [class*=' border-[#'],
+.practice-page[data-practice-theme='dark'] [class^='border-white'],
+.practice-page[data-practice-theme='dark'] [class*=' border-white'] {
+  border-color: rgb(var(--c-bg-hover) / 0.72) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='text-[#'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#'] {
+  color: rgb(var(--c-text-secondary)) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='text-[#10233a'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#10233a'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#122137'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#122137'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#f5'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f5'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#f6efe'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f6efe'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#f7f1'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f7f1'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#f8f1'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f8f1'] {
+  color: rgb(var(--c-text-primary)) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='text-[#335d88'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#335d88'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#8bb0d6'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#8bb0d6'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#a8c3df'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#a8c3df'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#9fb1c7'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#9fb1c7'] {
+  color: rgb(var(--c-accent-blue)) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='text-[#c74f2e'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#c74f2e'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#a94c35'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#a94c35'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#ffcabd'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#ffcabd'] {
+  color: rgb(var(--c-accent-red)) !important;
+}
+
+.practice-page[data-practice-theme='dark'] [class^='text-[#f4b88a'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f4b88a'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#f4c69e'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f4c69e'],
+.practice-page[data-practice-theme='dark'] [class^='text-[#f6dcc0'],
+.practice-page[data-practice-theme='dark'] [class*=' text-[#f6dcc0'] {
+  color: rgb(var(--c-accent-blue)) !important;
+}
+
 /* ========== Overlay HUD (重构 2026-04-20) ==========
  * 单一统一模式，有背景(磨砂玻璃) / 无背景(浮文字幕) 通过 showBg 切换。
  * 字体: JetBrains Mono + DM Sans — 通过 InterviewOverlay.tsx 动态注入 <link>。

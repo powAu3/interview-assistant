@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import PracticeMode from './PracticeMode'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 const apiMock = vi.hoisted(() => ({
   practiceGenerate: vi.fn(),
@@ -126,6 +127,7 @@ describe('PracticeMode', () => {
       setPracticeAnswerDraft: useInterviewStore.getState().setPracticeAnswerDraft,
       setPracticeCodeDraft: useInterviewStore.getState().setPracticeCodeDraft,
     } as any)
+    useUiPrefsStore.setState({ colorScheme: 'vscode-light-plus' } as any)
   })
 
   it('restores the JD draft from localStorage on the start screen', async () => {
@@ -136,6 +138,17 @@ describe('PracticeMode', () => {
     expect(await screen.findByPlaceholderText('粘贴目标岗位 JD，让问题更贴近真实岗位')).toHaveValue(
       '熟悉 Redis、MySQL、交易链路。',
     )
+  })
+
+  it('uses dark practice surfaces when the app color scheme is dark', async () => {
+    useUiPrefsStore.setState({ colorScheme: 'vscode-dark-plus' } as any)
+
+    render(<PracticeMode />)
+
+    const setup = await screen.findByTestId('practice-setup-screen')
+    expect(setup).toHaveAttribute('data-practice-theme', 'dark')
+    expect(setup.className).toContain('practice-page')
+    expect(setup.className).not.toContain('#fbf8f0')
   })
 
   it('shows a code editor when the current turn expects voice+code answers', () => {

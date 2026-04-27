@@ -14,7 +14,9 @@ import { usePracticePersistentState } from '@/hooks/usePracticePersistentState'
 import { usePracticeSessionActions } from '@/hooks/usePracticeSessionActions'
 import { usePracticeTurnPlayback } from '@/hooks/usePracticeTurnPlayback'
 import { usePracticeVoiceCatalog } from '@/hooks/usePracticeVoiceCatalog'
+import { isLightColorScheme } from '@/lib/colorScheme'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 function averageTurnScore(turns: Array<{ scorecard?: Record<string, number> }>) {
   const values = turns.flatMap((turn) => Object.values(turn.scorecard ?? {}))
@@ -243,6 +245,8 @@ export default function PracticeMode() {
   const interviewerSignalLabel = getInterviewerSignalLabel(currentTurn?.interviewer_signal)
   const resolvedTtsSourceLabel = getPracticeSourceLabel(playback.ttsPlaybackSource, config?.practice_tts_provider)
   const averageScore = averageTurnScore(completedTurns)
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
+  const practiceTheme = isLightColorScheme(colorScheme) ? 'light' : 'dark'
 
   if (isIdle || isPreparingView) {
     return (
@@ -264,6 +268,7 @@ export default function PracticeMode() {
         useEdgeTts={voiceCatalog.useEdgeTts}
         voiceGender={persistentState.voiceGender}
         voices={voiceCatalog.voices}
+        practiceTheme={practiceTheme}
       />
     )
   }
@@ -277,6 +282,7 @@ export default function PracticeMode() {
         handleReset={handleReset}
         practiceSession={practiceSession}
         practiceStatus={practiceStatus}
+        practiceTheme={practiceTheme}
       />
     )
   }
@@ -312,6 +318,7 @@ export default function PracticeMode() {
       setSelectedMic={setSelectedMic}
       sttLoaded={sttLoaded}
       ttsSourceLabel={resolvedTtsSourceLabel}
+      practiceTheme={practiceTheme}
     />
   )
 }
