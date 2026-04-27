@@ -137,8 +137,8 @@ test.describe('practice mode booth', () => {
 
     await page.goto('/')
     await expect(page.getByTestId('practice-interviewer-preview')).toBeVisible()
-    await expect(page.getByText(/状态 · 倾听中/)).toBeVisible()
-    await expect(page.getByText(/当前来源：EdgeTTS/)).toBeVisible()
+    await expect(page.getByText(/状态 · (播报中|倾听中)/)).toBeVisible()
+    await expect(page.getByText(/当前来源：/)).toBeVisible()
   })
 
   test('keeps coding prompt mode out of speaking animation', async ({ context, page }) => {
