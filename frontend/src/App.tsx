@@ -10,7 +10,6 @@ import { useOverlayWindowSync } from '@/hooks/useOverlayWindowSync'
 import { useAssistSplit } from '@/hooks/useAssistSplit'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
-import { requestTakeover } from '@/lib/wsLeader'
 import TranscriptionPanel from '@/components/TranscriptionPanel'
 import AnswerPanel from '@/components/AnswerPanel'
 import ControlBar from '@/components/ControlBar'
@@ -18,6 +17,9 @@ import SettingsDrawer from '@/components/SettingsDrawer'
 import SessionSettingsPopover from '@/components/SessionSettingsPopover'
 import KnowledgeButton from '@/components/kb/KnowledgeButton'
 import KnowledgeDrawer from '@/components/kb/KnowledgeDrawer'
+import { AppToastStack } from '@/components/app/AppToastStack'
+import { InitErrorScreen } from '@/components/app/InitErrorScreen'
+import { ModelPriorityDropdown } from '@/components/app/ModelPriorityDropdown'
 const PracticeMode = lazy(() => import('@/components/PracticeMode'))
 const KnowledgeMap = lazy(() => import('@/components/KnowledgeMap'))
 const ResumeOptimizer = lazy(() => import('@/components/ResumeOptimizer'))
@@ -97,6 +99,11 @@ export default function App() {
   }, [appMode, toggleAssistTranscriptCollapsed])
 
   const handleModelChange = useCallback(async (active_model: number) => {
+    const targetModel = useInterviewStore.getState().config?.models?.[active_model]
+    if (targetModel?.enabled === false) {
+      useInterviewStore.getState().setToastMessage('该模型已停用，请先在设置中启用后再设为优先')
+      return
+    }
     await updateConfigAndRefresh({ active_model })
     useInterviewStore.getState().setToastMessage('已设为优先答题模型（实时辅助优先占用该路）')
   }, [])
@@ -113,7 +120,6 @@ export default function App() {
     }
   }, [])
 
-  const activeModel = config?.models?.[config.active_model]
   const modelHealth = useInterviewStore((s) => s.modelHealth)
   const fallbackToast = useInterviewStore((s) => s.fallbackToast)
   const toastMessage = useInterviewStore((s) => s.toastMessage)
@@ -150,46 +156,8 @@ export default function App() {
     for (const timer of toastTimersRef.current.values()) clearTimeout(timer)
     toastTimersRef.current.clear()
   }, [])
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
-  const modelDropdownRef = useRef<HTMLDivElement>(null)
-
-  // P1: 仅在下拉菜单打开时才挂事件; 关闭后立即解绑, 避免 mousedown 全局污染
-  useEffect(() => {
-    if (!modelDropdownOpen) return
-    const handler = (e: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setModelDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [modelDropdownOpen])
-
   if (initError) {
-    return (
-      <div className="h-full flex items-center justify-center bg-bg-primary">
-        <div className="text-center space-y-3 p-8">
-          <p className="text-accent-red text-sm">连接后端失败</p>
-          <p className="text-text-muted text-xs">{initError}</p>
-          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-accent-blue text-white text-xs rounded-lg">重试</button>
-        </div>
-      </div>
-    )
-  }
-
-  const healthDot = (idx: number) => {
-    const status = modelHealth[idx]
-    if (status === 'ok') return 'bg-accent-green'
-    if (status === 'checking') return 'bg-accent-amber animate-pulse'
-    if (status === 'error') return 'bg-accent-red'
-    return 'bg-text-muted/30'
-  }
-  const healthLabel = (idx: number): string => {
-    const status = modelHealth[idx]
-    if (status === 'ok') return '连接正常'
-    if (status === 'checking') return '正在检测连接…'
-    if (status === 'error') return '连接失败，点击下拉菜单「重新检查连接」重试'
-    return '未检测，点击下拉菜单「重新检查连接」'
+    return <InitErrorScreen initError={initError} />
   }
 
   return (
@@ -273,42 +241,11 @@ export default function App() {
 
         <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 flex-nowrap justify-end">
           {config?.models && config.models.length > 0 && (
-            <div className="relative" ref={modelDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                title={`优先答题模型 · ${activeModel?.name ?? ''}\n状态:${healthLabel(config.active_model)}`}
-                aria-label={`优先答题模型 ${activeModel?.name ?? ''},${healthLabel(config.active_model)}`}
-                className="flex items-center gap-1.5 bg-bg-tertiary/50 text-text-primary text-xs rounded-xl px-2 py-1.5 sm:px-2.5 border border-bg-hover/50 hover:border-accent-blue/40 transition-all duration-200 max-w-[110px] md:max-w-[160px]"
-              >
-                <div
-                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config.active_model)}`}
-                  aria-hidden
-                />
-                <span className="truncate min-w-0 font-medium hidden sm:inline">{activeModel?.name}{activeModel?.supports_vision ? ' 👁' : ''}</span>
-                <svg className={`w-3 h-3 flex-shrink-0 text-text-muted transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-              {modelDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1.5 glass border border-bg-hover/50 rounded-xl shadow-xl shadow-black/20 z-50 min-w-[200px] py-1.5 animate-fade-up">
-                  {config.models.map((m, i) => (
-                    <button key={i}
-                      onClick={async () => { setModelDropdownOpen(false); await handleModelChange(i) }}
-                      title={`${m.name} · ${healthLabel(i)}`}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-bg-tertiary/50 transition-all duration-150 ${i === config.active_model ? 'text-accent-blue bg-accent-blue/5' : 'text-text-primary'}`}>
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${healthDot(i)}`} aria-hidden />
-                      <span className="truncate font-medium">{m.name}{m.supports_vision ? ' 👁' : ''}</span>
-                      {i === config.active_model && <span className="ml-auto text-accent-blue text-[10px] font-semibold">优先</span>}
-                    </button>
-                  ))}
-                  <div className="border-t border-bg-hover/40 mt-1 pt-1 px-3 py-1.5">
-                    <button onClick={() => { api.checkModelsHealth().catch(() => {}); }}
-                      className="text-[10px] text-text-muted hover:text-accent-blue transition-colors font-medium">
-                      重新检查连接
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ModelPriorityDropdown
+              config={config}
+              modelHealth={modelHealth}
+              onModelChange={handleModelChange}
+            />
           )}
 
           {/* 会场设置:聚合 Think + 岗位 + 语言 + Token */}
@@ -507,65 +444,12 @@ export default function App() {
         </Suspense>
       )}
 
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse gap-2 items-center">
-        {!wsIsLeader && (
-          <div className="animate-fade-up">
-            <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20 flex items-center gap-3">
-              <span className="text-accent-amber font-semibold">⏸</span>
-              <span>本标签处于备用状态(其他标签正在连接后端)</span>
-              <button
-                type="button"
-                onClick={requestTakeover}
-                className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber"
-              >
-                在此页接管
-              </button>
-            </div>
-          </div>
-        )}
-        {fallbackToast && (
-          <div className="animate-fade-up" role="alert" aria-live="assertive">
-            <div className="glass border border-accent-amber/30 text-text-primary text-xs px-4 py-2.5 rounded-xl shadow-xl shadow-black/20">
-              <span className="text-accent-amber font-semibold" aria-hidden>⚠</span>&nbsp; {fallbackToast.from} 不可用，切换到 {fallbackToast.to}
-            </div>
-          </div>
-        )}
-        {toasts.map((t) => {
-          const cls = {
-            info: 'border-bg-hover/50',
-            success: 'border-accent-green/40',
-            warn: 'border-accent-amber/40',
-            error: 'border-accent-red/50',
-          }[t.level]
-          const icon = { info: 'ℹ', success: '✓', warn: '⚠', error: '✕' }[t.level]
-          const iconCls = {
-            info: 'text-text-muted',
-            success: 'text-accent-green',
-            warn: 'text-accent-amber',
-            error: 'text-accent-red',
-          }[t.level]
-          const role = t.level === 'error' || t.level === 'warn' ? 'alert' : 'status'
-          const live = t.level === 'error' ? 'assertive' : 'polite'
-          return (
-            <div key={t.id} className="animate-fade-up" role={role} aria-live={live}>
-              <div
-                className={`glass border ${cls} text-text-primary text-xs pl-3 pr-2 py-2 rounded-xl shadow-xl shadow-black/20 font-medium flex items-center gap-2 max-w-[90vw]`}
-              >
-                <span className={`font-semibold ${iconCls}`} aria-hidden>{icon}</span>
-                <span className="truncate">{t.message}</span>
-                <button
-                  type="button"
-                  onClick={() => dismissToast(t.id)}
-                  aria-label="关闭提示"
-                  className="ml-1 w-5 h-5 shrink-0 inline-flex items-center justify-center rounded-md text-text-muted hover:text-text-primary hover:bg-bg-hover/70 transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      <AppToastStack
+        wsIsLeader={wsIsLeader}
+        fallbackToast={fallbackToast}
+        toasts={toasts}
+        dismissToast={dismissToast}
+      />
 
       <SettingsDrawer />
       <KnowledgeDrawer />

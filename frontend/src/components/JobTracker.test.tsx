@@ -14,6 +14,23 @@ const apiMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/api', () => ({ api: apiMock }))
+vi.mock('./job-tracker/KanbanBoard', () => ({
+  default: ({ applications, search }: any) => {
+    const q = search.trim().toLowerCase()
+    const visible = applications.filter((app: any) => {
+      if (!q) return true
+      return [app.company, app.position, app.city, app.notes]
+        .some((value) => String(value).toLowerCase().includes(q))
+    })
+    return (
+      <div>
+        {visible.map((app: any) => (
+          <div key={app.id}>{app.company}</div>
+        ))}
+      </div>
+    )
+  },
+}))
 vi.mock('./job-tracker/OfferCompareModal', () => ({ default: () => null }))
 vi.mock('./job-tracker/OfferEditModal', () => ({ default: () => null }))
 

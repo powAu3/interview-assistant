@@ -1,6 +1,79 @@
 import { buildApiUrl } from './backendUrl'
 import { getAuthToken } from './auth'
 
+const BACKEND_UNREACHABLE_MESSAGE = '无法连接后端服务，请确认应用服务已启动后重试'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function formatDetailValue(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => {
+        if (!isRecord(item)) return formatDetailValue(item)
+        const msg = formatDetailValue(item.msg ?? item.message ?? item.detail)
+        const loc = Array.isArray(item.loc) ? item.loc.map(String).join('.') : null
+        if (loc && msg) return `${loc}: ${msg}`
+        return msg ?? formatDetailValue(item)
+      })
+      .filter(Boolean)
+    return parts.length ? parts.join('; ') : null
+  }
+  if (isRecord(value)) {
+    const direct = formatDetailValue(value.detail ?? value.message ?? value.error)
+    if (direct) return direct
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+async function parseResponseBody(res: Response): Promise<unknown> {
+  const text = await res.text().catch(() => '')
+  if (!text) return null
+  const contentType = res.headers.get('content-type') ?? ''
+  if (contentType.includes('json')) {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return text
+    }
+  }
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+async function buildResponseErrorMessage(res: Response, fallback?: string): Promise<string> {
+  const body = await parseResponseBody(res)
+  const detail = isRecord(body) ? body.detail ?? body.message ?? body.error : body
+  const detailText = formatDetailValue(detail) ?? fallback ?? res.statusText ?? '请求失败'
+  return `请求失败 (${res.status}): ${detailText}`
+}
+
+async function fetchBackend(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init)
+  } catch {
+    throw new Error(BACKEND_UNREACHABLE_MESSAGE)
+  }
+}
+
+export function getErrorMessage(error: unknown, fallback = '操作失败'): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (isRecord(error)) return formatDetailValue(error) ?? fallback
+  return fallback
+}
+
 function buildHeaders(extra?: HeadersInit): HeadersInit {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = getAuthToken()
@@ -9,15 +82,16 @@ function buildHeaders(extra?: HeadersInit): HeadersInit {
 }
 
 async function request<T = any>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(buildApiUrl(url), {
+  const res = await fetchBackend(buildApiUrl(url), {
     ...opts,
     headers: buildHeaders(opts?.headers),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || res.statusText)
+    throw new Error(await buildResponseErrorMessage(res))
   }
-  return res.json()
+  if (res.status === 204) return undefined as T
+  const body = await parseResponseBody(res)
+  return body as T
 }
 
 export interface ResumeHistoryItem {
@@ -114,14 +188,13 @@ export const api = {
     const token = getAuthToken()
     const headers: Record<string, string> = {}
     if (token) headers.Authorization = `Bearer ${token}`
-    const res = await fetch(buildApiUrl('/api/resume'), {
+    const res = await fetchBackend(buildApiUrl('/api/resume'), {
       method: 'POST',
       body: fd,
       headers,
     })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
-      throw new Error(err.detail)
+      throw new Error(await buildResponseErrorMessage(res, '上传失败'))
     }
     return res.json()
   },
@@ -262,10 +335,9 @@ export const api = {
     const token = getAuthToken()
     const headers: Record<string, string> = {}
     if (token) headers.Authorization = `Bearer ${token}`
-    const res = await fetch(buildApiUrl('/api/kb/upload'), { method: 'POST', body: fd, headers })
+    const res = await fetchBackend(buildApiUrl('/api/kb/upload'), { method: 'POST', body: fd, headers })
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: '上传失败' }))
-      throw new Error(err.detail || '上传失败')
+      throw new Error(await buildResponseErrorMessage(res, '上传失败'))
     }
     return res.json()
   },

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, Plus, RotateCcw, GripVertical } from 'lucide-react'
 import { Section } from './shared'
-import { DEFAULT_QUICK_PROMPTS, getQuickPrompts, saveQuickPrompts } from '../ControlBar'
+import { DEFAULT_QUICK_PROMPTS, getQuickPrompts, saveQuickPrompts } from '../control-bar/quickPrompts'
 
 export default function QuickPromptsEditor() {
   const [prompts, setPrompts] = useState<string[]>(getQuickPrompts)

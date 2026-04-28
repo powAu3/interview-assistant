@@ -7,12 +7,20 @@ import { useInterviewStore } from '@/stores/configStore'
 const apiMock = vi.hoisted(() => ({
   ask: vi.fn(),
   getDevices: vi.fn(),
+  start: vi.fn(),
+  stop: vi.fn(),
+  pause: vi.fn(),
+  resume: vi.fn(),
+  clear: vi.fn(),
+  cancelAsk: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
   api: {
     ...apiMock,
   },
+  getErrorMessage: (error: unknown, fallback = '操作失败') =>
+    error instanceof Error ? error.message : fallback,
 }))
 
 vi.mock('@/components/ResumeHistory', () => ({
@@ -34,6 +42,12 @@ describe('ControlBar', () => {
     vi.stubGlobal('FileReader', MockFileReader as any)
     apiMock.ask.mockResolvedValue({ ok: true })
     apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
+    apiMock.start.mockResolvedValue({ ok: true })
+    apiMock.stop.mockResolvedValue({ ok: true })
+    apiMock.pause.mockResolvedValue({ ok: true })
+    apiMock.resume.mockResolvedValue({ ok: true })
+    apiMock.clear.mockResolvedValue({ ok: true })
+    apiMock.cancelAsk.mockResolvedValue({ ok: true })
     useInterviewStore.setState({
       config: {
         models: [{ name: 'TextOnly', supports_think: false, supports_vision: false, enabled: true }],
@@ -153,5 +167,69 @@ describe('ControlBar', () => {
 
     expect(apiMock.getDevices).toHaveBeenCalledTimes(1)
     expect(await screen.findByText('USB Headset Mic')).toBeInTheDocument()
+  })
+
+  it('warns when no model is enabled', () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        models: [
+          { name: 'Disabled A', supports_think: false, supports_vision: false, enabled: false },
+          { name: 'Disabled B', supports_think: false, supports_vision: false, enabled: false },
+        ],
+      },
+      modelHealth: { 0: 'error', 1: 'error' },
+    } as any)
+
+    render(<ControlBar />)
+
+    expect(screen.getByText('未启用任何模型，请在设置中开启至少一个模型。')).toBeInTheDocument()
+  })
+
+  it('blocks manual questions when no answer model is enabled', () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        models: [
+          { name: 'Disabled A', supports_think: false, supports_vision: false, enabled: false },
+        ],
+      },
+      modelHealth: { 0: 'error' },
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.change(screen.getByPlaceholderText('输入问题，Enter 发送…'), {
+      target: { value: '解释一下 B 树和 B+ 树' },
+    })
+
+    const send = screen.getByRole('button', { name: '发送问题' })
+    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('title', '请先在设置中启用至少一个模型')
+    fireEvent.click(send)
+    expect(apiMock.ask).not.toHaveBeenCalled()
+  })
+
+  it('surfaces stop failures instead of swallowing them', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    apiMock.stop.mockRejectedValue(new Error('stop down'))
+    useInterviewStore.setState({ isRecording: true, isPaused: false } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: /结束面试/ }))
+
+    expect(await screen.findByText('结束面试失败：stop down')).toBeInTheDocument()
+  })
+
+  it('surfaces cancel-generation failures instead of swallowing them', async () => {
+    apiMock.cancelAsk.mockRejectedValue(new Error('cancel down'))
+    useInterviewStore.setState({ streamingIds: ['qa-1'] } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '取消正在生成的回答' }))
+
+    expect(await screen.findByText('取消生成失败：cancel down')).toBeInTheDocument()
   })
 })

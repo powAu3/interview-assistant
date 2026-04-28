@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { useInterviewStore } from '@/stores/configStore'
@@ -10,6 +10,7 @@ const apiMock = vi.hoisted(() => ({
   getOptions: vi.fn(),
   checkModelsHealth: vi.fn(),
   kbStatus: vi.fn(),
+  updateConfig: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -60,6 +61,7 @@ describe('App bootstrap', () => {
     apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
     apiMock.getOptions.mockResolvedValue({ positions: [], languages: [] })
     apiMock.checkModelsHealth.mockResolvedValue(undefined)
+    apiMock.updateConfig.mockResolvedValue({ ok: true })
     apiMock.kbStatus.mockResolvedValue({
       enabled: false,
       total_docs: 0,
@@ -79,6 +81,8 @@ describe('App bootstrap', () => {
       expect(screen.getByText('连接后端失败')).toBeInTheDocument()
     })
     expect(screen.getByText('backend down')).toBeInTheDocument()
+    expect(screen.getByText(/正在请求 \/api\/config/)).toBeInTheDocument()
+    expect(screen.getByText(/确认后端服务已启动/)).toBeInTheDocument()
   })
 
   it('keeps rendering the app when non-critical bootstrap requests fail', async () => {
@@ -92,5 +96,29 @@ describe('App bootstrap', () => {
     })
 
     expect(screen.queryByText('连接后端失败')).not.toBeInTheDocument()
+  })
+
+  it('does not allow disabled models to be picked as the priority answer model', async () => {
+    apiMock.getConfig.mockResolvedValue({
+      models: [
+        { name: 'Enabled Model', supports_vision: false, enabled: true },
+        { name: 'Disabled Model', supports_vision: true, enabled: false },
+      ],
+      active_model: 0,
+      api_key_set: true,
+      think_mode: false,
+      stt_provider: 'whisper',
+    })
+
+    render(<App />)
+
+    const trigger = await screen.findByRole('button', { name: /优先答题模型 Enabled Model/ })
+    fireEvent.click(trigger)
+
+    const disabledOption = screen.getByRole('button', { name: /Disabled Model/ })
+    expect(disabledOption).toBeDisabled()
+    fireEvent.click(disabledOption)
+
+    expect(apiMock.updateConfig).not.toHaveBeenCalled()
   })
 })

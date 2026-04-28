@@ -3,525 +3,37 @@ import {
   Play,
   Square,
   Trash2,
-  Upload,
   Send,
-  FileText,
   X,
   AlertTriangle,
   Image as ImageIcon,
   Pause,
   PlayCircle,
-  Zap,
   Loader2,
-  ChevronDown,
-  Check,
-  Eye,
-  EyeOff,
-  Mic,
-  RefreshCw,
-  Volume2,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useInterviewStore, type DeviceItem } from '@/stores/configStore'
+import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
-import { api } from '@/lib/api'
+import { api, getErrorMessage } from '@/lib/api'
 import { ResumeMountInline } from '@/components/resume/ResumeMount'
+import { AudioDevicePicker } from './control-bar/AudioDevicePicker'
+import { QuickPromptsRow } from './control-bar/QuickPromptsRow'
+import { WsReconnectingBanner } from './control-bar/WsReconnectingBanner'
+import { splitAudioDevices } from './control-bar/audioDevices'
+import {
+  bumpQuickPromptRecent,
+  getQuickPrompts,
+  orderByRecent,
+  readQuickPromptRecent,
+} from './control-bar/quickPrompts'
 
-const DEFAULT_QUICK_PROMPTS = [
-  '写代码实现',
-  '给SQL',
-  '时间复杂度',
-  '举个例子',
-  '更详细',
-  '对比区别',
-  '优缺点',
-  '应用场景',
-  '简短回答',
-]
-
-const STORAGE_KEY = 'quick_prompts'
-
-function getQuickPrompts(): string[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
-  } catch {}
-  return DEFAULT_QUICK_PROMPTS
-}
-
-export function saveQuickPrompts(prompts: string[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prompts))
-}
-
-/**
- * Quick Prompts 最近使用：按时间戳记录最近点过的快捷词，限制最多 16 条。
- * 仅用于 UI 排序（recent-first）和顶部「最近用过」视觉标记，不持久化到后端。
- */
-const RECENT_KEY = 'quick_prompts_recent_v1'
-const RECENT_MAX = 16
-
-const USEFUL_SYSTEM_AUDIO_TERMS = [
-  'blackhole',
-  'soundflower',
-  'loopback',
-  'stereo mix',
-  '立体声混音',
-  'what u hear',
-  'ishowu',
-]
-
-const NOISY_AUDIO_DEVICE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /zoomaudiodevice|zoom audio/i, reason: '会议软件虚拟设备' },
-  { pattern: /microsoft teams audio|teams audio/i, reason: '会议软件虚拟设备' },
-  { pattern: /webex|slack audio|discord/i, reason: '软件虚拟设备' },
-  { pattern: /obs virtual|obs audio|obs-audio/i, reason: '录屏软件虚拟设备' },
-  { pattern: /background music|eqmac|krisp|nvidia broadcast/i, reason: '音频增强/路由软件' },
-  { pattern: /ndi audio|screenflow|sound siphon|audio hijack/i, reason: '音频路由软件' },
-  { pattern: /aggregate device|multi-output device|multi output/i, reason: '聚合/多输出设备' },
-  { pattern: /virtual/i, reason: '虚拟设备' },
-]
-
-function normalizeAudioDeviceName(name: string) {
-  return name.toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-function getHiddenAudioDeviceReason(device: DeviceItem): string | null {
-  const name = normalizeAudioDeviceName(device.name)
-  if (device.is_loopback || USEFUL_SYSTEM_AUDIO_TERMS.some((term) => name.includes(term))) {
-    return null
-  }
-  return NOISY_AUDIO_DEVICE_PATTERNS.find(({ pattern }) => pattern.test(device.name))?.reason ?? null
-}
-
-function splitAudioDevices(devices: DeviceItem[]) {
-  const visible: DeviceItem[] = []
-  const hidden: Array<{ device: DeviceItem; reason: string }> = []
-  for (const device of devices) {
-    const reason = getHiddenAudioDeviceReason(device)
-    if (reason) hidden.push({ device, reason })
-    else visible.push(device)
-  }
-  return { visible, hidden }
-}
-
-export function readQuickPromptRecent(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, number>
-    if (parsed && typeof parsed === 'object') return parsed
-  } catch {}
-  return {}
-}
-
-export function bumpQuickPromptRecent(prompt: string): Record<string, number> {
-  const now = Date.now()
-  const current = readQuickPromptRecent()
-  current[prompt] = now
-  const entries = Object.entries(current)
-  if (entries.length > RECENT_MAX) {
-    entries.sort((a, b) => b[1] - a[1])
-    const kept = Object.fromEntries(entries.slice(0, RECENT_MAX))
-    try {
-      localStorage.setItem(RECENT_KEY, JSON.stringify(kept))
-    } catch {}
-    return kept
-  }
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(current))
-  } catch {}
-  return current
-}
-
-/**
- * 把 quickPrompts 按「最近使用时间」降序排序；未在 recent 中的保持原顺序追加。
- */
-export function orderByRecent(
-  prompts: string[],
-  recent: Record<string, number>,
-): string[] {
-  const seen = new Set<string>()
-  const withTs = prompts
-    .filter((p) => recent[p] != null)
-    .sort((a, b) => (recent[b] ?? 0) - (recent[a] ?? 0))
-  const result: string[] = []
-  for (const p of withTs) {
-    if (seen.has(p)) continue
-    seen.add(p)
-    result.push(p)
-  }
-  for (const p of prompts) {
-    if (seen.has(p)) continue
-    seen.add(p)
-    result.push(p)
-  }
-  return result
-}
-
-export { DEFAULT_QUICK_PROMPTS, STORAGE_KEY, RECENT_KEY, getQuickPrompts }
-
-/**
- * WebSocket 断线后的轻量重连横幅:
- * - 不挤占焦点,仅视觉提示
- * - 显示断开时长 + 旋转指示器 (表示自动重连中)
- * - 仅在断开 10s+ 才提供 "手动刷新" 逃生通道, 且二次确认避免误触丢失对话
- */
-function WsReconnectingBanner() {
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    const start = Date.now()
-    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000)
-    return () => clearInterval(timer)
-  }, [])
-  const allowReload = elapsed >= 10
-  const handleReload = () => {
-    if (window.confirm('刷新页面将丢失当前转录与未保存的对话,确定继续?')) {
-      window.location.reload()
-    }
-  }
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg"
-    >
-      <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-      <span>
-        连接已断开 ({elapsed}s), 正在自动重连…
-      </span>
-      {allowReload && (
-        <button
-          type="button"
-          onClick={handleReload}
-          className="ml-auto text-accent-blue hover:underline font-medium"
-          title="长时间未恢复时,手动刷新页面 (会丢失当前对话)"
-        >
-          手动刷新
-        </button>
-      )}
-    </div>
-  )
-}
-
-/**
- * 快捷词滚动行: 仅在内容真的溢出时才渲染左右渐变遮罩.
- * 小屏/少量快捷词时 (scrollWidth <= clientWidth) 不显示多余 fade.
- */
-function QuickPromptsRow({
-  prompts,
-  onPick,
-  recentSet,
-}: {
-  prompts: string[]
-  onPick: (p: string) => void
-  recentSet?: Set<string>
-}) {
-  const rowRef = useRef<HTMLDivElement>(null)
-  const [fadeLeft, setFadeLeft] = useState(false)
-  const [fadeRight, setFadeRight] = useState(false)
-
-  const recalc = useCallback(() => {
-    const el = rowRef.current
-    if (!el) return
-    const overflowing = el.scrollWidth - el.clientWidth > 1
-    setFadeLeft(overflowing && el.scrollLeft > 2)
-    setFadeRight(overflowing && el.scrollLeft < el.scrollWidth - el.clientWidth - 2)
-  }, [])
-
-  useEffect(() => {
-    recalc()
-    const el = rowRef.current
-    if (!el) return
-    el.addEventListener('scroll', recalc, { passive: true })
-    const ro = new ResizeObserver(recalc)
-    ro.observe(el)
-    return () => {
-      el.removeEventListener('scroll', recalc)
-      ro.disconnect()
-    }
-  }, [recalc, prompts.length])
-
-  return (
-    <div className="relative">
-      <div
-        ref={rowRef}
-        className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5"
-        title="快捷提示词 · 点击填入下方输入框 (可在 设置 → 偏好 → 快捷提示词 中编辑)"
-      >
-        <Zap
-          className="w-3 h-3 text-accent-amber flex-shrink-0"
-          aria-label="快捷提示词"
-        />
-        {prompts.map((prompt, i) => {
-          const isRecent = recentSet?.has(prompt) ?? false
-          return (
-            <button
-              key={`${i}-${prompt}`}
-              onClick={() => onPick(prompt)}
-              title={isRecent ? `最近使用过 · 填入「${prompt}」到输入框` : `填入「${prompt}」到输入框`}
-              className={`prompt-pill inline-flex items-center gap-1 min-h-[28px] px-2.5 py-1 text-[11px] rounded-lg font-medium whitespace-nowrap flex-shrink-0${
-                isRecent ? ' ring-1 ring-accent-blue/40 text-accent-blue' : ''
-              }`}
-            >
-              {isRecent && (
-                <span
-                  className="inline-flex w-1 h-1 rounded-full bg-accent-blue/80"
-                  aria-hidden
-                />
-              )}
-              {prompt}
-            </button>
-          )
-        })}
-      </div>
-      {fadeLeft && (
-        <div
-          className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-bg-primary to-transparent"
-          aria-hidden
-        />
-      )}
-      {fadeRight && (
-        <div
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-bg-primary to-transparent"
-          aria-hidden
-        />
-      )}
-    </div>
-  )
-}
-
-function DeviceGroup({
-  title,
-  devices,
-  selectedDevice,
-  selectionDisabled,
-  hidden,
-  onSelect,
-}: {
-  title: string
-  devices: Array<DeviceItem | { device: DeviceItem; reason: string }>
-  selectedDevice: number | null
-  selectionDisabled: boolean
-  hidden?: boolean
-  onSelect: (deviceId: number) => void
-}) {
-  if (devices.length === 0) return null
-  return (
-    <div className="space-y-1">
-      <div className="px-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
-        {title}
-      </div>
-      <div className="space-y-1">
-        {devices.map((entry) => {
-          const device = 'device' in entry ? entry.device : entry
-          const reason = 'reason' in entry ? entry.reason : null
-          const selected = device.id === selectedDevice
-          const Icon = device.is_loopback ? Volume2 : Mic
-          return (
-            <button
-              key={device.id}
-              type="button"
-              onClick={() => onSelect(device.id)}
-              disabled={selectionDisabled}
-              aria-current={selected ? 'true' : undefined}
-              title={selectionDisabled ? '录音中不可切换设备，请先暂停' : device.name}
-              className={`w-full min-h-[38px] px-2.5 py-2 rounded-lg text-left flex items-center gap-2 border transition-colors ${
-                selected
-                  ? 'border-accent-blue/70 bg-accent-blue/10 text-text-primary'
-                  : 'border-transparent hover:border-bg-hover hover:bg-bg-hover/60 text-text-secondary'
-              } ${selectionDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
-              <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${device.is_loopback ? 'text-accent-blue' : 'text-text-muted'}`} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium text-text-primary">
-                  {device.name}
-                  {device.is_loopback ? ' ⟳' : ''}
-                </span>
-                <span className="block truncate text-[10px] text-text-muted">
-                  {hidden && reason ? `${reason} · ` : ''}
-                  {device.host_api}
-                  {device.channels ? ` · ${device.channels}ch` : ''}
-                </span>
-              </span>
-              {selected && <Check className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function AudioDevicePicker({
-  devices,
-  selectedDevice,
-  onSelect,
-  onRefresh,
-  refreshing,
-  selectionDisabled,
-}: {
-  devices: DeviceItem[]
-  selectedDevice: number | null
-  onSelect: (deviceId: number) => void
-  onRefresh: () => Promise<void>
-  refreshing: boolean
-  selectionDisabled: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [showHidden, setShowHidden] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const { visible, hidden } = useMemo(() => splitAudioDevices(devices), [devices])
-  const selected = devices.find((d) => d.id === selectedDevice) ?? null
-  const visibleLoopbacks = visible.filter((d) => d.is_loopback)
-  const visibleMics = visible.filter((d) => !d.is_loopback)
-  const hiddenLoopbacks = hidden.filter(({ device }) => device.is_loopback)
-  const hiddenMics = hidden.filter(({ device }) => !device.is_loopback)
-
-  useEffect(() => {
-    if (!open) return
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open])
-
-  const handleSelect = (deviceId: number) => {
-    onSelect(deviceId)
-    setOpen(false)
-  }
-
-  const handleRefresh = async () => {
-    await onRefresh()
-    setOpen(true)
-  }
-
-  return (
-    <div ref={rootRef} className="relative flex-1 min-w-0 max-w-[190px] md:max-w-[230px]">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        disabled={selectionDisabled}
-        aria-label="选择音频输入设备"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title={selectionDisabled ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
-        className="w-full min-h-[36px] bg-bg-tertiary text-text-primary text-xs rounded-lg pl-2.5 pr-2 py-2 border border-bg-hover hover:bg-bg-hover/70 focus:outline-none focus:border-accent-blue flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {selected?.is_loopback ? (
-          <Volume2 className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />
-        ) : (
-          <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-        )}
-        <span className="min-w-0 flex-1 text-left truncate">
-          {selected ? `当前: ${selected.name}${selected.is_loopback ? ' ⟳' : ''}` : '选择音频输入'}
-        </span>
-        {hidden.length > 0 && (
-          <span
-            className="hidden md:inline-flex rounded-md bg-accent-amber/15 px-1.5 py-0.5 text-[10px] text-accent-amber"
-            title={`已自动隐藏 ${hidden.length} 个疑似无用设备`}
-          >
-            -{hidden.length}
-          </span>
-        )}
-        <ChevronDown className={`w-3.5 h-3.5 text-text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="音频输入设备列表"
-          className="absolute left-0 bottom-full mb-2 z-50 w-[min(360px,calc(100vw-1.5rem))] rounded-xl border border-bg-hover bg-bg-primary shadow-2xl shadow-black/20 p-2"
-        >
-          <div className="flex items-center gap-2 px-1 pb-2 border-b border-bg-hover/60">
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-text-primary">音频输入</div>
-              <div className="text-[10px] text-text-muted">
-                {hidden.length > 0 ? `已自动隐藏 ${hidden.length} 个疑似无用设备` : '未隐藏设备'}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              aria-label="刷新设备列表"
-              title="刷新设备列表"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-bg-tertiary hover:bg-bg-hover text-text-secondary disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          <div className="max-h-[280px] overflow-y-auto py-2 space-y-3">
-            {visible.length === 0 && (
-              <div className="rounded-lg bg-accent-amber/10 px-3 py-2 text-xs text-accent-amber">
-                当前列表被自动过滤为空，可以显示全部设备后手动选择。
-              </div>
-            )}
-            <DeviceGroup
-              title="系统音频 (推荐)"
-              devices={visibleLoopbacks}
-              selectedDevice={selectedDevice}
-              selectionDisabled={selectionDisabled}
-              onSelect={handleSelect}
-            />
-            <DeviceGroup
-              title="麦克风"
-              devices={visibleMics}
-              selectedDevice={selectedDevice}
-              selectionDisabled={selectionDisabled}
-              onSelect={handleSelect}
-            />
-            {showHidden && (
-              <>
-                <DeviceGroup
-                  title="已隐藏的系统音频"
-                  devices={hiddenLoopbacks}
-                  selectedDevice={selectedDevice}
-                  selectionDisabled={selectionDisabled}
-                  hidden
-                  onSelect={handleSelect}
-                />
-                <DeviceGroup
-                  title="已隐藏设备"
-                  devices={hiddenMics}
-                  selectedDevice={selectedDevice}
-                  selectionDisabled={selectionDisabled}
-                  hidden
-                  onSelect={handleSelect}
-                />
-              </>
-            )}
-          </div>
-
-          {hidden.length > 0 && (
-            <div className="pt-2 border-t border-bg-hover/60">
-              <button
-                type="button"
-                onClick={() => setShowHidden((value) => !value)}
-                aria-label={showHidden ? '隐藏无用设备' : '显示全部设备'}
-                className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-text-secondary hover:bg-bg-hover"
-              >
-                {showHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>{showHidden ? '隐藏无用设备' : `显示全部设备 (${hidden.length})`}</span>
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
+export {
+  DEFAULT_QUICK_PROMPTS,
+  RECENT_KEY,
+  STORAGE_KEY,
+  getQuickPrompts,
+  saveQuickPrompts,
+} from './control-bar/quickPrompts'
 
 export default function ControlBar() {
   // 精确订阅字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
@@ -569,8 +81,14 @@ export default function ControlBar() {
   const [refreshingDevices, setRefreshingDevices] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const allModelsUnavailable = config?.models && config.models.length > 0 &&
-    config.models.every((_, i) => modelHealth[i] === 'error')
+  const enabledModelEntries = useMemo(
+    () => (config?.models ?? []).map((model, index) => ({ model, index })).filter(({ model }) => model.enabled !== false),
+    [config?.models],
+  )
+  const noEnabledModels = (config?.models?.length ?? 0) > 0 && enabledModelEntries.length === 0
+  const allModelsUnavailable = enabledModelEntries.length > 0 &&
+    enabledModelEntries.every(({ index }) => modelHealth[index] === 'error')
+  const answerModelUnavailable = noEnabledModels || allModelsUnavailable
   const showColdStartHint =
     !isRecording &&
     transcriptions.length === 0 &&
@@ -675,7 +193,7 @@ export default function ControlBar() {
         }).catch(() => {})
       }
     }
-    catch (e: any) { setError(e.message) }
+    catch (e: unknown) { setError(getErrorMessage(e, '开始面试失败')) }
     finally { setLoading(false) }
   }, [selectedDevice])
   const handleStop = useCallback(async () => {
@@ -684,15 +202,17 @@ export default function ControlBar() {
     try {
       await api.stop()
       window.electronAPI?.syncOverlayWindow?.({ visible: false }).catch(() => {})
-    } catch {} finally { setLoading(false) }
+    } catch (e: unknown) {
+      setError(`结束面试失败：${getErrorMessage(e)}`)
+    } finally { setLoading(false) }
   }, [isRecording])
   const handlePause = useCallback(async () => {
     setLoading(true)
-    try { await api.pause() } catch (e: any) { setError(e.message) } finally { setLoading(false) }
+    try { await api.pause() } catch (e: unknown) { setError(getErrorMessage(e, '暂停失败')) } finally { setLoading(false) }
   }, [])
   const handleResume = useCallback(async () => {
     setLoading(true)
-    try { await api.resume(selectedDevice ?? undefined) } catch (e: any) { setError(e.message) } finally { setLoading(false) }
+    try { await api.resume(selectedDevice ?? undefined) } catch (e: unknown) { setError(getErrorMessage(e, '继续录音失败')) } finally { setLoading(false) }
   }, [selectedDevice])
   const handleClear = useCallback(async () => {
     if (qaPairs.length > 0 || transcriptions.length > 0) {
@@ -703,7 +223,7 @@ export default function ControlBar() {
       await api.clear()
       clearSession()
       setToastMessage('已清空')
-    } catch (e: any) { setError(e.message) }
+    } catch (e: unknown) { setError(getErrorMessage(e, '清空失败')) }
     finally { setClearing(false) }
   }, [qaPairs.length, transcriptions.length, clearSession, setToastMessage])
 
@@ -712,12 +232,22 @@ export default function ControlBar() {
     try {
       await api.cancelAsk()
       setToastMessage('已发送取消')
-    } catch {}
+    } catch (e: unknown) {
+      setError(`取消生成失败：${getErrorMessage(e)}`)
+    }
     setTimeout(() => setCancellingAsk(false), 500)
   }, [setToastMessage])
 
   const handleAsk = useCallback(async () => {
     if (!manualQuestion.trim() && !pastedImage) return
+    if (noEnabledModels) {
+      setError('请先在设置中启用至少一个模型')
+      return
+    }
+    if (allModelsUnavailable) {
+      setError('所有启用模型不可用，请先检查模型连接')
+      return
+    }
     if (pastedImage && !activeModelSupportsVision) {
       setError(`当前模型「${activeModel?.name ?? '未命名模型'}」不支持图片识别，请切换到带 👁 标记的模型后再发送截图`)
       return
@@ -726,8 +256,8 @@ export default function ControlBar() {
       await api.ask(manualQuestion.trim(), pastedImage || undefined)
       setManualQuestion('')
       setPastedImage(null)
-    } catch (e: any) { setError(e.message) }
-  }, [manualQuestion, pastedImage, activeModelSupportsVision, activeModel?.name])
+    } catch (e: unknown) { setError(getErrorMessage(e, '提交问题失败')) }
+  }, [manualQuestion, pastedImage, noEnabledModels, allModelsUnavailable, activeModelSupportsVision, activeModel?.name])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (isComposingRef.current) return
@@ -747,8 +277,8 @@ export default function ControlBar() {
       const next = await api.getDevices()
       setDevices(next.devices ?? [], next.platform ?? null)
       setToastMessage('音频设备已刷新')
-    } catch (e: any) {
-      setError(e.message || '刷新音频设备失败')
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, '刷新音频设备失败'))
     } finally {
       setRefreshingDevices(false)
     }
@@ -770,7 +300,13 @@ export default function ControlBar() {
       {allModelsUnavailable && (
         <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>所有模型不可用，请检查 API 与网络。</span>
+          <span>所有启用模型不可用，请检查 API 与网络。</span>
+        </div>
+      )}
+      {noEnabledModels && (
+        <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>未启用任何模型，请在设置中开启至少一个模型。</span>
         </div>
       )}
       {!hasLoopback && platformInfo?.needs_virtual_device && (
@@ -928,8 +464,18 @@ export default function ControlBar() {
         </div>
         <button
           onClick={handleAsk}
-          disabled={!manualQuestion.trim() && !pastedImage}
-          title={manualQuestion.trim() || pastedImage ? '发送问题 (Enter)' : '请先输入问题或粘贴截图'}
+          disabled={answerModelUnavailable || (pastedImage && !activeModelSupportsVision) || (!manualQuestion.trim() && !pastedImage)}
+          title={
+            noEnabledModels
+              ? '请先在设置中启用至少一个模型'
+              : allModelsUnavailable
+              ? '所有启用模型不可用，请先检查模型连接'
+              : pastedImage && !activeModelSupportsVision
+              ? '当前模型不支持图片，请切换到带 👁 标记的模型'
+              : manualQuestion.trim() || pastedImage
+              ? '发送问题 (Enter)'
+              : '请先输入问题或粘贴截图'
+          }
           aria-label="发送问题"
           className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
         >
