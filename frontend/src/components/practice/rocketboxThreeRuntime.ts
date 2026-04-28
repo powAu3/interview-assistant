@@ -1,0 +1,6 @@
+export { AmbientLight } from 'three/src/lights/AmbientLight.js'
+export { DirectionalLight } from 'three/src/lights/DirectionalLight.js'
+export { HemisphereLight } from 'three/src/lights/HemisphereLight.js'
+export { PerspectiveCamera } from 'three/src/cameras/PerspectiveCamera.js'
+export { Scene } from 'three/src/scenes/Scene.js'
+export { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
