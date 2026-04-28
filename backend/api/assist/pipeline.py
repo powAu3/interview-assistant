@@ -3,8 +3,7 @@
 import gc
 import time
 import threading
-from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional
 
 from core.background import BoundedTaskWorker
 from core.config import get_config
@@ -15,28 +14,40 @@ _ilog = get_interview_logger()
 _elog = get_logger("pipeline")
 from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import (
-    build_asr_question_group_text,
-    classify_asr_question_candidate,
-    classify_followup,
     get_stt_engine,
-    is_viable_asr_question_group,
-    join_transcription_fragments,
     transcribe_with_fallback,
     transcription_for_publish,
 )
-from services.llm import (
-    PROMPT_MODE_ASR_REALTIME,
-    PROMPT_MODE_MANUAL_TEXT,
-    PROMPT_MODE_SERVER_SCREEN,
-    PROMPT_MODE_WRITTEN_EXAM,
-    PromptMode,
-    build_system_prompt,
-    chat_stream_single_model,
-    get_token_stats,
-    postprocess_answer_for_mode,
-)
 from api.common import get_model_health
 from api.realtime.ws import broadcast
+from api.assist.answer_worker import (
+    AnswerWorkerDeps,
+    process_question_parallel,
+    prompt_mode_for_task as answer_prompt_mode_for_task,
+    prompt_server_screen_code,
+)
+from api.assist.asr_state import (
+    AssistAsrStateMachine,
+    PendingASRGroup,
+    asr_interrupt_running,
+)
+from api.assist.scheduler import (
+    TaskPayload,
+    begin_asr_turn as scheduler_begin_asr_turn,
+    claim_next_dispatch,
+    dispatch_model_order as scheduler_dispatch_model_order,
+    dispatch_snapshot as scheduler_dispatch_snapshot,
+    drain_commit_queue,
+    is_asr_task,
+    is_stale_inflight_asr_task,
+    key_ok,
+    max_parallel_slots as scheduler_max_parallel_slots,
+    model_eligible as scheduler_model_eligible,
+    physical_busy_models as scheduler_physical_busy_models,
+    pick_model_index as scheduler_pick_model_index,
+    priority_model_index as scheduler_priority_model_index,
+    task_meta,
+)
 
 # ---------------------------------------------------------------------------
 # Module state
@@ -49,19 +60,7 @@ _pause_event = threading.Event()
 _answer_generation = 0
 _gen_lock = threading.Lock()
 
-TaskPayload = Tuple[str, Optional[str], bool, str, dict[str, Any]]
-
-
-@dataclass
-class PendingASRGroup:
-    source: str
-    utterances: list[str] = field(default_factory=list)
-    first_mono: float = 0.0
-    last_mono: float = 0.0
-    has_promote: bool = False
-
-
-_pending: list[Tuple[TaskPayload, int, int]] = []
+_pending: list[tuple[TaskPayload, int, int]] = []
 _dispatch_lock = threading.Lock()
 _in_flight_tasks: dict[int, tuple[int, TaskPayload]] = {}
 _task_session_version = 0
@@ -79,6 +78,14 @@ _asr_merge_mono_last: Optional[float] = None
 _pending_asr_group: Optional[PendingASRGroup] = None
 _recent_asr_turn_monos: list[float] = []
 _knowledge_worker: Optional[BoundedTaskWorker] = None
+_asr_state = AssistAsrStateMachine(
+    broadcast=lambda data: broadcast(data),
+    submit_answer_task=lambda task: submit_answer_task(task),
+    begin_asr_turn=lambda: _begin_asr_turn(),
+    record_asr_turn=lambda now_mono: _record_asr_turn(now_mono),
+    is_high_churn_submission=lambda cfg, now_mono: _is_high_churn_asr_submission(cfg, now_mono),
+    logger=_ilog,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -86,15 +93,28 @@ _knowledge_worker: Optional[BoundedTaskWorker] = None
 # ---------------------------------------------------------------------------
 
 def _reset_asr_merge_buffer():
-    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
-    _asr_merge_parts = []
-    _asr_merge_mono_first = None
-    _asr_merge_mono_last = None
+    _asr_state.reset_merge_buffer()
+    _sync_asr_state_to_compat_globals()
 
 
 def _reset_pending_asr_group():
-    global _pending_asr_group
-    _pending_asr_group = None
+    _asr_state.reset_pending_group()
+    _sync_asr_state_to_compat_globals()
+
+
+def _sync_compat_globals_to_asr_state():
+    _asr_state.merge_parts = _asr_merge_parts
+    _asr_state.merge_mono_first = _asr_merge_mono_first
+    _asr_state.merge_mono_last = _asr_merge_mono_last
+    _asr_state.pending_group = _pending_asr_group
+
+
+def _sync_asr_state_to_compat_globals():
+    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last, _pending_asr_group
+    _asr_merge_parts = _asr_state.merge_parts
+    _asr_merge_mono_first = _asr_state.merge_mono_first
+    _asr_merge_mono_last = _asr_state.merge_mono_last
+    _pending_asr_group = _asr_state.pending_group
 
 
 def _prune_recent_asr_turns_locked(now_mono: float, window_sec: float = 6.0):
@@ -135,15 +155,15 @@ def _asr_group_max_wait_sec(cfg) -> float:
 
 
 def _asr_interrupt_running(cfg) -> bool:
-    return bool(getattr(cfg, "assist_asr_interrupt_running", True))
+    return asr_interrupt_running(cfg)
 
 
 def _task_meta(task: TaskPayload) -> dict[str, Any]:
-    return task[4]
+    return task_meta(task)
 
 
 def _is_asr_task(task: TaskPayload) -> bool:
-    return _task_meta(task).get("origin") == "asr"
+    return is_asr_task(task)
 
 
 def _get_latest_asr_turn_id() -> int:
@@ -152,7 +172,7 @@ def _get_latest_asr_turn_id() -> int:
 
 
 def _is_stale_inflight_asr_task(task: TaskPayload) -> bool:
-    return _is_asr_task(task) and int(_task_meta(task).get("asr_turn_id", 0)) < _latest_asr_turn_id
+    return is_stale_inflight_asr_task(task, _latest_asr_turn_id)
 
 
 # ---------------------------------------------------------------------------
@@ -225,79 +245,40 @@ def _submit_knowledge_record(question: str, answer: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _key_ok(m) -> bool:
-    return bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here"))
+    return key_ok(m)
 
 
 def _model_eligible(i: int, m, need_vision: bool) -> bool:
-    if not getattr(m, "enabled", True):
-        return False
-    if get_model_health(i) == "error":
-        return False
-    if not _key_ok(m):
-        return False
-    if need_vision and not m.supports_vision:
-        return False
-    return True
+    return scheduler_model_eligible(i, m, need_vision, get_model_health)
 
 
-def _prompt_mode_for_task(source: str, manual_input: bool, written_exam: bool = False) -> PromptMode:
-    if source.startswith("server_screen_"):
-        if written_exam:
-            return PROMPT_MODE_WRITTEN_EXAM
-        return PROMPT_MODE_SERVER_SCREEN
-    if manual_input:
-        return PROMPT_MODE_MANUAL_TEXT
-    return PROMPT_MODE_ASR_REALTIME
+def _prompt_mode_for_task(source: str, manual_input: bool, written_exam: bool = False):
+    return answer_prompt_mode_for_task(source, manual_input, written_exam=written_exam)
 
 
 def _priority_model_index(cfg) -> int:
-    n = len(cfg.models)
-    if n <= 0:
-        return 0
-    try:
-        am = cfg.get_active_model()
-    except Exception:
-        return max(0, min(int(cfg.active_model), n - 1))
-    for i, m in enumerate(cfg.models):
-        if m is am:
-            return i
-    return max(0, min(int(cfg.active_model), n - 1))
+    return scheduler_priority_model_index(cfg)
 
 
 def _dispatch_model_order(cfg) -> list[int]:
-    n = len(cfg.models)
-    if n == 0:
-        return []
-    p = _priority_model_index(cfg)
-    return [p] + [i for i in range(n) if i != p]
+    return scheduler_dispatch_model_order(cfg)
 
 
 def _dispatch_snapshot_locked() -> tuple[set[int], int]:
-    busy_models: set[int] = set()
-    effective_slots = 0
-    for model_idx, task in _in_flight_tasks.values():
-        if _is_stale_inflight_asr_task(task):
-            continue
-        busy_models.add(model_idx)
-        effective_slots += 1
-    return busy_models, effective_slots
+    return scheduler_dispatch_snapshot(_in_flight_tasks, _latest_asr_turn_id)
 
 
 def _physical_busy_models_locked() -> set[int]:
-    return {model_idx for model_idx, _task in _in_flight_tasks.values()}
+    return scheduler_physical_busy_models(_in_flight_tasks)
 
 
 def _drain_commit_queue_locked():
     global _next_commit_seq
-    while True:
-        while _next_commit_seq in _skipped_commit_seqs:
-            _skipped_commit_seqs.discard(_next_commit_seq)
-            _next_commit_seq += 1
-        apply_fn = _commit_buffer.pop(_next_commit_seq, None)
-        if apply_fn is None:
-            return
-        apply_fn()
-        _next_commit_seq += 1
+    _next_commit_seq = drain_commit_queue(
+        _commit_buffer,
+        _skipped_commit_seqs,
+        _next_commit_seq,
+    )
 
 
 def _mark_seq_skipped(seq: int):
@@ -310,17 +291,9 @@ def _mark_seq_skipped(seq: int):
 
 def _begin_asr_turn() -> int:
     global _latest_asr_turn_id
-    skipped: list[int] = []
     with _dispatch_lock:
-        _latest_asr_turn_id += 1
+        _latest_asr_turn_id, skipped = scheduler_begin_asr_turn(_pending, _latest_asr_turn_id)
         turn_id = _latest_asr_turn_id
-        kept: list[Tuple[TaskPayload, int, int]] = []
-        for task, seq, sess_v in _pending:
-            if _is_asr_task(task):
-                skipped.append(seq)
-                continue
-            kept.append((task, seq, sess_v))
-        _pending[:] = kept
     for seq in skipped:
         _mark_seq_skipped(seq)
     return turn_id
@@ -331,58 +304,17 @@ def pick_model_index(
     busy: set[int],
     avoid_models: Optional[set[int]] = None,
 ) -> Optional[int]:
-    text, image, manual, source, meta = task
-    need_vision = bool(image)
-    cfg = get_config()
-    avoid = avoid_models or set()
-
-    def ok_basic(i: int, m) -> bool:
-        if i in busy:
-            return False
-        if not getattr(m, "enabled", True):
-            return False
-        if not _key_ok(m):
-            return False
-        if need_vision and not m.supports_vision:
-            return False
-        return True
-
-    order = _dispatch_model_order(cfg)
-    if avoid:
-        for i in order:
-            if i in avoid:
-                continue
-            m = cfg.models[i]
-            if not ok_basic(i, m):
-                continue
-            if get_model_health(i) == "error":
-                continue
-            return i
-        for i in order:
-            if i in avoid:
-                continue
-            m = cfg.models[i]
-            if ok_basic(i, m):
-                return i
-    for i in order:
-        m = cfg.models[i]
-        if not ok_basic(i, m):
-            continue
-        if get_model_health(i) == "error":
-            continue
-        return i
-    for i in order:
-        m = cfg.models[i]
-        if ok_basic(i, m):
-            return i
-    return None
+    return scheduler_pick_model_index(
+        task,
+        busy,
+        get_config(),
+        get_model_health,
+        avoid_models=avoid_models,
+    )
 
 
 def _max_parallel_slots() -> int:
-    cfg = get_config()
-    n_ok = sum(1 for i, m in enumerate(cfg.models) if _model_eligible(i, m, False))
-    cap = max(1, getattr(cfg, "max_parallel_answers", 2))
-    return max(1, min(cap, max(n_ok, 1)))
+    return scheduler_max_parallel_slots(get_config(), get_model_health)
 
 
 def submit_answer_task(task: TaskPayload) -> bool:
@@ -409,92 +341,21 @@ def submit_answer_task(task: TaskPayload) -> bool:
 # ---------------------------------------------------------------------------
 
 def _flush_asr_question_group_now(cfg, session) -> None:
-    global _pending_asr_group
-    group = _pending_asr_group
-    if group is None:
-        return
-    _pending_asr_group = None
-    if not is_viable_asr_question_group(
-        group.utterances,
-        getattr(cfg, "transcription_min_sig_chars", 2),
-    ):
-        return
-    question_text = build_asr_question_group_text(group.utterances)
-    if not question_text:
-        return
-    now_mono = time.monotonic()
-    high_churn_short = _is_high_churn_asr_submission(cfg, now_mono)
-    turn_id = _begin_asr_turn()
-    _record_asr_turn(now_mono)
-    _ilog.info(
-        "ASR_QUESTION turn=%d utterances=%d churn=%s text=%r",
-        turn_id, len(group.utterances), high_churn_short,
-        question_text[:150],
-    )
-    submit_answer_task(
-        (
-            question_text,
-            None,
-            False,
-            group.source,
-            {
-                "origin": "asr",
-                "asr_turn_id": turn_id,
-                "utterances": list(group.utterances),
-                "high_churn_short_answer": high_churn_short,
-            },
-        )
-    )
-
-
-def _asr_fast_confirm_sec(cfg) -> float:
-    fast = float(getattr(cfg, "assist_asr_fast_confirm_sec", 0.2) or 0.0)
-    return max(0.1, min(2.0, fast))
+    _sync_compat_globals_to_asr_state()
+    _asr_state.flush_question_group_now(cfg, session)
+    _sync_asr_state_to_compat_globals()
 
 
 def _try_flush_asr_question_group(cfg, session, now_mono: float, force: bool = False) -> None:
-    group = _pending_asr_group
-    if group is None:
-        return
-    confirm = _asr_confirm_window_sec(cfg)
-    fast_confirm = _asr_fast_confirm_sec(cfg)
-    max_wait = _asr_group_max_wait_sec(cfg)
-    since_last = now_mono - group.last_mono
-    age = now_mono - group.first_mono
-    if force or age >= max_wait:
-        _flush_asr_question_group_now(cfg, session)
-    elif group.has_promote and len(group.utterances) == 1 and since_last >= fast_confirm:
-        _flush_asr_question_group_now(cfg, session)
-    elif group.has_promote and since_last >= confirm:
-        _flush_asr_question_group_now(cfg, session)
-    elif not group.has_promote and since_last >= confirm * 2:
-        _flush_asr_question_group_now(cfg, session)
+    _sync_compat_globals_to_asr_state()
+    _asr_state.try_flush_question_group(cfg, session, now_mono, force)
+    _sync_asr_state_to_compat_globals()
 
 
 def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: float) -> None:
-    global _pending_asr_group
-    _try_flush_asr_question_group(cfg, session, now_mono, False)
-    kind, cleaned = classify_asr_question_candidate(
-        pub,
-        getattr(cfg, "transcription_min_sig_chars", 2),
-    )
-    if not cleaned:
-        return
-    if kind == "ignore" and _pending_asr_group is None:
-        return
-    if _pending_asr_group is None:
-        _pending_asr_group = PendingASRGroup(
-            source=source,
-            utterances=[cleaned],
-            first_mono=now_mono,
-            last_mono=now_mono,
-            has_promote=(kind == "promote"),
-        )
-    else:
-        _pending_asr_group.utterances.append(cleaned)
-        _pending_asr_group.last_mono = now_mono
-        _pending_asr_group.source = source
-        _pending_asr_group.has_promote = _pending_asr_group.has_promote or kind == "promote"
+    _sync_compat_globals_to_asr_state()
+    _asr_state.handle_auto_detect_asr_text(cfg, session, pub, source, now_mono)
+    _sync_asr_state_to_compat_globals()
 
 
 # ---------------------------------------------------------------------------
@@ -502,71 +363,21 @@ def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: 
 # ---------------------------------------------------------------------------
 
 def _flush_asr_merge_buffer_now(cfg, session) -> None:
-    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
-    if not _asr_merge_parts:
-        return
-    parts = list(_asr_merge_parts)
-    _asr_merge_parts.clear()
-    _asr_merge_mono_first = None
-    _asr_merge_mono_last = None
-    merged_raw = join_transcription_fragments(parts)
-    min_sig = getattr(cfg, "transcription_min_sig_chars", 2)
-    pub = transcription_for_publish(merged_raw, min_sig)
-    if not pub:
-        return
-    session.add_transcription(pub)
-    broadcast({"type": "transcription", "text": pub})
-    if cfg.auto_detect:
-        src = (
-            "conversation_loopback"
-            if session.capture_is_loopback
-            else "conversation_mic"
-        )
-        _handle_auto_detect_asr_text(cfg, session, pub, src, time.monotonic())
+    _sync_compat_globals_to_asr_state()
+    _asr_state.flush_merge_buffer_now(cfg, session)
+    _sync_asr_state_to_compat_globals()
 
 
 def _try_flush_asr_merge_buffer(cfg, session, now_mono: float, force: bool = False) -> None:
-    if not _asr_merge_parts:
-        return
-    gap = float(getattr(cfg, "assist_transcription_merge_gap_sec", 2.0) or 0.0)
-    max_wait = float(getattr(cfg, "assist_transcription_merge_max_sec", 12.0) or 12.0)
-    if max_wait < 1.0:
-        max_wait = 12.0
-    if force:
-        _flush_asr_merge_buffer_now(cfg, session)
-        return
-    if gap <= 0:
-        return
-    if _asr_merge_mono_last is None:
-        return
-    since_last = now_mono - _asr_merge_mono_last
-    burst_age = (now_mono - _asr_merge_mono_first) if _asr_merge_mono_first is not None else 0.0
-    if since_last >= gap or burst_age >= max_wait:
-        _flush_asr_merge_buffer_now(cfg, session)
+    _sync_compat_globals_to_asr_state()
+    _asr_state.try_flush_merge_buffer(cfg, session, now_mono, force)
+    _sync_asr_state_to_compat_globals()
 
 
 def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, force_flush_tail: bool = False) -> None:
-    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last
-    gap = float(getattr(cfg, "assist_transcription_merge_gap_sec", 2.0) or 0.0)
-    if gap <= 0:
-        session.add_transcription(pub)
-        broadcast({"type": "transcription", "text": pub})
-        if cfg.auto_detect:
-            src = (
-                "conversation_loopback"
-                if session.capture_is_loopback
-                else "conversation_mic"
-            )
-            _handle_auto_detect_asr_text(cfg, session, pub, src, now_mono)
-        return
-    if not _asr_merge_parts:
-        _asr_merge_mono_first = now_mono
-    _asr_merge_parts.append(pub)
-    _asr_merge_mono_last = now_mono
-    if force_flush_tail:
-        _flush_asr_merge_buffer_now(cfg, session)
-    else:
-        _try_flush_asr_merge_buffer(cfg, session, now_mono, False)
+    _sync_compat_globals_to_asr_state()
+    _asr_state.append_transcription_fragment(cfg, session, pub, now_mono, force_flush_tail)
+    _sync_asr_state_to_compat_globals()
 
 
 # ---------------------------------------------------------------------------
@@ -575,44 +386,27 @@ def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, forc
 
 def _try_dispatch():
     while True:
-        skipped_seq: Optional[int] = None
         with _dispatch_lock:
-            busy_models, effective_slots = _dispatch_snapshot_locked()
-            physical_busy_models = _physical_busy_models_locked()
-            if effective_slots >= _max_parallel_slots():
-                return
-            model_idx = None
-            task_seq = None
-            idx = 0
-            while idx < len(_pending):
-                task, seq, tv = _pending[idx]
-                meta = _task_meta(task)
-                if _is_asr_task(task) and int(meta.get("asr_turn_id", 0)) < _latest_asr_turn_id:
-                    _pending.pop(idx)
-                    skipped_seq = seq
-                    break
-                avoid_models = None
-                if _is_asr_task(task):
-                    avoid_models = physical_busy_models
-                mi = pick_model_index(task, busy_models, avoid_models=avoid_models)
-                if mi is not None:
-                    _pending.pop(idx)
-                    model_idx = mi
-                    task_seq = (task, seq, tv)
-                    break
-                idx += 1
-            if model_idx is None or task_seq is None:
-                if skipped_seq is None:
-                    return
-            else:
-                _in_flight_tasks[task_seq[1]] = (model_idx, task_seq[0])
-        if skipped_seq is not None:
-            _mark_seq_skipped(skipped_seq)
+            step = claim_next_dispatch(
+                _pending,
+                _in_flight_tasks,
+                _latest_asr_turn_id,
+                _max_parallel_slots(),
+                pick_model_index,
+            )
+        if step.skipped_seq is not None:
+            _mark_seq_skipped(step.skipped_seq)
             continue
-        task, seq, sess_v = task_seq
+        if step.claim is None:
+            return
         threading.Thread(
             target=_run_answer_worker,
-            args=(task, seq, model_idx, sess_v),
+            args=(
+                step.claim.task,
+                step.claim.seq,
+                step.claim.model_idx,
+                step.claim.session_version,
+            ),
             daemon=True,
         ).start()
 
@@ -871,38 +665,15 @@ def _interview_worker():
 # Answer generation worker
 # ---------------------------------------------------------------------------
 
-def _screen_region_label(region: str) -> str:
-    labels = {
-        "full": "\u4e3b\u663e\u793a\u5668\u5168\u5c4f",
-        "left_half": "\u4e3b\u663e\u793a\u5668\u5de6\u534a\u5c4f",
-        "right_half": "\u4e3b\u663e\u793a\u5668\u53f3\u534a\u5c4f",
-        "top_half": "\u4e3b\u663e\u793a\u5668\u4e0a\u534a\u5c4f",
-        "bottom_half": "\u4e3b\u663e\u793a\u5668\u4e0b\u534a\u5c4f",
-    }
-    return labels.get(region, "\u4e3b\u663e\u793a\u5668\u5de6\u534a\u5c4f")
-
-
-def prompt_server_screen_code(language: str, region: str) -> str:
-    where = _screen_region_label(region)
-    return (
-        f"\u4e0b\u56fe\u6765\u81ea\u8fd0\u884c\u672c\u540e\u7aef\u7684\u7535\u8111\u300c{where}\u300d\u7684\u5b9e\u65f6\u753b\u9762\uff0c\u53ef\u80fd\u5305\u542b\u9898\u76ee\u63cf\u8ff0\u3001\u8f93\u5165\u8f93\u51fa\u7ea6\u675f\u6216\u4ee3\u7801\u7247\u6bb5\u3002\n\n"
-        f"\u8bf7\u57fa\u4e8e\u56fe\u4e2d\u53ef\u89c1\u4fe1\u606f\u4f5c\u7b54\u3002\u82e5\u662f\u7f16\u7a0b\u9898\uff0c\u4ee3\u7801\u8bf7\u4f18\u5148\u4f7f\u7528 {language}\uff08SQL \u9898\u4f7f\u7528 sql\uff09\u3002\n\n"
-        "\u8bf7\u5c3d\u91cf\u6309\u4ee5\u4e0b\u987a\u5e8f\u7ec4\u7ec7\uff1a\u9898\u76ee\u7406\u89e3\u3001\u4e3b\u65b9\u6848\u4ee3\u7801\u3001\u5907\u9009\u65b9\u6848\u4ee3\u7801\uff081-2 \u4e2a\uff09\u3001\u65b9\u6848\u5bf9\u6bd4\u3001\u601d\u8def\u4e0e\u590d\u6742\u5ea6\u3001\u6d4b\u8bd5\u7528\u4f8b\u8bbe\u8ba1\u3002\n"
-        "\u5982\u679c\u5173\u952e\u4fe1\u606f\u770b\u4e0d\u6e05\uff0c\u8bf7\u660e\u786e\u8bf4\u660e\u7f3a\u5931\u9879\uff0c\u4e0d\u8981\u7f16\u9020\uff1b\u53ef\u5728\u5408\u7406\u5047\u8bbe\u4e0b\u7ed9\u51fa\u6700\u5c0f\u53ef\u6267\u884c\u65b9\u6848\u3002"
-    )
-
-
 def _process_question_parallel(
     task: TaskPayload,
     seq: int,
     model_idx: int,
     sess_v: int,
 ):
-    question_text, image, manual_input, source, meta = task
     cfg = get_config()
-    model_cfg = cfg.models[model_idx]
     my_gen = _capture_generation()
-    my_asr_turn = int(meta.get("asr_turn_id", 0)) if _is_asr_task(task) else 0
+    my_asr_turn = int(_task_meta(task).get("asr_turn_id", 0)) if _is_asr_task(task) else 0
 
     def aborted() -> bool:
         if my_gen != _answer_generation:
@@ -916,227 +687,22 @@ def _process_question_parallel(
             return True
         return False
 
-    written_exam = bool(getattr(cfg, "written_exam_mode", False))
-    written_exam_think = bool(getattr(cfg, "written_exam_think", False))
-    prompt_mode: PromptMode = _prompt_mode_for_task(source, manual_input, written_exam=written_exam)
-
-    # --- KB retrieve (Beta, opt-in) ---
-    # 同步调用; retriever 内部已做 deadline + sqlite interrupt watchdog,
-    # 即使开启也不会拖慢 first-token 超过 kb_deadline_ms (默认 150ms / ASR 80ms)。
-    kb_hits: list = []
-    kb_latency_ms = 0
-    kb_degraded = False
-    if (
-        bool(getattr(cfg, "kb_enabled", False))
-        and prompt_mode in set(getattr(cfg, "kb_trigger_modes", []) or [])
-        and (question_text or "").strip()
-    ):
-        try:
-            from services.kb.retriever import retrieve as _kb_retrieve
-
-            _deadline = (
-                int(getattr(cfg, "kb_asr_deadline_ms", 80) or 80)
-                if prompt_mode == PROMPT_MODE_ASR_REALTIME
-                else int(getattr(cfg, "kb_deadline_ms", 150) or 150)
-            )
-            _t0 = time.monotonic()
-            kb_hits = _kb_retrieve(
-                question_text,
-                k=int(getattr(cfg, "kb_top_k", 4) or 4),
-                deadline_ms=_deadline,
-                mode=prompt_mode,
-            )
-            kb_latency_ms = int((time.monotonic() - _t0) * 1000)
-        except Exception as _e:
-            _elog.warning("kb retrieve in pipeline failed: %s", _e)
-            kb_hits = []
-            kb_degraded = True
-
-    system_prompt = build_system_prompt(
-        manual_input=manual_input,
-        mode=prompt_mode,
-        screen_region=getattr(cfg, "screen_capture_region", "left_half"),
-        high_churn_short_answer=bool(meta.get("high_churn_short_answer", False)),
-        kb_hits=kb_hits or None,
-    )
-
-    if image:
-        user_for_llm: Any = [
-            {"type": "text", "text": question_text},
-            {"type": "image_url", "image_url": {"url": image}},
-        ]
-    else:
-        user_for_llm = question_text
-
-    with conversation_lock:
-        session_ref = get_session()
-        base_messages = list(session_ref.get_conversation_messages_for_llm())
-        last_qa = session_ref.get_last_qa()
-
-    is_followup = False
-    if (
-        not image
-        and last_qa
-        and source in ("asr", "manual_text")
-        and classify_followup(question_text, last_qa.question, last_qa.answer)
-    ):
-        is_followup = True
-        prev_answer_summary = last_qa.answer[:500]
-        user_for_llm = (
-            f"[\u8ffd\u95ee\u4e0a\u4e0b\u6587] \u4e0a\u4e00\u4e2a\u95ee\u9898\uff1a{last_qa.question}\n"
-            f"\u4f60\u4e0a\u6b21\u56de\u7b54\u7684\u8981\u70b9\uff1a{prev_answer_summary}\n\n"
-            f"\u73b0\u5728\u9762\u8bd5\u5b98\u8ffd\u95ee\uff1a{question_text}"
-        )
-
-    messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
-
-    display_question = question_text + (" [\U0001f4f7 \u9644\u56fe]" if image else "")
-    qa_id = f"qa-{seq}-{int(time.time() * 1000)}"
-    _ilog.info(
-        "ANSWER_START id=%s model=%s source=%s followup=%s q=%r",
-        qa_id, model_cfg.name, source, is_followup, question_text[:120],
-    )
-    broadcast(
-        {
-            "type": "answer_start",
-            "id": qa_id,
-            "question": display_question,
-            "source": source,
-            "model_name": model_cfg.name,
-            "model_index": model_idx,
-        }
-    )
-
-    # KB 命中提示：放在 answer_start 之后、首 token 之前; 永远不阻塞。
-    if kb_hits or kb_degraded:
-        try:
-            from services.kb.ws import build_kb_hits_payload as _kb_payload
-
-            broadcast(
-                _kb_payload(
-                    qa_id=qa_id,
-                    hits=kb_hits,
-                    latency_ms=kb_latency_ms,
-                    degraded=kb_degraded,
-                    excerpt_chars=int(
-                        getattr(cfg, "kb_prompt_excerpt_chars", 300) or 300
-                    ),
-                )
-            )
-        except Exception as _e:
-            _elog.warning("broadcast kb_hits failed: %s", _e)
-
-    full_answer = ""
-    full_think = ""
-    _exam_think_notified = False
-    gen_start = time.monotonic()
-    first_token_mono: Optional[float] = None
-    try:
-        think_override = written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM else None
-        for chunk_type, chunk_text in chat_stream_single_model(
-            model_cfg,
-            messages_for_llm,
-            system_prompt=system_prompt,
+    return process_question_parallel(
+        task,
+        seq,
+        model_idx,
+        sess_v,
+        AnswerWorkerDeps(
             abort_check=aborted,
-            override_think_mode=think_override,
-        ):
-            if aborted():
-                break
-            if first_token_mono is None:
-                first_token_mono = time.monotonic()
-            if chunk_type == "think":
-                full_think += chunk_text
-                if prompt_mode == PROMPT_MODE_WRITTEN_EXAM:
-                    if not _exam_think_notified:
-                        _exam_think_notified = True
-                        broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": "思考中..."})
-                else:
-                    broadcast({"type": "answer_think_chunk", "id": qa_id, "chunk": chunk_text})
-            else:
-                full_answer += chunk_text
-                broadcast({"type": "answer_chunk", "id": qa_id, "chunk": chunk_text})
-    except Exception as e:
-        _elog.error("LLM stream error id=%s: %s", qa_id, e, exc_info=True)
-        err = f"\n\n[\u751f\u6210\u7b54\u6848\u51fa\u9519: {e}]"
-        full_answer += err
-        broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
-
-    gen_elapsed = (time.monotonic() - gen_start) * 1000
-    first_token_ms = (first_token_mono - gen_start) * 1000 if first_token_mono else gen_elapsed
-
-    if aborted():
-        _ilog.info("ANSWER_CANCEL id=%s after=%.0fms", qa_id, gen_elapsed)
-        broadcast({"type": "answer_cancelled", "id": qa_id})
-        _mark_seq_skipped(seq)
-        return
-
-    full_answer = postprocess_answer_for_mode(full_answer, prompt_mode)
-
-    def _commit():
-        global _task_session_version
-        if sess_v != _task_session_version:
-            return
-        session = get_session()
-        try:
-            with conversation_lock:
-                if image:
-                    content: list = [{"type": "text", "text": question_text}]
-                    content.append({"type": "image_url", "image_url": {"url": image}})
-                    session.add_user_message(content)
-                else:
-                    session.add_user_message(question_text)
-                session.add_assistant_message(full_answer)
-                session.add_qa(
-                    display_question,
-                    full_answer,
-                    qa_id=qa_id,
-                    source=source,
-                    model_name=model_cfg.name,
-                )
-            stats = get_token_stats()
-            _ilog.info(
-                "ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms "
-                "answer_len=%d think_len=%d tokens_prompt=%d tokens_completion=%d",
-                qa_id, model_cfg.name, first_token_ms, gen_elapsed,
-                len(full_answer), len(full_think),
-                stats["prompt"], stats["completion"],
-            )
-            broadcast(
-                {
-                    "type": "answer_done",
-                    "id": qa_id,
-                    "question": display_question,
-                    "answer": full_answer,
-                    "think": full_think,
-                    "model_name": model_cfg.name,
-                }
-            )
-            broadcast(
-                {
-                    "type": "token_update",
-                    "prompt": stats["prompt"],
-                    "completion": stats["completion"],
-                    "total": stats["total"],
-                    "by_model": stats.get("by_model", {}),
-                }
-            )
-            if not _submit_knowledge_record(question_text, full_answer):
-                _elog.warning("KNOWLEDGE_ENQUEUE_DROP id=%s question=%r", qa_id, question_text[:80])
-            if prompt_mode == PROMPT_MODE_SERVER_SCREEN and image:
-                try:
-                    from services.vision_verify import schedule_self_verify
-                    schedule_self_verify(
-                        qa_id=qa_id,
-                        answer=full_answer,
-                        image_data_url=image,
-                        broadcast_callable=broadcast,
-                    )
-                except Exception as ve:  # noqa: BLE001
-                    _elog.warning("VISION_VERIFY_SCHEDULE_FAIL id=%s err=%s", qa_id, ve)
-        except Exception:
-            broadcast({"type": "answer_cancelled", "id": qa_id})
-
-    _flush_commit(seq, _commit)
+            is_session_current=lambda version: version == _task_session_version,
+            flush_commit=_flush_commit,
+            mark_seq_skipped=_mark_seq_skipped,
+            submit_knowledge_record=_submit_knowledge_record,
+            broadcast=broadcast,
+            logger=_ilog,
+            error_logger=_elog,
+        ),
+    )
 
 
 def _save_knowledge_record(question: str, answer: str):
