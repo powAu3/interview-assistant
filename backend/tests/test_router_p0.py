@@ -237,6 +237,35 @@ def test_models_layout_order_preserves_legitimate_int_indices(monkeypatch):
     assert names == ["c", "a", "b"]
 
 
+def test_models_layout_rejects_disabling_every_model(monkeypatch):
+    """至少保留一个启用模型，否则主流程会保存成功但答题必然不可用。"""
+
+    fake_cfg = _FakeCfg(
+        models=[_FakeModel("m0"), _FakeModel("m1")],
+        active=0,
+    )
+    monkeypatch.setattr(common_router, "get_config", lambda: fake_cfg)
+
+    update_called = False
+
+    def fake_update_config(d):
+        nonlocal update_called
+        update_called = True
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_models_layout({"enabled": [False, False]}))
+
+    assert exc.value.status_code == 422
+    assert "至少启用一个模型" in exc.value.detail
+    assert update_called is False
+
+
 # ---------- api_update_config: 非法 enum 必须 422 ---------------------------
 
 
@@ -369,3 +398,45 @@ def test_update_config_accepts_valid_enum(monkeypatch):
     assert result == {"ok": True}
     assert seen["d"]["screen_capture_region"] == "left_half"
     assert seen["d"]["practice_audience"] == "social"
+
+
+def test_update_config_rejects_all_disabled_models(monkeypatch):
+    """完整模型配置保存也不能留下 0 个启用模型。"""
+
+    update_called = False
+
+    def fake_update_config(d):
+        nonlocal update_called
+        update_called = True
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr(
+        common_router,
+        "get_config",
+        lambda: _FakeCfg(models=[_FakeModel("old")], active=0),
+    )
+
+    body = _Body(
+        models=[
+            {
+                "name": "main",
+                "api_base_url": "https://api.openai.com/v1",
+                "api_key": "sk-test",
+                "model": "gpt-4o-mini",
+                "supports_think": False,
+                "supports_vision": False,
+                "enabled": False,
+            }
+        ]
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_update_config(body))
+
+    assert exc.value.status_code == 422
+    assert "至少启用一个模型" in exc.value.detail
+    assert update_called is False

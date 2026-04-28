@@ -2,7 +2,6 @@ import socket
 import threading
 import time
 from typing import Optional
-import requests
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -17,14 +16,19 @@ from core.config import (
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
-from services.tts import get_edge_tts_status
+from api.common.config_payload import build_config_payload
+from api.common.model_health import (
+    get_model_health,
+    get_model_health_snapshot,
+    start_all_model_checks,
+    start_single_model_check,
+)
 from services.storage.resume_history import (
     MAX_UPLOAD_BYTES as RESUME_UPLOAD_MAX_BYTES,
     add_upload,
     apply_entry,
     delete_entry,
     get_entry_detail,
-    get_filename_for_id,
     list_entries,
     update_entry_summary,
 )
@@ -36,12 +40,8 @@ router = APIRouter()
 # 避免恶意客户端发送 GB 级 body 把整个文件读进内存触发 OOM.
 _RESUME_UPLOAD_CHUNK = 1 * 1024 * 1024
 
-_model_health: dict[int, str] = {}
-_model_health_detail: dict[int, str] = {}
-
-
-def get_model_health(index: int) -> Optional[str]:
-    return _model_health.get(index)
+def _has_enabled_model(models: list) -> bool:
+    return any(bool(getattr(model, "enabled", True)) for model in models)
 
 
 class ConfigUpdate(BaseModel):
@@ -96,84 +96,7 @@ class ConfigUpdate(BaseModel):
 
 @router.get("/config")
 async def api_get_config():
-    cfg = get_config()
-    m = cfg.get_active_model()
-    resume_active_history_id = getattr(cfg, "resume_active_history_id", None)
-    return {
-        **get_edge_tts_status(),
-        "models": [
-            {
-                "name": mdl.name,
-                "supports_think": mdl.supports_think,
-                "supports_vision": mdl.supports_vision,
-                "enabled": getattr(mdl, "enabled", True),
-            }
-            for mdl in cfg.models
-        ],
-        "max_parallel_answers": getattr(cfg, "max_parallel_answers", 2),
-        "active_model": cfg.active_model,
-        "model_name": m.name,
-        "temperature": cfg.temperature,
-        "max_tokens": cfg.max_tokens,
-        "think_mode": cfg.think_mode,
-        "stt_provider": cfg.stt_provider,
-        "whisper_model": cfg.whisper_model,
-        "whisper_language": cfg.whisper_language,
-        "doubao_stt_app_id": cfg.doubao_stt_app_id or "",
-        "doubao_stt_access_token": cfg.doubao_stt_access_token or "",
-        "doubao_stt_resource_id": cfg.doubao_stt_resource_id or "",
-        "doubao_stt_boosting_table_id": cfg.doubao_stt_boosting_table_id or "",
-        "iflytek_stt_app_id": cfg.iflytek_stt_app_id or "",
-        "iflytek_stt_api_key": cfg.iflytek_stt_api_key or "",
-        "iflytek_stt_api_secret": cfg.iflytek_stt_api_secret or "",
-        "practice_tts_provider": getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts",
-        "edge_tts_voice_female": getattr(cfg, "edge_tts_voice_female", "zh-CN-XiaoxiaoNeural") or "zh-CN-XiaoxiaoNeural",
-        "edge_tts_voice_male": getattr(cfg, "edge_tts_voice_male", "zh-CN-YunxiNeural") or "zh-CN-YunxiNeural",
-        "edge_tts_rate": getattr(cfg, "edge_tts_rate", "+0%") or "+0%",
-        "edge_tts_pitch": getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz",
-        "volcengine_tts_appkey": getattr(cfg, "volcengine_tts_appkey", "") or "",
-        "volcengine_tts_token": getattr(cfg, "volcengine_tts_token", "") or "",
-        "practice_tts_speaker_female": getattr(cfg, "practice_tts_speaker_female", "zh_female_qingxin") or "zh_female_qingxin",
-        "practice_tts_speaker_male": getattr(cfg, "practice_tts_speaker_male", "zh_male_chunhou") or "zh_male_chunhou",
-        "position": cfg.position,
-        "language": cfg.language,
-        "practice_audience": getattr(cfg, "practice_audience", "campus_intern"),
-        "auto_detect": cfg.auto_detect,
-        "silence_threshold": cfg.silence_threshold,
-        "silence_duration": cfg.silence_duration,
-        "answer_autoscroll_bottom_px": max(4, min(400, getattr(cfg, "answer_autoscroll_bottom_px", 40))),
-        "transcription_min_sig_chars": max(1, min(50, getattr(cfg, "transcription_min_sig_chars", 2))),
-        "assist_transcription_merge_gap_sec": max(
-            0.0, min(15.0, float(getattr(cfg, "assist_transcription_merge_gap_sec", 2.0) or 0.0))
-        ),
-        "assist_transcription_merge_max_sec": max(
-            1.0, min(120.0, float(getattr(cfg, "assist_transcription_merge_max_sec", 12.0) or 12.0))
-        ),
-        "assist_asr_confirm_window_sec": max(
-            0.0, min(5.0, float(getattr(cfg, "assist_asr_confirm_window_sec", 0.45) or 0.0))
-        ),
-        "assist_asr_group_max_wait_sec": max(
-            0.2, min(8.0, float(getattr(cfg, "assist_asr_group_max_wait_sec", 1.2) or 1.2))
-        ),
-        "assist_asr_interrupt_running": bool(getattr(cfg, "assist_asr_interrupt_running", True)),
-        "assist_high_churn_short_answer": bool(getattr(cfg, "assist_high_churn_short_answer", False)),
-        "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
-        "written_exam_mode": bool(getattr(cfg, "written_exam_mode", False)),
-        "written_exam_think": bool(getattr(cfg, "written_exam_think", False)),
-        # KB (Beta) - 暴露给前端 SettingsDrawer 调节; 详细配置仍在 config.json 中
-        "kb_enabled": bool(getattr(cfg, "kb_enabled", False)),
-        "kb_top_k": int(getattr(cfg, "kb_top_k", 4) or 4),
-        "kb_deadline_ms": int(getattr(cfg, "kb_deadline_ms", 150) or 150),
-        "kb_asr_deadline_ms": int(getattr(cfg, "kb_asr_deadline_ms", 80) or 80),
-        "has_resume": bool(cfg.resume_text),
-        "resume_active_history_id": resume_active_history_id,
-        "resume_active_filename": (
-            get_filename_for_id(resume_active_history_id)
-            if resume_active_history_id is not None
-            else None
-        ),
-        "api_key_set": bool(m.api_key and m.api_key not in ("", "sk-your-api-key-here")),
-    }
+    return build_config_payload(get_config())
 
 
 _MASK_MARKER = "****"
@@ -260,6 +183,8 @@ async def api_update_config(body: ConfigUpdate):
             d["models"] = raw_models
             if not d["models"]:
                 raise HTTPException(400, "至少保留一个模型")
+            if not _has_enabled_model(d["models"]):
+                raise HTTPException(422, "至少启用一个模型")
         if "max_parallel_answers" in d:
             d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
         if "answer_autoscroll_bottom_px" in d:
@@ -492,78 +417,16 @@ async def api_stt_status():
     return {"loaded": engine.is_loaded, "loading": engine.is_loading, "model": engine.model_size}
 
 
-def _check_single_model(index: int):
-    from api.realtime.ws import broadcast
-    cfg = get_config()
-    if index >= len(cfg.models):
-        return
-    m = cfg.models[index]
-    _model_health[index] = "checking"
-    _model_health_detail[index] = ""
-    broadcast({"type": "model_health", "index": index, "status": "checking"})
-
-    if not m.api_key or m.api_key in ("", "sk-your-api-key-here"):
-        _model_health[index] = "error"
-        _model_health_detail[index] = "未配置 API Key"
-        broadcast({"type": "model_health", "index": index, "status": "error", "detail": "未配置 API Key"})
-        return
-
-    try:
-        # SDK 在部分环境会抛出 pydantic by_alias 兼容异常；检测链路改为原始 HTTP 更稳。
-        base = (m.api_base_url or "").rstrip("/")
-        url = f"{base}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {m.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": m.model,
-            "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 1,
-            "stream": False,
-        }
-        r = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=12,
-        )
-        if r.status_code >= 400:
-            try:
-                body = r.json()
-            except Exception:
-                body = r.text
-            raise RuntimeError(f"HTTP {r.status_code}: {str(body)[:120]}")
-        _model_health[index] = "ok"
-        _model_health_detail[index] = ""
-        broadcast({"type": "model_health", "index": index, "status": "ok"})
-    except Exception as e:
-        _model_health[index] = "error"
-        detail = str(e)[:120]
-        _model_health_detail[index] = detail
-        broadcast({"type": "model_health", "index": index, "status": "error", "detail": detail})
-
-
-def _check_all_models():
-    cfg = get_config()
-    threads = []
-    for i in range(len(cfg.models)):
-        t = threading.Thread(target=_check_single_model, args=(i,), daemon=True)
-        threads.append(t)
-        t.start()
-    for t in threads:
-        t.join(timeout=15)
-
-
 @router.post("/models/health")
 async def api_check_models_health():
-    threading.Thread(target=_check_all_models, daemon=True).start()
+    if not start_all_model_checks():
+        raise HTTPException(429, "后台低优先级队列繁忙，请稍后重试")
     return {"ok": True}
 
 
 @router.get("/models/health")
 async def api_get_models_health():
-    return {"health": _model_health, "detail": _model_health_detail}
+    return get_model_health_snapshot()
 
 
 @router.post("/models/health/{index}")
@@ -572,7 +435,8 @@ async def api_check_single_model_health(index: int):
     cfg = get_config()
     if index < 0 or index >= len(cfg.models):
         raise HTTPException(400, f"模型 index {index} 超出范围")
-    threading.Thread(target=_check_single_model, args=(index,), daemon=True).start()
+    if not start_single_model_check(index):
+        raise HTTPException(429, "后台低优先级队列繁忙，请稍后重试")
     return {"ok": True}
 
 
@@ -641,6 +505,8 @@ async def api_models_layout(body: dict):
     if isinstance(enabled, list):
         for i in range(min(len(enabled), len(models))):
             models[i] = models[i].model_copy(update={"enabled": bool(enabled[i])})
+    if models and not _has_enabled_model(models):
+        raise HTTPException(status_code=422, detail="至少启用一个模型")
     mp = body.get("max_parallel_answers")
     updates: dict = {"models": [m.model_dump() for m in models]}
     if mp is not None:

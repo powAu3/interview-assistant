@@ -12,6 +12,7 @@ from api.realtime.ws import broadcast
 from core.background import BoundedTaskWorker
 from core.config import get_config
 from core.logger import get_logger
+from core.resource_lanes import ResourceLaneBusyError, run_low_priority
 from services.audio import AudioBusyError, AudioCapture, VADBuffer, audio_capture
 from services.llm import get_token_stats
 from services.practice import (
@@ -228,7 +229,7 @@ async def api_practice_tts(body: PracticeTtsBody):
         if provider == "volcengine":
             if not volcengine_tts_configured():
                 raise HTTPException(400, "火山引擎 TTS 未配置完成，请先在设置里填写 appkey / token")
-            result = await run_in_threadpool(
+            result = await run_low_priority(
                 synthesize_volcengine_tts,
                 text,
                 preferred_gender=(body.preferred_gender or "auto"),
@@ -237,7 +238,7 @@ async def api_practice_tts(body: PracticeTtsBody):
         elif provider == "edge_tts":
             if not edge_tts_configured():
                 raise HTTPException(400, "EdgeTTS 未安装，请先执行 pip install edge-tts")
-            result = await run_in_threadpool(
+            result = await run_low_priority(
                 synthesize_edge_tts,
                 text,
                 preferred_gender=(body.preferred_gender or "auto"),
@@ -245,6 +246,8 @@ async def api_practice_tts(body: PracticeTtsBody):
             )
         else:
             raise HTTPException(400, "当前播报方案不走后端 TTS 服务")
+    except ResourceLaneBusyError as e:
+        raise HTTPException(429, "后台低优先级队列繁忙，请稍后重试") from e
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {

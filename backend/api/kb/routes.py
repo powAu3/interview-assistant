@@ -18,9 +18,9 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
 
 from core.config import get_config
+from core.resource_lanes import ResourceLaneBusyError, run_low_priority
 from services.kb import indexer, retriever
 from services.kb.recent_hits import global_recent_hits
 
@@ -35,6 +35,13 @@ def _dep_ok(mod: str) -> bool:
         return False
 
 
+async def _run_kb_low_priority(fn, *args):
+    try:
+        return await run_low_priority(fn, *args)
+    except ResourceLaneBusyError as e:
+        raise HTTPException(status_code=429, detail="后台低优先级队列繁忙，请稍后重试") from e
+
+
 class SearchReq(BaseModel):
     query: str
     k: int = Field(default=4, ge=1, le=20)
@@ -45,7 +52,7 @@ class SearchReq(BaseModel):
 @router.get("/kb/status")
 async def kb_status() -> dict:
     cfg = get_config()
-    s = await run_in_threadpool(indexer.stats)
+    s = await _run_kb_low_priority(indexer.stats)
     deps = {
         "docx": _dep_ok("docx"),
         "pdf": _dep_ok("pypdf"),
@@ -65,7 +72,7 @@ async def kb_status() -> dict:
 
 @router.get("/kb/docs")
 async def kb_docs(limit: Optional[int] = None) -> dict:
-    items = await run_in_threadpool(indexer.list_docs, limit)
+    items = await _run_kb_low_priority(indexer.list_docs, limit)
     return {"items": items}
 
 
@@ -73,7 +80,7 @@ async def kb_docs(limit: Optional[int] = None) -> dict:
 async def kb_search(req: SearchReq) -> dict:
     cfg = get_config()
     deadline = req.deadline_ms or int(getattr(cfg, "kb_deadline_ms", 150) or 150)
-    hits = await run_in_threadpool(
+    hits = await _run_kb_low_priority(
         lambda: retriever.retrieve(
             req.query,
             req.k,
@@ -155,7 +162,7 @@ async def kb_upload(
     dest.write_bytes(content)
 
     rel_str = str(rel).replace("\\", "/")
-    info = await run_in_threadpool(indexer.reindex_file, rel_str)
+    info = await _run_kb_low_priority(indexer.reindex_file, rel_str)
     return {
         "path": rel_str,
         "size": len(content),
@@ -169,7 +176,7 @@ class ReindexReq(BaseModel):
 
 @router.post("/kb/reindex")
 async def kb_reindex(req: Optional[ReindexReq] = None) -> dict:
-    info = await run_in_threadpool(indexer.reindex)
+    info = await _run_kb_low_priority(indexer.reindex)
     return info
 
 
@@ -180,5 +187,5 @@ async def kb_delete_doc(path: str) -> dict:
         raise HTTPException(status_code=400, detail="path required")
     if Path(p).is_absolute() or any(part in ("..",) for part in Path(p).parts):
         raise HTTPException(status_code=400, detail="invalid path")
-    await run_in_threadpool(indexer.remove_file, p)
+    await _run_kb_low_priority(indexer.remove_file, p)
     return {"ok": True, "path": p}

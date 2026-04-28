@@ -134,6 +134,11 @@ class AppConfig(BaseModel):
         if not self.models:
             self.models = [_default_model_config()]
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
+        if not getattr(self.models[self.active_model], "enabled", True):
+            for i, model in enumerate(self.models):
+                if getattr(model, "enabled", True):
+                    self.active_model = i
+                    break
         return self
 
     def get_active_model(self) -> ModelConfig:

@@ -1,7 +1,8 @@
 import threading
 import uuid
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from core.resource_lanes import submit_low_priority_background
 from services.resume_optimizer import optimize_resume_stream
 from services.llm import get_token_stats
 from api.realtime.ws import broadcast
@@ -21,8 +22,12 @@ async def api_resume_optimize(body: OptimizeRequest):
     global _resume_opt_current_job_id
     job_id = uuid.uuid4().hex
     with _resume_opt_lock:
+        previous_job_id = _resume_opt_current_job_id
         _resume_opt_current_job_id = job_id
-    threading.Thread(target=_run_optimize, args=(body.jd, job_id), daemon=True).start()
+        accepted = submit_low_priority_background(_run_optimize, body.jd, job_id)
+        if not accepted:
+            _resume_opt_current_job_id = previous_job_id
+            raise HTTPException(429, "后台低优先级队列繁忙，请稍后重试")
     return {"ok": True, "job_id": job_id}
 
 
