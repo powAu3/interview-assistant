@@ -18,6 +18,15 @@ const APP_MODE_KEY = 'ia_app_mode'
 
 export type AppMode = 'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
 
+export const __UI_PREFS_TEST_KEYS = {
+  overlayEnabled: INTERVIEW_OVERLAY_STORAGE_KEYS.enabled,
+  overlayOpacity: INTERVIEW_OVERLAY_STORAGE_KEYS.opacity,
+  overlayFontSize: INTERVIEW_OVERLAY_STORAGE_KEYS.fontSize,
+  overlayFontColor: INTERVIEW_OVERLAY_STORAGE_KEYS.fontColor,
+  overlayShowBg: INTERVIEW_OVERLAY_STORAGE_KEYS.showBg,
+  overlayMaxLines: INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines,
+}
+
 const APP_MODE_VALUES: ReadonlySet<AppMode> = new Set([
   'assist',
   'practice',
@@ -97,6 +106,36 @@ function readOverlayMaxLines(): number {
   return 0
 }
 
+function normalizeOverlayEnabled(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
+function normalizeOverlayOpacity(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.min(1, Math.max(0, next))
+}
+
+function normalizeOverlayFontSize(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.max(10, Math.min(48, Math.round(next)))
+}
+
+function normalizeOverlayFontColor(value: unknown): string | null {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : null
+}
+
+function normalizeOverlayShowBg(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
+function normalizeOverlayMaxLines(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.max(0, Math.min(50, Math.round(next)))
+}
+
 function clampAssistSplitPct(value: number): number {
   return Math.min(62, Math.max(24, value))
 }
@@ -130,6 +169,15 @@ function persistOverlayPref(key: string, value: string) {
   window.dispatchEvent(new Event('interview-overlay-prefs-updated'))
 }
 
+function persistOverlayPrefSilently(key: string, value: string) {
+  try {
+    if (localStorage.getItem(key) === value) return
+    localStorage.setItem(key, value)
+  } catch {
+    /* ignore */
+  }
+}
+
 interface UiPrefsState {
   appMode: AppMode
   setAppMode: (mode: AppMode) => void
@@ -159,7 +207,7 @@ interface UiPrefsState {
   setInterviewOverlayShowBg: (show: boolean) => void
   setInterviewOverlayMaxLines: (lines: number) => void
   syncInterviewOverlayPrefs: () => void
-  applyInterviewOverlayState: (payload: OverlayStatePayload) => void
+  applyInterviewOverlayState: (payload: OverlayStatePayload, options?: { persistStyle?: boolean }) => void
 }
 
 export const useUiPrefsStore = create<UiPrefsState>((set) => ({
@@ -244,17 +292,17 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     set({ interviewOverlayEnabled: enabled })
   },
   setInterviewOverlayOpacity: (opacity) => {
-    const next = Math.min(1, Math.max(0, opacity))
+    const next = normalizeOverlayOpacity(opacity) ?? 0.88
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.opacity, String(next))
     set({ interviewOverlayOpacity: next })
   },
   setInterviewOverlayFontSize: (size) => {
-    const next = Math.max(10, Math.min(48, Math.round(size)))
+    const next = normalizeOverlayFontSize(size) ?? 14
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.fontSize, String(next))
     set({ interviewOverlayFontSize: next })
   },
   setInterviewOverlayFontColor: (color) => {
-    const next = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#e2e8f0'
+    const next = normalizeOverlayFontColor(color) ?? '#e2e8f0'
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.fontColor, next)
     set({ interviewOverlayFontColor: next })
   },
@@ -263,28 +311,45 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     set({ interviewOverlayShowBg: show })
   },
   setInterviewOverlayMaxLines: (lines) => {
-    const next = Math.max(0, Math.min(50, Math.round(lines)))
+    const next = normalizeOverlayMaxLines(lines) ?? 0
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines, String(next))
     set({ interviewOverlayMaxLines: next })
   },
 
   syncInterviewOverlayPrefs: () =>
     set({
+      interviewOverlayEnabled: readOverlayEnabled(),
       interviewOverlayOpacity: readOverlayOpacity(),
       interviewOverlayFontSize: readOverlayFontSize(),
       interviewOverlayFontColor: readOverlayFontColor(),
       interviewOverlayShowBg: readOverlayShowBg(),
       interviewOverlayMaxLines: readOverlayMaxLines(),
     }),
-  applyInterviewOverlayState: (payload) =>
-    set({
-      interviewOverlayEnabled: payload.enabled,
-      interviewOverlayOpacity: payload.opacity,
-      interviewOverlayFontSize: payload.fontSize,
-      interviewOverlayFontColor: payload.fontColor,
-      interviewOverlayShowBg: payload.showBg,
-      interviewOverlayMaxLines: payload.maxLines,
-    }),
+  applyInterviewOverlayState: (payload, options = {}) => {
+    const shouldApplyStyle = options.persistStyle === true || payload.initialized === true
+    const enabled = shouldApplyStyle ? normalizeOverlayEnabled(payload.enabled) : null
+    const opacity = shouldApplyStyle ? normalizeOverlayOpacity(payload.opacity) : null
+    const fontSize = shouldApplyStyle ? normalizeOverlayFontSize(payload.fontSize) : null
+    const fontColor = shouldApplyStyle ? normalizeOverlayFontColor(payload.fontColor) : null
+    const showBg = shouldApplyStyle ? normalizeOverlayShowBg(payload.showBg) : null
+    const maxLines = shouldApplyStyle ? normalizeOverlayMaxLines(payload.maxLines) : null
+
+    if (enabled !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.enabled, enabled ? '1' : '0')
+    if (opacity !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.opacity, String(opacity))
+    if (fontSize !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.fontSize, String(fontSize))
+    if (fontColor !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.fontColor, fontColor)
+    if (showBg !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.showBg, showBg ? '1' : '0')
+    if (maxLines !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines, String(maxLines))
+
+    set((state) => ({
+      interviewOverlayEnabled: enabled ?? state.interviewOverlayEnabled,
+      interviewOverlayOpacity: opacity ?? state.interviewOverlayOpacity,
+      interviewOverlayFontSize: fontSize ?? state.interviewOverlayFontSize,
+      interviewOverlayFontColor: fontColor ?? state.interviewOverlayFontColor,
+      interviewOverlayShowBg: showBg ?? state.interviewOverlayShowBg,
+      interviewOverlayMaxLines: maxLines ?? state.interviewOverlayMaxLines,
+    }))
+  },
 }))
 
 applyStoredColorSchemeToDocument()

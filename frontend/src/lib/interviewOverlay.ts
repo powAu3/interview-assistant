@@ -1,5 +1,7 @@
 export interface OverlayStatePayload {
+  initialized?: boolean
   enabled: boolean
+  visible?: boolean
   opacity: number
   fontSize: number
   fontColor: string
