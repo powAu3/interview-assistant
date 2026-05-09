@@ -72,10 +72,14 @@ function getShortcutsFilePath(app) {
 function isValidShortcutKey(key) {
   if (typeof key !== 'string' || !key.trim()) return false;
   const parts = key.trim().split('+');
-  // 严格形式：CommandOrControl + 单个 SUPPORTED_KEYS 项；不允许中间修饰键
-  if (parts.length !== 2) return false;
+  // Frontend emits: CommandOrControl + optional Shift + optional Alt + supported key.
+  if (parts.length < 2 || parts.length > 4) return false;
   if (parts[0] !== 'CommandOrControl') return false;
-  return SUPPORTED_KEYS.has(parts[1]);
+  const keyPart = parts[parts.length - 1];
+  const modifiers = parts.slice(1, -1);
+  if (!SUPPORTED_KEYS.has(keyPart)) return false;
+  const modifierKey = modifiers.join('+');
+  return modifierKey === '' || modifierKey === 'Shift' || modifierKey === 'Alt' || modifierKey === 'Shift+Alt';
 }
 
 function validateShortcutMap(shortcuts) {

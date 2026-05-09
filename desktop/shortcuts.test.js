@@ -22,12 +22,17 @@ function makeFakeApp(tmpDir) {
   };
 }
 
-test('isValidShortcutKey only accepts CommandOrControl plus single supported key', () => {
+test('isValidShortcutKey accepts CommandOrControl with optional Shift and Alt plus supported key', () => {
   assert.equal(isValidShortcutKey('CommandOrControl+B'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+.'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+/'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Shift+J'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Alt+J'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Shift+Alt+J'), true);
   assert.equal(isValidShortcutKey('Alt+B'), false);
-  assert.equal(isValidShortcutKey('CommandOrControl+Shift+B'), false);
+  assert.equal(isValidShortcutKey('CommandOrControl+Alt+Shift+B'), false);
+  assert.equal(isValidShortcutKey('CommandOrControl+Shift+Shift+B'), false);
+  assert.equal(isValidShortcutKey('CommandOrControl+Meta+B'), false);
   assert.equal(isValidShortcutKey('CommandOrControl+Backspace'), false);
 });
 
@@ -46,7 +51,7 @@ test('load and save shortcut config roundtrip', () => {
   const shortcuts = createShortcutState({
     askFromServerScreen: { key: 'CommandOrControl+/' },
     hardClearSession: { key: 'CommandOrControl+.' },
-    toggleInterviewOverlay: { key: 'CommandOrControl+O' },
+    toggleInterviewOverlay: { key: 'CommandOrControl+Shift+Alt+O' },
   });
 
   saveShortcutConfig(app, shortcuts);
@@ -54,6 +59,6 @@ test('load and save shortcut config roundtrip', () => {
 
   assert.equal(loaded.askFromServerScreen.key, 'CommandOrControl+/');
   assert.equal(loaded.hardClearSession.key, 'CommandOrControl+.');
-  assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+O');
+  assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+Shift+Alt+O');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
 });
