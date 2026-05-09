@@ -20,6 +20,7 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
     overlaySyncUntilRef.current = Date.now() + 500
 
     const payload: Record<string, unknown> = {
+      enabled: interviewOverlayEnabled,
       opacity: interviewOverlayOpacity,
       fontSize: interviewOverlayFontSize,
       fontColor: interviewOverlayFontColor,
@@ -29,7 +30,6 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
 
     // enabled OFF → force hide overlay + show main window
     if (prevEnabledRef.current && !interviewOverlayEnabled) {
-      payload.enabled = false
       payload.visible = false
     }
     prevEnabledRef.current = interviewOverlayEnabled
@@ -48,7 +48,7 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
     if (!window.electronAPI?.onOverlayState) return
     const removeOverlayListener = window.electronAPI.onOverlayState((payload) => {
       if (Date.now() < overlaySyncUntilRef.current) return
-      applyInterviewOverlayState(payload)
+      applyInterviewOverlayState(payload, { persistStyle: true })
     })
     return () => removeOverlayListener?.()
   }, [applyInterviewOverlayState])
