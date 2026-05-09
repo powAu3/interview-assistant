@@ -84,6 +84,7 @@ let _overlayDragging = false;
 let _blurTimer = null;
 let overlayPositionSaveTimer = null;
 let lastOverlayState = {
+  initialized: false,
   enabled: false,
   visible: false,
   opacity: 0.88,
@@ -335,6 +336,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 500,
     title: APP_DISPLAY_NAME,
+    frame: false,
     show: false,
     // Windows 下不在任务栏显示，只在托盘
     skipTaskbar: isWindows,
@@ -384,8 +386,10 @@ function createOverlayWindow() {
   const storedPos = getStoredOverlayPosition();
   const saved = loadOverlayWindowState();
   const storedSize = saved?.position;
-  const w = (storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width;
-  const h = (storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height;
+  const minOverlayWidth = OVERLAY_PRESET.minWidth || OVERLAY_PRESET.width;
+  const minOverlayHeight = OVERLAY_PRESET.minHeight || OVERLAY_PRESET.height;
+  const w = Math.max((storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width, minOverlayWidth);
+  const h = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
 
   // 透明浮窗: 视觉上能看到桌面, 需要 transparent: true + alpha=0 背景.
   // 注意: setContentProtection 在 macOS 的透明窗口上只是 best effort,
@@ -400,6 +404,7 @@ function createOverlayWindow() {
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
+    focusable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
     hiddenInMissionControl: true,
@@ -433,12 +438,14 @@ function createOverlayWindow() {
   overlayWindow.once('ready-to-show', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setFocusable(false);
     overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
   });
   overlayWindow.loadURL(`${SERVER_URL}?overlay=1`);
   overlayWindow.webContents.on('did-finish-load', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setFocusable(false);
     if (lastOverlayState) {
       overlayWindow.webContents.send('overlay-state', lastOverlayState);
     }
@@ -454,6 +461,7 @@ function createOverlayWindow() {
   overlayWindow.on('show', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setFocusable(false);
   });
 
   overlayWindow.on('closed', () => {
@@ -487,6 +495,7 @@ function sendOverlayState(payload) {
 
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  overlayWindow.setFocusable(false);
   if (process.platform === 'darwin' || process.platform === 'win32') {
     overlayWindow.showInactive();
   } else {
@@ -662,6 +671,7 @@ const shortcutCallbacks = {
     const nextVisible = !Boolean(lastOverlayState.visible);
     const nextState = {
       ...lastOverlayState,
+      initialized: true,
       enabled: nextVisible || lastOverlayState.enabled,
       visible: nextVisible,
     };
@@ -683,10 +693,21 @@ const shortcutCallbacks = {
   moveOverlayToMouse: () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
-    overlayWindow.setPosition(
-      Math.round(cursor.x + 16),
-      Math.round(cursor.y + 16),
+    const bounds = overlayWindow.getBounds();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const area = display.workArea;
+    const margin = 12;
+    const offsetX = 20;
+    const offsetY = 20;
+    const nextX = Math.max(
+      area.x + margin,
+      Math.min(cursor.x - offsetX, area.x + area.width - bounds.width - margin),
     );
+    const nextY = Math.max(
+      area.y + margin,
+      Math.min(cursor.y - offsetY, area.y + area.height - bounds.height - margin),
+    );
+    overlayWindow.setPosition(nextX, nextY);
     schedulePersistOverlayPosition();
   },
 };
@@ -727,18 +748,31 @@ ipcMain.handle('get-window-state', () => ({
   visible: mainWindow?.isVisible() ?? false,
 }));
 ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
-  const style = {
-    opacity: Math.max(0, Math.min(1, Number(payload.opacity) || 0)),
-    fontSize: Math.max(10, Math.min(48, Math.round(Number(payload.fontSize) || 14))),
-    fontColor: typeof payload.fontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.fontColor) ? payload.fontColor : '#e2e8f0',
-    showBg: payload.showBg !== false,
-    maxLines: Math.max(0, Math.min(50, Math.round(Number(payload.maxLines) || 0))),
-  };
+  const style = {};
+  if ('opacity' in payload) {
+    const opacity = Number(payload.opacity);
+    if (Number.isFinite(opacity)) style.opacity = Math.max(0, Math.min(1, opacity));
+  }
+  if ('fontSize' in payload) {
+    const fontSize = Number(payload.fontSize);
+    if (Number.isFinite(fontSize)) style.fontSize = Math.max(10, Math.min(48, Math.round(fontSize)));
+  }
+  if ('fontColor' in payload && typeof payload.fontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(payload.fontColor)) {
+    style.fontColor = payload.fontColor;
+  }
+  if ('showBg' in payload && typeof payload.showBg === 'boolean') {
+    style.showBg = payload.showBg;
+  }
+  if ('maxLines' in payload) {
+    const maxLines = Number(payload.maxLines);
+    if (Number.isFinite(maxLines)) style.maxLines = Math.max(0, Math.min(50, Math.round(maxLines)));
+  }
 
   const nextEnabled = typeof payload.enabled === 'boolean' ? payload.enabled : Boolean(lastOverlayState.enabled);
   const nextVisible = typeof payload.visible === 'boolean' ? payload.visible : Boolean(lastOverlayState.visible);
 
   const state = { ...lastOverlayState, ...style, enabled: nextEnabled, visible: nextVisible };
+  state.initialized = true;
   const visibleChanged = Boolean(lastOverlayState.visible) !== state.visible;
 
   lastOverlayState = state;

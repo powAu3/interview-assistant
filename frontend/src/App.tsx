@@ -163,7 +163,7 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-bg-primary overflow-hidden noise-bg">
       {/* Header — 强制单行不换行, 各按钮文字按宽度阶梯隐藏, 实在不够再让左区横向滚动 */}
-      <header className="header-gradient flex flex-row items-center justify-between gap-2 px-3 md:px-5 py-2.5 flex-shrink-0 min-w-0">
+      <header className="app-drag-region header-gradient flex flex-row items-center justify-between gap-2 px-3 md:px-5 py-2.5 flex-shrink-0 min-w-0">
         <div className="flex items-center gap-2 md:gap-2.5 flex-shrink min-w-0 overflow-hidden">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-blue/20 to-accent-blue/5 flex items-center justify-center border border-accent-blue/10">
