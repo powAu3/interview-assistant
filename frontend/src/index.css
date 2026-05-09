@@ -22,13 +22,30 @@ body,
 html.overlay-window,
 html.overlay-window body,
 body.overlay-window,
-body.overlay-window #root {
+body.overlay-window #root,
+html[data-overlay='1'],
+html[data-overlay='1'] body,
+html[data-overlay='1'] #root {
   background: transparent !important;
   background-color: transparent !important;
 }
 
 code, pre, .font-mono {
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+}
+
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-drag-region button,
+.app-drag-region a,
+.app-drag-region input,
+.app-drag-region select,
+.app-drag-region textarea,
+.app-drag-region [role='button'],
+.app-drag-region [role='tab'] {
+  -webkit-app-region: no-drag;
 }
 
 /* ========== 主题变量（与 tailwind.config 中 rgb(var(--c-*) / <alpha>) 对应）========== */
@@ -723,14 +740,6 @@ code, pre, .font-mono {
   font-family: 'DM Sans', 'JetBrains Mono', system-ui, sans-serif;
 }
 
-.ov-drag {
-  user-select: none;
-  cursor: grab;
-}
-.ov-drag:active {
-  cursor: grabbing;
-}
-
 /* ── 统一容器 ── */
 .ov-shell {
   position: relative;
@@ -766,16 +775,11 @@ code, pre, .font-mono {
   border-radius: 0;
 }
 
-.ov-shell--nobg .ov-header {
-  padding: 6px 4px 4px;
-}
 .ov-shell--nobg .ov-answer {
-  padding: 0 4px 4px;
+  padding: 4px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
-.ov-shell--nobg .ov-status,
-.ov-shell--nobg .ov-question,
 .ov-shell--nobg .ov-answer,
 .ov-shell--nobg .ov-standby-hint {
   /* 三层阴影: 1px 锐利描边 + 2px 近影 + 10px 光晕 -> 任何桌面底色都可读 */
@@ -806,40 +810,10 @@ code, pre, .font-mono {
   opacity: 1;
 }
 
-.ov-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px 6px;
-  min-height: 28px;
-  flex-shrink: 0;
-}
-
-.ov-status {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.4;
-  flex-shrink: 0;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.ov-question {
-  flex: 1;
-  font-size: 12px;
-  line-height: 1.4;
-  opacity: 0.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: 0.01em;
-}
-
 .ov-answer {
   flex: 1 1 0;
   min-height: 0;
-  padding: 4px 14px 14px;
+  padding: 14px;
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
@@ -848,6 +822,13 @@ code, pre, .font-mono {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   font-family: 'DM Sans', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+.ov-answer::selection,
+.ov-answer *::selection {
+  background: transparent;
 }
 .ov-answer::-webkit-scrollbar {
   width: 6px;
@@ -863,43 +844,9 @@ code, pre, .font-mono {
 .ov-standby-hint {
   display: block;
   padding: 8px 0;
-  font-size: 12px;
-  opacity: 0.3;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.02em;
-}
-
-/* ── 状态指示点 ── */
-.ov-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  flex-shrink: 0;
-  transition: background 300ms, box-shadow 300ms;
-}
-
-.ov-dot--rec {
-  background: #4ade80;
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.7);
-  animation: ov-pulse 1.4s ease-in-out infinite;
-}
-
-.ov-dot--think {
-  background: #facc15;
-  box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
-  animation: ov-pulse 0.9s ease-in-out infinite;
-}
-
-.ov-dot--stream {
-  background: #38bdf8;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
-  animation: ov-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes ov-pulse {
-  0%, 100% { opacity: 0.5; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1.2); }
+  color: inherit;
+  font: inherit;
+  opacity: 1;
 }
 
 /* ── 流式光标 ── */
@@ -920,9 +867,6 @@ code, pre, .font-mono {
 
 /* ── reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  .ov-dot--rec,
-  .ov-dot--think,
-  .ov-dot--stream,
   .ov-caret {
     animation: none;
   }

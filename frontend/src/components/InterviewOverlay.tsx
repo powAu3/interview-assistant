@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { applyStoredColorSchemeToDocument, COLOR_SCHEME_STORAGE_KEY } from '@/lib/colorScheme'
 import {
@@ -32,18 +32,12 @@ export default function InterviewOverlay() {
     return qaPairs[qaPairs.length - 1] ?? null
   }, [qaPairs, streamingIds])
 
-  const questionText = latestQa?.question?.trim() || ''
   const answerText =
     latestQa?.answer === '[已取消]'
       ? '上一条回答已取消'
       : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : '')
   const isStreaming = latestQa ? streamingIds.includes(latestQa.id) : false
   const hasContent = Boolean(latestQa)
-  const isThinking = Boolean(latestQa?.isThinking)
-
-  const statusLabel = !hasContent
-    ? (isRecording ? '聆听中' : '待命')
-    : (isThinking ? '思考中' : (isStreaming ? '输出中' : '就绪'))
 
   const displayLines = useMemo(() => {
     if (!answerText) return []
@@ -98,42 +92,18 @@ export default function InterviewOverlay() {
     }
   }, [applyState, syncPrefs])
 
-  // --- drag ---
-  const dragOrigin = useRef<{ x: number; y: number } | null>(null)
-  const dragCleanupRef = useRef<(() => void) | null>(null)
-  useEffect(() => { return () => dragCleanupRef.current?.() }, [])
-
-  const onDragStart = useCallback((e: ReactMouseEvent) => {
-    if ((e.target as HTMLElement).closest('.ov-content')) return
-    e.preventDefault()
-    dragCleanupRef.current?.()
-    dragOrigin.current = { x: e.screenX, y: e.screenY }
-    window.electronAPI?.overlayDragStart?.()
-
-    const onMove = (ev: globalThis.MouseEvent) => {
-      if (!dragOrigin.current) return
-      const dx = ev.screenX - dragOrigin.current.x
-      const dy = ev.screenY - dragOrigin.current.y
-      dragOrigin.current = { x: ev.screenX, y: ev.screenY }
-      window.electronAPI?.moveOverlayWindow?.(dx, dy)
+  const suppressMouseSelection = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const selection = window.getSelection?.()
+    if (selection && selection.rangeCount > 0) {
+      selection.removeAllRanges()
     }
-    const cleanup = () => {
-      dragOrigin.current = null
-      dragCleanupRef.current = null
-      window.electronAPI?.overlayDragEnd?.()
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', cleanup)
-    }
-    dragCleanupRef.current = cleanup
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', cleanup)
   }, [])
 
   if (!enabled) {
     return <div className="h-screen w-screen bg-transparent" />
   }
 
-  const questionFontSize = Math.max(11, fontSize - 2)
   const answerFontSize = Math.max(12, fontSize)
   const shellClass = `ov-shell ${showBg ? 'ov-shell--bg' : 'ov-shell--nobg'}`
   const trimmedLines = maxLines > 0 ? displayLines : null
@@ -151,39 +121,23 @@ export default function InterviewOverlay() {
       {isStreaming && <span className="ov-caret" />}
     </>
   ) : (
-    <span className="ov-standby-hint">
+    <span className="ov-standby-hint" style={{ fontSize: `${answerFontSize}px` }}>
       {isRecording ? '正在聆听…' : '等待面试开始'}
     </span>
   )
 
   return (
     <div
-      className="ov-root ov-drag"
-      onMouseDown={onDragStart}
+      className="ov-root"
     >
       <div className={shellClass} style={{ opacity, color: fontColor }}>
         <div className="ov-grip" aria-hidden />
-
-        {showBg && (
-          <div className="ov-header">
-            <span className={`ov-dot ${isRecording ? 'ov-dot--rec' : isThinking ? 'ov-dot--think' : isStreaming ? 'ov-dot--stream' : ''}`} />
-            <span className="ov-status">{statusLabel}</span>
-            {hasContent && questionText && (
-              <span
-                className="ov-question"
-                style={{ fontSize: `${questionFontSize}px` }}
-                title={questionText}
-              >
-                {questionText}
-              </span>
-            )}
-          </div>
-        )}
 
         <div
           ref={answerScrollRef}
           className="ov-content ov-answer"
           style={{ fontSize: `${answerFontSize}px` }}
+          onMouseDown={suppressMouseSelection}
         >
           {renderedAnswer}
         </div>
