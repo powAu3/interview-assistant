@@ -54,6 +54,7 @@ except Exception:
 # Populated by list_devices(); used by start() to find the right device.
 _SC_ID_BASE = 20000
 _SC_ID_MAP: dict[int, str] = {}   # id -> speaker.id (GUID)
+_SC_DEVICE_CACHE: dict[int, dict[str, str]] = {}   # id -> stable device metadata
 
 
 def _is_sc_id(device_id) -> bool:
@@ -67,14 +68,30 @@ def _get_sc_loopback_devices() -> list[dict]:
     """Return soundcard-based WASAPI loopback device entries."""
     if not _HAS_SC:
         return []
+    previous_by_guid = {
+        meta.get("guid"): int(dev_id)
+        for dev_id, meta in _SC_DEVICE_CACHE.items()
+        if meta.get("guid")
+    }
+    previous_by_name = {
+        meta.get("name"): int(dev_id)
+        for dev_id, meta in _SC_DEVICE_CACHE.items()
+        if meta.get("name")
+    }
     result = []
-    _SC_ID_MAP.clear()
+    next_map: dict[int, str] = {}
+    next_cache: dict[int, dict[str, str]] = {}
+    used_ids: set[int] = set()
     try:
         default_id = _sc.default_speaker().id
         speakers = _sc.all_speakers()
         for n, spk in enumerate(speakers):
-            dev_id = _SC_ID_BASE + n
-            _SC_ID_MAP[dev_id] = spk.id
+            dev_id = previous_by_guid.get(spk.id) or previous_by_name.get(spk.name) or (_SC_ID_BASE + n)
+            while dev_id in used_ids:
+                dev_id += 1
+            used_ids.add(dev_id)
+            next_map[dev_id] = spk.id
+            next_cache[dev_id] = {"guid": spk.id, "name": spk.name}
             is_default = (spk.id == default_id)
             label = ("★ " if is_default else "") + spk.name + " (系统音频)"
             result.append({
@@ -89,6 +106,10 @@ def _get_sc_loopback_devices() -> list[dict]:
             })
     except Exception:
         pass
+    if next_map:
+        _SC_ID_MAP.clear()
+        _SC_ID_MAP.update(next_map)
+        _SC_DEVICE_CACHE.update(next_cache)
     # default output first
     result.sort(key=lambda d: (0 if d.get("is_default_output") else 1, d["name"]))
     return result
@@ -319,6 +340,8 @@ class AudioCapture:
 
     def _start_soundcard(self, device_id: int):
         speaker_guid = _SC_ID_MAP.get(device_id)
+        if speaker_guid is None:
+            speaker_guid = _SC_DEVICE_CACHE.get(device_id, {}).get("guid")
         if speaker_guid is None:
             # Map may have been rebuilt; try refreshing
             _get_sc_loopback_devices()
