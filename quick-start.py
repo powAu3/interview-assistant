@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-click launcher: install deps, then start backend + Electron desktop window.
+"""One-click launcher: install backend/frontend deps, then start desktop mode.
 
 Usage:
     python quick-start.py                  # install + start on port 18080
@@ -44,7 +44,13 @@ def _run_step(label: str, cmd: list[str], cwd: str) -> bool:
 
 
 def install_dependencies() -> bool:
-    """Install Python, frontend, and desktop dependencies before launching."""
+    """Install Python and frontend dependencies before launching.
+
+    Electron desktop dependencies are intentionally NOT installed here.
+    `start.py --mode desktop` already owns that responsibility via
+    `ensure_electron()`, which avoids duplicate install flows and reduces
+    the chance of Electron postinstall interruptions during quick start.
+    """
     npm = _find_npm()
     if npm is None:
         _print_node_help()
@@ -53,7 +59,6 @@ def install_dependencies() -> bool:
     steps = [
         ("安装后端 Python 依赖", [sys.executable, "-m", "pip", "install", "-r", REQUIREMENTS], ROOT),
         ("安装前端 npm 依赖", [npm, "install"], FRONTEND_DIR),
-        ("安装桌面端 npm 依赖", [npm, "install"], DESKTOP_DIR),
     ]
     for label, cmd, cwd in steps:
         if not _run_step(label, cmd, cwd):
