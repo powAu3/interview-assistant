@@ -133,6 +133,7 @@ _PAT_CJK_COMMA_FW = re.compile(rf"([{_CJK}])，([{_CJK}])")
 _PAT_CJK_COMMA_ASCII = re.compile(rf"([{_CJK}]),([{_CJK}])")
 _PAT_CJK_PERIOD_FW = re.compile(rf"([{_CJK}])。([{_CJK}])")
 _PAT_CJK_PERIOD_ASCII = re.compile(rf"([{_CJK}])\.([{_CJK}])")
+_PAT_CJK_PUNCT_SHORT_FOLLOWUP = re.compile(rf"([{_CJK}])[，,。\.]([0-9A-Za-z{_CJK}]{{1,3}})([{_CJK}])")
 
 
 def _normalize_slow_speech_intraword_punct(text: str) -> str:
@@ -143,6 +144,7 @@ def _normalize_slow_speech_intraword_punct(text: str) -> str:
     def count_adjacent_cjk_punct(s: str) -> int:
         n = len(_PAT_CJK_COMMA_FW.findall(s)) + len(_PAT_CJK_COMMA_ASCII.findall(s))
         n += len(_PAT_CJK_PERIOD_FW.findall(s)) + len(_PAT_CJK_PERIOD_ASCII.findall(s))
+        n += len(_PAT_CJK_PUNCT_SHORT_FOLLOWUP.findall(s))
         return n
 
     def cjk_len(s: str) -> int:
@@ -150,9 +152,10 @@ def _normalize_slow_speech_intraword_punct(text: str) -> str:
 
     adj = count_adjacent_cjk_punct(text)
     n_cjk = cjk_len(text)
+    short_followup = bool(_PAT_CJK_PUNCT_SHORT_FOLLOWUP.search(text))
     should_merge_all = adj >= 2
     should_merge_short = adj == 1 and n_cjk <= 3
-    if not (should_merge_all or should_merge_short):
+    if not (should_merge_all or should_merge_short or short_followup):
         return text
 
     t = text
@@ -163,6 +166,7 @@ def _normalize_slow_speech_intraword_punct(text: str) -> str:
         t = _PAT_CJK_COMMA_ASCII.sub(r"\1\2", t)
         t = _PAT_CJK_PERIOD_FW.sub(r"\1\2", t)
         t = _PAT_CJK_PERIOD_ASCII.sub(r"\1\2", t)
+        t = _PAT_CJK_PUNCT_SHORT_FOLLOWUP.sub(r"\1\2\3", t)
     return t
 
 
