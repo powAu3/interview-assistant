@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 from core.config import get_config
-from services.llm import build_system_prompt
+from services.llm import build_system_prompt, create_answer_stream_sanitizer
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def test_no_resume_rule_when_resume_missing(reset_resume):
 def test_first_sentence_hard_constraint_in_asr():
     p = _asr_prompt(high_churn=False)
     assert "首句硬约束" in p
-    assert "前 20 字" in p
+    assert "第一句直接给结论" in p
     assert "我理解你问的是" in p
 
 
@@ -100,17 +100,41 @@ def test_normal_asr_still_has_followup_rule():
 def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
     p = _asr_prompt(high_churn=False)
     assert "真人候选人口吻" in p
-    assert "像在现场回答面试官" in p
-    assert "不要把“结论 -> 机制/步骤 -> 线上做法 -> 风险边界 -> 可追问点”当成固定标题" in p
+    assert "结论先行" in p
+    assert "不要把这些当标题" in p
 
 
 def test_asr_high_churn_keeps_oral_short_answer_shape():
     p = _asr_prompt(high_churn=True)
     assert "像现场接一句话" in p
-    assert "不要像摘要模板" in p
+    assert "默认 80-180 字" in p
 
 
 def test_manual_prompt_warns_not_to_emit_template_labels():
     p = _manual_prompt()
     assert "真人候选人口吻" in p
-    assert "不要把题型模板标题原样输出" in p
+    assert "不要输出题型模板标题" in p
+
+
+def test_stream_sanitizer_removes_split_think_tags():
+    s = create_answer_stream_sanitizer("manual_text")
+    chunks = ["<thi", "nking>内部思考</thinking>用 AOF", " 和 RDB。"]
+    out = "".join(s.push(c) for c in chunks) + s.finish()
+    assert out == "用 AOF 和 RDB。"
+
+
+def test_stream_sanitizer_cleans_manual_markdown_and_meta_preface():
+    s = create_answer_stream_sanitizer("manual_text")
+    out = s.push("这是一个经典问题。\n# 回答\n**核心**是先止血。") + s.finish()
+    assert "这是一个经典问题" not in out
+    assert "#" not in out
+    assert "回答" not in out
+    assert "**" not in out
+    assert "核心是先止血。" in out
+
+
+def test_stream_sanitizer_keeps_screen_markdown_but_removes_think():
+    s = create_answer_stream_sanitizer("server_screen_code")
+    out = s.push("<analysis>草稿</analysis># 题目理解\n正文") + s.finish()
+    assert "草稿" not in out
+    assert "# 题目理解" in out

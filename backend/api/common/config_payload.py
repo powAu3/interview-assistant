@@ -64,6 +64,9 @@ def build_config_payload(cfg) -> dict:
         "assist_asr_interrupt_running": bool(getattr(cfg, "assist_asr_interrupt_running", True)),
         "assist_high_churn_short_answer": bool(getattr(cfg, "assist_high_churn_short_answer", False)),
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
+        "multi_screen_capture_idle_sec": max(
+            1.0, min(60.0, float(getattr(cfg, "multi_screen_capture_idle_sec", 10.0) or 10.0))
+        ),
         "written_exam_mode": bool(getattr(cfg, "written_exam_mode", False)),
         "written_exam_think": bool(getattr(cfg, "written_exam_think", False)),
         "kb_enabled": bool(getattr(cfg, "kb_enabled", False)),

@@ -423,6 +423,7 @@ function createOverlayWindow() {
   // Content protection 必须尽早调用 —— 等到 ready-to-show 时,
   // 窗口可能已经被 window server 登记过一次, 导致 NSWindowSharingNone 漏掉初始帧
   overlayWindow.setContentProtection(true);
+  overlayWindow.setBackgroundColor('#00000000');
   overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   if (process.platform === 'darwin') {
@@ -438,6 +439,7 @@ function createOverlayWindow() {
   overlayWindow.once('ready-to-show', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setBackgroundColor('#00000000');
     overlayWindow.setFocusable(false);
     overlayWindow.setAlwaysOnTop(true, 'screen-saver', FRONT_REASSERT_LEVEL);
   });
@@ -445,6 +447,7 @@ function createOverlayWindow() {
   overlayWindow.webContents.on('did-finish-load', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setBackgroundColor('#00000000');
     overlayWindow.setFocusable(false);
     if (lastOverlayState) {
       overlayWindow.webContents.send('overlay-state', lastOverlayState);
@@ -461,6 +464,7 @@ function createOverlayWindow() {
   overlayWindow.on('show', () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     overlayWindow.setContentProtection(true);
+    overlayWindow.setBackgroundColor('#00000000');
     overlayWindow.setFocusable(false);
   });
 
@@ -495,6 +499,10 @@ function sendOverlayState(payload) {
 
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (!overlayWindow._overlayReady) {
+    overlayWindow._pendingShow = true;
+    return;
+  }
   overlayWindow.setFocusable(false);
   if (process.platform === 'darwin' || process.platform === 'win32') {
     overlayWindow.showInactive();
@@ -543,6 +551,74 @@ function postBackend(pathname, body = '{}') {
     req.write(body);
     req.end();
   });
+}
+
+function getBackend(pathname) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(`${SERVER_URL}${pathname}`, { method: 'GET' }, (res) => {
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { raw += chunk; });
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(raw ? JSON.parse(raw) : {});
+          return;
+        }
+        reject(new Error(raw || res.statusMessage || `HTTP ${res.statusCode}`));
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+const multiServerScreenBatch = {
+  images: [],
+  timer: null,
+  submitting: false,
+};
+
+async function getMultiScreenIdleMs() {
+  try {
+    const cfg = await getBackend('/api/config');
+    const sec = Number(cfg?.multi_screen_capture_idle_sec ?? 10);
+    return Math.max(1, Math.min(60, Number.isFinite(sec) ? sec : 10)) * 1000;
+  } catch {
+    return 10000;
+  }
+}
+
+async function flushMultiServerScreenBatch() {
+  if (multiServerScreenBatch.submitting) return;
+  if (multiServerScreenBatch.timer) {
+    clearTimeout(multiServerScreenBatch.timer);
+    multiServerScreenBatch.timer = null;
+  }
+  const images = multiServerScreenBatch.images.splice(0);
+  if (!images.length) return;
+  multiServerScreenBatch.submitting = true;
+  try {
+    await postBackend('/api/ask-from-server-screens', JSON.stringify({ images }));
+  } catch (error) {
+    console.error('flushMultiServerScreenBatch failed:', error);
+  } finally {
+    multiServerScreenBatch.submitting = false;
+  }
+}
+
+async function addMultiServerScreenShot() {
+  try {
+    const res = await postBackend('/api/capture-server-screen');
+    if (!res?.image) throw new Error('capture response missing image');
+    multiServerScreenBatch.images.push(res.image);
+    if (multiServerScreenBatch.timer) clearTimeout(multiServerScreenBatch.timer);
+    const idleMs = await getMultiScreenIdleMs();
+    multiServerScreenBatch.timer = setTimeout(() => {
+      flushMultiServerScreenBatch();
+    }, idleMs);
+  } catch (error) {
+    console.error('addMultiServerScreenShot failed:', error);
+  }
 }
 
 function createTray() {
@@ -667,6 +743,7 @@ const shortcutCallbacks = {
       console.error('askFromServerScreen failed:', error);
     }
   },
+  addMultiServerScreenShot,
   toggleInterviewOverlay: () => {
     const nextVisible = !Boolean(lastOverlayState.visible);
     const nextState = {

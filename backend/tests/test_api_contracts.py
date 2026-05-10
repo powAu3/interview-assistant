@@ -44,3 +44,27 @@ def test_api_ask_returns_error_when_no_answer_model_available(monkeypatch: pytes
 
     assert exc_info.value.status_code == 503
     assert "模型" in str(exc_info.value.detail)
+
+
+def test_api_ask_from_server_screens_submits_multi_image_task(monkeypatch: pytest.MonkeyPatch):
+    submitted = []
+
+    monkeypatch.setattr("services.llm.has_vision_model", lambda: True)
+    monkeypatch.setattr(assist_routes, "pick_model_index", lambda task, busy: 0)
+    monkeypatch.setattr(assist_routes, "cancel_answer_work", lambda reset_session_data=False: None)
+    monkeypatch.setattr(assist_routes, "submit_answer_task", lambda task: submitted.append(task) or True)
+
+    res = asyncio.run(
+        assist_routes.api_ask_from_server_screens(
+            assist_routes.MultiServerScreenQuestion(images=["data:image/png;base64,a", "data:image/png;base64,b"])
+        )
+    )
+
+    assert res == {"ok": True}
+    assert len(submitted) == 1
+    text, images, manual, source, meta = submitted[0]
+    assert "2 张连续截图" in text
+    assert images == ["data:image/png;base64,a", "data:image/png;base64,b"]
+    assert manual is True
+    assert source == "server_screen_multi"
+    assert meta["image_count"] == 2

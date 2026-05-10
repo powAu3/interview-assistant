@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple
 
-TaskPayload = Tuple[str, Optional[str], bool, str, dict[str, Any]]
+TaskImage = Optional[str | list[str]]
+TaskPayload = Tuple[str, TaskImage, bool, str, dict[str, Any]]
 PendingTask = Tuple[TaskPayload, int, int]
 
 

@@ -30,6 +30,10 @@ class ManualQuestion(BaseModel):
     image: Optional[str] = None
 
 
+class MultiServerScreenQuestion(BaseModel):
+    images: list[str]
+
+
 @router.post("/start")
 async def api_start(body: dict):
     device_id = body.get("device_id")
@@ -133,6 +137,41 @@ async def api_ask_from_server_screen():
         raise HTTPException(400, "\u6ca1\u6709\u53ef\u7528\u7684\u8bc6\u56fe\u6a21\u578b\uff0c\u8bf7\u68c0\u67e5\u542f\u7528\u72b6\u6001\u4e0e API Key")
     cancel_answer_work(reset_session_data=False)
     queued = submit_answer_task((text, data_url, True, "server_screen_left", {"origin": "server_screen"}))
+    if not queued:
+        raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")
+    return {"ok": True}
+
+
+@router.post("/capture-server-screen")
+async def api_capture_server_screen():
+    from services.capture import ScreenCaptureError, capture_primary_left_half_data_url
+
+    try:
+        return {"ok": True, "image": capture_primary_left_half_data_url()}
+    except ScreenCaptureError as e:
+        raise HTTPException(503, str(e))
+
+
+@router.post("/ask-from-server-screens")
+async def api_ask_from_server_screens(body: MultiServerScreenQuestion):
+    from services.llm import has_vision_model
+
+    images = [img for img in body.images if img]
+    if not images:
+        raise HTTPException(400, "至少需要一张截图")
+    if len(images) > 8:
+        raise HTTPException(400, "一次最多提交 8 张截图")
+    if not has_vision_model():
+        raise HTTPException(400, "请至少配置一个支持识图且已填写 API Key 的模型")
+
+    cfg = get_config()
+    region = getattr(cfg, "screen_capture_region", "left_half") or "left_half"
+    text = f"{prompt_server_screen_code(cfg.language, region)}\n\n本次包含 {len(images)} 张连续截图，请按页序合并理解题目。"
+    task = (text, images, True, "server_screen_multi", {"origin": "server_screen", "image_count": len(images)})
+    if pick_model_index(task, set()) is None:
+        raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
+    cancel_answer_work(reset_session_data=False)
+    queued = submit_answer_task(task)
     if not queued:
         raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")
     return {"ok": True}

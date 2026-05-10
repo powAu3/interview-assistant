@@ -73,6 +73,7 @@ class ConfigUpdate(BaseModel):
     assist_asr_interrupt_running: Optional[bool] = None
     assist_high_churn_short_answer: Optional[bool] = None
     screen_capture_region: Optional[str] = None
+    multi_screen_capture_idle_sec: Optional[float] = None
     written_exam_mode: Optional[bool] = None
     written_exam_think: Optional[bool] = None
     iflytek_stt_app_id: Optional[str] = None
@@ -216,6 +217,10 @@ async def api_update_config(body: ConfigUpdate):
             raise HTTPException(
                 422,
                 f"screen_capture_region 必须是 {list(SCREEN_CAPTURE_REGION_OPTIONS)} 之一",
+            )
+        if "multi_screen_capture_idle_sec" in d:
+            d["multi_screen_capture_idle_sec"] = max(
+                1.0, min(60.0, float(d["multi_screen_capture_idle_sec"]))
             )
         if d.get("practice_audience") == "":
             d.pop("practice_audience", None)

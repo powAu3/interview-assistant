@@ -17,6 +17,7 @@ from services.llm import (
     PromptMode,
     build_system_prompt,
     chat_stream_single_model,
+    create_answer_stream_sanitizer,
     get_token_stats,
     postprocess_answer_for_mode,
 )
@@ -54,6 +55,14 @@ def prompt_server_screen_code(language: str, region: str) -> str:
         "请尽量按以下顺序组织：题目理解、主方案代码、备选方案代码（1-2 个）、方案对比、思路与复杂度、测试用例设计。\n"
         "如果关键信息看不清，请明确说明缺失项，不要编造；可在合理假设下给出最小可执行方案。"
     )
+
+
+def _normalize_task_images(image: Any) -> list[str]:
+    if isinstance(image, list):
+        return [str(x) for x in image if x]
+    if image:
+        return [str(image)]
+    return []
 
 
 def prompt_mode_for_task(
@@ -122,11 +131,14 @@ def process_question_parallel(
         kb_hits=kb_hits or None,
     )
 
-    if image:
+    images = _normalize_task_images(image)
+
+    if images:
         user_for_llm: Any = [
             {"type": "text", "text": question_text},
-            {"type": "image_url", "image_url": {"url": image}},
         ]
+        for data_url in images:
+            user_for_llm.append({"type": "image_url", "image_url": {"url": data_url}})
     else:
         user_for_llm = question_text
 
@@ -137,7 +149,7 @@ def process_question_parallel(
 
     is_followup = False
     if (
-        not image
+        not images
         and last_qa
         and source in ("asr", "manual_text")
         and classify_followup(question_text, last_qa.question, last_qa.answer)
@@ -152,7 +164,10 @@ def process_question_parallel(
 
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
 
-    display_question = question_text + (" [📷 附图]" if image else "")
+    if len(images) > 1:
+        display_question = f"{question_text} [📷 多图 x{len(images)}]"
+    else:
+        display_question = question_text + (" [📷 附图]" if images else "")
     qa_id = f"qa-{seq}-{int(time.time() * 1000)}"
     deps.logger.info(
         "ANSWER_START id=%s model=%s source=%s followup=%s q=%r",
@@ -191,7 +206,8 @@ def process_question_parallel(
         except Exception as exc:
             deps.error_logger.warning("broadcast kb_hits failed: %s", exc)
 
-    full_answer = ""
+    raw_full_answer = ""
+    stream_sanitizer = create_answer_stream_sanitizer(prompt_mode)
     full_think = ""
     exam_think_notified = False
     gen_start = time.monotonic()
@@ -232,14 +248,19 @@ def process_question_parallel(
                         }
                     )
             else:
-                full_answer += chunk_text
-                deps.broadcast(
-                    {"type": "answer_chunk", "id": qa_id, "chunk": chunk_text}
-                )
+                raw_full_answer += chunk_text
+                clean_chunk = stream_sanitizer.push(chunk_text)
+                if clean_chunk:
+                    deps.broadcast(
+                        {"type": "answer_chunk", "id": qa_id, "chunk": clean_chunk}
+                    )
     except Exception as exc:
         deps.error_logger.error("LLM stream error id=%s: %s", qa_id, exc, exc_info=True)
         err = f"\n\n[生成答案出错: {exc}]"
-        full_answer += err
+        raw_full_answer += err
+        tail = stream_sanitizer.finish()
+        if tail:
+            deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
         deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
 
     gen_elapsed = (time.monotonic() - gen_start) * 1000
@@ -253,7 +274,11 @@ def process_question_parallel(
         deps.mark_seq_skipped(seq)
         return
 
-    full_answer = postprocess_answer_for_mode(full_answer, prompt_mode)
+    tail = stream_sanitizer.finish()
+    if tail:
+        deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
+
+    full_answer = postprocess_answer_for_mode(raw_full_answer, prompt_mode)
 
     def _commit():
         if not deps.is_session_current(sess_v):
@@ -261,9 +286,10 @@ def process_question_parallel(
         session = get_session()
         try:
             with conversation_lock:
-                if image:
+                if images:
                     content: list = [{"type": "text", "text": question_text}]
-                    content.append({"type": "image_url", "image_url": {"url": image}})
+                    for data_url in images:
+                        content.append({"type": "image_url", "image_url": {"url": data_url}})
                     session.add_user_message(content)
                 else:
                     session.add_user_message(question_text)
@@ -313,14 +339,14 @@ def process_question_parallel(
                     qa_id,
                     question_text[:80],
                 )
-            if prompt_mode == PROMPT_MODE_SERVER_SCREEN and image:
+            if prompt_mode == PROMPT_MODE_SERVER_SCREEN and images:
                 try:
                     from services.vision_verify import schedule_self_verify
 
                     schedule_self_verify(
                         qa_id=qa_id,
                         answer=full_answer,
-                        image_data_url=image,
+                        image_data_url=images[0],
                         broadcast_callable=deps.broadcast,
                     )
                 except Exception as exc:  # noqa: BLE001

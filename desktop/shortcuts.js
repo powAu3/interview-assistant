@@ -29,6 +29,13 @@ const DEFAULT_SHORTCUTS = {
     label: '服务端截图审题',
     category: '实时辅助',
   },
+  addMultiServerScreenShot: {
+    action: 'addMultiServerScreenShot',
+    key: 'CommandOrControl+Shift+/',
+    defaultKey: 'CommandOrControl+Shift+/',
+    label: '多图截图判题',
+    category: '实时辅助',
+  },
   toggleInterviewOverlay: {
     action: 'toggleInterviewOverlay',
     key: 'CommandOrControl+O',
@@ -49,6 +56,7 @@ const SUPPORTED_KEYS = new Set([
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
   ...'0123456789'.split(''),
   '.', '/', '\\', '-', '=', ',', ';', "'", '[', ']', '`',
+  'Enter',
   'Up', 'Down', 'Left', 'Right',
 ]);
 

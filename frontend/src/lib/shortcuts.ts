@@ -2,6 +2,7 @@ export type ShortcutAction =
   | 'hideOrShowWindow'
   | 'hardClearSession'
   | 'askFromServerScreen'
+  | 'addMultiServerScreenShot'
   | 'toggleInterviewOverlay'
   | 'moveOverlayToMouse'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
@@ -40,6 +41,14 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     category: '实时辅助',
     status: 'available',
   },
+  addMultiServerScreenShot: {
+    action: 'addMultiServerScreenShot',
+    key: 'CommandOrControl+Shift+/',
+    defaultKey: 'CommandOrControl+Shift+/',
+    label: '多图截图判题',
+    category: '实时辅助',
+    status: 'available',
+  },
   toggleInterviewOverlay: {
     action: 'toggleInterviewOverlay',
     key: 'CommandOrControl+O',
@@ -72,6 +81,7 @@ const supportedPhysicalKeys = new Map<string, string>([
   ['BracketLeft', '['],
   ['BracketRight', ']'],
   ['Backquote', '`'],
+  ['Enter', 'Enter'],
   ['ArrowUp', 'Up'],
   ['ArrowDown', 'Down'],
   ['ArrowLeft', 'Left'],
@@ -95,6 +105,7 @@ export function getShortcutAccelerator(event: KeyboardEvent): string | null {
 }
 
 const KEY_DISPLAY: Record<string, string> = {
+  Enter: 'Enter',
   Up: '↑', Down: '↓', Left: '←', Right: '→',
 }
 

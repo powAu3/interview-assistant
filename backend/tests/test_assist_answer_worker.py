@@ -158,6 +158,100 @@ def test_process_question_parallel_marks_seq_skipped_when_aborted(
     )
 
     event_types = [event["type"] for event in broadcasts]
-    assert event_types == ["answer_start", "answer_chunk", "answer_cancelled"]
+    assert event_types == ["answer_start", "answer_cancelled"]
     assert skipped == [5]
     assert get_session().qa_pairs == []
+
+
+def test_process_question_parallel_sanitizes_streamed_answer_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "<thi")
+        yield ("text", "nk>草稿</think># 回答\n**用 AOF**")
+        yield ("text", " 和 RDB。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("Redis 怎么持久化？", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    streamed = "".join(
+        event["chunk"] for event in broadcasts if event["type"] == "answer_chunk"
+    )
+    assert "<think>" not in streamed
+    assert "草稿" not in streamed
+    assert "#" not in streamed
+    assert "回答" not in streamed
+    assert "**" not in streamed
+    assert "用 AOF 和 RDB。" in streamed
+
+    done = next(event for event in broadcasts if event["type"] == "answer_done")
+    assert done["answer"] == "用 AOF 和 RDB。"
+
+
+def test_process_question_parallel_flushes_clean_tail_before_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "用 AOF")
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("Redis 怎么持久化？", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    chunks = [event["chunk"] for event in broadcasts if event["type"] == "answer_chunk"]
+    assert chunks[0] == "用 AOF"
+    assert "生成答案出错" in chunks[1]
+
+
+def test_process_question_parallel_sends_multiple_images_to_vision_model(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    captured = {}
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["content"] = messages[-1]["content"]
+        yield ("text", "多图答案")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "多图题面",
+            ["data:image/png;base64,a", "data:image/png;base64,b"],
+            True,
+            "server_screen_multi",
+            {"origin": "server_screen", "image_count": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    content = captured["content"]
+    assert content[0] == {"type": "text", "text": "多图题面"}
+    assert [part["image_url"]["url"] for part in content[1:]] == [
+        "data:image/png;base64,a",
+        "data:image/png;base64,b",
+    ]
+    done = next(event for event in broadcasts if event["type"] == "answer_done")
+    assert "多图 x2" in done["question"]

@@ -229,6 +229,10 @@ export const api = {
   /** 服务端截取本机主屏左半幅 + VL 写码（手机端用，不经过手机截图 API） */
   askFromServerScreen: () =>
     request('/api/ask-from-server-screen', { method: 'POST', body: '{}' }),
+  captureServerScreen: () =>
+    request<{ ok: boolean; image: string }>('/api/capture-server-screen', { method: 'POST', body: '{}' }),
+  askFromServerScreens: (images: string[]) =>
+    request('/api/ask-from-server-screens', { method: 'POST', body: JSON.stringify({ images }) }),
   getSttStatus: () => request('/api/stt/status'),
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
   /** 当前各模型健康状态（检测中/可用/不可用） */

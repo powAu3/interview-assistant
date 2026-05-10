@@ -250,76 +250,96 @@ export default function PreferencesTab() {
               悬浮窗不会抢占焦点,直接用鼠标滚轮即可滚动内容,
               <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">Cmd+M</kbd> 可把窗口一键移到鼠标附近。
             </p>
-
-            {/* 截图区域 */}
-            {config && hasScreenCapture && (
-              <Field label="截图区域" hint="手机端「截屏审题」时，服务端截取主显示器的范围">
-                <select
-                  value={config.screen_capture_region ?? 'left_half'}
-                  onChange={async (e) => {
-                    try {
-                      await updateConfigAndRefresh({ screen_capture_region: e.target.value })
-                    } catch {}
-                  }}
-                  className="input-field w-full max-w-[200px]"
-                >
-                  {options!.screen_capture_regions!.map((r) => (
-                    <option key={r} value={r}>
-                      {r === 'full' ? '全屏' : r === 'left_half' ? '左半屏' : r === 'right_half' ? '右半屏' : r === 'top_half' ? '上半屏' : '下半屏'}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-
-            {/* 笔试模式 */}
-            {config && hasScreenCapture && (
-              <div className="border-t border-bg-hover/40 pt-3 space-y-3">
-                <div className="flex items-center gap-2">
-                  <PenLine className="w-3.5 h-3.5 text-text-muted" />
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">笔试模式</span>
-                  <BetaBadge title="笔试模式 — 仍在测试中" />
-                </div>
-                <Toggle
-                  checked={config?.written_exam_mode ?? false}
-                  onChange={async (v) => {
-                    try {
-                      await updateConfigAndRefresh({ written_exam_mode: v })
-                    } catch {}
-                  }}
-                  label={config?.written_exam_mode ? '已开启' : '已关闭'}
-                />
-                {config?.written_exam_mode && (
-                  <>
-                    <Field label="深度思考 (Think)">
-                      <Toggle
-                        checked={config?.written_exam_think ?? false}
-                        onChange={async (v) => {
-                          try {
-                            await updateConfigAndRefresh({ written_exam_think: v })
-                          } catch {}
-                        }}
-                        label={config?.written_exam_think ? '已开启（更准但更慢）' : '已关闭（更快）'}
-                      />
-                      <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
-                        开启后模型会先推理再作答，编程题准确率更高，但响应变慢。需模型支持 think。
-                      </p>
-                    </Field>
-                    <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-lg p-2.5 space-y-1">
-                      <p className="text-[11px] text-text-secondary leading-relaxed">
-                        <span className="font-medium text-accent-blue">配合截图快捷键使用</span>
-                      </p>
-                      <ul className="text-[10px] text-text-muted leading-relaxed space-y-0.5 pl-3 list-disc">
-                        <li>选择题 → 直接输出答案（如 A.Redis）</li>
-                        <li>编程题 → 直接输出完整可提交代码</li>
-                        <li>填空题 → 直接输出填空内容</li>
-                      </ul>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </>
+        )}
+
+        {/* 截图区域 */}
+        {config && hasScreenCapture && (
+          <Field label="截图区域" hint="服务端截图审题时，后端截取主显示器的范围">
+            <select
+              value={config.screen_capture_region ?? 'left_half'}
+              onChange={async (e) => {
+                try {
+                  await updateConfigAndRefresh({ screen_capture_region: e.target.value })
+                } catch {}
+              }}
+              className="input-field w-full max-w-[200px]"
+            >
+              {options!.screen_capture_regions!.map((r) => (
+                <option key={r} value={r}>
+                  {r === 'full' ? '全屏' : r === 'left_half' ? '左半屏' : r === 'right_half' ? '右半屏' : r === 'top_half' ? '上半屏' : '下半屏'}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        {config && hasScreenCapture && (
+          <Field
+            label={`多图截图等待: ${config.multi_screen_capture_idle_sec ?? 10} 秒`}
+            hint="多图截图判题快捷键最后一次按下后，等待这段时间无新截图就提交整批图片 (1-60)"
+          >
+            <input
+              type="number"
+              min={1}
+              max={60}
+              step={1}
+              value={config.multi_screen_capture_idle_sec ?? 10}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(60, Number(e.target.value) || 10))
+                updateConfigAndRefresh({ multi_screen_capture_idle_sec: v }).catch(() => {})
+              }}
+              className="input-field w-full max-w-[120px]"
+            />
+          </Field>
+        )}
+
+        {/* 笔试模式 */}
+        {config && hasScreenCapture && (
+          <div className="border-t border-bg-hover/40 pt-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <PenLine className="w-3.5 h-3.5 text-text-muted" />
+              <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">笔试模式</span>
+              <BetaBadge title="笔试模式 — 仍在测试中" />
+            </div>
+            <Toggle
+              checked={config?.written_exam_mode ?? false}
+              onChange={async (v) => {
+                try {
+                  await updateConfigAndRefresh({ written_exam_mode: v })
+                } catch {}
+              }}
+              label={config?.written_exam_mode ? '已开启' : '已关闭'}
+            />
+            {config?.written_exam_mode && (
+              <>
+                <Field label="深度思考 (Think)">
+                  <Toggle
+                    checked={config?.written_exam_think ?? false}
+                    onChange={async (v) => {
+                      try {
+                        await updateConfigAndRefresh({ written_exam_think: v })
+                      } catch {}
+                    }}
+                    label={config?.written_exam_think ? '已开启（更准但更慢）' : '已关闭（更快）'}
+                  />
+                  <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
+                    开启后模型会先推理再作答，编程题准确率更高，但响应变慢。需模型支持 think。
+                  </p>
+                </Field>
+                <div className="bg-accent-blue/5 border border-accent-blue/20 rounded-lg p-2.5 space-y-1">
+                  <p className="text-[11px] text-text-secondary leading-relaxed">
+                    <span className="font-medium text-accent-blue">配合截图快捷键使用</span>
+                  </p>
+                  <ul className="text-[10px] text-text-muted leading-relaxed space-y-0.5 pl-3 list-disc">
+                    <li>选择题 → 直接输出答案（如 A.Redis）</li>
+                    <li>编程题 → 直接输出完整可提交代码</li>
+                    <li>填空题 → 直接输出填空内容</li>
+                  </ul>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </Collapsible>
 

@@ -26,7 +26,10 @@ test('isValidShortcutKey accepts CommandOrControl with optional Shift and Alt pl
   assert.equal(isValidShortcutKey('CommandOrControl+B'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+.'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+/'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Enter'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+J'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Shift+Enter'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Shift+/'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Alt+J'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+Alt+J'), true);
   assert.equal(isValidShortcutKey('Alt+B'), false);
@@ -50,15 +53,17 @@ test('load and save shortcut config roundtrip', () => {
   const app = makeFakeApp(tmpDir);
   const shortcuts = createShortcutState({
     askFromServerScreen: { key: 'CommandOrControl+/' },
+    addMultiServerScreenShot: { key: 'CommandOrControl+Shift+/' },
     hardClearSession: { key: 'CommandOrControl+.' },
-    toggleInterviewOverlay: { key: 'CommandOrControl+Shift+Alt+O' },
+    toggleInterviewOverlay: { key: 'CommandOrControl+Shift+Enter' },
   });
 
   saveShortcutConfig(app, shortcuts);
   const loaded = loadShortcutConfig(app);
 
   assert.equal(loaded.askFromServerScreen.key, 'CommandOrControl+/');
+  assert.equal(loaded.addMultiServerScreenShot.key, 'CommandOrControl+Shift+/');
   assert.equal(loaded.hardClearSession.key, 'CommandOrControl+.');
-  assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+Shift+Alt+O');
+  assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+Shift+Enter');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
 });

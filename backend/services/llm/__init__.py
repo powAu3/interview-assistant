@@ -7,6 +7,7 @@ from .prompts import (
     PROMPT_MODE_WRITTEN_EXAM,
     PromptMode,
     build_system_prompt,
+    create_answer_stream_sanitizer,
     postprocess_answer_for_mode,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "PROMPT_MODE_WRITTEN_EXAM",
     "PromptMode",
     "build_system_prompt",
+    "create_answer_stream_sanitizer",
     "postprocess_answer_for_mode",
     "get_client",
     "get_client_for_model",
