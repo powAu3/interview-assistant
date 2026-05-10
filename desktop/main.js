@@ -693,20 +693,10 @@ const shortcutCallbacks = {
   moveOverlayToMouse: () => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
-    const bounds = overlayWindow.getBounds();
-    const display = screen.getDisplayNearestPoint(cursor);
-    const area = display.workArea;
-    const margin = 12;
     const offsetX = 20;
     const offsetY = 20;
-    const nextX = Math.max(
-      area.x + margin,
-      Math.min(cursor.x - offsetX, area.x + area.width - bounds.width - margin),
-    );
-    const nextY = Math.max(
-      area.y + margin,
-      Math.min(cursor.y - offsetY, area.y + area.height - bounds.height - margin),
-    );
+    const nextX = Math.round(cursor.x - offsetX);
+    const nextY = Math.round(cursor.y - offsetY);
     overlayWindow.setPosition(nextX, nextY);
     schedulePersistOverlayPosition();
   },
