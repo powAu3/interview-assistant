@@ -147,7 +147,7 @@ sequenceDiagram
 | --- | --- |
 | **前端** | React 18 · TypeScript · Vite · Zustand · Tailwind CSS · Playwright |
 | **后端** | Python 3.10+ · FastAPI · Uvicorn · WebSocket |
-| **语音识别** | faster-whisper · 豆包 (Volcengine) · 讯飞 |
+| **语音识别** | faster-whisper · 豆包 (Volcengine) · 通用 ASR (OpenAI-compatible) |
 | **LLM** | OpenAI 兼容接口 · 多模型并行 · Think 推理 · 识图 |
 | **存储** | SQLite · 本地简历历史 · 知识库索引 |
 | **桌面** | Electron |

@@ -117,7 +117,14 @@ export default function PreferencesTab() {
     }
   }
 
-  const sttLabel = config?.stt_provider === 'doubao' ? '豆包' : config?.stt_provider === 'generic' ? '通用 ASR' : 'Whisper'
+  const sttLabel =
+    config?.stt_provider === 'doubao'
+      ? '豆包'
+      : config?.stt_provider === 'generic'
+        ? '通用 ASR'
+        : config?.stt_provider === 'whisper'
+          ? 'Whisper'
+          : `不支持 (${config?.stt_provider ?? 'unknown'})`
   const hasScreenCapture = (options?.screen_capture_regions?.length ?? 0) > 0
   const searchQuery = useSettingsSearch()
   const inSearch = searchQuery.trim().length > 0

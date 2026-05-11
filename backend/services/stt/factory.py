@@ -115,6 +115,8 @@ def get_stt_engine(
     """返回当前配置对应的 STT 引擎：whisper（本地）/ doubao（豆包）/ generic（通用 HTTP）。"""
     from core.config import get_config
     cfg = get_config()
+    if cfg.stt_provider == "iflytek":
+        raise RuntimeError("讯飞 STT 已下线，请在设置中改为通用 ASR 或 Whisper")
     if cfg.stt_provider == "doubao":
         global _doubao_engine
         if _doubao_engine is None or (
@@ -143,6 +145,8 @@ def get_stt_engine(
                 model=cfg.generic_stt_model,
             )
         return _generic_engine
+    if cfg.stt_provider != "whisper":
+        raise RuntimeError(f"未知 STT provider: {cfg.stt_provider}")
     global _engine
     size = model_size if model_size is not None else cfg.whisper_model
     lang = language if language is not None else cfg.whisper_language
@@ -189,6 +193,8 @@ def transcribe_with_fallback(
     for attempt in range(max_attempts):
         try:
             text = primary.transcribe(audio, sample_rate, position=position, language=language)
+            if is_remote and not (text or "").strip():
+                raise RuntimeError(f"{provider} 返回空文本")
             if is_remote:
                 _circuit_reset()
             return text

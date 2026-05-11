@@ -33,7 +33,7 @@ const STT_GUIDES: Record<string, { color: string; borderColor: string; title: st
       '填写兼容 OpenAI /audio/transcriptions 的 Base URL',
       '填写 API Key 和供应商要求的模型名',
       '请求格式为 multipart/form-data: file=audio.wav, model=模型名',
-      '测试连接会上传一段静音 WAV，并显示接口返回的文本',
+      '测试连接会优先上传一段预置问句音频，并显示接口返回的文本',
     ],
   },
 }

@@ -10,6 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from services.stt.engines import GenericHTTPSTT
+from services.stt import factory as stt_factory
 
 
 def test_generic_http_stt_posts_openai_compatible_multipart(monkeypatch):
@@ -66,3 +67,38 @@ def test_generic_http_stt_extracts_nested_result_text(monkeypatch):
 
     engine = GenericHTTPSTT("https://asr.example.com/v1", "sk", "m")
     assert engine.transcribe(np.zeros(100, dtype=np.float32), sample_rate=16000) == "你好。"
+
+
+def test_transcribe_with_fallback_treats_empty_remote_text_as_failure(monkeypatch):
+    import core.config as core_config
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {"stt_provider": "generic", "whisper_model": "base", "whisper_language": "auto"})(),
+    )
+
+    class _RemoteEngine:
+        def transcribe(self, audio, sample_rate=16000, position="", language=""):
+            return ""
+
+    calls = {"broadcast": [], "fallback": 0}
+
+    monkeypatch.setattr(stt_factory, "get_stt_engine", lambda model_size=None, language=None: _RemoteEngine())
+    monkeypatch.setattr(stt_factory, "_is_circuit_open", lambda: False)
+    monkeypatch.setattr(stt_factory, "_circuit_record_failure", lambda is_timeout=False: None)
+    monkeypatch.setattr(stt_factory, "_circuit_reset", lambda: None)
+    monkeypatch.setattr(stt_factory, "_whisper_transcribe", lambda audio, sample_rate, position, language: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text")
+
+    import sys as _sys
+    ws_mod = _sys.modules.get("api.realtime.ws")
+    if ws_mod is None:
+        import types as _types
+        ws_mod = _types.ModuleType("api.realtime.ws")
+        _sys.modules["api.realtime.ws"] = ws_mod
+    monkeypatch.setattr(ws_mod, "broadcast", lambda data: calls["broadcast"].append(data), raising=False)
+
+    text = stt_factory.transcribe_with_fallback(np.zeros(100, dtype=np.float32), 16000)
+
+    assert text == "fallback text"
+    assert calls["fallback"] == 1
+    assert calls["broadcast"]

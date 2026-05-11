@@ -168,6 +168,7 @@ export default function SpeechTab() {
 
   const providers = options?.stt_providers ?? ['whisper', 'doubao', 'generic']
   const practiceTtsProviders = options?.practice_tts_providers ?? ['edge_tts', 'local', 'volcengine']
+  const providerSupported = providers.includes(form.stt_provider)
 
   const providerMeta: Record<string, { label: string; desc: string; icon: React.ReactNode; brandClass: string }> = {
     whisper: { label: 'Whisper', desc: '本地运行，免费无限', icon: <Volume2 className="w-5 h-5" />, brandClass: 'sky' },
@@ -227,6 +228,13 @@ export default function SpeechTab() {
           })}
         </div>
       </Section>
+
+      {!providerSupported && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          当前配置中的 STT provider 为 `{form.stt_provider}`，该 provider 已不再受支持。
+          请切换到“通用 ASR”或“Whisper”后保存，再重新测试连接。
+        </div>
+      )}
 
       <SttGuideCard provider={form.stt_provider} />
 
@@ -301,7 +309,7 @@ export default function SpeechTab() {
               />
               {sttTestResult.ok && (
                 <div className="text-[10px] text-text-muted max-w-[360px] truncate">
-                  返回文本：{sttTestResult.text?.trim() || '空（测试音频为静音，接口可用）'}
+                  返回文本：{sttTestResult.text?.trim() || '空'}
                 </div>
               )}
             </div>

@@ -102,6 +102,7 @@ async def api_get_config():
 
 
 _MASK_MARKER = "****"
+_LEGACY_STT_PROVIDER_MAP = {"iflytek": "generic"}
 
 
 def _mask_api_key(key: str) -> str:
@@ -187,6 +188,18 @@ async def api_update_config(body: ConfigUpdate):
                 raise HTTPException(400, "至少保留一个模型")
             if not _has_enabled_model(d["models"]):
                 raise HTTPException(422, "至少启用一个模型")
+        if d.get("stt_provider") in _LEGACY_STT_PROVIDER_MAP:
+            raise HTTPException(
+                422,
+                f"stt_provider={d['stt_provider']} 已废弃，请改用 {_LEGACY_STT_PROVIDER_MAP[d['stt_provider']]} 或 whisper",
+            )
+        if d.get("stt_provider") == "":
+            d.pop("stt_provider", None)
+        elif "stt_provider" in d and d["stt_provider"] not in STT_PROVIDER_OPTIONS:
+            raise HTTPException(
+                422,
+                f"stt_provider 必须是 {list(STT_PROVIDER_OPTIONS)} 之一",
+            )
         if "max_parallel_answers" in d:
             d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
         if "answer_autoscroll_bottom_px" in d:
@@ -419,8 +432,11 @@ async def api_resume_history_delete(entry_id: int):
 
 @router.get("/stt/status")
 async def api_stt_status():
-    engine = get_stt_engine()
-    return {"loaded": engine.is_loaded, "loading": engine.is_loading, "model": engine.model_size}
+    try:
+        engine = get_stt_engine()
+        return {"loaded": engine.is_loaded, "loading": engine.is_loading, "model": engine.model_size}
+    except Exception as e:
+        return {"loaded": False, "loading": False, "model": get_config().stt_provider, "detail": str(e)[:200]}
 
 
 @router.post("/models/health")
@@ -450,6 +466,8 @@ async def api_check_single_model_health(index: int):
 async def api_stt_test():
     """Test current STT engine connectivity with credential pre-checks."""
     cfg = get_config()
+    if cfg.stt_provider == "iflytek":
+        return {"ok": False, "detail": "讯飞 STT 已下线，请改为通用 ASR 或 Whisper"}
     if cfg.stt_provider == "doubao":
         if not cfg.doubao_stt_access_token:
             return {"ok": False, "detail": "豆包 Access Token 未配置"}
@@ -473,8 +491,8 @@ async def api_stt_test():
             sr = 16000
             audio = _np.zeros(int(sr * 1.5), dtype=_np.float32)
         result = engine.transcribe(audio, sample_rate=sr)
-        if result is None:
-            return {"ok": False, "detail": "引擎返回空结果，请检查配置"}
+        if not (result or "").strip():
+            return {"ok": False, "detail": "引擎返回空文本，请检查接口兼容性或模型配置"}
         return {"ok": True, "text": result}
     except Exception as e:
         return {"ok": False, "detail": str(e)[:200]}

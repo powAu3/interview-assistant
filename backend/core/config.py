@@ -133,6 +133,10 @@ class AppConfig(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_valid_models(self):
+        if self.stt_provider == "iflytek":
+            logger.warning(
+                "检测到已废弃的 stt_provider=iflytek；请在设置中改为 generic 或 whisper"
+            )
         if not self.models:
             self.models = [_default_model_config()]
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))

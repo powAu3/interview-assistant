@@ -400,6 +400,80 @@ def test_update_config_accepts_valid_enum(monkeypatch):
     assert seen["d"]["practice_audience"] == "social"
 
 
+def test_update_config_rejects_legacy_iflytek_provider(monkeypatch):
+    update_called = False
+
+    def fake_update_config(d):
+        nonlocal update_called
+        update_called = True
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    body = _Body(stt_provider="iflytek")
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_update_config(body))
+
+    assert exc.value.status_code == 422
+    assert "已废弃" in exc.value.detail
+    assert update_called is False
+
+
+def test_update_config_rejects_unknown_stt_provider(monkeypatch):
+    update_called = False
+
+    def fake_update_config(d):
+        nonlocal update_called
+        update_called = True
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "STT_PROVIDER_OPTIONS", ("whisper", "doubao", "generic"))
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    body = _Body(stt_provider="custom-provider")
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_update_config(body))
+
+    assert exc.value.status_code == 422
+    assert "stt_provider" in exc.value.detail
+    assert update_called is False
+
+
+def test_stt_test_rejects_legacy_iflytek_provider(monkeypatch):
+    monkeypatch.setattr(common_router, "get_config", lambda: _Body(stt_provider="iflytek"))
+
+    result = _run(common_router.api_stt_test())
+
+    assert result["ok"] is False
+    assert "已下线" in result["detail"]
+
+
+def test_stt_test_rejects_empty_transcription(monkeypatch):
+    monkeypatch.setattr(common_router, "get_config", lambda: _Body(stt_provider="generic", generic_stt_api_base_url="https://x", generic_stt_api_key="sk", generic_stt_model="m"))
+
+    class _FakeEngine:
+        def transcribe(self, audio, sample_rate=16000):
+            return ""
+
+    monkeypatch.setattr(common_router, "get_stt_engine", lambda: _FakeEngine())
+    monkeypatch.setattr(common_router.Path, "exists", lambda self: False)
+
+    result = _run(common_router.api_stt_test())
+
+    assert result["ok"] is False
+    assert "空文本" in result["detail"]
+
+
 def test_update_config_rejects_all_disabled_models(monkeypatch):
     """完整模型配置保存也不能留下 0 个启用模型。"""
 
