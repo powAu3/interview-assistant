@@ -29,9 +29,9 @@ export default function SpeechTab() {
     doubao_stt_access_token: '',
     doubao_stt_resource_id: 'volc.seedasr.sauc.duration',
     doubao_stt_boosting_table_id: '',
-    iflytek_stt_app_id: '',
-    iflytek_stt_api_key: '',
-    iflytek_stt_api_secret: '',
+    generic_stt_api_base_url: '',
+    generic_stt_api_key: '',
+    generic_stt_model: '',
     practice_tts_provider: 'edge_tts' as string,
     edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
     edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -51,7 +51,7 @@ export default function SpeechTab() {
   })
   const [saving, setSaving] = useState(false)
   const [sttTesting, setSttTesting] = useState(false)
-  const [sttTestResult, setSttTestResult] = useState<{ ok: boolean; detail?: string } | null>(null)
+  const [sttTestResult, setSttTestResult] = useState<{ ok: boolean; detail?: string; text?: string } | null>(null)
   const [ttsPreviewing, setTtsPreviewing] = useState(false)
   const [ttsPreviewText, setTtsPreviewText] = useState('欢迎来到模拟面试，现在请你用九十秒介绍一下自己。')
 
@@ -65,9 +65,9 @@ export default function SpeechTab() {
         doubao_stt_access_token: config.doubao_stt_access_token ?? '',
         doubao_stt_resource_id: config.doubao_stt_resource_id ?? 'volc.seedasr.sauc.duration',
         doubao_stt_boosting_table_id: config.doubao_stt_boosting_table_id ?? '',
-        iflytek_stt_app_id: config.iflytek_stt_app_id ?? '',
-        iflytek_stt_api_key: config.iflytek_stt_api_key ?? '',
-        iflytek_stt_api_secret: config.iflytek_stt_api_secret ?? '',
+        generic_stt_api_base_url: config.generic_stt_api_base_url ?? '',
+        generic_stt_api_key: config.generic_stt_api_key ?? '',
+        generic_stt_model: config.generic_stt_model ?? '',
         practice_tts_provider: config.practice_tts_provider ?? 'edge_tts',
         edge_tts_voice_female: config.edge_tts_voice_female ?? 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: config.edge_tts_voice_male ?? 'zh-CN-YunxiNeural',
@@ -166,25 +166,25 @@ export default function SpeechTab() {
     }
   }
 
-  const providers = options?.stt_providers ?? ['whisper', 'doubao', 'iflytek']
+  const providers = options?.stt_providers ?? ['whisper', 'doubao', 'generic']
   const practiceTtsProviders = options?.practice_tts_providers ?? ['edge_tts', 'local', 'volcengine']
 
   const providerMeta: Record<string, { label: string; desc: string; icon: React.ReactNode; brandClass: string }> = {
     whisper: { label: 'Whisper', desc: '本地运行，免费无限', icon: <Volume2 className="w-5 h-5" />, brandClass: 'sky' },
     doubao: { label: '豆包', desc: '火山引擎云端 API', icon: <Zap className="w-5 h-5" />, brandClass: 'orange' },
-    iflytek: { label: '讯飞', desc: '讯飞开放平台 API', icon: <Sparkles className="w-5 h-5" />, brandClass: 'blue' },
+    generic: { label: '通用 ASR', desc: 'OpenAI-compatible multipart', icon: <Sparkles className="w-5 h-5" />, brandClass: 'blue' },
   }
 
   const brandBorder: Record<string, string> = {
     whisper: 'border-sky-400/40',
     doubao: 'border-orange-400/40',
-    iflytek: 'border-blue-400/40',
+    generic: 'border-blue-400/40',
   }
 
   const credentialConfigured = (provider: string): boolean => {
     if (provider === 'whisper') return true
     if (provider === 'doubao') return !!(form.doubao_stt_app_id && form.doubao_stt_access_token)
-    if (provider === 'iflytek') return !!(form.iflytek_stt_app_id && form.iflytek_stt_api_key && form.iflytek_stt_api_secret)
+    if (provider === 'generic') return !!(form.generic_stt_api_base_url && form.generic_stt_api_key && form.generic_stt_model)
     return false
   }
 
@@ -269,16 +269,16 @@ export default function SpeechTab() {
           </>
         )}
 
-        {form.stt_provider === 'iflytek' && (
+        {form.stt_provider === 'generic' && (
           <>
-            <Field label="APPID" hint="讯飞开放平台应用 ID">
-              <input type="text" value={form.iflytek_stt_app_id} onChange={(e) => setForm({ ...form, iflytek_stt_app_id: e.target.value })} placeholder="如：5f9a8b7c" className="input-field" />
+            <Field label="Base URL" hint="OpenAI-compatible 地址，例如 https://api.example.com/v1">
+              <input type="text" value={form.generic_stt_api_base_url} onChange={(e) => setForm({ ...form, generic_stt_api_base_url: e.target.value })} placeholder="https://.../v1" className="input-field" />
             </Field>
-            <Field label="APIKey" hint="讯飞应用的 APIKey">
-              <input type="password" value={form.iflytek_stt_api_key} onChange={(e) => setForm({ ...form, iflytek_stt_api_key: e.target.value })} placeholder="填入 APIKey" className="input-field" />
+            <Field label="API Key" hint="Bearer token">
+              <input type="password" value={form.generic_stt_api_key} onChange={(e) => setForm({ ...form, generic_stt_api_key: e.target.value })} placeholder="填入 API Key" className="input-field" />
             </Field>
-            <Field label="APISecret" hint="讯飞应用的 APISecret">
-              <input type="password" value={form.iflytek_stt_api_secret} onChange={(e) => setForm({ ...form, iflytek_stt_api_secret: e.target.value })} placeholder="填入 APISecret" className="input-field" />
+            <Field label="Model" hint="例如 whisper-1 / qwen-audio-asr / 供应商模型名">
+              <input type="text" value={form.generic_stt_model} onChange={(e) => setForm({ ...form, generic_stt_model: e.target.value })} placeholder="模型名" className="input-field" />
             </Field>
           </>
         )}
@@ -294,10 +294,17 @@ export default function SpeechTab() {
             {sttTesting ? '测试中…' : '测试连接'}
           </button>
           {sttTestResult && (
-            <StatusBadge
-              status={sttTestResult.ok ? 'ok' : 'error'}
-              label={sttTestResult.ok ? '连接成功' : (sttTestResult.detail?.slice(0, 40) || '连接失败')}
-            />
+            <div className="flex flex-col gap-1 min-w-0">
+              <StatusBadge
+                status={sttTestResult.ok ? 'ok' : 'error'}
+                label={sttTestResult.ok ? '连接成功' : (sttTestResult.detail?.slice(0, 40) || '连接失败')}
+              />
+              {sttTestResult.ok && (
+                <div className="text-[10px] text-text-muted max-w-[360px] truncate">
+                  返回文本：{sttTestResult.text?.trim() || '空（测试音频为静音，接口可用）'}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </GradientCard>

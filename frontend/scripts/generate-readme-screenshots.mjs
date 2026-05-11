@@ -34,6 +34,9 @@ const SAMPLE_CONFIG = {
   doubao_stt_access_token: '',
   doubao_stt_resource_id: '',
   doubao_stt_boosting_table_id: '',
+  generic_stt_api_base_url: '',
+  generic_stt_api_key: '',
+  generic_stt_model: '',
   position: '后端开发工程师',
   language: '中文',
   practice_audience: 'social',
@@ -56,7 +59,7 @@ const SAMPLE_OPTIONS = {
   positions: ['后端开发工程师', '前端开发工程师', '全栈开发工程师', 'Java 工程师'],
   languages: ['中文', 'English'],
   practice_audiences: ['social', 'campus_intern'],
-  stt_providers: ['whisper', 'doubao', 'iflytek'],
+  stt_providers: ['whisper', 'doubao', 'generic'],
   whisper_models: ['large-v3-turbo', 'medium', 'small'],
   screen_capture_regions: ['full', 'left_half', 'right_half', 'top_half', 'bottom_half'],
 }

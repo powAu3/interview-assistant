@@ -7,16 +7,16 @@ from typing import Optional
 import numpy as np
 
 from core.logger import get_logger
-from .engines import STTEngine, DoubaoSTT, IflyitekSTT
+from .engines import STTEngine, DoubaoSTT, GenericHTTPSTT
 
 _log = get_logger("stt.factory")
 
 _engine: Optional[STTEngine] = None
 _doubao_engine: Optional[DoubaoSTT] = None
-_iflytek_engine: Optional[IflyitekSTT] = None
+_generic_engine: Optional[GenericHTTPSTT] = None
 
 # ---------------------------------------------------------------------------
-# Circuit breaker for remote STT engines (doubao / iflytek)
+# Circuit breaker for remote STT engines (doubao / generic)
 # ---------------------------------------------------------------------------
 
 _circuit_lock = threading.Lock()
@@ -112,7 +112,7 @@ def get_stt_engine(
     model_size: Optional[str] = None,
     language: Optional[str] = None,
 ):
-    """返回当前配置对应的 STT 引擎：whisper（本地）/ doubao（豆包）/ iflytek（讯飞）。"""
+    """返回当前配置对应的 STT 引擎：whisper（本地）/ doubao（豆包）/ generic（通用 HTTP）。"""
     from core.config import get_config
     cfg = get_config()
     if cfg.stt_provider == "doubao":
@@ -130,19 +130,19 @@ def get_stt_engine(
                 boosting_table_id=cfg.doubao_stt_boosting_table_id or "",
             )
         return _doubao_engine
-    if cfg.stt_provider == "iflytek":
-        global _iflytek_engine
-        if _iflytek_engine is None or (
-            _iflytek_engine.app_id != (cfg.iflytek_stt_app_id or "")
-            or _iflytek_engine.api_key != (cfg.iflytek_stt_api_key or "")
-            or _iflytek_engine.api_secret != (cfg.iflytek_stt_api_secret or "")
+    if cfg.stt_provider == "generic":
+        global _generic_engine
+        if _generic_engine is None or (
+            _generic_engine.api_base_url != (cfg.generic_stt_api_base_url or "").rstrip("/")
+            or _generic_engine.api_key != (cfg.generic_stt_api_key or "")
+            or _generic_engine.model != (cfg.generic_stt_model or "")
         ):
-            _iflytek_engine = IflyitekSTT(
-                app_id=cfg.iflytek_stt_app_id,
-                api_key=cfg.iflytek_stt_api_key,
-                api_secret=cfg.iflytek_stt_api_secret,
+            _generic_engine = GenericHTTPSTT(
+                api_base_url=cfg.generic_stt_api_base_url,
+                api_key=cfg.generic_stt_api_key,
+                model=cfg.generic_stt_model,
             )
-        return _iflytek_engine
+        return _generic_engine
     global _engine
     size = model_size if model_size is not None else cfg.whisper_model
     lang = language if language is not None else cfg.whisper_language
@@ -171,7 +171,7 @@ def transcribe_with_fallback(
 
     cfg = get_config()
     provider = cfg.stt_provider
-    is_remote = provider in ("doubao", "iflytek")
+    is_remote = provider in ("doubao", "generic")
 
     if is_remote and _is_circuit_open():
         _log.info("STT circuit open, using whisper fallback directly")

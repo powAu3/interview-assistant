@@ -25,6 +25,9 @@ export const SAMPLE_CONFIG = {
   doubao_stt_access_token: '',
   doubao_stt_resource_id: '',
   doubao_stt_boosting_table_id: '',
+  generic_stt_api_base_url: '',
+  generic_stt_api_key: '',
+  generic_stt_model: '',
   practice_tts_provider: 'edge_tts',
   edge_tts_available: true,
   edge_tts_status_detail: 'edge-tts Python 包可用',
@@ -59,7 +62,7 @@ export const SAMPLE_OPTIONS = {
   languages: ['中文', 'English'],
   practice_audiences: ['social', 'campus_intern'],
   practice_tts_providers: ['edge_tts', 'local', 'volcengine'],
-  stt_providers: ['whisper', 'doubao', 'iflytek'],
+  stt_providers: ['whisper', 'doubao', 'generic'],
   whisper_models: ['large-v3-turbo', 'medium', 'small'],
   screen_capture_regions: ['full', 'left_half', 'right_half', 'top_half', 'bottom_half'],
 }

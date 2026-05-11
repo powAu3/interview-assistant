@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
@@ -76,9 +77,9 @@ class ConfigUpdate(BaseModel):
     multi_screen_capture_idle_sec: Optional[float] = None
     written_exam_mode: Optional[bool] = None
     written_exam_think: Optional[bool] = None
-    iflytek_stt_app_id: Optional[str] = None
-    iflytek_stt_api_key: Optional[str] = None
-    iflytek_stt_api_secret: Optional[str] = None
+    generic_stt_api_base_url: Optional[str] = None
+    generic_stt_api_key: Optional[str] = None
+    generic_stt_model: Optional[str] = None
     practice_tts_provider: Optional[str] = None
     edge_tts_voice_female: Optional[str] = None
     edge_tts_voice_male: Optional[str] = None
@@ -454,23 +455,27 @@ async def api_stt_test():
             return {"ok": False, "detail": "豆包 Access Token 未配置"}
         if not cfg.doubao_stt_app_id:
             return {"ok": False, "detail": "豆包 App ID 未配置"}
-    elif cfg.stt_provider == "iflytek":
-        if not cfg.iflytek_stt_app_id:
-            return {"ok": False, "detail": "讯飞 APPID 未配置"}
-        if not cfg.iflytek_stt_api_key:
-            return {"ok": False, "detail": "讯飞 APIKey 未配置"}
-        if not cfg.iflytek_stt_api_secret:
-            return {"ok": False, "detail": "讯飞 APISecret 未配置"}
-    import numpy as _np
+    elif cfg.stt_provider == "generic":
+        if not getattr(cfg, "generic_stt_api_base_url", ""):
+            return {"ok": False, "detail": "通用 ASR Base URL 未配置"}
+        if not getattr(cfg, "generic_stt_api_key", ""):
+            return {"ok": False, "detail": "通用 ASR API Key 未配置"}
+        if not getattr(cfg, "generic_stt_model", ""):
+            return {"ok": False, "detail": "通用 ASR Model 未配置"}
     try:
         engine = get_stt_engine()
-        sr = 16000
-        duration_sec = 1.5
-        silence = _np.zeros(int(sr * duration_sec), dtype=_np.float32)
-        result = engine.transcribe(silence, sample_rate=sr)
+        from services.audio import load_wav_file
+        wav_path = Path(__file__).resolve().parents[2] / "assets" / "preflight_phrase.wav"
+        if wav_path.exists():
+            audio, sr = load_wav_file(wav_path)
+        else:
+            import numpy as _np
+            sr = 16000
+            audio = _np.zeros(int(sr * 1.5), dtype=_np.float32)
+        result = engine.transcribe(audio, sample_rate=sr)
         if result is None:
             return {"ok": False, "detail": "引擎返回空结果，请检查配置"}
-        return {"ok": True}
+        return {"ok": True, "text": result}
     except Exception as e:
         return {"ok": False, "detail": str(e)[:200]}
 

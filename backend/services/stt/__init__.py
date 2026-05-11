@@ -20,7 +20,7 @@ from .text_utils import (
 from .engines import (
     STTEngine,
     DoubaoSTT,
-    IflyitekSTT,
+    GenericHTTPSTT,
 )
 
 from .factory import (
@@ -46,7 +46,7 @@ __all__ = [
     "AsrQuestionCandidate",
     "STTEngine",
     "DoubaoSTT",
-    "IflyitekSTT",
+    "GenericHTTPSTT",
     "get_stt_engine",
     "set_whisper_language",
     "transcribe_with_fallback",

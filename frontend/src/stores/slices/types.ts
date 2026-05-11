@@ -39,9 +39,9 @@ export interface AppConfig {
   doubao_stt_access_token: string
   doubao_stt_resource_id: string
   doubao_stt_boosting_table_id: string
-  iflytek_stt_app_id: string
-  iflytek_stt_api_key: string
-  iflytek_stt_api_secret: string
+  generic_stt_api_base_url: string
+  generic_stt_api_key: string
+  generic_stt_model: string
   practice_tts_provider?: string
   edge_tts_available?: boolean
   edge_tts_status_detail?: string

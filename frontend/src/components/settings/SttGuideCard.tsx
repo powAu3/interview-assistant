@@ -25,17 +25,16 @@ const STT_GUIDES: Record<string, { color: string; borderColor: string; title: st
     ],
     link: { url: 'https://console.volcengine.com/speech/service/8', label: '火山引擎控制台' },
   },
-  iflytek: {
+  generic: {
     color: 'bg-blue-500/10',
     borderColor: 'border-blue-500/20',
-    title: '讯飞（语音听写）',
+    title: '通用 ASR（OpenAI-compatible）',
     steps: [
-      '前往讯飞开放平台 → 控制台 → 创建应用',
-      '在应用管理中获取 APPID、APIKey、APISecret',
-      '开通「语音听写（流式版）」服务',
-      '每日有免费调用额度，超出需付费',
+      '填写兼容 OpenAI /audio/transcriptions 的 Base URL',
+      '填写 API Key 和供应商要求的模型名',
+      '请求格式为 multipart/form-data: file=audio.wav, model=模型名',
+      '测试连接会上传一段静音 WAV，并显示接口返回的文本',
     ],
-    link: { url: 'https://console.xfyun.cn/services/iat', label: '讯飞开放平台' },
   },
 }
 

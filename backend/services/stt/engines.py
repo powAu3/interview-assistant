@@ -1,14 +1,18 @@
-"""STT engine implementations: Whisper (local), Doubao (Volcengine), Iflytek."""
+"""STT engine implementations: Whisper (local), Doubao, and generic HTTP ASR."""
 
+import io
 import gzip
 import json
 import re
 import struct
 import time
 import uuid
+import wave
 import numpy as np
 import threading
 from typing import Optional, Any
+
+import requests
 
 from core.logger import get_logger
 from .text_utils import TECH_VOCAB, _postprocess, _build_initial_prompt
@@ -37,6 +41,17 @@ def _audio_to_pcm_int16(audio: np.ndarray) -> np.ndarray:
     if audio.dtype != np.int16:
         return audio.astype(np.int16)
     return audio
+
+
+def _audio_to_wav_bytes(audio: np.ndarray, sample_rate: int = 16000) -> bytes:
+    pcm = _audio_to_pcm_int16(audio)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(int(sample_rate or 16000))
+        wf.writeframes(pcm.tobytes())
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +244,87 @@ class DoubaoSTT:
 
 
 # ---------------------------------------------------------------------------
+# GenericHTTPSTT – OpenAI-compatible multipart ASR
+# ---------------------------------------------------------------------------
+
+class GenericHTTPSTT:
+    """通用 HTTP ASR: POST {base_url}/audio/transcriptions with multipart file."""
+
+    def __init__(self, api_base_url: str, api_key: str, model: str):
+        self.api_base_url = (api_base_url or "").rstrip("/")
+        self.api_key = api_key or ""
+        self.model = model or ""
+
+    @property
+    def model_size(self) -> str:
+        return "generic"
+
+    @property
+    def is_loaded(self) -> bool:
+        return True
+
+    @property
+    def is_loading(self) -> bool:
+        return False
+
+    def load_model(self) -> None:
+        pass
+
+    def change_model(self, _model_size: str) -> None:
+        pass
+
+    def _extract_text(self, data: Any) -> str:
+        if isinstance(data, str):
+            return data.strip()
+        if not isinstance(data, dict):
+            return ""
+        for key in ("text", "transcript", "result", "content"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        result = data.get("result")
+        if isinstance(result, dict):
+            for key in ("text", "transcript", "content"):
+                value = result.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return ""
+
+    def transcribe(self, audio: np.ndarray, sample_rate: int = 16000,
+                   position: str = "后端开发", language: str = "Python") -> str:
+        if not self.api_base_url:
+            raise RuntimeError("通用 ASR Base URL 未配置")
+        if not self.api_key:
+            raise RuntimeError("通用 ASR API Key 未配置")
+        if not self.model:
+            raise RuntimeError("通用 ASR Model 未配置")
+
+        url = f"{self.api_base_url}/audio/transcriptions"
+        wav_bytes = _audio_to_wav_bytes(audio, sample_rate=sample_rate)
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {"model": self.model, "response_format": "json"}
+        try:
+            resp = requests.post(url, headers=headers, files=files, data=data, timeout=(10, 60))
+            if resp.status_code >= 400:
+                raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+            ctype = resp.headers.get("content-type", "")
+            if "json" in ctype.lower():
+                payload = resp.json()
+            else:
+                try:
+                    payload = resp.json()
+                except Exception:
+                    payload = resp.text
+            text = self._extract_text(payload)
+            return _postprocess(text) if text else ""
+        except requests.exceptions.Timeout as e:
+            raise RuntimeError(f"通用 ASR 请求超时: {e}") from e
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"通用 ASR 请求失败: {e}") from e
+
+
+# ---------------------------------------------------------------------------
 # STTEngine – Whisper (local)
 # ---------------------------------------------------------------------------
 
@@ -338,153 +434,3 @@ class STTEngine:
     @property
     def is_loading(self) -> bool:
         return self._loading
-
-
-# ---------------------------------------------------------------------------
-# IflyitekSTT – Iflytek streaming ASR
-# ---------------------------------------------------------------------------
-
-class IflyitekSTT:
-    """讯飞语音听写（流式版）WebSocket API。"""
-
-    WSS_URL = "wss://iat-api.xfyun.cn/v2/iat"
-
-    def __init__(self, app_id: str, api_key: str, api_secret: str):
-        self.app_id = app_id or ""
-        self.api_key = api_key or ""
-        self.api_secret = api_secret or ""
-
-    @property
-    def model_size(self) -> str:
-        return "iflytek"
-
-    @property
-    def is_loaded(self) -> bool:
-        return True
-
-    @property
-    def is_loading(self) -> bool:
-        return False
-
-    def load_model(self) -> None:
-        pass
-
-    def change_model(self, _model_size: str) -> None:
-        pass
-
-    def _build_auth_url(self) -> str:
-        import hashlib, hmac, base64
-        from datetime import datetime
-        from time import mktime
-        from wsgiref.handlers import format_date_time
-        from urllib.parse import urlencode, urlparse
-
-        url_parts = urlparse(self.WSS_URL)
-        now = datetime.now()
-        date = format_date_time(mktime(now.timetuple()))
-        signature_origin = (
-            f"host: {url_parts.netloc}\n"
-            f"date: {date}\n"
-            f"GET {url_parts.path} HTTP/1.1"
-        )
-        signature_sha = hmac.new(
-            self.api_secret.encode("utf-8"),
-            signature_origin.encode("utf-8"),
-            digestmod=hashlib.sha256,
-        ).digest()
-        signature = base64.b64encode(signature_sha).decode("utf-8")
-        authorization_origin = (
-            f'api_key="{self.api_key}", algorithm="hmac-sha256", '
-            f'headers="host date request-line", signature="{signature}"'
-        )
-        authorization = base64.b64encode(authorization_origin.encode("utf-8")).decode("utf-8")
-        params = {"authorization": authorization, "date": date, "host": url_parts.netloc}
-        return f"{self.WSS_URL}?{urlencode(params)}"
-
-    def transcribe(self, audio: np.ndarray, sample_rate: int = 16000,
-                  position: str = "后端开发", language: str = "Python") -> str:
-        if not self.api_key or not self.api_secret or websocket is None:
-            return ""
-        pcm = _audio_to_pcm_int16(audio)
-        if sample_rate != 16000:
-            n_orig = len(pcm)
-            n_new = int(round(n_orig * 16000 / sample_rate))
-            if n_new < 1:
-                n_new = 1
-            indices = np.linspace(0, n_orig - 1, n_new).astype(np.int32)
-            pcm = pcm[indices]
-
-        auth_url = self._build_auth_url()
-        FRAME_SIZE = 1280
-        pcm_bytes = pcm.tobytes()
-        try:
-            ws = websocket.create_connection(auth_url, timeout=8)
-        except Exception as e:
-            _log.error("Iflytek ASR connect failed: %s", e, exc_info=True)
-            raise RuntimeError(f"讯飞 ASR 连接失败: {e}") from e
-
-        try:
-            offset = 0
-            total = len(pcm_bytes)
-            frame_idx = 0
-            while offset < total:
-                end = min(offset + FRAME_SIZE, total)
-                chunk = pcm_bytes[offset:end]
-                import base64 as _b64
-                data_field = {"status": 0 if frame_idx == 0 else 1, "format": "audio/L16;rate=16000",
-                              "encoding": "raw", "audio": _b64.b64encode(chunk).decode("utf-8")}
-                if frame_idx == 0:
-                    payload = {
-                        "common": {"app_id": self.app_id},
-                        "business": {"language": "zh_cn", "domain": "iat", "accent": "mandarin",
-                                     "vad_eos": 3000, "dwa": "wpgs", "ptt": 0},
-                        "data": data_field,
-                    }
-                else:
-                    payload = {"data": data_field}
-                ws.send(json.dumps(payload))
-                offset = end
-                frame_idx += 1
-
-            last_payload = {
-                "data": {"status": 2, "format": "audio/L16;rate=16000",
-                         "encoding": "raw", "audio": ""}
-            }
-            ws.send(json.dumps(last_payload))
-
-            result_parts: list[str] = []
-            ws.settimeout(8)
-            while True:
-                try:
-                    msg = ws.recv()
-                except Exception:
-                    break
-                if not msg:
-                    break
-                resp = json.loads(msg)
-                code = resp.get("code", -1)
-                if code != 0:
-                    ws.close()
-                    raise RuntimeError(f"讯飞 ASR 错误 {code}: {resp.get('message', '')}")
-                data = resp.get("data", {})
-                result = data.get("result", {})
-                ws_list = result.get("ws", [])
-                for ws_item in ws_list:
-                    cw_list = ws_item.get("cw", [])
-                    for cw in cw_list:
-                        w = cw.get("w", "")
-                        if w:
-                            result_parts.append(w)
-                status = data.get("status", 0)
-                if status == 2:
-                    break
-            ws.close()
-            text = "".join(result_parts).strip()
-            return _postprocess(text) if text else ""
-        except Exception as e:
-            _log.error("Iflytek ASR error: %s", e, exc_info=True)
-            try:
-                ws.close()
-            except Exception:
-                pass
-            raise

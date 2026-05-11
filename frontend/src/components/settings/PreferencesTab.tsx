@@ -117,7 +117,7 @@ export default function PreferencesTab() {
     }
   }
 
-  const sttLabel = config?.stt_provider === 'doubao' ? '豆包' : config?.stt_provider === 'iflytek' ? '讯飞' : 'Whisper'
+  const sttLabel = config?.stt_provider === 'doubao' ? '豆包' : config?.stt_provider === 'generic' ? '通用 ASR' : 'Whisper'
   const hasScreenCapture = (options?.screen_capture_regions?.length ?? 0) > 0
   const searchQuery = useSettingsSearch()
   const inSearch = searchQuery.trim().length > 0

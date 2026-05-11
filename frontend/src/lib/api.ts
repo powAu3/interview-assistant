@@ -238,7 +238,7 @@ export const api = {
   /** 当前各模型健康状态（检测中/可用/不可用） */
   getModelsHealth: () => request<{ health: Record<string, string> }>('/api/models/health'),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
-  sttTest: () => request<{ ok: boolean; detail?: string }>('/api/stt/test', { method: 'POST' }),
+  sttTest: () => request<{ ok: boolean; detail?: string; text?: string }>('/api/stt/test', { method: 'POST' }),
 
   // Knowledge
   knowledgeSummary: () => request('/api/knowledge/summary'),
