@@ -192,7 +192,7 @@ export default function SoundTest() {
             <Sparkles className="w-3 h-3 text-accent-amber/80" />
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
-            {'开始面试前，播放固定测试短句并检查 播放 → 捕获 → STT → LLM → 实时推送 是否畅通'}
+            {'开始前，播放固定测试短句并检查 播放 → 捕获 → STT → LLM → 实时推送 是否畅通'}
           </p>
         </div>
       </div>
@@ -341,7 +341,7 @@ export default function SoundTest() {
           {allPassed ? (
             <>
               <CheckCircle2 className="w-4 h-4" />
-              {'\u94FE\u8DEF\u7545\u901A\uFF0C\u53EF\u4EE5\u5F00\u59CB\u9762\u8BD5\u4E86\uFF01'}
+              {'链路畅通，可以开始了！'}
             </>
           ) : (
             <>

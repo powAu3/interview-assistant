@@ -252,3 +252,73 @@ def test_worker_stop_on_load_failure_does_not_call_audio_stop(monkeypatch):
     assert audio.stop_calls == [], (
         f"模型加载失败的早退路径不应调用 audio.stop; 实际 stop_calls={audio.stop_calls}"
     )
+
+
+# ---------- Written exam mode: start without audio ---------------------------
+
+
+def test_start_nonblocking_skips_audio_in_exam_mode(monkeypatch):
+    """笔试模式 start_nonblocking(device_id=None) 不调 audio_capture.start() 且不启动 ASR worker."""
+
+    audio = _RecordingAudioCapture()
+    session = _FakeSession()
+    _wire_common_fakes(monkeypatch, audio, session)
+
+    monkeypatch.setattr(
+        pipeline, "get_config",
+        lambda: type("Cfg", (), {"written_exam_mode": True})(),
+    )
+
+    pipeline.start_nonblocking(device_id=None)
+
+    assert audio.start_calls == [], (
+        f"笔试模式不应调用 audio_capture.start; 实际 start_calls={audio.start_calls}"
+    )
+    assert session.is_recording is True
+    assert session.is_paused is False
+
+    pipeline.stop_interview_loop()
+
+    assert "assist" in audio.stop_calls
+
+
+def test_start_nonblocking_with_device_in_exam_mode(monkeypatch):
+    """笔试模式仍允许传 device_id 走正常音频路径（用户想同时录音）."""
+
+    audio = _RecordingAudioCapture()
+    session = _FakeSession()
+    _wire_common_fakes(monkeypatch, audio, session)
+
+    monkeypatch.setattr(
+        pipeline, "get_config",
+        lambda: type("Cfg", (), {"written_exam_mode": True})(),
+    )
+
+    pipeline.start_nonblocking(device_id=1)
+
+    assert audio.start_calls == [(1, "assist")], (
+        f"传了 device_id 时应走音频路径; 实际 start_calls={audio.start_calls}"
+    )
+
+    pipeline.stop_interview_loop()
+
+
+def test_stop_interview_loop_safe_when_no_audio_started(monkeypatch):
+    """笔试模式启动后（无音频）stop_interview_loop 安全完成."""
+
+    audio = _RecordingAudioCapture()
+    session = _FakeSession()
+    _wire_common_fakes(monkeypatch, audio, session)
+
+    monkeypatch.setattr(
+        pipeline, "get_config",
+        lambda: type("Cfg", (), {"written_exam_mode": True})(),
+    )
+
+    pipeline.start_nonblocking(device_id=None)
+    assert session.is_recording is True
+
+    pipeline.stop_interview_loop()
+
+    assert session.is_recording is False
+    assert session.is_paused is False

@@ -14,6 +14,8 @@ export default function InterviewOverlay() {
   const qaPairs = useInterviewStore((s) => s.qaPairs)
   const streamingIds = useInterviewStore((s) => s.streamingIds)
   const isRecording = useInterviewStore((s) => s.isRecording)
+  const config = useInterviewStore((s) => s.config)
+  const isExamMode = config?.written_exam_mode === true
   const enabled = useUiPrefsStore((s) => s.interviewOverlayEnabled)
   const opacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
   const fontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
@@ -122,7 +124,7 @@ export default function InterviewOverlay() {
     </>
   ) : (
     <span className="ov-standby-hint" style={{ fontSize: `${answerFontSize}px` }}>
-      {isRecording ? '正在聆听…' : '等待面试开始'}
+      {isRecording ? (isExamMode ? '笔试中…' : '正在聆听…') : (isExamMode ? '点击开始笔试' : '等待面试开始')}
     </span>
   )
 

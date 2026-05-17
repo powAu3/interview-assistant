@@ -514,3 +514,69 @@ def test_update_config_rejects_all_disabled_models(monkeypatch):
     assert exc.value.status_code == 422
     assert "至少启用一个模型" in exc.value.detail
     assert update_called is False
+
+
+# ---------- Written exam mode: /api/start without device_id ------------------
+
+
+def test_start_rejects_no_device_in_normal_mode(monkeypatch):
+    assist_router = importlib.import_module("api.assist.routes")
+
+    monkeypatch.setattr(
+        assist_router, "get_config",
+        lambda: type("Cfg", (), {"written_exam_mode": False})(),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        _run(assist_router.api_start({}))
+
+    assert exc.value.status_code == 400
+
+
+def test_start_accepts_no_device_in_written_exam_mode(monkeypatch):
+    assist_router = importlib.import_module("api.assist.routes")
+
+    monkeypatch.setattr(
+        assist_router, "get_config",
+        lambda: type("Cfg", (), {"written_exam_mode": True})(),
+    )
+
+    start_called = {"v": False}
+
+    def fake_start_nonblocking(device_id):
+        start_called["v"] = True
+        assert device_id is None
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        fn(*args, **kwargs)
+
+    monkeypatch.setattr(assist_router, "start_nonblocking", fake_start_nonblocking)
+    monkeypatch.setattr(assist_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    result = _run(assist_router.api_start({}))
+    assert result == {"ok": True}
+    assert start_called["v"] is True
+
+
+def test_start_passes_device_id_when_provided_in_exam_mode(monkeypatch):
+    assist_router = importlib.import_module("api.assist.routes")
+
+    monkeypatch.setattr(
+        assist_router, "get_config",
+        lambda: type("Cfg", (), {"written_exam_mode": True})(),
+    )
+
+    start_args = {"device_id": None}
+
+    def fake_start_nonblocking(device_id):
+        start_args["device_id"] = device_id
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        fn(*args, **kwargs)
+
+    monkeypatch.setattr(assist_router, "start_nonblocking", fake_start_nonblocking)
+    monkeypatch.setattr(assist_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    result = _run(assist_router.api_start({"device_id": 5}))
+    assert result == {"ok": True}
+    assert start_args["device_id"] == 5

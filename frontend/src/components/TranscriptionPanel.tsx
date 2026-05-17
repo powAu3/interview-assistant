@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Mic, MicOff, Activity, Volume2, Radio, Languages } from 'lucide-react'
+import { Mic, MicOff, Activity, Volume2, Radio, Languages, ClipboardPaste, Keyboard, Brain } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 
 export default function TranscriptionPanel() {
@@ -7,6 +7,8 @@ export default function TranscriptionPanel() {
   const isRecording = useInterviewStore((s) => s.isRecording)
   const audioLevel = useInterviewStore((s) => s.audioLevel)
   const isTranscribing = useInterviewStore((s) => s.isTranscribing)
+  const config = useInterviewStore((s) => s.config)
+  const isExamMode = config?.written_exam_mode === true
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -28,7 +30,7 @@ export default function TranscriptionPanel() {
             <MicOff className="w-4 h-4 text-text-muted" />
           )}
           <span className="text-sm font-semibold tracking-tight">
-            {isRecording ? '正在录音' : '实时转录'}
+            {isRecording ? (isExamMode ? '答题中' : '正在录音') : (isExamMode ? '答题记录' : '实时转录')}
           </span>
         </div>
         {isRecording && (
@@ -73,21 +75,32 @@ export default function TranscriptionPanel() {
             </div>
             <div className="text-center space-y-1">
               <p className="text-text-primary text-sm font-semibold">
-                {isRecording ? '等待语音输入…' : '实时语音转录'}
+                {isRecording ? (isExamMode ? '等待截图或手动输入…' : '等待语音输入…') : (isExamMode ? '笔试答题记录' : '实时语音转录')}
               </p>
               <p className="text-text-muted text-xs leading-relaxed">
                 {isRecording
-                  ? '检测到语音会自动分段转录,问题会发给 AI 生成答案'
+                  ? isExamMode
+                    ? '截图审题或手动输入问题后，AI 会自动生成答案'
+                    : '检测到语音会自动分段转录,问题会发给 AI 生成答案'
+                  : isExamMode
+                  ? '点击「开始笔试」，通过截图或输入题目获取答案'
                   : '选择音频设备后,点击「开始面试」启动实时识别'}
               </p>
             </div>
             {!isRecording && (
               <div className="flex items-center gap-1.5 flex-wrap justify-center pt-1">
-                {[
-                  { icon: Volume2, label: '会议拾音', hint: '优先选 BlackHole / 系统音频 (loopback), 可录远端声音' },
-                  { icon: Radio, label: '自动断句', hint: 'VAD 静音超阈值即切段并识别' },
-                  { icon: Languages, label: '中英混读', hint: '默认中文优先, 英文术语保留原样' },
-                ].map(({ icon: Icon, label, hint }) => (
+                {(isExamMode
+                  ? [
+                      { icon: ClipboardPaste, label: '截图审题', hint: '输入框 Ctrl/⌘+V 粘贴' },
+                      { icon: Keyboard, label: '手动输入', hint: '底部输入框 + Enter' },
+                      { icon: Brain, label: 'AI 答题', hint: '自动识别题目类型并生成答案' },
+                    ]
+                  : [
+                      { icon: Volume2, label: '会议拾音', hint: '优先选 BlackHole / 系统音频 (loopback), 可录远端声音' },
+                      { icon: Radio, label: '自动断句', hint: 'VAD 静音超阈值即切段并识别' },
+                      { icon: Languages, label: '中英混读', hint: '默认中文优先, 英文术语保留原样' },
+                    ]
+                ).map(({ icon: Icon, label, hint }: { icon: typeof Mic; label: string; hint: string }) => (
                   <span
                     key={label}
                     title={hint}

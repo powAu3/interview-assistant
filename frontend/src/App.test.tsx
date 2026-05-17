@@ -56,6 +56,7 @@ describe('App bootstrap', () => {
       active_model: 0,
       api_key_set: true,
       think_mode: false,
+      think_effort: 'off',
       stt_provider: 'whisper',
     })
     apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
@@ -107,6 +108,7 @@ describe('App bootstrap', () => {
       active_model: 0,
       api_key_set: true,
       think_mode: false,
+      think_effort: 'off',
       stt_provider: 'whisper',
     })
 

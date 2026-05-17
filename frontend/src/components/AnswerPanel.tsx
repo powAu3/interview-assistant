@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield, Keyboard, ClipboardPaste, Mic } from 'lucide-react'
+import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield, Keyboard, ClipboardPaste, Mic, MonitorSmartphone } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import KbReferenceBanner from '@/components/kb/KbReferenceBanner'
@@ -221,6 +221,7 @@ export default function AnswerPanel() {
   const qaPairs = useInterviewStore((s) => s.qaPairs)
   const streamingIds = useInterviewStore((s) => s.streamingIds)
   const config = useInterviewStore((s) => s.config)
+  const isExamMode = config?.written_exam_mode === true
   const toggleSettings = useInterviewStore((s) => s.toggleSettings)
   const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
@@ -289,11 +290,11 @@ export default function AnswerPanel() {
           </div>
           <div>
             <p className="text-text-primary text-sm font-semibold flex items-center justify-center gap-1.5">
-              AI {'\u9762\u8BD5\u52A9\u624B'}
+              AI {isExamMode ? '笔试助手' : '面试助手'}
               <Sparkles className="w-3 h-3 text-accent-amber/80" />
             </p>
             <p className="text-text-muted text-xs mt-1 leading-relaxed">
-              {'\u8BC6\u522B\u5230\u95EE\u9898\u540E\u81EA\u52A8\u751F\u6210\u56DE\u7B54\uFF0C\u4E5F\u53EF\u4EE5\u624B\u52A8\u8F93\u5165\u6216\u622A\u56FE\u5BA1\u9898'}
+              {isExamMode ? '截图或输入题目后自动生成答案' : '识别到问题后自动生成回答，也可以手动输入或截图审题'}
             </p>
           </div>
           {needsConfig && (
@@ -306,11 +307,18 @@ export default function AnswerPanel() {
           )}
           {!needsConfig && (
             <div className="pt-2 flex items-center justify-center gap-1.5 flex-wrap">
-              {[
-                { icon: Keyboard, label: '键盘输入', hint: '底部输入框 + Enter' },
-                { icon: ClipboardPaste, label: '粘贴截图', hint: '输入框内 Ctrl/⌘+V' },
-                { icon: Mic, label: '开始面试', hint: '录音自动识别问题' },
-              ].map(({ icon: Icon, label, hint }) => (
+              {(isExamMode
+                ? [
+                    { icon: Keyboard, label: '键盘输入', hint: '底部输入框 + Enter' },
+                    { icon: ClipboardPaste, label: '粘贴截图', hint: '输入框内 Ctrl/⌘+V' },
+                    { icon: MonitorSmartphone, label: '开始笔试', hint: '截图审题或输入问题' },
+                  ]
+                : [
+                    { icon: Keyboard, label: '键盘输入', hint: '底部输入框 + Enter' },
+                    { icon: ClipboardPaste, label: '粘贴截图', hint: '输入框内 Ctrl/⌘+V' },
+                    { icon: Mic, label: '开始面试', hint: '录音自动识别问题' },
+                  ]
+              ).map(({ icon: Icon, label, hint }) => (
                 <span
                   key={label}
                   title={hint}
@@ -325,7 +333,7 @@ export default function AnswerPanel() {
         </div>
 
         {/* Sound Test - only show when idle (not recording) */}
-        {isIdle && (
+        {isIdle && !isExamMode && (
           <Suspense fallback={<div className="text-xs text-text-muted">加载链路检测中…</div>}>
             <SoundTest />
           </Suspense>

@@ -114,6 +114,7 @@ describe('PracticeMode', () => {
         practice_audience: 'social',
         has_resume: true,
         think_mode: false,
+        think_effort: 'off',
       },
       devices: [{ id: 1, name: 'MacBook Mic', channels: 1, is_loopback: false, host_api: 'coreaudio' }],
       sttLoaded: true,
@@ -320,6 +321,7 @@ describe('PracticeMode', () => {
         resume_active_filename: '张三_后端开发.pdf',
         resume_active_history_id: 3,
         think_mode: false,
+        think_effort: 'off',
       },
     } as any)
 

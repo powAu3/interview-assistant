@@ -213,8 +213,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ summary }),
     }),
-  start: (device_id: number) =>
-    request('/api/start', { method: 'POST', body: JSON.stringify({ device_id }) }),
+  start: (device_id?: number | null) =>
+    request('/api/start', { method: 'POST', body: JSON.stringify(device_id != null ? { device_id } : {}) }),
   stop: () => request('/api/stop', { method: 'POST' }),
   pause: () => request('/api/pause', { method: 'POST' }),
   resume: (device_id?: number) => request('/api/unpause', { method: 'POST', body: JSON.stringify(device_id != null ? { device_id } : {}) }),

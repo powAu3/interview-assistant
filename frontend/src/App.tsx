@@ -39,6 +39,7 @@ export default function App() {
   const sttLoading = useInterviewStore((s) => s.sttLoading)
   const isRecording = useInterviewStore((s) => s.isRecording)
   const isPaused = useInterviewStore((s) => s.isPaused)
+  const isExamMode = config?.written_exam_mode === true
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
   const appMode = useUiPrefsStore((s) => s.appMode)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
@@ -201,8 +202,8 @@ export default function App() {
               aria-live="polite"
               title={
                 isPaused
-                  ? `录音已暂停 · STT ${sttLoaded ? '就绪' : sttLoading ? '加载中' : '未加载'}`
-                  : `正在录音中 · STT ${sttLoaded ? '就绪' : sttLoading ? '加载中' : '未加载'}`
+                  ? isExamMode ? '笔试已暂停' : `录音已暂停 · STT ${sttLoaded ? '就绪' : sttLoading ? '加载中' : '未加载'}`
+                  : isExamMode ? '笔试进行中' : `正在录音中 · STT ${sttLoaded ? '就绪' : sttLoading ? '加载中' : '未加载'}`
               }
             >
               <span className="relative inline-flex w-1.5 h-1.5 flex-shrink-0">
@@ -217,14 +218,16 @@ export default function App() {
               <span
                 className={`text-[10px] font-semibold leading-none hidden sm:inline ${isPaused ? 'text-accent-amber' : 'text-accent-red'}`}
               >
-                {isPaused ? 'PAUSED' : 'REC'}
+                {isPaused ? 'PAUSED' : isExamMode ? 'EXAM' : 'REC'}
               </span>
             </div>
           ) : (
             <div
               className="flex items-center gap-1.5 ml-1.5 flex-shrink-0 bg-bg-tertiary/30 rounded-lg px-2 py-1 border border-bg-hover/20"
               title={
-                sttLoaded
+                isExamMode
+                  ? '笔试模式 · 等待提问'
+                  : sttLoaded
                   ? 'STT 模型已加载 · 等待录音'
                   : sttLoading
                   ? 'STT 模型加载中…'
@@ -316,7 +319,7 @@ export default function App() {
           <div className="flex md:hidden border-b border-bg-tertiary flex-shrink-0">
             <button onClick={() => setMobileTab('transcript')}
               className={`flex-1 py-2 text-xs font-medium text-center transition-colors ${mobileTab === 'transcript' ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`}>
-              实时转录
+              {isExamMode ? '答题记录' : '实时转录'}
             </button>
             <button onClick={() => setMobileTab('answer')}
               className={`flex-1 py-2 text-xs font-medium text-center transition-colors ${mobileTab === 'answer' ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`}>

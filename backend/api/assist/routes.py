@@ -36,13 +36,18 @@ class MultiServerScreenQuestion(BaseModel):
 
 @router.post("/start")
 async def api_start(body: dict):
+    cfg = get_config()
+    written_exam = bool(getattr(cfg, "written_exam_mode", False))
     device_id = body.get("device_id")
-    if device_id is None:
+    if not written_exam and device_id is None:
         raise HTTPException(400, "\u8bf7\u9009\u62e9\u97f3\u9891\u8bbe\u5907")
-    try:
-        dev = int(device_id)
-    except (TypeError, ValueError):
-        raise HTTPException(400, "device_id 必须是整数")
+    if device_id is not None:
+        try:
+            dev = int(device_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "device_id \u5fc5\u987b\u662f\u6574\u6570")
+    else:
+        dev = None
     try:
         await run_in_threadpool(start_nonblocking, dev)
         return {"ok": True}

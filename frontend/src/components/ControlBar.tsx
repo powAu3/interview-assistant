@@ -10,6 +10,7 @@ import {
   Pause,
   PlayCircle,
   Loader2,
+  BookOpen,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
@@ -85,15 +86,18 @@ export default function ControlBar() {
     () => (config?.models ?? []).map((model, index) => ({ model, index })).filter(({ model }) => model.enabled !== false),
     [config?.models],
   )
+  const isExamMode = config?.written_exam_mode === true
   const noEnabledModels = (config?.models?.length ?? 0) > 0 && enabledModelEntries.length === 0
   const allModelsUnavailable = enabledModelEntries.length > 0 &&
     enabledModelEntries.every(({ index }) => modelHealth[index] === 'error')
   const answerModelUnavailable = noEnabledModels || allModelsUnavailable
   const showColdStartHint =
+    !isExamMode &&
     !isRecording &&
     transcriptions.length === 0 &&
     qaPairs.length === 0 &&
     (devices.length === 0 || selectedDevice === null)
+  const showExamStartHint = isExamMode && !isRecording && qaPairs.length === 0
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
@@ -176,10 +180,10 @@ export default function ControlBar() {
   }, [])
 
   const handleStart = useCallback(async () => {
-    if (selectedDevice === null) { setError('请先选择音频设备'); return }
+    if (!isExamMode && selectedDevice === null) { setError('请先选择音频设备'); return }
     setLoading(true); setError(null)
     try {
-      await api.start(selectedDevice)
+      await api.start(isExamMode ? null : selectedDevice)
       const s = useUiPrefsStore.getState()
       if (s.interviewOverlayEnabled && window.electronAPI?.syncOverlayWindow) {
         window.electronAPI.syncOverlayWindow({
@@ -193,17 +197,17 @@ export default function ControlBar() {
         }).catch(() => {})
       }
     }
-    catch (e: unknown) { setError(getErrorMessage(e, '开始面试失败')) }
+    catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '开始失败' : '开始面试失败')) }
     finally { setLoading(false) }
-  }, [selectedDevice])
+  }, [selectedDevice, isExamMode])
   const handleStop = useCallback(async () => {
-    if (isRecording && !window.confirm('结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
+    if (isRecording && !window.confirm(isExamMode ? '结束本次笔试？当前答案会保留在页面上。' : '结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
     setLoading(true)
     try {
       await api.stop()
       window.electronAPI?.syncOverlayWindow?.({ visible: false }).catch(() => {})
     } catch (e: unknown) {
-      setError(`结束面试失败：${getErrorMessage(e)}`)
+      setError(`结束${isExamMode ? '' : '面试'}失败：${getErrorMessage(e)}`)
     } finally { setLoading(false) }
   }, [isRecording])
   const handlePause = useCallback(async () => {
@@ -212,7 +216,7 @@ export default function ControlBar() {
   }, [])
   const handleResume = useCallback(async () => {
     setLoading(true)
-    try { await api.resume(selectedDevice ?? undefined) } catch (e: unknown) { setError(getErrorMessage(e, '继续录音失败')) } finally { setLoading(false) }
+    try { await api.resume(selectedDevice ?? undefined) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally { setLoading(false) }
   }, [selectedDevice])
   const handleClear = useCallback(async () => {
     if (qaPairs.length > 0 || transcriptions.length > 0) {
@@ -276,7 +280,7 @@ export default function ControlBar() {
     try {
       const next = await api.getDevices()
       setDevices(next.devices ?? [], next.platform ?? null)
-      setToastMessage('音频设备已刷新')
+      setToastMessage(isExamMode ? '设备已刷新' : '音频设备已刷新')
     } catch (e: unknown) {
       setError(getErrorMessage(e, '刷新音频设备失败'))
     } finally {
@@ -296,6 +300,12 @@ export default function ControlBar() {
           </span>
         </div>
       )}
+      {showExamStartHint && (
+        <div className="flex items-center gap-2 text-xs text-accent-blue bg-accent-blue/10 px-3 py-1.5 rounded-lg">
+          <BookOpen className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>点击「开始笔试」进入答题模式，可通过截图或手动输入提问</span>
+        </div>
+      )}
       {!wsConnected && <WsReconnectingBanner />}
       {allModelsUnavailable && (
         <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
@@ -309,7 +319,7 @@ export default function ControlBar() {
           <span>未启用任何模型，请在设置中开启至少一个模型。</span>
         </div>
       )}
-      {!hasLoopback && platformInfo?.needs_virtual_device && (
+      {!isExamMode && !hasLoopback && platformInfo?.needs_virtual_device && (
         <div className="flex items-start gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-2 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <div>
@@ -319,7 +329,7 @@ export default function ControlBar() {
           </div>
         </div>
       )}
-      {selectedDevice !== null && !selectedIsLoopback && hasLoopback && (
+      {!isExamMode && selectedDevice !== null && !selectedIsLoopback && hasLoopback && (
         <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
           <span>你选择的是麦克风，建议选择带 ⟳ 标记的系统音频设备</span>
@@ -361,21 +371,21 @@ export default function ControlBar() {
         <div className={`flex md:hidden items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium ${isPaused ? 'bg-accent-amber/15 text-accent-amber' : 'bg-accent-green/15 text-accent-green'}`}>
           <div className="flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-accent-amber' : 'bg-accent-green animate-pulse'}`} />
-            <span>{isPaused ? '已暂停' : '录制中'}</span>
+            <span>{isPaused ? '已暂停' : isExamMode ? '答题中' : '录制中'}</span>
           </div>
         </div>
       )}
 
       {/* 主控制行 */}
       <div className="flex items-center gap-2">
-        <AudioDevicePicker
+        {!isExamMode && <AudioDevicePicker
           devices={devices}
           selectedDevice={selectedDevice}
           onSelect={setSelectedDevice}
           onRefresh={handleRefreshDevices}
           refreshing={refreshingDevices}
           selectionDisabled={isRecording && !isPaused}
-        />
+        />}
 
         {isRecording ? (
           <>
@@ -395,14 +405,14 @@ export default function ControlBar() {
             <button onClick={handleStop} disabled={loading}
               className="flex items-center gap-1.5 px-3.5 py-2 btn-danger text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
               <Square className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">结束面试</span>
+              <span className="hidden sm:inline">{isExamMode ? '结束' : '结束面试'}</span>
             </button>
           </>
         ) : (
-          <button onClick={handleStart} disabled={loading || selectedDevice === null}
+          <button onClick={handleStart} disabled={loading || (!isExamMode && selectedDevice === null)}
             className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
             <Play className="w-3.5 h-3.5" />
-            <span>开始面试</span>
+            <span>{isExamMode ? '开始笔试' : '开始面试'}</span>
           </button>
         )}
 
@@ -422,7 +432,7 @@ export default function ControlBar() {
         <button
           onClick={handleClear}
           disabled={clearing}
-          title={qaPairs.length > 30 ? `当前会话较长 (${qaPairs.length} 条), 建议清空以保持流畅` : '清空当前页的实时转录与 AI 答案 (不影响历史)'}
+          title={qaPairs.length > 30 ? `当前会话较长 (${qaPairs.length} 条), 建议清空以保持流畅` : isExamMode ? '清空当前页的 AI 答案 (不影响历史)' : '清空当前页的实时转录与 AI 答案 (不影响历史)'}
           aria-label={qaPairs.length > 30 ? `清空当前 ${qaPairs.length} 条转录与答案` : '清空当前转录与答案'}
           className={`relative flex items-center gap-1 min-h-[36px] min-w-[36px] justify-center px-2 py-2 text-xs rounded-lg transition-colors flex-shrink-0 disabled:opacity-50 ${
             qaPairs.length > 30

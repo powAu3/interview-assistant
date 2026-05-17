@@ -437,32 +437,39 @@ def _flush_commit(seq: int, apply_fn: Callable[[], None]):
 # Interview loop
 # ---------------------------------------------------------------------------
 
-def start_nonblocking(device_id: int):
+def start_nonblocking(device_id: Optional[int] = None):
     global _interview_thread
     stop_interview_loop()
     _stop_event.clear()
     _pause_event.clear()
 
-    capture_is_loopback = False
-    for d in AudioCapture.list_devices():
-        if d["id"] == device_id:
-            capture_is_loopback = d["is_loopback"]
-            break
-
-    audio_capture.start(device_id, owner="assist")
-
     session = get_session()
     with conversation_lock:
         session.is_recording = True
         session.is_paused = False
-        session.last_device_id = device_id
-        session.capture_is_loopback = capture_is_loopback
-    _ilog.info("INTERVIEW_START device=%s loopback=%s", device_id, capture_is_loopback)
+
+    if device_id is not None:
+        capture_is_loopback = False
+        for d in AudioCapture.list_devices():
+            if d["id"] == device_id:
+                capture_is_loopback = d["is_loopback"]
+                break
+
+        audio_capture.start(device_id, owner="assist")
+
+        with conversation_lock:
+            session.last_device_id = device_id
+            session.capture_is_loopback = capture_is_loopback
+        _ilog.info("INTERVIEW_START device=%s loopback=%s", device_id, capture_is_loopback)
+    else:
+        _ilog.info("INTERVIEW_START no_device (written_exam_mode)")
+
     broadcast({"type": "recording", "value": True})
     broadcast({"type": "paused", "value": False})
 
-    _interview_thread = threading.Thread(target=_interview_worker, daemon=True)
-    _interview_thread.start()
+    if device_id is not None:
+        _interview_thread = threading.Thread(target=_interview_worker, daemon=True)
+        _interview_thread.start()
 
 
 def stop_interview_loop():
