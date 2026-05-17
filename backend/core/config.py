@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class AppConfig(BaseModel):
     temperature: float = 0.5
     max_tokens: int = 4096
     think_mode: bool = False
+    # 推理强度: off=关闭, low/medium/high 分别对应低/中/高强度推理
+    think_effort: str = "off"
 
     # 语音识别：whisper=本地 faster-whisper，doubao=豆包语音识别 API
     stt_provider: str = "whisper"
@@ -153,25 +156,28 @@ class AppConfig(BaseModel):
 
 
 _config: Optional[AppConfig] = None
+_config_lock = threading.RLock()
 
 
 def get_config() -> AppConfig:
     global _config
-    if _config is None:
-        _config = _load_config()
-    return _config
+    with _config_lock:
+        if _config is None:
+            _config = _load_config()
+        return _config
 
 
 def update_config(updates: dict) -> AppConfig:
     global _config
-    cfg = get_config()
-    data = cfg.model_dump()
-    for k, v in updates.items():
-        if hasattr(cfg, k):
-            data[k] = v
-    _config = AppConfig(**data)
-    _save_config(_config)
-    return _config
+    with _config_lock:
+        cfg = get_config()
+        data = cfg.model_dump()
+        for k, v in updates.items():
+            if hasattr(cfg, k):
+                data[k] = v
+        _config = AppConfig(**data)
+        _save_config(_config)
+        return _config
 
 
 def _load_config() -> AppConfig:
