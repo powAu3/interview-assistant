@@ -540,7 +540,8 @@ function postBackend(pathname, body = '{}') {
         res.on('data', (chunk) => { raw += chunk; });
         res.on('end', () => {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(raw ? JSON.parse(raw) : { ok: true });
+            if (!raw) { resolve({ ok: true }); return; }
+            try { resolve(JSON.parse(raw)); } catch { resolve({ ok: true }); }
             return;
           }
           reject(new Error(raw || res.statusMessage || `HTTP ${res.statusCode}`));
@@ -561,7 +562,8 @@ function getBackend(pathname) {
       res.on('data', (chunk) => { raw += chunk; });
       res.on('end', () => {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(raw ? JSON.parse(raw) : {});
+          if (!raw) { resolve({}); return; }
+          try { resolve(JSON.parse(raw)); } catch { resolve({}); }
           return;
         }
         reject(new Error(raw || res.statusMessage || `HTTP ${res.statusCode}`));
@@ -785,6 +787,7 @@ ipcMain.handle('get-shortcuts', () => shortcuts);
 ipcMain.handle('update-shortcuts', (_event, updates) => {
   const next = JSON.parse(JSON.stringify(shortcuts));
   for (const update of updates || []) {
+    if (!update || typeof update.action !== 'string' || typeof update.key !== 'string') continue;
     if (!next[update.action]) continue;
     next[update.action].key = update.key;
   }

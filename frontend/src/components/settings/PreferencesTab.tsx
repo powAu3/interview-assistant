@@ -272,7 +272,7 @@ export default function PreferencesTab() {
               }}
               className="input-field w-full max-w-[200px]"
             >
-              {options!.screen_capture_regions!.map((r) => (
+              {(options?.screen_capture_regions ?? []).map((r) => (
                 <option key={r} value={r}>
                   {r === 'full' ? '全屏' : r === 'left_half' ? '左半屏' : r === 'right_half' ? '右半屏' : r === 'top_half' ? '上半屏' : '下半屏'}
                 </option>

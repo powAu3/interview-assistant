@@ -37,7 +37,7 @@ def _audio_to_pcm_int16(audio: np.ndarray) -> np.ndarray:
     if audio.dtype == np.float32 or audio.dtype == np.float64:
         if audio.max() <= 1.0 and audio.min() >= -1.0:
             return (audio * 32767).astype(np.int16)
-        return audio.astype(np.int16)
+        return np.clip(audio, -32768, 32767).astype(np.int16)
     if audio.dtype != np.int16:
         return audio.astype(np.int16)
     return audio
@@ -205,37 +205,38 @@ class DoubaoSTT:
                 header=[f"{k}: {v}" for k, v in headers.items()],
                 timeout=10,
             )
-            ws.send_binary(first_frame)
-            time.sleep(0.05)
-            for i, frame in enumerate(chunks):
-                ws.send_binary(frame)
-                if i % 10 == 9:
-                    time.sleep(0.02)
-            final_text = ""
-            ws.settimeout(12)
-            while True:
-                try:
-                    raw = ws.recv()
-                except Exception:
-                    break
-                if raw is None:
-                    break
-                if isinstance(raw, str):
-                    raw = raw.encode("utf-8")
-                msg_type, payload = _parse_ws_response(raw)
-                if msg_type == MSG_ERROR:
-                    code = struct.unpack(">I", raw[4:8])[0] if len(raw) >= 8 else 0
-                    err_size = struct.unpack(">I", raw[8:12])[0] if len(raw) >= 12 else 0
-                    err_msg = raw[12:12 + err_size].decode("utf-8", errors="replace") if err_size else ""
-                    ws.close()
-                    raise RuntimeError(f"豆包 ASR 错误: {code} {err_msg}")
-                if msg_type == MSG_FULL_SERVER_RESPONSE and payload:
-                    res = payload.get("result") or {}
-                    text = (res.get("text") or "").strip()
-                    if text:
-                        final_text = text
-            ws.close()
-            return _postprocess(final_text) if final_text else ""
+            try:
+                ws.send_binary(first_frame)
+                time.sleep(0.05)
+                for i, frame in enumerate(chunks):
+                    ws.send_binary(frame)
+                    if i % 10 == 9:
+                        time.sleep(0.02)
+                final_text = ""
+                ws.settimeout(12)
+                while True:
+                    try:
+                        raw = ws.recv()
+                    except Exception:
+                        break
+                    if raw is None:
+                        break
+                    if isinstance(raw, str):
+                        raw = raw.encode("utf-8")
+                    msg_type, payload = _parse_ws_response(raw)
+                    if msg_type == MSG_ERROR:
+                        code = struct.unpack(">I", raw[4:8])[0] if len(raw) >= 8 else 0
+                        err_size = struct.unpack(">I", raw[8:12])[0] if len(raw) >= 12 else 0
+                        err_msg = raw[12:12 + err_size].decode("utf-8", errors="replace") if err_size else ""
+                        raise RuntimeError(f"豆包 ASR 错误: {code} {err_msg}")
+                    if msg_type == MSG_FULL_SERVER_RESPONSE and payload:
+                        res = payload.get("result") or {}
+                        text = (res.get("text") or "").strip()
+                        if text:
+                            final_text = text
+                return _postprocess(final_text) if final_text else ""
+            finally:
+                ws.close()
         except Exception as e:
             _log.error("Doubao ASR error: %s", e, exc_info=True)
             if "websocket" in str(type(e).__name__).lower():

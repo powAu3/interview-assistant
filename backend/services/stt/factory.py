@@ -14,6 +14,7 @@ _log = get_logger("stt.factory")
 _engine: Optional[STTEngine] = None
 _doubao_engine: Optional[DoubaoSTT] = None
 _generic_engine: Optional[GenericHTTPSTT] = None
+_engine_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Circuit breaker for remote STT engines (doubao / generic)
@@ -78,18 +79,18 @@ def _is_circuit_open() -> bool:
 # ---------------------------------------------------------------------------
 
 def _get_whisper_fallback() -> STTEngine:
-    """Get or lazily create a local Whisper engine for fallback."""
     global _engine
     from core.config import get_config
     cfg = get_config()
     size = cfg.whisper_model or "base"
     lang = cfg.whisper_language or "auto"
-    if _engine is None:
-        _engine = STTEngine(model_size=size, language=lang)
-    if not _engine.is_loaded:
-        _log.info("Whisper fallback: loading model %s", _engine.model_size)
-        _engine.load_model()
-    return _engine
+    with _engine_lock:
+        if _engine is None:
+            _engine = STTEngine(model_size=size, language=lang)
+        if not _engine.is_loaded:
+            _log.info("Whisper fallback: loading model %s", _engine.model_size)
+            _engine.load_model()
+        return _engine
 
 
 def _whisper_transcribe(audio: np.ndarray, sample_rate: int,
@@ -104,8 +105,9 @@ def _whisper_transcribe(audio: np.ndarray, sample_rate: int,
 
 def set_whisper_language(language: str) -> None:
     global _engine
-    if _engine is not None:
-        _engine.language = language
+    with _engine_lock:
+        if _engine is not None:
+            _engine.language = language
 
 
 def get_stt_engine(
@@ -119,42 +121,45 @@ def get_stt_engine(
         raise RuntimeError("讯飞 STT 已下线，请在设置中改为通用 ASR 或 Whisper")
     if cfg.stt_provider == "doubao":
         global _doubao_engine
-        if _doubao_engine is None or (
-            _doubao_engine.app_id != cfg.doubao_stt_app_id
-            or _doubao_engine.access_token != cfg.doubao_stt_access_token
-            or _doubao_engine.resource_id != cfg.doubao_stt_resource_id
-            or _doubao_engine.boosting_table_id != (cfg.doubao_stt_boosting_table_id or "")
-        ):
-            _doubao_engine = DoubaoSTT(
-                app_id=cfg.doubao_stt_app_id,
-                access_token=cfg.doubao_stt_access_token,
-                resource_id=cfg.doubao_stt_resource_id or "volc.seedasr.sauc.duration",
-                boosting_table_id=cfg.doubao_stt_boosting_table_id or "",
-            )
-        return _doubao_engine
+        with _engine_lock:
+            if _doubao_engine is None or (
+                _doubao_engine.app_id != cfg.doubao_stt_app_id
+                or _doubao_engine.access_token != cfg.doubao_stt_access_token
+                or _doubao_engine.resource_id != cfg.doubao_stt_resource_id
+                or _doubao_engine.boosting_table_id != (cfg.doubao_stt_boosting_table_id or "")
+            ):
+                _doubao_engine = DoubaoSTT(
+                    app_id=cfg.doubao_stt_app_id,
+                    access_token=cfg.doubao_stt_access_token,
+                    resource_id=cfg.doubao_stt_resource_id or "volc.seedasr.sauc.duration",
+                    boosting_table_id=cfg.doubao_stt_boosting_table_id or "",
+                )
+            return _doubao_engine
     if cfg.stt_provider == "generic":
         global _generic_engine
-        if _generic_engine is None or (
-            _generic_engine.api_base_url != (cfg.generic_stt_api_base_url or "").rstrip("/")
-            or _generic_engine.api_key != (cfg.generic_stt_api_key or "")
-            or _generic_engine.model != (cfg.generic_stt_model or "")
-        ):
-            _generic_engine = GenericHTTPSTT(
-                api_base_url=cfg.generic_stt_api_base_url,
-                api_key=cfg.generic_stt_api_key,
-                model=cfg.generic_stt_model,
-            )
-        return _generic_engine
+        with _engine_lock:
+            if _generic_engine is None or (
+                _generic_engine.api_base_url != (cfg.generic_stt_api_base_url or "").rstrip("/")
+                or _generic_engine.api_key != (cfg.generic_stt_api_key or "")
+                or _generic_engine.model != (cfg.generic_stt_model or "")
+            ):
+                _generic_engine = GenericHTTPSTT(
+                    api_base_url=cfg.generic_stt_api_base_url,
+                    api_key=cfg.generic_stt_api_key,
+                    model=cfg.generic_stt_model,
+                )
+            return _generic_engine
     if cfg.stt_provider != "whisper":
         raise RuntimeError(f"未知 STT provider: {cfg.stt_provider}")
     global _engine
     size = model_size if model_size is not None else cfg.whisper_model
     lang = language if language is not None else cfg.whisper_language
-    if _engine is None:
-        _engine = STTEngine(model_size=size, language=lang)
-    elif _engine.model_size != size:
-        _engine.change_model(size)
-    return _engine
+    with _engine_lock:
+        if _engine is None:
+            _engine = STTEngine(model_size=size, language=lang)
+        elif _engine.model_size != size:
+            _engine.change_model(size)
+        return _engine
 
 
 def transcribe_with_fallback(

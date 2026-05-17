@@ -124,15 +124,22 @@ export function getShortcutDisplay(accelerator: string) {
   return out.join(isMacPlatform() ? '' : '+')
 }
 
+const VALID_ACTIONS = new Set<string>(Object.keys(defaultShortcuts))
+const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+[A-Za-z0-9./\\\- =;,'`\[\]\{\}]$/
+
 export function mergeShortcutConfigs(
   input: Record<string, Partial<ShortcutConfig> | Record<string, unknown>> | undefined,
 ) {
   const merged = { ...defaultShortcuts }
   for (const [action, shortcut] of Object.entries(input || {})) {
     if (!(action in merged)) continue
-    merged[action as ShortcutAction] = {
-      ...merged[action as ShortcutAction],
-      ...(shortcut as Partial<ShortcutConfig>),
+    if (!shortcut || typeof shortcut !== 'object') continue
+    const s = shortcut as Record<string, unknown>
+    if (typeof s.key === 'string' && s.key.trim() && SUPPORTED_KEY_RE.test(s.key)) {
+      merged[action as ShortcutAction] = {
+        ...merged[action as ShortcutAction],
+        key: s.key,
+      }
     }
   }
   return merged
