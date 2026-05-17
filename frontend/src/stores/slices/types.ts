@@ -32,6 +32,7 @@ export interface AppConfig {
   temperature: number
   max_tokens: number
   think_mode: boolean
+  think_effort: string
   stt_provider: string
   whisper_model: string
   whisper_language: string

@@ -17,7 +17,7 @@ from core.config import (
 )
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
-from api.common.config_payload import build_config_payload
+from api.common.config_payload import build_config_payload, _mask_secret
 from api.common.model_health import (
     get_model_health,
     get_model_health_snapshot,
@@ -52,6 +52,7 @@ class ConfigUpdate(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     think_mode: Optional[bool] = None
+    think_effort: Optional[str] = None
     stt_provider: Optional[str] = None
     whisper_model: Optional[str] = None
     whisper_language: Optional[str] = None
@@ -106,11 +107,7 @@ _LEGACY_STT_PROVIDER_MAP = {"iflytek": "generic"}
 
 
 def _mask_api_key(key: str) -> str:
-    if not key or key in ("", "sk-your-api-key-here"):
-        return ""
-    if len(key) <= 8:
-        return key[:2] + _MASK_MARKER + key[-1:]
-    return key[:3] + _MASK_MARKER + key[-3:]
+    return _mask_secret(key)
 
 
 def _resolve_masked_api_key(x: dict, index: int, old_models: list) -> str:
@@ -138,8 +135,6 @@ def _resolve_masked_api_key(x: dict, index: int, old_models: list) -> str:
     loose = [m for m in old_models if (m.name or "").strip() == name and (m.model or "").strip() == model_id]
     if len(loose) == 1:
         return loose[0].api_key or ""
-    if index < len(old_models):
-        return old_models[index].api_key or ""
     matched = next(
         (m for m in old_models if m.name == x.get("name") and m.model == x.get("model")),
         None,
@@ -236,6 +231,15 @@ async def api_update_config(body: ConfigUpdate):
             d["multi_screen_capture_idle_sec"] = max(
                 1.0, min(60.0, float(d["multi_screen_capture_idle_sec"]))
             )
+        if "think_effort" in d:
+            val = str(d["think_effort"]).strip().lower()
+            if val not in ("off", "low", "medium", "high"):
+                raise HTTPException(422, "think_effort 必须是 off/low/medium/high 之一")
+            d["think_effort"] = val
+            if val == "off" and d.get("think_mode", True) is True:
+                d["think_mode"] = False
+            elif val != "off" and d.get("think_mode", False) is False:
+                d["think_mode"] = True
         if d.get("practice_audience") == "":
             d.pop("practice_audience", None)
         elif "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:

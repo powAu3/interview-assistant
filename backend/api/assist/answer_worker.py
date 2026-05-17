@@ -70,7 +70,7 @@ def prompt_mode_for_task(
     manual_input: bool,
     written_exam: bool = False,
 ) -> PromptMode:
-    if source.startswith("server_screen_"):
+    if (source or "").startswith("server_screen_"):
         if written_exam:
             return PROMPT_MODE_WRITTEN_EXAM
         return PROMPT_MODE_SERVER_SCREEN
@@ -88,6 +88,8 @@ def process_question_parallel(
 ):
     question_text, image, manual_input, source, meta = task
     cfg = get_config()
+    if model_idx < 0 or model_idx >= len(cfg.models):
+        return
     model_cfg = cfg.models[model_idx]
 
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
@@ -214,7 +216,8 @@ def process_question_parallel(
     first_token_mono: Optional[float] = None
     try:
         think_override = (
-            written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM else None
+            written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM and (source or "").startswith("server_screen_")
+            else None
         )
         for chunk_type, chunk_text in chat_stream_single_model(
             model_cfg,

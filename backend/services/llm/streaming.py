@@ -272,13 +272,51 @@ def _sanitize_messages(messages: list[dict], supports_vision: bool) -> list[dict
     return sanitized
 
 
+_EFFORT_BUDGET = {
+    "low": 1024,
+    "medium": 4096,
+    "high": 10240,
+}
+
+def _detect_think_style(model_cfg) -> str:
+    """Detect which thinking parameter format the model expects.
+
+    Returns:
+        'gpt'   – OpenAI o-series / GPT reasoning models (use reasoning_effort)
+        'claude' – Anthropic Claude extended thinking (use thinking.budget_tokens)
+        'generic' – generic OpenAI-compatible (use thinking.type)
+    """
+    name = (model_cfg.model or "").lower()
+    if name.startswith("o1") or name.startswith("o3") or name.startswith("o4"):
+        return "gpt"
+    if "claude" in name or "sonnet" in name or "haiku" in name or "opus" in name:
+        return "claude"
+    return "generic"
+
+
 def _build_think_params(model_cfg, cfg) -> dict:
     if not model_cfg.supports_think:
         return {}
-    think_type = "enabled" if cfg.think_mode else "disabled"
+    effort = cfg.think_effort
+    style = _detect_think_style(model_cfg)
+    if effort == "off":
+        if style == "gpt":
+            return {"reasoning_effort": "off", "think_mode": False}
+        return {"thinking": {"type": "disabled"}, "think_mode": False}
+    if style == "gpt":
+        return {
+            "reasoning_effort": effort,
+            "think_mode": True,
+        }
+    if style == "claude":
+        budget = _EFFORT_BUDGET.get(effort, 4096)
+        return {
+            "thinking": {"type": "enabled", "budget_tokens": budget},
+            "think_mode": True,
+        }
     return {
-        "thinking": {"type": think_type},
-        "think_mode": bool(cfg.think_mode),
+        "thinking": {"type": "enabled"},
+        "think_mode": True,
     }
 
 

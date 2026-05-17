@@ -68,6 +68,7 @@ export default function ModelsTab() {
     temperature: 0.5,
     max_tokens: 4096,
     think_mode: false,
+    think_effort: 'off',
   })
   const [llmSaving, setLlmSaving] = useState(false)
 
@@ -109,6 +110,7 @@ export default function ModelsTab() {
       temperature: config.temperature,
       max_tokens: config.max_tokens,
       think_mode: config.think_mode ?? false,
+      think_effort: config.think_effort ?? 'off',
     })
     void syncHealthFromServer()
   }, [config, syncHealthFromServer])
@@ -202,7 +204,7 @@ export default function ModelsTab() {
       await api.checkSingleModelHealth(idx)
       const deadline = Date.now() + 20000
       while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 500))
+        await new Promise((r) => setTimeout(r, 2000))
         const { health } = await api.getModelsHealth()
         const st = health[String(idx)]
         if (st === 'ok' || st === 'error') {
@@ -228,7 +230,7 @@ export default function ModelsTab() {
       await api.checkModelsHealth()
       const deadline = Date.now() + 25000
       while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 450))
+        await new Promise((r) => setTimeout(r, 2000))
         await syncHealthFromServer()
         const { health } = await api.getModelsHealth().catch(() => ({ health: {} as Record<string, string> }))
         const vals = Object.values(health ?? {})
@@ -574,7 +576,10 @@ export default function ModelsTab() {
             </p>
           </div>
           <button type="button" role="switch" aria-checked={llmForm.think_mode}
-            onClick={() => setLlmForm({ ...llmForm, think_mode: !llmForm.think_mode })}
+            onClick={() => {
+              const next = !llmForm.think_mode
+              setLlmForm({ ...llmForm, think_mode: next, think_effort: next ? 'high' : 'off' })
+            }}
             className={`relative h-7 w-11 rounded-full flex-shrink-0 transition-colors ${llmForm.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}>
             <span className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${llmForm.think_mode ? 'translate-x-4' : ''}`} />
           </button>

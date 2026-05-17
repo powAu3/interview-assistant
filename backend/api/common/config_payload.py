@@ -2,6 +2,14 @@ from services.storage.resume_history import get_filename_for_id
 from services.tts import get_edge_tts_status
 
 
+def _mask_secret(key: str) -> str:
+    if not key or key in ("", "sk-your-api-key-here"):
+        return ""
+    if len(key) <= 8:
+        return key[:2] + "****" + key[-1:]
+    return key[:3] + "****" + key[-3:]
+
+
 def build_config_payload(cfg) -> dict:
     active_model = cfg.get_active_model()
     resume_active_history_id = getattr(cfg, "resume_active_history_id", None)
@@ -22,15 +30,16 @@ def build_config_payload(cfg) -> dict:
         "temperature": cfg.temperature,
         "max_tokens": cfg.max_tokens,
         "think_mode": cfg.think_mode,
+        "think_effort": cfg.think_effort,
         "stt_provider": cfg.stt_provider,
         "whisper_model": cfg.whisper_model,
         "whisper_language": cfg.whisper_language,
         "doubao_stt_app_id": cfg.doubao_stt_app_id or "",
-        "doubao_stt_access_token": cfg.doubao_stt_access_token or "",
+        "doubao_stt_access_token": _mask_secret(cfg.doubao_stt_access_token or ""),
         "doubao_stt_resource_id": cfg.doubao_stt_resource_id or "",
         "doubao_stt_boosting_table_id": cfg.doubao_stt_boosting_table_id or "",
         "generic_stt_api_base_url": getattr(cfg, "generic_stt_api_base_url", "") or "",
-        "generic_stt_api_key": getattr(cfg, "generic_stt_api_key", "") or "",
+        "generic_stt_api_key": _mask_secret(getattr(cfg, "generic_stt_api_key", "") or ""),
         "generic_stt_model": getattr(cfg, "generic_stt_model", "") or "",
         "practice_tts_provider": getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts",
         "edge_tts_voice_female": getattr(cfg, "edge_tts_voice_female", "zh-CN-XiaoxiaoNeural") or "zh-CN-XiaoxiaoNeural",
@@ -38,7 +47,7 @@ def build_config_payload(cfg) -> dict:
         "edge_tts_rate": getattr(cfg, "edge_tts_rate", "+0%") or "+0%",
         "edge_tts_pitch": getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz",
         "volcengine_tts_appkey": getattr(cfg, "volcengine_tts_appkey", "") or "",
-        "volcengine_tts_token": getattr(cfg, "volcengine_tts_token", "") or "",
+        "volcengine_tts_token": _mask_secret(getattr(cfg, "volcengine_tts_token", "") or ""),
         "practice_tts_speaker_female": getattr(cfg, "practice_tts_speaker_female", "zh_female_qingxin") or "zh_female_qingxin",
         "practice_tts_speaker_male": getattr(cfg, "practice_tts_speaker_male", "zh_male_chunhou") or "zh_male_chunhou",
         "position": cfg.position,

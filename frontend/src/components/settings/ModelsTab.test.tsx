@@ -50,6 +50,7 @@ describe('ModelsTab state sync', () => {
       temperature: 0.5,
       max_tokens: 4096,
       think_mode: false,
+      think_effort: 'off',
     })
     apiMock.checkSingleModelHealth.mockResolvedValue({ ok: true })
     apiMock.checkModelsHealth.mockResolvedValue({ ok: true })
@@ -69,6 +70,7 @@ describe('ModelsTab state sync', () => {
         temperature: 0.5,
         max_tokens: 4096,
         think_mode: false,
+        think_effort: 'off',
         stt_provider: 'whisper',
         whisper_model: 'base',
         whisper_language: 'auto',
