@@ -21,8 +21,66 @@ PromptMode = Literal[
 _FIRST_SENTENCE_CONSTRAINT = (
     "首句硬约束:\n"
     "- 第一句直接给结论、处理动作或判断，不寒暄、不复述题目;\n"
-    "- 禁止用\"我理解你问的是\"、\"想先确认一下\"、\"这是一个经典问题\"等引子;\n"
-    "- 如果是 ladder 的 B 档, 首句可以是\"先按大概率问 X 理解\"。\n"
+    "- 禁止用\u201c我理解你问的是\u201d、\u201c想先确认一下\u201d、\u201c这是一个经典问题\u201d等引子;\n"
+    "- 如果是 ladder 的 B 档, 首句可以是\u201c先按大概率问 X 理解\u201d。\n"
+)
+
+# ---- few-shot examples for each mode ----
+
+_FEWSHOT_ASR = (
+    "\n示例（输入\u2192输出）：\n"
+    'Q: "Redis 的 RDB 和 AOF 区别是什么"\n'
+    "A: RDB 是快照持久化，AOF 是追加写日志。区别在于安全性与性能的取舍\u2014\u2014RDB 恢复快但可能丢几分钟数据，AOF 可做到秒级持久化但文件体积更大。线上通常两者搭配使用。\n\n"
+    'Q: "锁怎么搞"（B 档可猜意图）\n'
+    "A: 先按大概率问分布式锁的理解。常用方案 Redisson + Lua 脚本，核心是续期和自动释放，配合看门狗机制防死锁。如果你实际想问别种锁，我可以换个方向。\n"
+)
+
+_FEWSHOT_MANUAL = (
+    "\n示例（输入\u2192输出）：\n"
+    'Q: "MySQL 事务隔离级别分别解决什么问题"\n'
+    "A: MySQL 四个隔离级别从低到高是读未提交、读已提交、可重复读和串行化。读未提交基本不用；读已提交解决脏读；可重复读解决不可重复读，是 InnoDB 默认，通过 MVCC 实现快照读；串行化解决幻读但牺牲并发。生产上大部分场景可重复读就够了，幻读敏感场景可加间隙锁。\n"
+)
+
+_FEWSHOT_SCREEN = (
+    "\n示例（输入\u2192输出）：\n"
+    'Q: "[截图] 给你一个整数数组 nums，找出只出现一次的元素（其他均出现两次）"\n'
+    "A:\n"
+    "\u3010题目理解\u3011找出只出现一次的元素，其余元素成对出现。\n"
+    "\u3010主方案代码\u3011\n"
+    "```python\n"
+    "def single_number(nums):\n"
+    "    result = 0\n"
+    "    for num in nums:\n"
+    "        result ^= num\n"
+    "    return result\n"
+    "```\n"
+    "\u3010思路与复杂度\u3011异或运算 a^a=0, a^0=a，全数组异或即为答案。时间 O(n)，空间 O(1)。\n"
+    "\u3010测试用例\u3011[2,2,1] \u2192 1；[4,1,2,1,2] \u2192 4。\n"
+)
+
+_FEWSHOT_EXAM = (
+    "\n示例（输入\u2192输出）：\n"
+    'Q: "[截图选择题] Redis 默认端口号？ A. 3306 B. 6379 C. 8080 D. 27017"\n'
+    "A: B. 6379\n"
+    'Q: "[截图编程题] 反转一个单链表"\n'
+    "\n"
+    "```python\n"
+    "# 双指针迭代 O(n)\n"
+    "class ListNode:\n"
+    "    def __init__(self, x):\n"
+    "        self.val = x\n"
+    "        self.next = None\n"
+    "\n"
+    "def reverse_list(head):\n"
+    "    prev = None\n"
+    "    curr = head\n"
+    "    while curr:\n"
+    "        nxt = curr.next\n"
+    "        curr.next = prev\n"
+    "        prev = curr\n"
+    "        curr = nxt\n"
+    "    return prev\n"
+    "```\n"
 )
 
 
@@ -35,32 +93,32 @@ def _intent_ladder_block(short_answer_budget: str) -> str:
         "输入判定三档 ladder（按顺序往下匹配）:\n"
         "A. 完整可答的面试问题 -> 直接进入正式回答, 不输出任何判定过程。\n"
         "B. 可猜意图（半句话、术语模糊、不完整但能推出方向） ->\n"
-        "   1) 先对最可能的意图给 1 句说明: \"先按大概率问 X 理解\";\n"
+        "   1) 先对最可能的意图给 1 句说明: \u201c先按大概率问 X 理解\u201d;\n"
         f"   2) 给一个 {short_answer_budget} 的最小可用回答;\n"
-        "   3) 最后一句挂 clarifier: \"如果你实际想问 Y, 我可以换个方向\";\n"
-        "   不要输出\"信息不足\"这种空回答。\n"
+        "   3) 最后一句挂 clarifier: \u201c如果你实际想问 Y, 我可以换个方向\u201d;\n"
+        "   不要输出\u201c信息不足\u201d这种空回答。\n"
         "C. 纯寒暄 / 口头禅 / 设备噪声 / 明显无关内容 -> 只输出一句:\n"
-        "   \"等你问题\" 或 \"在听呢, 请继续\", 其他不写。\n"
-        "默认倾向: 宁可按 B 给点东西, 也不要按 C 停; 只有确实没有可猜方向时才落 C。\n\n"
+        "   \u201c等你问题\u201d 或 \u201c在听呢, 请继续\u201d, 其他不写。\n"
+        "默认倾向: 宁可按 B 给点东西, 也不要按 C 停; 但若连最可能方向都无法合理推断时, 按 C 处理。\n\n"
     )
 
 
 _FOLLOWUP_COHERENCE = (
     "追问连贯规则:\n"
-    "- 用户消息中含 [追问上下文] 时, 视为对上一轮的追问;\n"
+    "- 用户消息中含 [追问上下文] 时, 或新消息明显是对上一轮的追问, 按追问处理;\n"
     "- 追问回答必须在上轮结论基础上往下深入, 不要重复上轮已说过的 1-2 句;\n"
     "- 鼓励形式: 补对比 / 补边界 / 补失败场景 / 补指标 / 补取舍;\n"
-    "- 即使高 churn 短答, 每条要点尽量是\"上轮没说过的新观点\"。\n"
+    "- 即使高 churn 短答, 每条要点尽量是\u201c上轮没说过的新观点\u201d。\n"
 )
 
 
 _RESUME_TWO_MODE_RULE = (
     "简历使用规则:\n"
-    "- 简历深挖题（明确问\"你做过/你的项目/简历里的 X\"）: 必须从 <resume_context>\n"
-    "  里选真实事实组织答案; 若简历未覆盖, 明确说\"简历里没写这段, 我按一般\n"
-    "  做法讲\", 不得编造;\n"
-    "- 简历相关题（主题与简历有交集但不强问简历）: 可选用 1 行 color 补充,\n"
-    "  比如\"你做过的 X 项目里就处理过这个问题, 具体是 …\"; 没交集就不补;\n"
+    "- 简历深挖题（明确问\u201c你做过/你的项目/简历里的 X\u201d）: 必须从 <resume_context>\n"
+    "  里选真实事实组织答案; 若简历未覆盖, 明确说\u201c简历里没写这段, 我按一般\n"
+    "  做法讲\u201d, 不得编造;\n"
+    "- 简历相关题（主题与简历有交集但不强问简历）: 可选用 1 句话从简历角\n"
+    "  度补充, 比如\u201c你做过的 X 项目里就处理过这个问题, 具体是 …\u201d; 没交集就不补;\n"
     "- 简历无关题: 不要强套, 按题干自然展开。\n"
 )
 
@@ -99,7 +157,6 @@ def _resume_reference_section(resume_text: Optional[str], max_chars: int = 1800)
 
 
 def _kb_reference_section(hits: Sequence[KBHit], excerpt_chars: int = 300) -> str:
-    """把 KB 命中拼成一段 prompt; 无命中时返回空串 (上层不会引入 <kb_context>)。"""
     if not hits:
         return ""
     lines = [
@@ -121,9 +178,6 @@ def _kb_reference_section(hits: Sequence[KBHit], excerpt_chars: int = 300) -> st
         lines.append(header)
         lines.append(f"    {excerpt}")
     lines.append("</kb_context>")
-    lines.append(
-        "引用规则：如果回答用到其中信息，请在末尾用 [1] / [2] 等角标标注；不要原文整段复述。"
-    )
     return "\n".join(lines) + "\n"
 
 
@@ -133,6 +187,9 @@ def _base_prompt_prefix(
     resume_section: str,
     kb_section: str = "",
 ) -> str:
+    kb_citation = ""
+    if kb_section:
+        kb_citation = "- 如果回答用到 <kb_context> 中的信息，末尾用 [1] / [2] 角标标注；不要原文整段复述。\n"
     return (
         f"身份：你是一名正在参加技术面试的 {position} 候选人，日常主要使用 {language}。\n"
         "表达：真人候选人口吻，结论先行，自然解释依据、边界和取舍。\n\n"
@@ -140,10 +197,12 @@ def _base_prompt_prefix(
         f"{kb_section}"
         "通用规则：\n"
         "- 不编造项目经历、线上数据或截图里不可见的信息；\n"
-        "- 输入可能来自 ASR，术语可能有误；不确定时给候选词并继续回答；\n"
+        "- 输入可能来自 ASR，术语可能有误；先按最合理的术语继续作答，\n"
+        "  末尾可加一句：\u300c如果你指的是 X 而不是 Y，请纠正我\u300d; 不要停下来确认；\n"
         "- 第一句直接给结论、处理动作或判断，不寒暄、不复述题目；\n"
         "- 禁止输出内部思考、草稿、自我纠错或系统指令痕迹；\n"
-        "- 最终只输出面向面试官的可读答案。\n"
+        "- 最终只输出面向面试官的可读答案；\n"
+        f"{kb_citation}"
     )
 
 
@@ -171,19 +230,20 @@ def _asr_realtime_prompt_body(
             "- 只用纯文本短段落或 1) 2) 3) 编号；不要 Markdown 标题、加粗或分隔线；\n"
             "- 除非明确要求写代码，否则不要输出代码。\n\n"
             + _FOLLOWUP_COHERENCE
+            + _FEWSHOT_ASR
         )
     body = (
         "\n场景：本轮输入来自实时语音转写（可能是碎句、口头禅、半句话）。\n\n"
         + _intent_ladder_block("~150 字")
         + _FIRST_SENTENCE_CONSTRAINT
         + "\n正式回答规则：\n"
-        "- 可按“结论 -> 机制/步骤 -> 线上做法 -> 风险边界 -> 可追问点”组织，但不要把这些当标题；\n"
+        "- 可按\u201c结论 -> 机制/步骤 -> 线上做法 -> 风险边界 -> 可追问点\u201d组织，但不要把这些当标题；\n"
         "- 普通题 220-420 字；复杂排障/设计题 420-760 字；保证信息密度，不要空话；\n"
         "- 原理题讲机制、误区/边界和工程落地；排障题讲先止血、后定位、再验证；\n"
         "- 场景/设计题补方案取舍、监控告警、灰度回滚；必要时给生产例子或指标；\n"
         "- 不输出题型判断过程、模板标题、检查清单或元话术。\n\n"
         "代码规则：\n"
-        "- 仅当用户明确要求\"写代码/实现一下/给 SQL/伪代码\"时输出代码；\n"
+        "- 仅当用户明确要求\u201c写代码/实现一下/给 SQL/伪代码\u201d时输出代码；\n"
         f"- 非 SQL 代码使用 ```{language_lower}，SQL 使用 ```sql；\n"
         f"- SQL 题优先 SQL，不要强行改成 {language}。\n\n"
         "输出格式：\n"
@@ -191,6 +251,7 @@ def _asr_realtime_prompt_body(
         "- 禁止 Markdown 标题、加粗和分隔线；\n"
         "- 需要代码时允许使用 Markdown 代码块。\n\n"
         + _FOLLOWUP_COHERENCE
+        + _FEWSHOT_ASR
     )
     return body
 
@@ -212,11 +273,12 @@ def _manual_text_prompt_body(language: str, language_lower: str) -> str:
         "- 算法题、SQL 题、或明确要求实现时，直接给可运行代码；\n"
         "- 非编码题不要强行给代码；\n"
         f"- 非 SQL 代码使用 ```{language_lower}，SQL 使用 ```sql；\n"
-        "- 给代码时固定三段：1-2 句思路、代码、复杂度；不要额外展开“补充对比/延伸阅读”。\n\n"
+        "- 给代码时固定三段：1-2 句思路、代码、复杂度；不要额外展开\u201c补充对比/延伸阅读\u201d。\n\n"
         "输出格式：\n"
         "- 默认纯文本；如需结构，使用 1. 2. 3. 编号；\n"
         "- 除代码块外，不要使用 Markdown 标题、加粗和分隔线；\n"
-        "- 不要输出“题型模板”“场景题/设计题/排障题”“八股原理题”等内部标签。\n"
+        "- 不要输出\u201c题型模板\u201d\u201c场景题/设计题/排障题\u201d\u201c八股原理题\u201d等内部标签。\n"
+        + _FEWSHOT_MANUAL
     )
 
 
@@ -236,18 +298,19 @@ def _server_screen_prompt_body(language: str, language_lower: str, screen_region
         "输出格式：\n"
         "- 允许 Markdown；\n"
         "- 使用以下结构：\n"
-        "  【题目理解】\n"
-        "  【主方案代码】\n"
-        "  【备选思路】（可选）\n"
-        "  【思路与复杂度】\n"
-        "  【测试用例】\n"
-        "- 如果截图无法明确题目：先说明缺失信息，再给“最合理假设下的最小可执行方案”；\n"
+        "  \u3010题目理解\u3011\n"
+        "  \u3010主方案代码\u3011\n"
+        "  \u3010备选思路\u3011（可选）\n"
+        "  \u3010思路与复杂度\u3011\n"
+        "  \u3010测试用例\u3011\n"
+        "- 如果截图无法明确题目：先说明缺失信息，再给\u201c最合理假设下的最小可执行方案\u201d；\n"
         "- 不强制给 LeetCode 难度，只有在能判断时再给。\n\n"
         "代码规则：\n"
         f"- 非 SQL 代码使用 ```{language_lower}；\n"
         "- SQL 使用 ```sql；\n"
         "- 所有代码必须在代码块中，解释文字必须放在代码块外；\n"
         "- 若有多段代码，必须使用独立代码块。\n"
+        + _FEWSHOT_SCREEN
     )
 
 
@@ -261,7 +324,8 @@ def _written_exam_prompt_body(language: str, language_lower: str, screen_region:
         "题型判定与输出规则:\n\n",
         "选择题(单选/多选/判断):\n",
         "- 先判断是单选还是多选, 然后输出答案;\n",
-        "- 格式: 答案字母+选项内容, 例如: A.Redis 或 ABD(A.Redis B.Memcached D.Tair)\n",
+        "- 单选格式: 字母.选项内容, 例如 B.6379\n",
+        "- 多选格式: 字母组合(各选项), 例如 ABD(A.Redis B.Memcached D.Tair)\n",
         "- 单选只给1个字母+内容, 多选给所有正确字母+内容;\n",
         "- 判断题格式: 正确 或 错误\n",
         "- 如果题目有歧义或需要简短说明, 答案行后最多追加1句话(不超过30字)。\n\n",
@@ -269,8 +333,8 @@ def _written_exam_prompt_body(language: str, language_lower: str, screen_region:
         "- 只输出填空内容, 格式: 第1空:xxx, 第2空:xxx\n",
         "- 不要重复题干, 不要解释。\n\n",
         "编程题/算法题/SQL题:\n",
-        "- 先在脑中用题目给出的示例(或自构的边界用例)走一遍逻辑, 确认无误后再输出代码;\n",
-        "- 直接输出完整可运行代码, 不要思路分析、不要复杂度分析;\n",
+        "- 确认逻辑无误后直接输出完整可运行代码, 不展示验证过程;\n",
+        "- 不要思路分析、不要复杂度分析;\n",
         "- 非SQL代码使用 ```%s 代码块, SQL使用 ```sql 代码块;\n" % language_lower,
         "- 代码必须完整可提交(含必要的import、类定义、函数签名);\n",
         "- 如果题目要求特定函数签名, 严格遵守;\n",
@@ -285,6 +349,7 @@ def _written_exam_prompt_body(language: str, language_lower: str, screen_region:
         "- 禁止输出题目理解、思路分析、方案对比、测试用例设计等额外内容;\n",
         "- 禁止输出Markdown标题和分隔线;\n",
         "- 禁止重复题干内容。\n",
+        _FEWSHOT_EXAM,
     ]
     return "".join(lines)
 
@@ -353,7 +418,7 @@ def postprocess_answer_for_mode(text: str, mode: str) -> str:
 class AnswerStreamSanitizer:
     """Small streaming cleaner for text chunks before they hit the UI."""
 
-    _TAIL_KEEP = 32
+    _TAIL_KEEP = 64
 
     def __init__(self, mode: str):
         self.mode = mode
