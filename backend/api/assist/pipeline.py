@@ -716,5 +716,5 @@ def _save_knowledge_record(question: str, answer: str):
     try:
         from services.storage.knowledge import save_record
         save_record("assist", question, answer)
-    except Exception:
-        pass
+    except Exception as exc:
+        _elog.warning("_save_knowledge_record failed: %s", exc)

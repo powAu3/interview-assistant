@@ -287,6 +287,8 @@ def process_question_parallel(
         if not deps.is_session_current(sess_v):
             return
         session = get_session()
+        pre_user_len = len(session.conversation_history)
+        pre_qa_len = len(session.qa_pairs)
         try:
             with conversation_lock:
                 if images:
@@ -352,13 +354,18 @@ def process_question_parallel(
                         image_data_url=images[0],
                         broadcast_callable=deps.broadcast,
                     )
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc: # noqa: BLE001
                     deps.error_logger.warning(
                         "VISION_VERIFY_SCHEDULE_FAIL id=%s err=%s",
                         qa_id,
                         exc,
                     )
         except Exception as exc:
+            with conversation_lock:
+                if len(session.qa_pairs) > pre_qa_len:
+                    session.qa_pairs.pop()
+                if len(session.conversation_history) > pre_user_len:
+                    del session.conversation_history[pre_user_len:]
             deps.error_logger.error(
                 "_commit failed for id=%s seq=%d: %s",
                 qa_id, seq, exc, exc_info=True,
