@@ -32,6 +32,7 @@ class Session:
     MAX_TRANSCRIPTION_HISTORY = 200
     MAX_QA_PAIRS = 80
     CONVERSATION_TURNS_FOR_LLM = 6
+    SCREEN_TURNS_FOR_LLM = 2
     MAX_CHARS_PER_MESSAGE = 2000
     # 滚动摘要触发阈值:超过此条数后台压缩一次
     SUMMARY_TRIGGER = 12
@@ -79,10 +80,6 @@ class Session:
         return list(self.conversation_history)
 
     def get_conversation_messages_for_llm(self) -> list[dict]:
-        """最近 N 轮对话，每条 content 截断到 max_chars，用于控制 token。
-
-        若已存在滚动摘要(system_summary),会作为一条 system 消息插在最前。
-        """
         n = self.CONVERSATION_TURNS_FOR_LLM * 2
         recent = self.conversation_history[-n:] if len(self.conversation_history) > n else self.conversation_history
         out: list[dict] = []
@@ -94,6 +91,30 @@ class Session:
                     "不要复读它):\n" + self.system_summary
                 ),
             })
+        screen_count = sum(
+            1 for msg in recent
+            if isinstance(msg.get("content"), list)
+        )
+        screen_limit = self.SCREEN_TURNS_FOR_LLM * 2
+        if screen_count > screen_limit:
+            screen_seen = 0
+            filtered: list[dict] = []
+            for msg in reversed(recent):
+                if isinstance(msg.get("content"), list):
+                    screen_seen += 1
+                    if screen_seen > screen_limit:
+                        text_parts = [
+                            p.get("text", "") for p in msg["content"]
+                            if isinstance(p, dict) and p.get("type") == "text"
+                        ]
+                        summary_text = " ".join(text_parts).strip()
+                        if summary_text:
+                            filtered.append({"role": msg["role"], "content": f"[之前截图问题: {summary_text[:200]}]"})
+                        else:
+                            filtered.append({"role": msg["role"], "content": "[之前截图问题(已省略图片)]"})
+                        continue
+                filtered.append(msg)
+            recent = list(reversed(filtered))
         for msg in recent:
             content = msg.get("content")
             if isinstance(content, list):
