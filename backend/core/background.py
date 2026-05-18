@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import logging
 import queue
 import threading
 from typing import Callable, Optional
+
+from core.logger import get_logger
 
 
 TaskArgs = tuple[object, ...]
@@ -24,7 +25,7 @@ class BoundedTaskWorker:
         self._queue: queue.Queue[Optional[TaskArgs]] = queue.Queue(maxsize=maxsize)
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
-        self._log = logging.getLogger(name)
+        self._log = get_logger(name)
         self.dropped_count = 0
 
     def start(self) -> None:

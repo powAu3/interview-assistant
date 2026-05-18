@@ -9,11 +9,12 @@
 """
 from __future__ import annotations
 
-import logging
 import threading
 from typing import Iterable, List, Sequence
 
-_log = logging.getLogger("memory_agent")
+from core.logger import get_logger
+
+_log = get_logger("memory_agent")
 
 _SUMMARY_PROMPT = """你是面试会话的记忆压缩助手。请把下面这段更早的「问答历史」凝练成简洁的事实笔记,
 保留:候选人提到过的关键技术栈/项目/数字、面试官追问过的方向、已经回答过的问题及结论。

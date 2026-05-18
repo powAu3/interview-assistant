@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import secrets
 from typing import Any, Dict, Generator, List, Tuple
@@ -27,9 +26,10 @@ def _new_eid() -> str:
     return secrets.token_hex(3)
 
 from core.config import get_config
+from core.logger import get_logger
 from services.llm import _add_tokens, get_client
 
-_log = logging.getLogger("resume_optimizer")
+_log = get_logger("resume_optimizer")
 
 
 # ---------------------------------------------------------------------------

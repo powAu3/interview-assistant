@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import base64
-import logging
 from pathlib import Path
 from typing import Optional
 
-_log = logging.getLogger(__name__)
+from core.logger import get_logger
+
+_log = get_logger(__name__)
 
 _CAPTION_PROMPT = (
     "这是一份技术笔记中的 PDF 页面截图。请用 3-6 句简体中文概括页面的信息："

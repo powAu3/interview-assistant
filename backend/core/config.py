@@ -1,12 +1,15 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
 import json
-import logging
 import os
+
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 import shutil
 import threading
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILE = os.environ.get("IA_CONFIG_PATH") or os.path.join(_BACKEND_DIR, "config.json")
@@ -145,8 +148,9 @@ class AppConfig(BaseModel):
             import re as _re
             if not _re.match(r"^[a-z]{2}(-[A-Z]{2})?$", wl):
                 logger.warning(
-                    "whisper_language=%r 格式不正确，应为 auto 或 ISO 639-1 码 (如 en/zh)", wl
+                    "whisper_language=%r 格式不正确，已重置为 auto (应为 ISO 639-1 码如 en/zh)", wl
                 )
+                self.whisper_language = "auto"
         if not self.models:
             self.models = [_default_model_config()]
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
@@ -188,7 +192,11 @@ def update_config(updates: dict) -> AppConfig:
 
 
 def _load_config() -> AppConfig:
+    _custom_path = os.environ.get("IA_CONFIG_PATH")
     if not os.path.exists(CONFIG_FILE):
+        if _custom_path:
+            logger.warning("IA_CONFIG_PATH=%s does not exist, using defaults", _custom_path)
+            return AppConfig()
         if os.path.exists(CONFIG_EXAMPLE):
             shutil.copy2(CONFIG_EXAMPLE, CONFIG_FILE)
             print("[Config] 已从 config.example.json 创建 config.json，请填入你的 API Key")

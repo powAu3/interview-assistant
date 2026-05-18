@@ -1,20 +1,20 @@
 """索引调度器：扫 kb_dir → dispatch loader → chunker → store。"""
 from __future__ import annotations
 
-import logging
 import os
 import threading
 from pathlib import Path
 from typing import Any, Optional
 
 from core.config import get_config
+from core.logger import get_logger
 from services.storage.paths import backend_root
 
 from . import loaders as _loaders  # noqa: F401  触发 register 副作用
 from .chunker import chunk_doc
 from .store import KBStore
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 _store: Optional[KBStore] = None
 _lock = threading.RLock()

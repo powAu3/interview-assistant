@@ -5,19 +5,19 @@ deadline_ms 作为**硬上限**：超时时用 `sqlite3.Connection.interrupt()` 
 """
 from __future__ import annotations
 
-import logging
 import re
 import threading
 import time
 from typing import Optional
 
 from core.config import get_config
+from core.logger import get_logger
 
 from ._tokenize import cjk_bigram_query_tokens
 from .indexer import _get_store
 from .types import KBHit
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 _NOISE_WORDS = (
     "嗯", "呃", "那个", "然后", "就是", "啊", "吧", "呢", "的话",

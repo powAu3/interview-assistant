@@ -15,6 +15,7 @@ from core.config import (
     PRACTICE_TTS_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
 )
+from core.env import env_int
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
 from api.common.config_payload import build_config_payload, _mask_secret
@@ -304,7 +305,7 @@ async def api_network_info(request: Request):
         ip = "127.0.0.1"
     # Read PORT from env (set by start.py), fallback to 18080
     import os
-    port = int(os.environ.get("PORT", 18080))
+    port = env_int("PORT", 18080, minimum=1)
     base = f"http://{ip}:{port}"
     client_host = request.client.host if request.client else None
     url = base

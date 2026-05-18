@@ -19,12 +19,9 @@ from typing import Callable, Optional
 
 import sounddevice as sd
 
-try:
-    from core.logger import get_logger as _get_logger
-    _alog = _get_logger("audio")
-except Exception:  # pragma: no cover - logger module not available during isolated import
-    import logging
-    _alog = logging.getLogger("audio")
+from core.logger import get_logger
+
+_alog = get_logger("audio")
 
 # Windows WDM-KS devices crash PortAudio with -9999; exclude them entirely
 _WDM_KS_API = "Windows WDM-KS"

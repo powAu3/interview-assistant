@@ -1,11 +1,12 @@
 """OCR 封装（rapidocr-onnxruntime, opt-in）。"""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
-_log = logging.getLogger(__name__)
+from core.logger import get_logger
+
+_log = get_logger(__name__)
 
 _ocr_engine: Any = None
 

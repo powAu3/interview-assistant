@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import json
-import logging
 import threading
 from typing import Any, Optional
 
 from core.config import get_config
+from core.logger import get_logger
 from services.llm import _add_tokens, get_client_for_model
 
 from .models import PracticeSession
 
 _practice: Optional[PracticeSession] = None
 _lock = threading.Lock()
-_log = logging.getLogger("practice.service")
+_log = get_logger("practice.service")
 
 
 def get_practice() -> PracticeSession:

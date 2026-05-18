@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import sqlite3
 import threading
@@ -7,12 +6,13 @@ import time
 from typing import Optional
 
 from core.config import get_config
+from core.logger import get_logger
 from services.llm import get_client
 from services.storage.paths import sqlite_path
 
 DB_PATH = sqlite_path("knowledge.db")
 _db_lock = threading.Lock()
-_tag_log = logging.getLogger("knowledge.tags")
+_tag_log = get_logger("knowledge.tags")
 
 
 def _get_conn() -> sqlite3.Connection:

@@ -1,8 +1,8 @@
 import threading
 import uuid
-import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from core.logger import get_logger
 from core.resource_lanes import submit_low_priority_background
 from services.resume_optimizer import optimize_resume_stream
 from services.llm import get_token_stats
@@ -12,7 +12,7 @@ from api.realtime.ws import broadcast
 router = APIRouter()
 _resume_opt_lock = threading.Lock()
 _resume_opt_current_job_id: str | None = None
-_ropt_log = logging.getLogger("resume.optimize")
+_ropt_log = get_logger("resume.optimize")
 
 
 class OptimizeRequest(BaseModel):

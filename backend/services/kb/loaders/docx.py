@@ -1,14 +1,15 @@
 """DOCX loader：按 Heading 1..9 层级切 section，表格以 tab 分隔附在末尾 section。"""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Optional
+
+from core.logger import get_logger
 
 from ..types import RawDoc, RawSection
 from ._base import register
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 try:
     from docx import Document  # python-docx

@@ -1,17 +1,17 @@
 import asyncio
 import json
-import logging
 import time
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
 from core.auth import is_auth_disabled, is_loopback_host, verify_token
+from core.logger import get_logger
 from core.session import snapshot_session
 from services.practice import get_practice
 from services.stt import get_stt_engine
 
-_log = logging.getLogger("ws")
+_log = get_logger("ws")
 
 router = APIRouter()
 
@@ -48,6 +48,7 @@ async def _safe_send(ws: WebSocket, data: dict) -> bool:
 async def ws_dispatcher():
     if _msg_queue is None:
         return
+    _crash_backoff = 1
     while True:
         try:
             data = await _msg_queue.get()
@@ -66,25 +67,32 @@ async def ws_dispatcher():
                         await ws.close(code=status.WS_1011_INTERNAL_ERROR)
                     except Exception:
                         pass
+            _crash_backoff = 1
         except Exception as e:
-            _log.error("ws_dispatcher crashed: %s", e, exc_info=True)
-            await asyncio.sleep(1)
+            _log.error("ws_dispatcher crashed (retry in %ds): %s", _crash_backoff, e, exc_info=True)
+            await asyncio.sleep(_crash_backoff)
+            _crash_backoff = min(_crash_backoff * 2, 60)
 
 
 async def ws_heartbeat():
     """服务端主动心跳：定期 ping 客户端，长时间无 pong 视为僵尸连接并关闭。"""
+    _crash_backoff = 1
+    _crash_sleep = 0.0
     while True:
         try:
             await asyncio.sleep(HEARTBEAT_INTERVAL)
             now = time.monotonic()
             clients = list(ws_clients)
             if not clients:
+                _crash_sleep = 0.0
                 continue
             ping_msg = {"type": "ping", "ts": now}
             results = await asyncio.gather(
                 *[_safe_send(ws, ping_msg) for ws in clients],
                 return_exceptions=False,
             )
+            effective_timeout = HEARTBEAT_TIMEOUT + _crash_sleep
+            _crash_sleep = 0.0
             for ws, ok in zip(clients, results):
                 if not ok:
                     ws_clients.discard(ws)
@@ -94,16 +102,19 @@ async def ws_heartbeat():
                         pass
                     continue
                 last = getattr(ws, "_ia_last_pong", None) or getattr(ws, "_ia_connected_at", now)
-                if now - last > HEARTBEAT_TIMEOUT:
+                if now - last > effective_timeout:
                     _log.info("WS heartbeat timeout, closing stale client")
                     ws_clients.discard(ws)
                     try:
                         await ws.close(code=status.WS_1001_GOING_AWAY)
                     except Exception:
                         pass
+            _crash_backoff = 1
         except Exception as e:
-            _log.error("ws_heartbeat crashed: %s", e, exc_info=True)
-            await asyncio.sleep(1)
+            _log.error("ws_heartbeat crashed (retry in %ds): %s", _crash_backoff, e, exc_info=True)
+            _crash_sleep = _crash_backoff
+            await asyncio.sleep(_crash_backoff)
+            _crash_backoff = min(_crash_backoff * 2, 60)
 
 
 def broadcast(data: dict):

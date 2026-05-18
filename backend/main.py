@@ -18,6 +18,7 @@ from core.auth import (
     verify_token,
 )
 from core.config import get_config
+from core.env import env_int
 from core.logger import setup_logging, get_logger
 from services.stt import get_stt_engine
 from api.realtime import ws
@@ -26,6 +27,8 @@ from api import kb as kb_api
 
 setup_logging()
 _log = get_logger("app.main")
+
+_BQ_SIZE = env_int("IA_BROADCAST_QUEUE_SIZE", 500, minimum=1)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
@@ -74,7 +77,7 @@ async def lifespan(app: FastAPI):
     )
 
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue(maxsize=int(os.environ.get("IA_BROADCAST_QUEUE_SIZE", "500")))
+    queue: asyncio.Queue = asyncio.Queue(maxsize=_BQ_SIZE)
     ws.init_broadcast(loop, queue)
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())

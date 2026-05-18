@@ -1,16 +1,17 @@
 """PDF loader：L1 文本层（pypdf），L2 OCR / L3 Vision 均在索引期、opt-in。"""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Optional
+
+from core.logger import get_logger
 
 from ..types import RawDoc, RawSection
 from ._base import register
 from ._ocr import ocr_image_file
 from ._vision import render_pdf_page_to_png, vision_caption
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 try:
     from pypdf import PdfReader

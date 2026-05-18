@@ -11,12 +11,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import threading
 from typing import Optional
 
-_log = logging.getLogger("vision_verify")
+from core.logger import get_logger
+
+_log = get_logger("vision_verify")
 
 _VERIFY_SEMAPHORE = threading.BoundedSemaphore(4)
 
