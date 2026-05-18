@@ -1,5 +1,6 @@
 import threading
 import uuid
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from core.resource_lanes import submit_low_priority_background
@@ -11,6 +12,7 @@ from api.realtime.ws import broadcast
 router = APIRouter()
 _resume_opt_lock = threading.Lock()
 _resume_opt_current_job_id: str | None = None
+_ropt_log = logging.getLogger("resume.optimize")
 
 
 class OptimizeRequest(BaseModel):
@@ -68,5 +70,5 @@ def _run_optimize(jd: str, job_id: str):
             "total": stats["total"],
             "by_model": stats.get("by_model", {}),
         })
-    except Exception:
-        pass  # ws 可能已断开，仅忽略避免 daemon 线程抛错
+    except Exception as e:
+        _ropt_log.warning("resume_opt_done broadcast failed: %s", e)

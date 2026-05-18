@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from typing import Any, Optional
 
@@ -11,6 +12,7 @@ from .models import PracticeSession
 
 _practice: Optional[PracticeSession] = None
 _lock = threading.Lock()
+_log = logging.getLogger("practice.service")
 
 
 def get_practice() -> PracticeSession:
@@ -76,7 +78,11 @@ def _json_from_text(text: str) -> Any:
         end = text.rfind("]")
         if end >= 0:
             text = text[: end + 1]
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        _log.warning("_json_from_text parse failed: %s text=%r", e, text[:200])
+        return {}
 
 
 def _request_json_completion(model_cfg, prompt: str, *, max_tokens: int = 2200) -> dict[str, Any]:

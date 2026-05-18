@@ -49,53 +49,61 @@ async def ws_dispatcher():
     if _msg_queue is None:
         return
     while True:
-        data = await _msg_queue.get()
-        clients = list(ws_clients)
-        if not clients:
-            continue
-        results = await asyncio.gather(
-            *[_safe_send(ws, data) for ws in clients],
-            return_exceptions=False,
-        )
-        dead = [ws for ws, ok in zip(clients, results) if not ok]
-        if dead:
-            for ws in dead:
-                ws_clients.discard(ws)
-                try:
-                    await ws.close(code=status.WS_1011_INTERNAL_ERROR)
-                except Exception:
-                    pass
+        try:
+            data = await _msg_queue.get()
+            clients = list(ws_clients)
+            if not clients:
+                continue
+            results = await asyncio.gather(
+                *[_safe_send(ws, data) for ws in clients],
+                return_exceptions=False,
+            )
+            dead = [ws for ws, ok in zip(clients, results) if not ok]
+            if dead:
+                for ws in dead:
+                    ws_clients.discard(ws)
+                    try:
+                        await ws.close(code=status.WS_1011_INTERNAL_ERROR)
+                    except Exception:
+                        pass
+        except Exception as e:
+            _log.error("ws_dispatcher crashed: %s", e, exc_info=True)
+            await asyncio.sleep(1)
 
 
 async def ws_heartbeat():
     """服务端主动心跳：定期 ping 客户端，长时间无 pong 视为僵尸连接并关闭。"""
     while True:
-        await asyncio.sleep(HEARTBEAT_INTERVAL)
-        now = time.monotonic()
-        clients = list(ws_clients)
-        if not clients:
-            continue
-        ping_msg = {"type": "ping", "ts": now}
-        results = await asyncio.gather(
-            *[_safe_send(ws, ping_msg) for ws in clients],
-            return_exceptions=False,
-        )
-        for ws, ok in zip(clients, results):
-            if not ok:
-                ws_clients.discard(ws)
-                try:
-                    await ws.close(code=status.WS_1011_INTERNAL_ERROR)
-                except Exception:
-                    pass
+        try:
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            now = time.monotonic()
+            clients = list(ws_clients)
+            if not clients:
                 continue
-            last = getattr(ws, "_ia_last_pong", None) or getattr(ws, "_ia_connected_at", now)
-            if now - last > HEARTBEAT_TIMEOUT:
-                _log.info("WS heartbeat timeout, closing stale client")
-                ws_clients.discard(ws)
-                try:
-                    await ws.close(code=status.WS_1001_GOING_AWAY)
-                except Exception:
-                    pass
+            ping_msg = {"type": "ping", "ts": now}
+            results = await asyncio.gather(
+                *[_safe_send(ws, ping_msg) for ws in clients],
+                return_exceptions=False,
+            )
+            for ws, ok in zip(clients, results):
+                if not ok:
+                    ws_clients.discard(ws)
+                    try:
+                        await ws.close(code=status.WS_1011_INTERNAL_ERROR)
+                    except Exception:
+                        pass
+                    continue
+                last = getattr(ws, "_ia_last_pong", None) or getattr(ws, "_ia_connected_at", now)
+                if now - last > HEARTBEAT_TIMEOUT:
+                    _log.info("WS heartbeat timeout, closing stale client")
+                    ws_clients.discard(ws)
+                    try:
+                        await ws.close(code=status.WS_1001_GOING_AWAY)
+                    except Exception:
+                        pass
+        except Exception as e:
+            _log.error("ws_heartbeat crashed: %s", e, exc_info=True)
+            await asyncio.sleep(1)
 
 
 def broadcast(data: dict):

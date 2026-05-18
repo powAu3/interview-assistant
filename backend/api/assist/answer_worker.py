@@ -358,7 +358,11 @@ def process_question_parallel(
                         qa_id,
                         exc,
                     )
-        except Exception:
-            deps.broadcast({"type": "answer_cancelled", "id": qa_id})
+        except Exception as exc:
+            deps.error_logger.error(
+                "_commit failed for id=%s seq=%d: %s",
+                qa_id, seq, exc, exc_info=True,
+            )
+            deps.broadcast({"type": "answer_error", "id": qa_id, "message": "答案保存失败"})
 
     deps.flush_commit(seq, _commit)

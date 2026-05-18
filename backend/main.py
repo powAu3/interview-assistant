@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
     )
 
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+    queue: asyncio.Queue = asyncio.Queue(maxsize=int(os.environ.get("IA_BROADCAST_QUEUE_SIZE", "500")))
     ws.init_broadcast(loop, queue)
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
@@ -109,7 +109,7 @@ app = FastAPI(title="学习助手", lifespan=lifespan)
 _DEFAULT_ORIGIN_REGEX = (
     r"^https?://("
     r"localhost|127\.0\.0\.1|\[::1\]|"
-    r"10(\.\d{1,3}){3}|"
+    r"10\.(\d{1,3}\.){2}\d{1,3}|"
     r"192\.168(\.\d{1,3}){2}|"
     r"172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}"
     r")(:\d{1,5})?$"

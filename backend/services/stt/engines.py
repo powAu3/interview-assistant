@@ -3,7 +3,7 @@
 import io
 import gzip
 import json
-import re
+import logging
 import struct
 import time
 import uuid
@@ -121,11 +121,13 @@ def _parse_ws_response(data: bytes) -> tuple[int, Optional[dict]]:
             try:
                 raw = gzip.decompress(raw)
             except Exception:
+                _parse_log.warning("_parse_ws_response gzip decompress failed")
                 return msg_type, None
         try:
             payload = json.loads(raw.decode("utf-8"))
             return msg_type, payload
         except Exception:
+            _parse_log.warning("_parse_ws_response invalid JSON at offset %d", len(raw))
             return msg_type, None
     return msg_type, None
 

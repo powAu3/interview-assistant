@@ -18,6 +18,8 @@ from typing import Optional
 
 _log = logging.getLogger("vision_verify")
 
+_VERIFY_SEMAPHORE = threading.BoundedSemaphore(4)
+
 
 _VERIFY_PROMPT = """你是严谨的代码评审员。下面是一道编程题(以截图形式给出)以及一位候选人提交的解答。
 
@@ -127,6 +129,9 @@ def schedule_self_verify(
         return
     if _pick_vision_model_cfg() is None:
         return
+    if not _VERIFY_SEMAPHORE.acquire(blocking=False):
+        _log.debug("vision_verify skipped (semaphore full) id=%s", qa_id)
+        return
 
     def _worker() -> None:
         try:
@@ -143,6 +148,8 @@ def schedule_self_verify(
             })
         except Exception:  # noqa: BLE001
             pass
+        finally:
+            _VERIFY_SEMAPHORE.release()
 
     threading.Thread(
         target=_worker,

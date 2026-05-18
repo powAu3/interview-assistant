@@ -4,9 +4,10 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.config import get_config
+from core.logger import get_logger
 from core.session import get_session, snapshot_session
 from services.audio import AudioBusyError
 from .pipeline import (
@@ -23,10 +24,11 @@ from .pipeline import (
 )
 
 router = APIRouter()
+_rlog = get_logger("assist.routes")
 
 
 class ManualQuestion(BaseModel):
-    text: str
+    text: str = Field(..., max_length=10000)
     image: Optional[str] = None
 
 
@@ -54,7 +56,8 @@ async def api_start(body: dict):
     except AudioBusyError as e:
         raise HTTPException(409, str(e))
     except Exception as e:
-        raise HTTPException(500, str(e))
+        _rlog.error("api_start failed: %s", e, exc_info=True)
+        raise HTTPException(500, "启动失败，请重试")
 
 
 @router.post("/stop")

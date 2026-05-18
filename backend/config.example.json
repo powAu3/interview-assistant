@@ -1,51 +1,20 @@
 {
   "models": [
     {
-      "name": "GPT-4o",
+      "name": "Example-Model",
       "api_base_url": "https://api.openai.com/v1",
-      "api_key": "sk-your-api-key-here",
-      "model": "gpt-4o",
-      "supports_think": false,
-      "supports_vision": true
-    },
-    {
-      "name": "GPT-4o-mini",
-      "api_base_url": "https://api.openai.com/v1",
-      "api_key": "sk-your-api-key-here",
+      "api_key": "YOUR_API_KEY_HERE",
       "model": "gpt-4o-mini",
       "supports_think": false,
-      "supports_vision": false
-    },
-    {
-      "name": "DeepSeek-V3",
-      "api_base_url": "https://api.deepseek.com",
-      "api_key": "sk-your-deepseek-key",
-      "model": "deepseek-chat",
-      "supports_think": true,
-      "supports_vision": false
-    },
-    {
-      "name": "豆包 (火山引擎)",
-      "api_base_url": "https://ark.cn-beijing.volces.com/api/v3",
-      "api_key": "your-volcengine-api-key",
-      "model": "ep-your-endpoint-id",
-      "supports_think": true,
-      "supports_vision": false
-    },
-    {
-      "name": "GLM-4.7-Flash (智谱)",
-      "api_base_url": "https://open.bigmodel.cn/api/paas/v4",
-      "api_key": "your-zhipu-api-key",
-      "model": "GLM-4.7-Flash",
-      "supports_think": true,
-      "supports_vision": false
+      "supports_vision": false,
+      "enabled": true
     }
   ],
   "active_model": 0,
-  "max_parallel_answers": 2,
   "temperature": 0.5,
   "max_tokens": 4096,
   "think_mode": false,
+  "think_effort": "off",
   "stt_provider": "whisper",
   "whisper_model": "base",
   "whisper_language": "auto",
@@ -68,14 +37,24 @@
   "position": "后端开发",
   "language": "Python",
   "practice_audience": "campus_intern",
+  "resume_text": null,
+  "resume_active_history_id": null,
   "auto_detect": true,
   "silence_threshold": 0.01,
   "silence_duration": 1.2,
+  "max_parallel_answers": 2,
   "answer_autoscroll_bottom_px": 40,
   "transcription_min_sig_chars": 2,
   "assist_transcription_merge_gap_sec": 2.0,
   "assist_transcription_merge_max_sec": 12.0,
+  "assist_asr_confirm_window_sec": 0.45,
+  "assist_asr_group_max_wait_sec": 1.2,
+  "assist_asr_interrupt_running": true,
+  "assist_high_churn_short_answer": false,
   "screen_capture_region": "left_half",
+  "multi_screen_capture_idle_sec": 10.0,
+  "written_exam_mode": false,
+  "written_exam_think": false,
   "kb_enabled": false,
   "kb_dir": "data/kb",
   "kb_db_path": "data/kb.sqlite",
@@ -86,8 +65,18 @@
   "kb_min_score": 0.0,
   "kb_chunk_max_chars": 800,
   "kb_prompt_excerpt_chars": 300,
-  "kb_trigger_modes": ["asr_realtime", "manual_text", "written_exam"],
-  "kb_file_extensions": [".md", ".txt", ".log", ".docx", ".pdf"],
+  "kb_trigger_modes": [
+    "asr_realtime",
+    "manual_text",
+    "written_exam"
+  ],
+  "kb_file_extensions": [
+    ".md",
+    ".txt",
+    ".log",
+    ".docx",
+    ".pdf"
+  ],
   "kb_ocr_enabled": false,
   "kb_vision_caption_enabled": false,
   "kb_max_upload_bytes": 20971520,

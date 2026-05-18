@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -11,6 +12,7 @@ from services.storage.paths import sqlite_path
 
 DB_PATH = sqlite_path("knowledge.db")
 _db_lock = threading.Lock()
+_tag_log = logging.getLogger("knowledge.tags")
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -72,8 +74,8 @@ def extract_tags(question: str, answer: str = "") -> list[str]:
         end = text.rfind("]") + 1
         if start >= 0 and end > start:
             return json.loads(text[start:end])
-    except Exception:
-        pass
+    except Exception as e:
+        _tag_log.warning("extract_tags failed: %s", e, exc_info=True)
     return []
 
 

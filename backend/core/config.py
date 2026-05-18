@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import Optional
+from typing import Literal, Optional
 import json
 import logging
 import os
@@ -9,7 +9,7 @@ import threading
 logger = logging.getLogger(__name__)
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_FILE = os.path.join(_BACKEND_DIR, "config.json")
+CONFIG_FILE = os.environ.get("IA_CONFIG_PATH") or os.path.join(_BACKEND_DIR, "config.json")
 CONFIG_EXAMPLE = os.path.join(_BACKEND_DIR, "config.example.json")
 
 
@@ -40,7 +40,7 @@ class AppConfig(BaseModel):
     max_tokens: int = 4096
     think_mode: bool = False
     # 推理强度: off=关闭, low/medium/high 分别对应低/中/高强度推理
-    think_effort: str = "off"
+    think_effort: Literal["off", "low", "medium", "high"] = "off"
 
     # 语音识别：whisper=本地 faster-whisper，doubao=豆包语音识别 API
     stt_provider: str = "whisper"
@@ -140,6 +140,13 @@ class AppConfig(BaseModel):
             logger.warning(
                 "检测到已废弃的 stt_provider=iflytek；请在设置中改为 generic 或 whisper"
             )
+        wl = (self.whisper_language or "").strip()
+        if wl and wl != "auto":
+            import re as _re
+            if not _re.match(r"^[a-z]{2}(-[A-Z]{2})?$", wl):
+                logger.warning(
+                    "whisper_language=%r 格式不正确，应为 auto 或 ISO 639-1 码 (如 en/zh)", wl
+                )
         if not self.models:
             self.models = [_default_model_config()]
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
