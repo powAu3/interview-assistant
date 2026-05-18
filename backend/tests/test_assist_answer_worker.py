@@ -51,6 +51,7 @@ def _deps(
     knowledge: list[tuple[str, str]] | None = None,
     abort_check=lambda: False,
     flush_commit=None,
+    mark_seq_skipped=None,
 ):
     skipped = skipped if skipped is not None else []
     knowledge = knowledge if knowledge is not None else []
@@ -69,7 +70,7 @@ def _deps(
         abort_check=abort_check,
         is_session_current=lambda _version: True,
         flush_commit=_flush_commit,
-        mark_seq_skipped=skipped.append,
+        mark_seq_skipped=mark_seq_skipped if mark_seq_skipped is not None else skipped.append,
         submit_knowledge_record=_submit_knowledge_record,
         broadcast=broadcasts.append,
         logger=_Logger(),
@@ -219,6 +220,87 @@ def test_process_question_parallel_flushes_clean_tail_before_error(
     chunks = [event["chunk"] for event in broadcasts if event["type"] == "answer_chunk"]
     assert chunks[0] == "用 AOF"
     assert "生成答案出错" in chunks[1]
+
+
+def test_process_question_parallel_broadcasts_answer_error_when_commit_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "正常答案")
+
+    def _raise_db_down(_m):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+    _sess = get_session()
+    monkeypatch.setattr(_sess, "add_user_message", _raise_db_down)
+
+    answer_worker.process_question_parallel(
+        ("保存失败的问题？", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    event_types = [event["type"] for event in broadcasts]
+    assert "answer_error" in event_types
+    err_event = next(e for e in broadcasts if e["type"] == "answer_error")
+    assert err_event["id"] is not None
+    assert "保存失败" in err_event["message"]
+    assert get_session().qa_pairs == []
+    assert get_session().conversation_history == []
+
+
+def test_process_question_parallel_no_deadlock_when_commit_fails_under_lock(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import threading
+
+    broadcasts: list[dict] = []
+    commit_lock = threading.Lock()
+    deadlock_detected = threading.Event()
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "正常答案")
+
+    def _raise_db_down(_m):
+        raise RuntimeError("db down")
+
+    def _flush_commit_simulating_production(seq, apply_fn):
+        with commit_lock:
+            apply_fn()
+
+    def _mark_seq_skipped_simulating_production(seq):
+        try:
+            acquired = commit_lock.acquire(timeout=2)
+            if not acquired:
+                deadlock_detected.set()
+                return
+            commit_lock.release()
+        except Exception:
+            deadlock_detected.set()
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+    _sess = get_session()
+    monkeypatch.setattr(_sess, "add_user_message", _raise_db_down)
+
+    answer_worker.process_question_parallel(
+        ("死锁测试？", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(
+            broadcasts=broadcasts,
+            flush_commit=_flush_commit_simulating_production,
+            mark_seq_skipped=_mark_seq_skipped_simulating_production,
+        ),
+    )
+
+    assert not deadlock_detected.is_set(), "Deadlock detected: mark_seq_skipped tried to re-acquire commit_lock"
+    assert "answer_error" in [e["type"] for e in broadcasts]
 
 
 def test_process_question_parallel_sends_multiple_images_to_vision_model(
