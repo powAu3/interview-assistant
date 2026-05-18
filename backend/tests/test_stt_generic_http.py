@@ -81,11 +81,11 @@ def test_transcribe_with_fallback_treats_empty_remote_text_as_failure(monkeypatc
         def transcribe(self, audio, sample_rate=16000, position="", language=""):
             return ""
 
-    calls = {"broadcast": [], "fallback": 0}
+    calls = {"broadcast": [], "fallback": 0, "circuit_failure": 0}
 
     monkeypatch.setattr(stt_factory, "get_stt_engine", lambda model_size=None, language=None: _RemoteEngine())
     monkeypatch.setattr(stt_factory, "_is_circuit_open", lambda: False)
-    monkeypatch.setattr(stt_factory, "_circuit_record_failure", lambda is_timeout=False: None)
+    monkeypatch.setattr(stt_factory, "_circuit_record_failure", lambda is_timeout=False: calls.__setitem__("circuit_failure", calls["circuit_failure"] + 1))
     monkeypatch.setattr(stt_factory, "_circuit_reset", lambda: None)
     monkeypatch.setattr(stt_factory, "_whisper_transcribe", lambda audio, sample_rate, position, language: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text")
 
@@ -101,4 +101,5 @@ def test_transcribe_with_fallback_treats_empty_remote_text_as_failure(monkeypatc
 
     assert text == "fallback text"
     assert calls["fallback"] == 1
-    assert calls["broadcast"]
+    assert calls["circuit_failure"] == 1
+    assert any(e.get("type") == "stt_fallback" for e in calls["broadcast"])

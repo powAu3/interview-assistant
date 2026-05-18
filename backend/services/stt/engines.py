@@ -215,12 +215,16 @@ class DoubaoSTT:
                     if i % 10 == 9:
                         time.sleep(0.02)
                 final_text = ""
-                ws.settimeout(12)
+                ws.settimeout(5)
+                first_packet = True
                 while True:
                     try:
                         raw = ws.recv()
                     except Exception:
                         break
+                    if first_packet:
+                        ws.settimeout(15)
+                        first_packet = False
                     if raw is None:
                         break
                     if isinstance(raw, str):
@@ -240,7 +244,7 @@ class DoubaoSTT:
             finally:
                 ws.close()
         except Exception as e:
-            _log.error("Doubao ASR error: %s", e, exc_info=True)
+            _log.warning("Doubao ASR error: %s", e, exc_info=True)
             if "websocket" in str(type(e).__name__).lower():
                 raise RuntimeError(f"豆包 ASR 连接异常: {e}") from e
             raise

@@ -55,7 +55,12 @@ TECH_VOCAB = {
     "算法工程师": (
         "Transformer BERT GPT LLM CNN RNN LSTM GAN Diffusion "
         "梯度下降 反向传播 损失函数 学习率 正则化 Dropout BatchNorm "
-        "PyTorch TensorFlow ONNX CUDA 推理 训练 微调 量化 蒸馏 LoRA PEFT"
+        "PyTorch TensorFlow ONNX CUDA 推理 训练 微调 量化 蒸馏 LoRA PEFT "
+        "Agent RAG LangGraph embedding 向量数据库 裁判员模型 基座模型 "
+        "评测 评估 benchmark "
+        "MCP Playwright "
+        "Shopee 虾皮 "
+        "大疆 卓驭 自动驾驶 车载 "
     ),
     "测试开发": (
         "Selenium Playwright Pytest JMeter 接口测试 性能测试 "
@@ -103,6 +108,26 @@ TERM_CORRECTIONS = {
     r"(?i)k\s*eight\s*s|kates|k8s": "Kubernetes",
     r"(?i)(?<![a-zA-Z])mq(?![a-zA-Z])": "MQ",
     r"(?i)my\s*sql": "MySQL",
+    r"下皮|下屏|下期": "虾皮",
+    r"自动词史|自动价史|自动价是|自动价值": "自动驾驶",
+    r"简率|减力": "简历",
+    r"纳机回收|拿去回收": "垃圾回收",
+    r"类诊陷漏|类诊泄漏": "内存泄漏",
+    r"偶尔M": "OOM",
+    r"财与": "参与",
+    r"平衫|平侧|平测|频测|评课": "评测",
+    r"材料圆模型": "裁判员模型",
+    r"机座模型": "基座模型",
+    r"(?<![a-zA-Z])AZNT(?![a-zA-Z])": "Agent",
+    r"(?<![a-zA-Z])R\s*N\s*A\s*G(?![a-zA-Z])": "RAG",
+    r"大家的车载": "大疆的车载",
+    r"大家是它的": "大疆是它的",
+    r"大家控股": "大疆控股",
+    r"街单": "接单",
+    r"路件": "路径",
+    r"购件": "构建",
+    r"体校": "提效",
+    r"用力(?!气|量|心|来|劲)": "用例",
 }
 
 # ---------------------------------------------------------------------------
@@ -134,6 +159,11 @@ _PAT_CJK_COMMA_ASCII = re.compile(rf"([{_CJK}]),([{_CJK}])")
 _PAT_CJK_PERIOD_FW = re.compile(rf"([{_CJK}])。([{_CJK}])")
 _PAT_CJK_PERIOD_ASCII = re.compile(rf"([{_CJK}])\.([{_CJK}])")
 _PAT_CJK_PUNCT_SHORT_FOLLOWUP = re.compile(rf"([{_CJK}])[，,。\.]([0-9A-Za-z{_CJK}]{{1,3}})([{_CJK}])")
+_PAT_ENG_PERIOD_ENG = re.compile(r"([A-Za-z])。([A-Za-z])")
+_PAT_ENG_COMMA_ENG = re.compile(r"([A-Za-z])[，,]([A-Za-z])")
+_PAT_DIGIT_PERIOD_DIGIT = re.compile(r"(\d)。(\d)")
+_PAT_CJK_PERIOD_ENG = re.compile(rf"([{_CJK}])。([A-Za-z])")
+_PAT_ENG_PERIOD_CJK = re.compile(rf"([A-Za-z])。([{_CJK}])")
 
 
 def _normalize_slow_speech_intraword_punct(text: str) -> str:
@@ -167,14 +197,33 @@ def _normalize_slow_speech_intraword_punct(text: str) -> str:
         t = _PAT_CJK_PERIOD_FW.sub(r"\1\2", t)
         t = _PAT_CJK_PERIOD_ASCII.sub(r"\1\2", t)
         t = _PAT_CJK_PUNCT_SHORT_FOLLOWUP.sub(r"\1\2\3", t)
+        t = _PAT_ENG_PERIOD_ENG.sub(r"\1\2", t)
+        t = _PAT_ENG_COMMA_ENG.sub(r"\1\2", t)
+        t = _PAT_DIGIT_PERIOD_DIGIT.sub(r"\1\2", t)
+        t = _PAT_CJK_PERIOD_ENG.sub(r"\1\2", t)
+        t = _PAT_ENG_PERIOD_CJK.sub(r"\1\2", t)
     return t
 
 
 _normalize_slow_speech_commas = _normalize_slow_speech_intraword_punct
 
 
+_REPEAT_CHAR = re.compile(r"([\u4e00-\u9fffA-Za-z,，.。!?？！])\1{4,}")
+_REPEAT_PHRASE = re.compile(r"(.{2,8}?)\1{3,}")
+
+
+def _strip_feedback_loop(text: str) -> str:
+    t = _REPEAT_CHAR.sub("", text)
+    prev = None
+    while prev != t:
+        prev = t
+        t = _REPEAT_PHRASE.sub(r"\1", t)
+    return t.strip()
+
+
 def _postprocess(text: str) -> str:
-    """Apply term corrections, t2s conversion, and slow-speech normalization."""
+    """Apply term corrections, t2s conversion, slow-speech normalization, and feedback-loop filter."""
+    text = _strip_feedback_loop(text)
     converter = _get_t2s_converter()
     if converter and converter is not False:
         text = converter.convert(text)
@@ -264,6 +313,10 @@ _QUESTION_CONNECTOR_SPLIT = re.compile(
     r"第二个问题|另一个问题|下一个问题))",
     re.IGNORECASE,
 )
+_SENTENCE_START_AFTER_SPLIT = re.compile(
+    r"^(?:那|那么|然后|所以|但是|不过|另外|还有|以及|就是|呃|额|哎|噢|"
+    r"请问|能不能|可不可以|为什么|怎么|如何|什么)",
+)
 
 AsrQuestionCandidate = Literal["ignore", "candidate", "promote"]
 
@@ -288,11 +341,20 @@ def split_question_like_text(text: str) -> list[str]:
     raw = (text or "").strip()
     if not raw:
         return []
-    parts = [p for p in _QUESTION_SPLIT.split(raw) if p and p.strip()]
-    if not parts:
-        parts = [raw]
+    raw_parts = [p for p in _QUESTION_SPLIT.split(raw) if p and p.strip()]
+    if not raw_parts:
+        raw_parts = [raw]
+    merged: list[str] = []
+    for part in raw_parts:
+        stripped = part.strip()
+        if not stripped:
+            continue
+        if merged and not _SENTENCE_START_AFTER_SPLIT.match(stripped):
+            merged[-1] = merged[-1] + "？" + stripped
+        else:
+            merged.append(stripped)
     out: list[str] = []
-    for part in parts:
+    for part in merged:
         subparts = _QUESTION_CONNECTOR_SPLIT.split(part)
         for sub in subparts:
             cleaned = normalize_transcription_for_analysis(sub)
@@ -380,6 +442,7 @@ def build_asr_question_group_text(texts: list[str], max_items: int = 4) -> str:
                 continue
             if not items or items[-1] != part:
                 items.append(part)
+    items = [it for it in items if len(it) >= 3 or it == items[0]]
     if not items:
         return ""
     if len(items) == 1:

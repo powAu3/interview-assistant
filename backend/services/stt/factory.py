@@ -194,25 +194,31 @@ def transcribe_with_fallback(
     primary = get_stt_engine()
     last_err: Optional[Exception] = None
 
+    is_timeout_err = False
     max_attempts = 2 if is_remote else 1
     for attempt in range(max_attempts):
         try:
             text = primary.transcribe(audio, sample_rate, position=position, language=language)
             if is_remote and not (text or "").strip():
-                raise RuntimeError(f"{provider} 返回空文本")
+                last_err = RuntimeError(f"{provider} 返回空文本")
+                break
             if is_remote:
                 _circuit_reset()
             return text
         except Exception as e:
             last_err = e
+            is_timeout_err = _is_timeout_error(e)
             if attempt == 0 and is_remote:
+                if is_timeout_err:
+                    _log.warning("STT %s attempt 1 timeout, skipping retry", provider)
+                    break
                 _log.warning("STT %s attempt 1 failed, retrying: %s", provider, e)
                 time.sleep(0.3)
             else:
-                _log.error("STT %s attempt %d failed: %s", provider, attempt + 1, e, exc_info=True)
+                _log.error("STT %s attempt %d failed: %s", provider, attempt + 1, e)
 
     if is_remote and last_err is not None:
-        _circuit_record_failure(is_timeout=_is_timeout_error(last_err))
+        _circuit_record_failure(is_timeout=is_timeout_err)
 
     if is_remote:
         _log.warning("STT fallback to whisper (primary=%s err=%s)", provider, last_err)
