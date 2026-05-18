@@ -177,6 +177,10 @@ export function useInterviewWS() {
       case 'answer_cancelled':
         s.cancelAnswer(msg.id as string)
         break
+      case 'answer_error':
+        s.errorAnswer(msg.id as string, (msg.message as string) || '答案保存失败')
+        s.pushToast(`答案保存失败: ${(msg.message as string) || '未知原因'}`, 'error')
+        break
       case 'vision_verify':
         s.setVisionVerify(
           msg.id as string,

@@ -35,9 +35,11 @@ export default function InterviewOverlay() {
   }, [qaPairs, streamingIds])
 
   const answerText =
-    latestQa?.answer === '[已取消]'
+    latestQa?.status === 'cancelled'
       ? '上一条回答已取消'
-      : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : '')
+      : latestQa?.status === 'error'
+        ? `保存失败: ${latestQa.errorMessage || '未知原因'}`
+        : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : '')
   const isStreaming = latestQa ? streamingIds.includes(latestQa.id) : false
   const hasContent = Boolean(latestQa)
 

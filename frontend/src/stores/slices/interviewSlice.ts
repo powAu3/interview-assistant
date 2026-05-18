@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { RootState } from './rootState'
-import type { QAPair } from './types'
+import type { QAPair, QAStatus } from './types'
 
 const CHUNK_THROTTLE_MS = 50
 
@@ -61,6 +61,7 @@ export interface InterviewSliceActions {
     modelName?: string,
   ) => void
   cancelAnswer: (id: string) => void
+  errorAnswer: (id: string, message: string) => void
   setVisionVerify: (id: string, verdict: 'PASS' | 'FAIL' | 'UNKNOWN', reason: string) => void
   setInitData: (data: any) => void
   clearSession: () => void
@@ -99,6 +100,7 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
           timestamp: Date.now() / 1000,
           questionSource: meta?.source,
           modelLabel: meta?.modelName,
+          status: 'streaming' as QAStatus,
         },
       ],
     })),
@@ -133,6 +135,7 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
                 thinkContent: thinkContent ?? qa.thinkContent,
                 isThinking: false,
                 modelLabel: modelName ?? qa.modelLabel,
+                status: 'done' as QAStatus,
               }
             : qa,
         ),
@@ -148,7 +151,23 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
         currentStreamingId: next.length ? next[next.length - 1] : null,
         streamingIds: next,
         qaPairs: s.qaPairs.map((qa) =>
-          qa.id === id ? { ...qa, answer: '[已取消]', isThinking: false } : qa,
+          qa.id === id ? { ...qa, isThinking: false, status: 'cancelled' as QAStatus } : qa,
+        ),
+      }
+    })
+  },
+
+  errorAnswer: (id, message) => {
+    _chunkBuffer.delete(id)
+    set((s) => {
+      const next = s.streamingIds.filter((x) => x !== id)
+      return {
+        currentStreamingId: next.length ? next[next.length - 1] : null,
+        streamingIds: next,
+        qaPairs: s.qaPairs.map((qa) =>
+          qa.id === id
+            ? { ...qa, isThinking: false, status: 'error' as QAStatus, errorMessage: message }
+            : qa,
         ),
       }
     })
@@ -177,6 +196,7 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
           timestamp: qa.timestamp ?? Date.now() / 1000,
           questionSource: (qa as any).source ?? qa.questionSource,
           modelLabel: (qa as any).model_name ?? qa.modelLabel,
+          status: qa.status ?? 'done' as QAStatus,
         }),
       ),
       currentStreamingId: null,

@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Loader2, ChevronRight, Brain, Ban, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield, Keyboard, ClipboardPaste, Mic, MonitorSmartphone } from 'lucide-react'
+import { Bot, Loader2, ChevronRight, Brain, Ban, AlertCircle, Layers, ArrowDown, Sparkles, ShieldCheck, ShieldAlert, Shield, Keyboard, ClipboardPaste, Mic, MonitorSmartphone } from 'lucide-react'
 import { useInterviewStore, QAPair } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import KbReferenceBanner from '@/components/kb/KbReferenceBanner'
@@ -98,13 +98,26 @@ function renderAnswerBody(
   stream: boolean,
   colorScheme: ColorSchemeId,
 ) {
+  const qaStatus = qa.status ?? (qa.answer ? 'done' : 'streaming')
   return (
     <>
       {qa.thinkContent && <ThinkBlock content={qa.thinkContent} isThinking={qa.isThinking} streamLayout={stream} />}
-      {qa.answer === '[\u5DF2\u53D6\u6D88]' ? (
+      {qaStatus === 'cancelled' ? (
         <div className="flex items-center gap-1.5 text-text-muted italic text-sm">
           <Ban className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>{'\u5DF2\u53D6\u6D88'}</span>
+          <span>已取消</span>
+        </div>
+      ) : qaStatus === 'error' ? (
+        <div className="space-y-2">
+          {qa.answer && (
+            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap break-words opacity-60">
+              {qa.answer}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 text-accent-red text-sm font-medium">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{qa.errorMessage || '答案保存失败'}</span>
+          </div>
         </div>
       ) : qa.answer ? (
         isStreaming && !qa.isThinking ? (
@@ -120,18 +133,18 @@ function renderAnswerBody(
       ) : isStreaming && !qa.isThinking ? (
         <div className="flex items-center gap-2 text-text-muted text-sm">
           <Loader2 className="w-4 h-4 animate-spin" />
-          {'\u751F\u6210\u4E2D\u2026'}
+          {'生成中…'}
         </div>
       ) : null}
-      {qa.visionVerify && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
+      {qa.visionVerify && qaStatus !== 'cancelled' && qaStatus !== 'error' && (
         <VisionVerifyBadge verdict={qa.visionVerify.verdict} reason={qa.visionVerify.reason} />
       )}
-      {qa.modelLabel && qa.answer && qa.answer !== '[\u5DF2\u53D6\u6D88]' && (
+      {qa.modelLabel && qaStatus !== 'cancelled' && qaStatus !== 'error' && (
         <p
           className={`text-[10px] text-text-muted/70 mt-2.5 pt-2 border-t border-bg-tertiary/30 flex items-center gap-1 ${stream ? 'border-bg-hover/40' : ''}`}
         >
           <Brain className="w-3 h-3 opacity-50" />
-          {'\u7531 '}<span className="text-accent-blue/80 font-medium">{qa.modelLabel}</span>{' \u751F\u6210'}
+          {'由 '}<span className="text-accent-blue/80 font-medium">{qa.modelLabel}</span>{' 生成'}
         </p>
       )}
     </>

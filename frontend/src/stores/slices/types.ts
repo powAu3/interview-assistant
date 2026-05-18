@@ -97,6 +97,8 @@ export interface AppConfig {
   kb_top_k?: number
 }
 
+export type QAStatus = 'streaming' | 'done' | 'cancelled' | 'error'
+
 export interface QAPair {
   id: string
   question: string
@@ -107,6 +109,8 @@ export interface QAPair {
   questionSource?: string
   modelLabel?: string
   visionVerify?: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }
+  status?: QAStatus
+  errorMessage?: string
 }
 
 export type PracticeAnswerMode = 'voice' | 'code' | 'voice+code'
