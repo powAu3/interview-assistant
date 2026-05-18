@@ -16,10 +16,23 @@ from services.kb.types import Chunk  # noqa: E402
 
 @pytest.fixture
 def store():
-    with tempfile.TemporaryDirectory() as d:
-        s = KBStore(db_path=str(Path(d) / "kb.sqlite"))
-        s.init_schema()
-        yield s
+    d = tempfile.mkdtemp()
+    s = KBStore(db_path=str(Path(d) / "kb.sqlite"))
+    s.init_schema()
+    yield s
+    import gc
+    del s
+    gc.collect()
+    db_file = Path(d) / "kb.sqlite"
+    for f in Path(d).iterdir():
+        try:
+            f.unlink()
+        except PermissionError:
+            pass
+    try:
+        Path(d).rmdir()
+    except OSError:
+        pass
 
 
 def test_init_schema_creates_tables(store: KBStore):

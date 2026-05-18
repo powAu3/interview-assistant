@@ -8,16 +8,17 @@
 """
 from __future__ import annotations
 
-import logging
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from core.logger import get_logger
+
 from ._tokenize import cjk_bigram_text
 from .types import Chunk
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS kb_doc (
@@ -68,6 +69,9 @@ class KBStore:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
         return conn
+
+    def close(self) -> None:
+        pass
 
     def init_schema(self) -> None:
         with self._lock, self._connect() as conn:
