@@ -782,6 +782,8 @@ const shortcutCallbacks = {
 };
 
 ipcMain.handle('hide-window', () => mainWindow?.hide());
+ipcMain.handle('minimize-window', () => mainWindow?.minimize());
+ipcMain.handle('quit-app', () => { isQuitting = true; app.quit(); });
 ipcMain.handle('show-window', () => { mainWindow?.show(); mainWindow?.focus(); });
 ipcMain.handle('get-shortcuts', () => shortcuts);
 ipcMain.handle('update-shortcuts', (_event, updates) => {

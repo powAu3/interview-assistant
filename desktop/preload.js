@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   hideWindow: () => ipcRenderer.invoke('hide-window'),
+  minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
+  quitApp: () => ipcRenderer.invoke('quit-app'),
   showWindow: () => ipcRenderer.invoke('show-window'),
   getShortcuts: () => ipcRenderer.invoke('get-shortcuts'),
   updateShortcuts: (shortcuts) => ipcRenderer.invoke('update-shortcuts', shortcuts),

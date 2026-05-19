@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
@@ -300,15 +300,37 @@ export default function App() {
             </button>
           )}
           <KnowledgeButton />
-          <button
-            type="button"
-            onClick={toggleSettings}
-            className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
-            title="设置中心 (外观 / 偏好 / 模型 / 隐私 / 快捷键)"
-            aria-label="打开设置"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+        <button
+          type="button"
+          onClick={toggleSettings}
+          className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
+          title="设置中心 (外观 / 偏好 / 模型 / 隐私 / 快捷键)"
+          aria-label="打开设置"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+        {window.electronAPI && (
+          <>
+            <button
+              type="button"
+              onClick={() => window.electronAPI?.minimizeWindow()}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-bg-hover/60 text-text-muted hover:text-text-primary transition-colors duration-150"
+              title="最小化"
+              aria-label="最小化窗口"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => window.electronAPI?.quitApp()}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-accent-red/80 text-text-muted hover:text-white transition-colors duration-150"
+              title="退出"
+              aria-label="退出应用"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </>
+        )}
         </div>
       </header>
 
