@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { useInterviewStore } from '@/stores/configStore'
 
@@ -122,5 +122,113 @@ describe('App bootstrap', () => {
     fireEvent.click(disabledOption)
 
     expect(apiMock.updateConfig).not.toHaveBeenCalled()
+  })
+})
+
+describe('Window control buttons', () => {
+  const minimizeSpy = vi.fn()
+  const quitSpy = vi.fn()
+  const originalElectronAPI = window.electronAPI
+
+  beforeEach(() => {
+    useInterviewStore.setState({
+      config: null,
+      devices: [],
+      options: null,
+      sttLoaded: false,
+      sttLoading: true,
+      modelHealth: {},
+      tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
+      fallbackToast: null,
+      toastMessage: null,
+      settingsOpen: false,
+      qaPairs: [],
+      streamingIds: [],
+      currentStreamingId: null,
+      transcriptions: [],
+      isPaused: false,
+      wsConnected: true,
+    } as any)
+    apiMock.getConfig.mockResolvedValue({
+      models: [{ name: 'demo', supports_vision: false }],
+      active_model: 0,
+      api_key_set: true,
+      think_mode: false,
+      think_effort: 'off',
+      stt_provider: 'whisper',
+    })
+    apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
+    apiMock.getOptions.mockResolvedValue({ positions: [], languages: [] })
+    apiMock.checkModelsHealth.mockResolvedValue(undefined)
+    apiMock.updateConfig.mockResolvedValue({ ok: true })
+    apiMock.kbStatus.mockResolvedValue({
+      enabled: false,
+      total_docs: 0,
+      total_chunks: 0,
+      deadline_ms: 150,
+      asr_deadline_ms: 80,
+      deps: { docx: false, pdf: false, ocr: false, vision: false },
+    })
+    minimizeSpy.mockReset()
+    quitSpy.mockReset()
+  })
+
+  afterEach(() => {
+    window.electronAPI = originalElectronAPI
+  })
+
+  it('does not show window control buttons when electronAPI is absent', async () => {
+    delete (window as any).electronAPI
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '实时辅助' })).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: '最小化窗口' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '退出应用' })).not.toBeInTheDocument()
+  })
+
+  it('shows minimize and quit buttons when electronAPI is present', async () => {
+    window.electronAPI = {
+      minimizeWindow: minimizeSpy,
+      quitApp: quitSpy,
+    } as any
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '退出应用' })).toBeInTheDocument()
+  })
+
+  it('calls electronAPI.minimizeWindow when minimize button is clicked', async () => {
+    window.electronAPI = {
+      minimizeWindow: minimizeSpy,
+      quitApp: quitSpy,
+    } as any
+
+    render(<App />)
+
+    const btn = await screen.findByRole('button', { name: '最小化窗口' })
+    fireEvent.click(btn)
+
+    expect(minimizeSpy).toHaveBeenCalledTimes(1)
+    expect(quitSpy).not.toHaveBeenCalled()
+  })
+
+  it('calls electronAPI.quitApp when quit button is clicked', async () => {
+    window.electronAPI = {
+      minimizeWindow: minimizeSpy,
+      quitApp: quitSpy,
+    } as any
+
+    render(<App />)
+
+    const btn = await screen.findByRole('button', { name: '退出应用' })
+    fireEvent.click(btn)
+
+    expect(quitSpy).toHaveBeenCalledTimes(1)
+    expect(minimizeSpy).not.toHaveBeenCalled()
   })
 })
