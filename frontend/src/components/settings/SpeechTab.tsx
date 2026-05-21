@@ -25,7 +25,7 @@ export default function SpeechTab() {
     stt_provider: 'whisper' as string,
     whisper_model: 'base',
     whisper_language: 'auto',
-    whisper_preload: true,
+    whisper_preload: false,
     doubao_stt_app_id: '',
     doubao_stt_access_token: '',
     doubao_stt_api_key: '',
@@ -64,7 +64,7 @@ export default function SpeechTab() {
         stt_provider: config.stt_provider ?? 'whisper',
         whisper_model: config.whisper_model,
         whisper_language: config.whisper_language ?? 'auto',
-        whisper_preload: config.whisper_preload ?? true,
+        whisper_preload: config.whisper_preload ?? false,
         doubao_stt_app_id: config.doubao_stt_app_id ?? '',
         doubao_stt_access_token: config.doubao_stt_access_token ?? '',
         doubao_stt_api_key: config.doubao_stt_api_key ?? '',
@@ -304,7 +304,7 @@ export default function SpeechTab() {
         )}
 
         {form.stt_provider !== 'whisper' && (
-          <Field label="Whisper 降级预加载" hint="启动时后台加载 Whisper 模型（~300MB 内存），远程 ASR 故障时即时降级">
+          <Field label="Whisper 降级预加载" hint="默认关闭；开启后启动时后台加载 Whisper（约 300MB 内存），远程 ASR 故障时更快降级">
             <label className="inline-flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.whisper_preload} onChange={(e) => setForm({ ...form, whisper_preload: e.target.checked })} className="rounded border-border text-accent-blue focus:ring-accent-blue/30" />
               <span className="text-xs text-text-secondary">{form.whisper_preload ? '已启用' : '已关闭'}</span>

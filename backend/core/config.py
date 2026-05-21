@@ -50,8 +50,8 @@ class AppConfig(BaseModel):
     whisper_model: str = "base"
     # "auto" is more robust for Chinese interview speech mixed with English terms.
     whisper_language: str = "auto"
-    # 启动时预加载 whisper 降级模型（远程 ASR 为主引擎时，~300MB 内存换即时降级）
-    whisper_preload: bool = True
+    # 启动时预加载 whisper 降级模型（远程 ASR 为主引擎时，~300MB 内存换更快降级）
+    whisper_preload: bool = False
     # 豆包语音识别 API（当 stt_provider=doubao 时使用），使用小时版 + WebSocket 双流式
     doubao_stt_app_id: str = ""
     doubao_stt_access_token: str = ""

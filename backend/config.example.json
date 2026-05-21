@@ -18,7 +18,7 @@
   "stt_provider": "whisper",
   "whisper_model": "base",
   "whisper_language": "auto",
-  "whisper_preload": true,
+  "whisper_preload": false,
   "doubao_stt_app_id": "",
   "doubao_stt_access_token": "",
   "doubao_stt_api_key": "",

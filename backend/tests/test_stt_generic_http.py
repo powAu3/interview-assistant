@@ -157,6 +157,7 @@ def test_transcribe_with_fallback_suppresses_short_empty_remote_audio(monkeypatc
     monkeypatch.setattr(stt_factory, "_circuit_reset", lambda: None)
     monkeypatch.setattr(stt_factory, "_whisper_transcribe", lambda audio, sample_rate, position, language: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text")
     monkeypatch.setattr(stt_factory, "_is_whisper_preloaded", lambda: True)
+    _patch_broadcast(monkeypatch, [])
 
     text = stt_factory.transcribe_with_fallback(np.zeros(16000 * 2, dtype=np.float32), 16000)
 
