@@ -399,3 +399,23 @@ def update_entry_summary(entry_id: int, summary: str) -> dict[str, Any]:
     if cfg.resume_active_history_id == entry_id:
         update_config({"resume_text": summary})
     return {"ok": True, "length": len(summary)}
+
+
+def restore_active_resume() -> bool:
+    """服务器启动时自动恢复上次挂载的简历。
+
+    config.json 中保存了 resume_active_history_id，但 resume_text 被排除在持久化之外。
+    此函数检查：若 active_id 存在但 resume_text 为空，则从数据库缓存中恢复。
+    """
+    cfg = get_config()
+    active_id = cfg.resume_active_history_id
+    if not active_id:
+        return False
+    if cfg.resume_text and cfg.resume_text.strip():
+        return False
+
+    try:
+        apply_entry(active_id)
+        return True
+    except Exception:
+        return False

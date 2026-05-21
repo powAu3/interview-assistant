@@ -83,6 +83,12 @@ async def lifespan(app: FastAPI):
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
     assist.init_background_workers()
     threading.Thread(target=_preload_stt, daemon=True).start()
+    try:
+        from services.storage.resume_history import restore_active_resume
+        if restore_active_resume():
+            _log.info("Resume auto-restored from history (id=%s)", cfg.resume_active_history_id)
+    except Exception as e:
+        _log.debug("Resume auto-restore skipped: %s", e)
     yield
     _log.info("SHUTDOWN cleaning up")
     assist.stop_interview_loop()
@@ -96,13 +102,19 @@ def _preload_stt():
         cfg = get_config()
         engine = get_stt_engine()
         _log.info("STT preload start provider=%s", cfg.stt_provider)
-        ws.broadcast({"type": "stt_status", "loaded": False, "loading": True})
+        ws.broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": cfg.stt_provider})
         engine.load_model()
-        _log.info("STT preload done provider=%s", cfg.stt_provider)
-        ws.broadcast({"type": "stt_status", "loaded": True, "loading": False})
+        loaded = bool(engine.is_loaded)
+        _log.info("STT preload done provider=%s loaded=%s", cfg.stt_provider, loaded)
+        ws.broadcast({"type": "stt_status", "loaded": loaded, "loading": False, "provider": cfg.stt_provider})
     except Exception as e:
         _log.error("STT preload failed: %s", e, exc_info=True)
-        ws.broadcast({"type": "stt_status", "loaded": False, "loading": False, "error": str(e)})
+        ws.broadcast({"type": "stt_status", "loaded": False, "loading": False, "provider": get_config().stt_provider, "error": str(e)})
+    try:
+        from services.stt.factory import preload_whisper_fallback
+        preload_whisper_fallback()
+    except Exception as e:
+        _log.debug("Whisper fallback preload skipped: %s", e)
 
 
 app = FastAPI(title="学习助手", lifespan=lifespan)
