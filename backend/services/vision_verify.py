@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import base64
 from typing import Optional
 
 from core.logger import get_logger
@@ -80,6 +81,19 @@ def _pick_vision_model_cfg():
     return None
 
 
+def _normalize_image_data_url(image_data_url: str) -> str:
+    raw = (image_data_url or "").strip()
+    if not raw:
+        return raw
+    if raw.startswith("data:image"):
+        return raw
+    try:
+        base64.b64decode(raw, validate=True)
+    except Exception:
+        return raw
+    return f"data:image/png;base64,{raw}"
+
+
 def _verify_blocking(answer: str, image_data_url: str) -> dict:
     """同步执行一次 self-verify。失败时返回 verdict=UNKNOWN。"""
     model_cfg = _pick_vision_model_cfg()
@@ -91,7 +105,7 @@ def _verify_blocking(answer: str, image_data_url: str) -> dict:
     client = get_client_for_model(model_cfg)
     user_content = [
         {"type": "text", "text": _VERIFY_PROMPT.format(answer=answer)},
-        {"type": "image_url", "image_url": {"url": image_data_url}},
+        {"type": "image_url", "image_url": {"url": _normalize_image_data_url(image_data_url)}},
     ]
     try:
         response = client.chat.completions.create(

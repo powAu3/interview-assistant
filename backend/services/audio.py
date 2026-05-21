@@ -358,7 +358,15 @@ class AudioCapture:
                 except Exception:
                     pass
 
-                mic = _sc.get_microphone(speaker_guid, include_loopback=True)
+                active_guid = speaker_guid
+                try:
+                    mic = _sc.get_microphone(active_guid, include_loopback=True)
+                except IndexError:
+                    _get_sc_loopback_devices()
+                    active_guid = _SC_ID_MAP.get(device_id) or _SC_DEVICE_CACHE.get(device_id, {}).get("guid")
+                    if active_guid is None:
+                        raise RuntimeError(f"系统音频设备已失效 ID={device_id}，请刷新页面重新选择设备")
+                    mic = _sc.get_microphone(active_guid, include_loopback=True)
                 _alog.info("soundcard loopback opened: %s", mic.name)
                 with mic.recorder(samplerate=self.SAMPLE_RATE,
                                   channels=1,
