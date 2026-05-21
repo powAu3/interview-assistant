@@ -5,12 +5,14 @@ import type { ModelHealthStatus, TokenUsage } from './types'
 export interface SttSliceState {
   sttLoaded: boolean
   sttLoading: boolean
+  sttActiveProvider: string
+  sttFallbackLoaded: boolean
   modelHealth: Record<number, ModelHealthStatus>
   tokenUsage: TokenUsage
 }
 
 export interface SttSliceActions {
-  setSttStatus: (loaded: boolean, loading: boolean) => void
+  setSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
   setModelHealth: (index: number, status: ModelHealthStatus) => void
   setTokenUsage: (usage: TokenUsage) => void
 }
@@ -18,12 +20,23 @@ export interface SttSliceActions {
 export type SttSlice = SttSliceState & SttSliceActions
 
 export const createSttSlice: StateCreator<RootState, [], [], SttSlice> = (set) => ({
-  sttLoaded: false,
-  sttLoading: true,
+  sttLoaded: true,
+  sttLoading: false,
+  sttActiveProvider: '',
+  sttFallbackLoaded: false,
   modelHealth: {},
   tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
 
-  setSttStatus: (loaded, loading) => set({ sttLoaded: loaded, sttLoading: loading }),
+  setSttStatus: (loaded, loading, provider) => set((s) => {
+    if (provider === 'whisper-preload') {
+      return { sttFallbackLoaded: loaded }
+    }
+    return {
+      sttLoaded: loaded,
+      sttLoading: loading,
+      ...(provider != null ? { sttActiveProvider: provider } : {}),
+    }
+  }),
   setModelHealth: (index, status) =>
     set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
   setTokenUsage: (usage) =>

@@ -76,6 +76,7 @@ describe('ModelsTab state sync', () => {
         whisper_language: 'auto',
         doubao_stt_app_id: '',
         doubao_stt_access_token: '',
+        doubao_stt_api_key: '',
         doubao_stt_resource_id: '',
         doubao_stt_boosting_table_id: '',
         generic_stt_api_base_url: '',

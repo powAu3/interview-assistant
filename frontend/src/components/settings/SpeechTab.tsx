@@ -25,13 +25,16 @@ export default function SpeechTab() {
     stt_provider: 'whisper' as string,
     whisper_model: 'base',
     whisper_language: 'auto',
+    whisper_preload: true,
     doubao_stt_app_id: '',
     doubao_stt_access_token: '',
+    doubao_stt_api_key: '',
     doubao_stt_resource_id: 'volc.seedasr.sauc.duration',
     doubao_stt_boosting_table_id: '',
     generic_stt_api_base_url: '',
     generic_stt_api_key: '',
     generic_stt_model: '',
+    generic_stt_custom_headers: '',
     practice_tts_provider: 'edge_tts' as string,
     edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
     edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -61,13 +64,16 @@ export default function SpeechTab() {
         stt_provider: config.stt_provider ?? 'whisper',
         whisper_model: config.whisper_model,
         whisper_language: config.whisper_language ?? 'auto',
+        whisper_preload: config.whisper_preload ?? true,
         doubao_stt_app_id: config.doubao_stt_app_id ?? '',
         doubao_stt_access_token: config.doubao_stt_access_token ?? '',
+        doubao_stt_api_key: config.doubao_stt_api_key ?? '',
         doubao_stt_resource_id: config.doubao_stt_resource_id ?? 'volc.seedasr.sauc.duration',
         doubao_stt_boosting_table_id: config.doubao_stt_boosting_table_id ?? '',
         generic_stt_api_base_url: config.generic_stt_api_base_url ?? '',
         generic_stt_api_key: config.generic_stt_api_key ?? '',
         generic_stt_model: config.generic_stt_model ?? '',
+        generic_stt_custom_headers: config.generic_stt_custom_headers ?? '',
         practice_tts_provider: config.practice_tts_provider ?? 'edge_tts',
         edge_tts_voice_female: config.edge_tts_voice_female ?? 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: config.edge_tts_voice_male ?? 'zh-CN-YunxiNeural',
@@ -184,7 +190,7 @@ export default function SpeechTab() {
 
   const credentialConfigured = (provider: string): boolean => {
     if (provider === 'whisper') return true
-    if (provider === 'doubao') return !!(form.doubao_stt_app_id && form.doubao_stt_access_token)
+    if (provider === 'doubao') return !!(form.doubao_stt_api_key || (form.doubao_stt_app_id && form.doubao_stt_access_token))
     if (provider === 'generic') return !!(form.generic_stt_api_base_url && form.generic_stt_api_key && form.generic_stt_model)
     return false
   }
@@ -262,13 +268,16 @@ export default function SpeechTab() {
 
         {form.stt_provider === 'doubao' && (
           <>
-            <Field label="App ID" hint="火山引擎应用标识">
+            <Field label="API Key（新版控制台）" hint="优先使用；火山引擎新版控制台 API Key 管理中获取">
+              <input type="text" value={form.doubao_stt_api_key} onChange={(e) => setForm({ ...form, doubao_stt_api_key: e.target.value })} placeholder="填入 API Key（UUID 格式）" className="input-field" />
+            </Field>
+            <Field label="App ID（旧版控制台）" hint="使用旧版控制台时填写，新版无需填">
               <input type="text" value={form.doubao_stt_app_id} onChange={(e) => setForm({ ...form, doubao_stt_app_id: e.target.value })} placeholder="如：123456789" className="input-field" />
             </Field>
-            <Field label="Access Token" hint="火山引擎 API 访问令牌">
-              <input type="password" value={form.doubao_stt_access_token} onChange={(e) => setForm({ ...form, doubao_stt_access_token: e.target.value })} placeholder="填入 Access Token" className="input-field" />
+            <Field label="Access Token（旧版控制台）" hint="使用旧版控制台时填写，新版无需填">
+              <input type="text" value={form.doubao_stt_access_token} onChange={(e) => setForm({ ...form, doubao_stt_access_token: e.target.value })} placeholder="填入 Access Token" className="input-field" />
             </Field>
-            <Field label="Resource ID" hint="默认为流式语音识别 2.0 小时版">
+            <Field label="Resource ID" hint="默认为流式语音识别 1.0 小时版">
               <input type="text" value={form.doubao_stt_resource_id} onChange={(e) => setForm({ ...form, doubao_stt_resource_id: e.target.value })} className="input-field" />
             </Field>
             <Field label="热词表 ID（可选）" hint="在自学习平台上传热词文件后获得">
@@ -283,12 +292,24 @@ export default function SpeechTab() {
               <input type="text" value={form.generic_stt_api_base_url} onChange={(e) => setForm({ ...form, generic_stt_api_base_url: e.target.value })} placeholder="https://.../v1" className="input-field" />
             </Field>
             <Field label="API Key" hint="Bearer token">
-              <input type="password" value={form.generic_stt_api_key} onChange={(e) => setForm({ ...form, generic_stt_api_key: e.target.value })} placeholder="填入 API Key" className="input-field" />
+              <input type="text" value={form.generic_stt_api_key} onChange={(e) => setForm({ ...form, generic_stt_api_key: e.target.value })} placeholder="填入 API Key" className="input-field" />
             </Field>
             <Field label="Model" hint="例如 whisper-1 / qwen-audio-asr / 供应商模型名">
               <input type="text" value={form.generic_stt_model} onChange={(e) => setForm({ ...form, generic_stt_model: e.target.value })} placeholder="模型名" className="input-field" />
             </Field>
+            <Field label="自定义 Header（可选）" hint='JSON {"Key":"Value"} 或每行 Key: Value，追加到请求头'>
+              <textarea value={form.generic_stt_custom_headers} onChange={(e) => setForm({ ...form, generic_stt_custom_headers: e.target.value })} placeholder='{"X-Custom-Header": "value"}&#10;或&#10;X-Custom-Header: value' rows={3} className="input-field min-h-[66px] resize-y font-mono text-xs" />
+            </Field>
           </>
+        )}
+
+        {form.stt_provider !== 'whisper' && (
+          <Field label="Whisper 降级预加载" hint="启动时后台加载 Whisper 模型（~300MB 内存），远程 ASR 故障时即时降级">
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.whisper_preload} onChange={(e) => setForm({ ...form, whisper_preload: e.target.checked })} className="rounded border-border text-accent-blue focus:ring-accent-blue/30" />
+              <span className="text-xs text-text-secondary">{form.whisper_preload ? '已启用' : '已关闭'}</span>
+            </label>
+          </Field>
         )}
 
         <div className="flex items-center gap-3 pt-1">
@@ -403,7 +424,7 @@ export default function SpeechTab() {
             </Field>
             <Field label="Token" hint="可先使用控制台临时 token；正式接入再换成稳定 token 管理">
               <input
-                type="password"
+                type="text"
                 value={form.volcengine_tts_token}
                 onChange={(e) => setForm({ ...form, volcengine_tts_token: e.target.value })}
                 placeholder="填入火山引擎 TTS token"
@@ -464,8 +485,8 @@ export default function SpeechTab() {
               onChange={(e) => setForm({ ...form, silence_threshold: parseFloat(e.target.value) })} className="input-field" />
           </Field>
           <Field label="静音时长 (秒)" hint="说完判定">
-            <input type="number" step="0.5" min="0.5" max="10" value={form.silence_duration}
-              onChange={(e) => setForm({ ...form, silence_duration: parseFloat(e.target.value) })} className="input-field" />
+            <input type="number" step="0.1" min="0.5" max="10" value={form.silence_duration}
+              onChange={(e) => setForm({ ...form, silence_duration: parseFloat(e.target.value) || 1.2 })} className="input-field" />
           </Field>
         </div>
         <Field label="转写最少有效字" hint="去标点只计汉字/英文/数字；低于则不触发（如过滤「嗯」）">
@@ -477,12 +498,12 @@ export default function SpeechTab() {
       <Section title="转写合并与自动答题" keywords="合并 merge auto answer 自动答题 gap interval seconds 间隔">
         <div className="grid grid-cols-2 gap-3">
           <Field label="合并间隔 (秒)" hint="上一段结束后静默超过该时间送出；0=每段立即发">
-            <input type="number" step="0.5" min={0} max={15} value={form.assist_transcription_merge_gap_sec}
+            <input type="number" step="0.1" min={0} max={15} value={form.assist_transcription_merge_gap_sec}
               onChange={(e) => setForm({ ...form, assist_transcription_merge_gap_sec: Math.max(0, Math.min(15, parseFloat(e.target.value) || 0)) })}
               className="input-field" />
           </Field>
           <Field label="最长等待 (秒)" hint="从首段起超过该时间强制送出">
-            <input type="number" step={1} min={1} max={120} value={form.assist_transcription_merge_max_sec}
+            <input type="number" step="0.1" min={1} max={120} value={form.assist_transcription_merge_max_sec}
               onChange={(e) => setForm({ ...form, assist_transcription_merge_max_sec: Math.max(1, Math.min(120, parseFloat(e.target.value) || 12)) })}
               className="input-field" />
           </Field>

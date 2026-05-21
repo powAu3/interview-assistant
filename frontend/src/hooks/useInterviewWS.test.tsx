@@ -66,6 +66,8 @@ describe('useInterviewWS', () => {
       isRecording: false,
       sttLoaded: false,
       sttLoading: true,
+      sttActiveProvider: '',
+      sttFallbackLoaded: false,
       modelHealth: {},
       tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
       resumeOptLoading: false,

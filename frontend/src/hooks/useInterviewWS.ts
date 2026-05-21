@@ -189,7 +189,7 @@ export function useInterviewWS() {
         )
         break
       case 'stt_status':
-        s.setSttStatus((msg.loaded as boolean) ?? false, (msg.loading as boolean) ?? false)
+        s.setSttStatus((msg.loaded as boolean) ?? false, (msg.loading as boolean) ?? false, msg.provider as string | undefined)
         break
       // Practice mode messages
       case 'practice_status':

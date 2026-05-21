@@ -72,6 +72,8 @@ export default function PreferencesTab() {
   const platformInfo = useInterviewStore((s) => s.platformInfo)
   const sttLoaded = useInterviewStore((s) => s.sttLoaded)
   const sttLoading = useInterviewStore((s) => s.sttLoading)
+  const sttActiveProvider = useInterviewStore((s) => s.sttActiveProvider)
+  const sttFallbackLoaded = useInterviewStore((s) => s.sttFallbackLoaded)
   const setSettingsDrawerTab = useInterviewStore((s) => s.setSettingsDrawerTab)
   const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
   const setAnswerPanelLayout = useUiPrefsStore((s) => s.setAnswerPanelLayout)
@@ -141,9 +143,9 @@ export default function PreferencesTab() {
         </div>
       )}
       <div className="flex items-center gap-2 text-xs px-1">
-        <div className={`w-2 h-2 rounded-full ${sttLoaded ? 'bg-accent-green' : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
+        <div className={`w-2 h-2 rounded-full ${sttLoaded ? (sttActiveProvider === 'whisper' ? 'bg-accent-amber' : 'bg-accent-green') : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
         <span className="text-text-secondary">
-          语音识别: {sttLoaded ? '就绪' : sttLoading ? '加载中…' : '未就绪'}（{sttLabel}）
+          语音识别: {sttLoaded ? (sttActiveProvider === 'whisper' ? 'Whisper 降级就绪' : sttFallbackLoaded ? '就绪 ✓' : '就绪') : sttLoading ? '加载中…' : '未就绪'}（{sttLabel}）
         </span>
       </div>
 

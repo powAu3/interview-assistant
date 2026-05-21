@@ -54,6 +54,9 @@ export default function ControlBar() {
     setLastWSError,
     wsConnected,
     modelHealth,
+    sttLoaded,
+    sttLoading,
+    sttActiveProvider,
   } = useInterviewStore(
     useShallow((s) => ({
       isRecording: s.isRecording,
@@ -71,6 +74,9 @@ export default function ControlBar() {
       setLastWSError: s.setLastWSError,
       wsConnected: s.wsConnected,
       modelHealth: s.modelHealth,
+      sttLoaded: s.sttLoaded ?? true,
+      sttLoading: s.sttLoading ?? false,
+      sttActiveProvider: s.sttActiveProvider ?? '',
     })),
   )
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
@@ -106,16 +112,8 @@ export default function ControlBar() {
     () => orderByRecent(quickPrompts, quickPromptRecent),
     [quickPrompts, quickPromptRecent],
   )
-  const recentSet = useMemo(() => {
-    // 只把排序后靠前且真被标记的前 3 项视为「最近使用」
-    const s = new Set<string>()
-    const withTs = quickPrompts
-      .filter((p) => quickPromptRecent[p] != null)
-      .sort((a, b) => (quickPromptRecent[b] ?? 0) - (quickPromptRecent[a] ?? 0))
-      .slice(0, 3)
-    for (const p of withTs) s.add(p)
-    return s
-  }, [quickPrompts, quickPromptRecent])
+  const [quickPromptSessionUsed, setQuickPromptSessionUsed] = useState<Set<string>>(new Set())
+  const recentSet = quickPromptSessionUsed
 
   const visibleDevices = useMemo(() => splitAudioDevices(devices).visible, [devices])
 
@@ -272,6 +270,7 @@ export default function ControlBar() {
     setManualQuestion((prev) => (prev ? `${prev} ${prompt}` : prompt))
     inputRef.current?.focus()
     setQuickPromptRecent(bumpQuickPromptRecent(prompt))
+    setQuickPromptSessionUsed((prev) => new Set(prev).add(prompt))
   }, [])
 
   const handleRefreshDevices = useCallback(async () => {
@@ -408,6 +407,18 @@ export default function ControlBar() {
               <span className="hidden sm:inline">{isExamMode ? '结束' : '结束面试'}</span>
             </button>
           </>
+        ) : !isExamMode && sttLoading ? (
+          <button disabled
+            className="flex items-center gap-1.5 px-4 py-2 bg-bg-tertiary text-text-muted text-xs font-semibold rounded-xl cursor-not-allowed flex-shrink-0">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>{sttActiveProvider === 'whisper' ? '降级加载 Whisper…' : '语音加载中…'}</span>
+          </button>
+        ) : !isExamMode && !sttLoaded ? (
+          <button onClick={handleStart} disabled={loading || selectedDevice === null}
+            className="flex items-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>语音未就绪，开始面试</span>
+          </button>
         ) : (
           <button onClick={handleStart} disabled={loading || (!isExamMode && selectedDevice === null)}
             className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">

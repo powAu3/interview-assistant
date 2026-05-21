@@ -12,7 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
   KeyRound,
-  Check,
   Zap,
   Loader2,
   Sparkles,
@@ -56,7 +55,6 @@ export default function ModelsTab() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
-  const [keyEdited, setKeyEdited] = useState<Record<number, boolean>>({})
   const [testingIdx, setTestingIdx] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, 'ok' | 'error' | 'checking'>>({})
   const [maxP, setMaxP] = useState(2)
@@ -89,7 +87,6 @@ export default function ModelsTab() {
     try {
       const { models: full } = await api.getModelsFull()
       setModelRows(full.map(toModelRow))
-      setKeyEdited({})
       setTestResults({})
       if (full.length === 0) setExpandedIdx(-1)
     } catch {
@@ -140,15 +137,6 @@ export default function ModelsTab() {
     }
     setModelRows((prev) => prev.filter((_, i) => i !== idx))
     setExpandedIdx(null)
-    setKeyEdited((prev) => {
-      const next: Record<number, boolean> = {}
-      Object.entries(prev).forEach(([k, v]) => {
-        const n = Number(k)
-        if (n < idx) next[n] = v
-        else if (n > idx) next[n - 1] = v
-      })
-      return next
-    })
   }
 
   const buildModelPayload = () =>
@@ -341,10 +329,9 @@ export default function ModelsTab() {
       <div className="space-y-2">
         {modelRows.map(({ model: m }, idx) => {
           const isExpanded = expandedIdx === idx
-          const keyHasValue = m.has_key && !keyEdited[idx]
-          const keyNewlyFilled = keyEdited[idx] && m.api_key.trim().length > 0
-          const keyStatus = keyHasValue ? 'ok' : keyNewlyFilled ? 'ok' : 'error'
-          const keyLabel = keyHasValue ? '已配置' : keyNewlyFilled ? '已填写' : '未配置'
+          const keyHasValue = m.api_key.trim().length > 0 || m.has_key
+          const keyStatus = keyHasValue ? 'ok' : 'error'
+          const keyLabel = keyHasValue ? '已填写' : '未配置'
           const tr = testResults[idx]
 
           return (
@@ -396,21 +383,12 @@ export default function ModelsTab() {
                     <div className="space-y-1">
                       <label className="text-xs text-text-secondary">API Key</label>
                       <input
-                        type="password"
-                        value={keyEdited[idx] ? m.api_key : ''}
-                        onChange={(e) => {
-                          setKeyEdited((prev) => ({ ...prev, [idx]: true }))
-                          updateModel(idx, { api_key: e.target.value })
-                        }}
-                        placeholder={m.has_key ? '已配置（输入新值覆盖）' : '填入你的 API Key'}
+                        type="text"
+                        value={m.api_key}
+                        onChange={(e) => updateModel(idx, { api_key: e.target.value })}
+                        placeholder="填入你的 API Key"
                         className="input-field"
                       />
-                      {m.has_key && !keyEdited[idx] && (
-                        <p className="text-[10px] text-emerald-400 flex items-center gap-1">
-                          <Check className="w-3 h-3" />
-                          已有密钥，留空则保留原值
-                        </p>
-                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-text-secondary">Model ID</label>

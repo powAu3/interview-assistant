@@ -57,6 +57,8 @@ export const useInterview = makeShallowHook((s) => ({
 export const useStt = makeShallowHook((s) => ({
   sttLoaded: s.sttLoaded,
   sttLoading: s.sttLoading,
+  sttActiveProvider: s.sttActiveProvider,
+  sttFallbackLoaded: s.sttFallbackLoaded,
   modelHealth: s.modelHealth,
   tokenUsage: s.tokenUsage,
   setSttStatus: s.setSttStatus,
