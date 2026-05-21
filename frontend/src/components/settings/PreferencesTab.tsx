@@ -187,17 +187,39 @@ export default function PreferencesTab() {
             </button>
           ))}
         </div>
-        <Field label="简短回答">
-          <Toggle
-            checked={config?.assist_high_churn_short_answer ?? false}
-            onChange={async (v) => {
-              try {
-                await updateConfigAndRefresh({ assist_high_churn_short_answer: v })
-              } catch {}
-            }}
-            label={config?.assist_high_churn_short_answer ? '简短模式' : '详细模式'}
-          />
-          <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">开启后回答更短更精炼</p>
+        <Field label="回答长度">
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: false, label: '详细回答', hint: '解释更完整' },
+              { value: true, label: '简短回答', hint: '更快跟住问题' },
+            ]).map((item) => {
+              const selected = (config?.assist_high_churn_short_answer ?? false) === item.value
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await updateConfigAndRefresh({ assist_high_churn_short_answer: item.value })
+                    } catch {}
+                  }}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                    selected
+                      ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
+                      : 'border-bg-hover bg-bg-tertiary/25 hover:border-bg-hover'
+                  }`}
+                >
+                  <span className={`text-xs font-semibold ${selected ? 'text-accent-blue' : 'text-text-primary'}`}>
+                    {item.label}
+                  </span>
+                  <span className="block text-[10px] text-text-muted mt-1">{item.hint}</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
+            当前：{config?.assist_high_churn_short_answer ? '简短回答' : '详细回答'}
+          </p>
         </Field>
         <Field label="候选人维度" hint="影响练习模式的出题与点评风格">
           <select value={practiceAudience}

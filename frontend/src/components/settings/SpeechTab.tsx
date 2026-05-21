@@ -527,15 +527,33 @@ export default function SpeechTab() {
             className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0" />
           <span className="text-xs text-text-secondary">自动检测问题并生成答案</span>
         </label>
-        <label className="flex items-center gap-2 cursor-pointer mt-2">
-          <input type="checkbox" checked={form.assist_high_churn_short_answer}
-            onChange={(e) => setForm({ ...form, assist_high_churn_short_answer: e.target.checked })}
-            className="w-4 h-4 rounded bg-bg-tertiary border-bg-hover text-accent-blue focus:ring-accent-blue focus:ring-offset-0" />
-          <div>
-            <span className="text-xs text-text-secondary">高 churn 短答模式</span>
-            <p className="text-[10px] text-text-muted leading-snug">问题切换频繁时自动切成更短回答，优先跟住最新问题。</p>
+        <Field label="回答长度" hint="和常用页的回答长度设置一致，保存语音配置后生效">
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: false, label: '详细回答', hint: '解释更完整' },
+              { value: true, label: '简短回答', hint: '更快跟住问题' },
+            ]).map((item) => {
+              const selected = form.assist_high_churn_short_answer === item.value
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => setForm({ ...form, assist_high_churn_short_answer: item.value })}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                    selected
+                      ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/30'
+                      : 'border-bg-hover bg-bg-tertiary/25 hover:border-bg-hover'
+                  }`}
+                >
+                  <span className={`text-xs font-semibold ${selected ? 'text-accent-blue' : 'text-text-primary'}`}>
+                    {item.label}
+                  </span>
+                  <span className="block text-[10px] text-text-muted mt-1">{item.hint}</span>
+                </button>
+              )
+            })}
           </div>
-        </label>
+        </Field>
       </Section>
 
       <button
