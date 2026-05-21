@@ -99,11 +99,11 @@ describe('ModelsTab state sync', () => {
   it('persists enabled changes from the ordering section when saving models', async () => {
     render(<ModelsTab />)
 
-    await screen.findByText('保存模型列表')
+    await screen.findByText('保存模型队列')
 
     const switches = screen.getAllByRole('switch')
     fireEvent.click(switches[0])
-    fireEvent.click(screen.getByText('保存模型列表'))
+    fireEvent.click(screen.getByText('保存模型队列'))
 
     await waitFor(() => {
       expect(apiMock.updateConfig).toHaveBeenCalled()
