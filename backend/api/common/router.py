@@ -138,7 +138,7 @@ async def api_update_config(body: ConfigUpdate):
     try:
         if "models" in d:
             raw_models = []
-            for i, x in enumerate(d["models"]):
+            for x in d["models"]:
                 if not isinstance(x, dict):
                     continue
                 raw_models.append(ModelConfig(**x))
