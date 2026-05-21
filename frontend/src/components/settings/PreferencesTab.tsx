@@ -199,6 +199,15 @@ export default function PreferencesTab() {
           />
           <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">开启后回答更短更精炼</p>
         </Field>
+        <Field label="候选人维度" hint="影响练习模式的出题与点评风格">
+          <select value={practiceAudience}
+            onChange={(e) => setPracticeAudience(e.target.value)}
+            className="input-field">
+            {(options?.practice_audiences ?? ['campus_intern', 'social']).map((v) => (
+              <option key={v} value={v}>{v === 'social' ? '社招' : '校招（实习）'}</option>
+            ))}
+          </select>
+        </Field>
       </Section>
 
       {/* ── 2. 悬浮提示窗（含截图区域、笔试模式） ── */}
@@ -489,15 +498,6 @@ export default function PreferencesTab() {
               </button>
             ))}
           </div>
-        </Field>
-        <Field label="候选人维度" hint="影响练习模式的出题与点评风格">
-          <select value={practiceAudience}
-            onChange={(e) => setPracticeAudience(e.target.value)}
-            className="input-field">
-            {(options?.practice_audiences ?? ['campus_intern', 'social']).map((v) => (
-              <option key={v} value={v}>{v === 'social' ? '社招' : '校招（实习）'}</option>
-            ))}
-          </select>
         </Field>
         <Field label="流式跟滚阈值（像素）" hint="距底部小于该值时自动滚到底（4～400）">
           <input
