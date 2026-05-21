@@ -246,6 +246,19 @@ export default function SpeechTab() {
 
       {/* Engine-specific config with brand color border */}
       <GradientCard className={`p-4 space-y-3 transition-all duration-200 ${brandBorder[form.stt_provider] ?? ''}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">当前引擎配置</h3>
+            <p className="text-[11px] text-text-muted mt-0.5">
+              {providerMeta[form.stt_provider]?.label ?? form.stt_provider}
+            </p>
+          </div>
+          <StatusBadge
+            status={credentialConfigured(form.stt_provider) ? 'ok' : 'error'}
+            label={credentialConfigured(form.stt_provider) ? '配置完整' : '待补全'}
+          />
+        </div>
+
         {form.stt_provider === 'whisper' && (
           <>
             <Field label="Whisper 模型" hint="模型越大越准确但越慢，base 适合大多数场景">

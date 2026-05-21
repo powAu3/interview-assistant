@@ -36,19 +36,19 @@ function Collapsible({ title, searchTitle, icon, defaultOpen = false, badge, key
   if (!matchSettingsSearch(titleText, keywords, query)) return null
   const effectiveOpen = query.trim() ? true : open
   return (
-    <div className="border border-bg-hover/60 rounded-xl overflow-hidden" data-search-title={titleText}>
+    <section className="rounded-xl border border-bg-hover/60 bg-bg-primary/35 overflow-hidden" data-search-title={titleText}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider hover:bg-bg-tertiary/30 transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-bg-tertiary/25 transition-colors"
       >
-        {icon}
-        {title}
-        {badge}
+        {icon && <span className="text-text-muted flex-shrink-0">{icon}</span>}
+        <span className="text-sm font-semibold text-text-primary">{title}</span>
+        {badge && <span className="flex-shrink-0">{badge}</span>}
         <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${effectiveOpen ? 'rotate-180' : ''}`} />
       </button>
-      {effectiveOpen && <div className="px-3 pb-3 space-y-3">{children}</div>}
-    </div>
+      {effectiveOpen && <div className="px-4 pb-4 space-y-3 border-t border-bg-hover/50">{children}</div>}
+    </section>
   )
 }
 
@@ -132,7 +132,7 @@ export default function PreferencesTab() {
   const inSearch = searchQuery.trim().length > 0
 
   return (
-    <div className="p-5 space-y-4 pb-8" data-in-search={inSearch ? '1' : undefined}>
+    <div className="p-5 space-y-5 pb-8" data-in-search={inSearch ? '1' : undefined}>
       {/* ── 系统状态 ── */}
       {platformInfo?.needs_virtual_device && (
         <div className="bg-accent-amber/10 border border-accent-amber/30 rounded-lg p-3 text-xs space-y-2">
@@ -142,15 +142,30 @@ export default function PreferencesTab() {
           </div>
         </div>
       )}
-      <div className="flex items-center gap-2 text-xs px-1">
-        <div className={`w-2 h-2 rounded-full ${sttLoaded ? (sttActiveProvider === 'whisper' ? 'bg-accent-amber' : 'bg-accent-green') : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
-        <span className="text-text-secondary">
-          语音识别: {sttLoaded ? (sttActiveProvider === 'whisper' ? 'Whisper 降级就绪' : sttFallbackLoaded ? '就绪 ✓' : '就绪') : sttLoading ? '加载中…' : '未就绪'}（{sttLabel}）
-        </span>
-      </div>
 
-      {/* ── 1. 答案展示（常用，保持展开） ── */}
-      <Section title="答案展示" keywords="布局 卡片 流式 简短 layout card stream">
+      <Section title="运行状态" icon={<AlertTriangle className="w-3.5 h-3.5" />} keywords="status 状态 stt 语音识别 就绪">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/25 px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${sttLoaded ? (sttActiveProvider === 'whisper' ? 'bg-accent-amber' : 'bg-accent-green') : sttLoading ? 'bg-accent-amber animate-pulse' : 'bg-accent-red'}`} />
+              <span className="text-xs font-medium text-text-primary">语音识别</span>
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              {sttLoaded ? (sttActiveProvider === 'whisper' ? 'Whisper 降级就绪' : sttFallbackLoaded ? '就绪，降级已预备' : '就绪') : sttLoading ? '加载中' : '未就绪'} · {sttLabel}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSettingsDrawerTab('config')}
+            className="rounded-xl border border-accent-blue/30 bg-accent-blue/10 px-3 py-2.5 text-left hover:bg-accent-blue/15 transition-colors"
+          >
+            <span className="text-xs font-medium text-accent-blue">语音配置</span>
+            <p className="text-[11px] text-text-muted mt-1">切换 STT / TTS 与断句参数</p>
+          </button>
+        </div>
+      </Section>
+
+      <Section title="回答体验" icon={<LayoutGrid className="w-3.5 h-3.5" />} keywords="布局 卡片 流式 简短 layout card stream">
         <div className="grid grid-cols-2 gap-2">
           {([
             { key: 'cards' as const, icon: LayoutGrid, label: '卡片', hint: '独立框，框内滚动' },
@@ -190,14 +205,38 @@ export default function PreferencesTab() {
       <Collapsible
         title={
           <span className="inline-flex items-center gap-1.5">
-            悬浮提示窗
+            工作模式
             <BetaBadge title="悬浮提示窗 — 仍在测试中" />
           </span>
         }
-        searchTitle="悬浮提示窗"
+        searchTitle="工作模式"
         icon={<Monitor className="w-3.5 h-3.5" />}
-        keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗 beta"
+        keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗 beta exam"
       >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setOverlayEnabled(!overlayEnabled)}
+            className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+              overlayEnabled ? 'border-accent-blue bg-accent-blue/10' : 'border-bg-hover bg-bg-tertiary/25 hover:border-bg-hover'
+            }`}
+          >
+            <span className="text-xs font-medium text-text-primary">悬浮提示窗</span>
+            <p className="text-[10px] text-text-muted mt-1">{overlayEnabled ? '已开启' : '已关闭'}</p>
+          </button>
+          {config && hasScreenCapture && (
+            <button
+              type="button"
+              onClick={() => updateConfigAndRefresh({ written_exam_mode: !(config?.written_exam_mode ?? false) }).catch(() => {})}
+              className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                config?.written_exam_mode ? 'border-accent-blue bg-accent-blue/10' : 'border-bg-hover bg-bg-tertiary/25 hover:border-bg-hover'
+              }`}
+            >
+              <span className="text-xs font-medium text-text-primary">笔试模式</span>
+              <p className="text-[10px] text-text-muted mt-1">{config?.written_exam_mode ? '已开启' : '已关闭'}</p>
+            </button>
+          )}
+        </div>
         <div className="mb-2 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-[11px] text-text-secondary leading-relaxed">
           <div className="font-semibold text-accent-amber mb-0.5">反截图检测为 Beta 能力</div>
           <div>
@@ -205,11 +244,6 @@ export default function PreferencesTab() {
             macOS 15+ 的 <span className="font-mono text-[10px]">ScreenCaptureKit</span> 会绕过保护位，实际效果请以你自己的环境测试为准。
           </div>
         </div>
-        <Toggle
-          checked={overlayEnabled}
-          onChange={(v) => setOverlayEnabled(v)}
-          label={overlayEnabled ? '已开启' : '已关闭'}
-        />
         {overlayEnabled && (
           <>
             <Field label="背景样式">
@@ -354,7 +388,7 @@ export default function PreferencesTab() {
 
       {/* ── 3. 知识库 (Beta) ── */}
       <Collapsible
-        title="知识库"
+        title="知识库与引用"
         icon={<BookOpen className="w-3.5 h-3.5" />}
         keywords="kb knowledge base 笔记 参考 rag retrieval 引用"
         badge={<BetaBadge title="知识库 — 仍在测试中" className="ml-1" />}
@@ -432,7 +466,7 @@ export default function PreferencesTab() {
       </Collapsible>
 
       {/* ── 4. 外观与高级 ── */}
-      <Collapsible title="外观与高级" icon={<Palette className="w-3.5 h-3.5" />} keywords="主题 配色 字体 theme color scheme font 高级">
+      <Collapsible title="外观" icon={<Palette className="w-3.5 h-3.5" />} keywords="主题 配色 字体 theme color scheme font 高级">
         <Field label="配色方案">
           <div className="grid grid-cols-1 gap-1.5">
             {COLOR_SCHEME_OPTIONS.map((opt) => (
@@ -481,9 +515,11 @@ export default function PreferencesTab() {
         </Field>
       </Collapsible>
 
-      <NetworkQRCode />
-      <QuickPromptsEditor />
-      <GlobalShortcutsEditor />
+      <Collapsible title="快捷操作" keywords="quick prompt 快捷词 模板 shortcut 快捷键 手机 二维码">
+        <NetworkQRCode />
+        <QuickPromptsEditor />
+        <GlobalShortcutsEditor />
+      </Collapsible>
 
       <button
         type="button"
@@ -495,13 +531,6 @@ export default function PreferencesTab() {
         {generalSaving ? '保存中…' : '保存设置'}
       </button>
 
-      <button
-        type="button"
-        onClick={() => setSettingsDrawerTab('config')}
-        className="w-full py-2.5 text-xs font-medium rounded-xl border border-accent-blue/40 text-accent-blue hover:bg-accent-blue/10 transition-colors"
-      >
-        前往「语音识别」配置 STT 引擎
-      </button>
     </div>
   )
 }

@@ -32,29 +32,31 @@ export function Section({ title, icon, keywords, children }: { title: React.Reac
   const titleText = typeof title === 'string' ? title : ''
   if (!matchSettingsSearch(titleText, keywords, query)) return null
   return (
-    <div className="space-y-3" data-search-title={titleText}>
-      <h3 className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">
-        {icon}
-        {title}
-      </h3>
-      {children}
-    </div>
+    <section className="rounded-xl border border-bg-hover/60 bg-bg-primary/35 overflow-hidden" data-search-title={titleText}>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-bg-hover/50">
+        {icon && <span className="text-text-muted flex-shrink-0">{icon}</span>}
+        <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+      </div>
+      <div className="px-4 py-4 space-y-3">
+        {children}
+      </div>
+    </section>
   )
 }
 
 export function Field({ label, hint, children }: { label: React.ReactNode; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
-      <label className="text-xs text-text-secondary">{label}</label>
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-text-secondary">{label}</label>
       {children}
-      {hint && <p className="text-[10px] text-text-muted leading-tight">{hint}</p>}
+      {hint && <p className="text-[10px] text-text-muted leading-relaxed">{hint}</p>}
     </div>
   )
 }
 
 export function GradientCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-bg-hover/60 bg-gradient-to-b from-bg-tertiary/20 to-bg-secondary/30 backdrop-blur-sm ${className}`}>
+    <div className={`rounded-xl border border-bg-hover/60 bg-bg-tertiary/25 ${className}`}>
       {children}
     </div>
   )
