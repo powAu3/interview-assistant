@@ -18,7 +18,7 @@ from core.config import (
 from core.env import env_int
 from services.audio import AudioCapture
 from services.stt import get_stt_engine, set_whisper_language
-from api.common.config_payload import build_config_payload, _mask_secret
+from api.common.config_payload import build_config_payload
 from api.common.model_health import (
     get_model_health,
     get_model_health_snapshot,
@@ -57,8 +57,10 @@ class ConfigUpdate(BaseModel):
     stt_provider: Optional[str] = None
     whisper_model: Optional[str] = None
     whisper_language: Optional[str] = None
+    whisper_preload: Optional[bool] = None
     doubao_stt_app_id: Optional[str] = None
     doubao_stt_access_token: Optional[str] = None
+    doubao_stt_api_key: Optional[str] = None
     doubao_stt_resource_id: Optional[str] = None
     doubao_stt_boosting_table_id: Optional[str] = None
     position: Optional[str] = None
@@ -82,6 +84,7 @@ class ConfigUpdate(BaseModel):
     generic_stt_api_base_url: Optional[str] = None
     generic_stt_api_key: Optional[str] = None
     generic_stt_model: Optional[str] = None
+    generic_stt_custom_headers: Optional[str] = None
     practice_tts_provider: Optional[str] = None
     edge_tts_voice_female: Optional[str] = None
     edge_tts_voice_male: Optional[str] = None
@@ -103,56 +106,19 @@ async def api_get_config():
     return build_config_payload(get_config())
 
 
-_MASK_MARKER = "****"
 _LEGACY_STT_PROVIDER_MAP = {"iflytek": "generic"}
-
-
-def _mask_api_key(key: str) -> str:
-    return _mask_secret(key)
-
-
-def _resolve_masked_api_key(x: dict, index: int, old_models: list) -> str:
-    """前端用掩码占位符回传 api_key 时，从旧配置恢复真实密钥。
-
-    不能仅用列表下标：删除或重排模型后，下标与旧列表错位会把别人的 key 赋给当前行，
-    表现为「保存/测试连接」一直失败。
-    """
-    name = (x.get("name") or "").strip()
-    model_id = (x.get("model") or "").strip()
-    base = (x.get("api_base_url") or "").strip()
-
-    def triple_match(m) -> bool:
-        return (
-            (m.name or "").strip() == name
-            and (m.model or "").strip() == model_id
-            and (m.api_base_url or "").strip() == base
-        )
-
-    strict = [m for m in old_models if triple_match(m)]
-    if len(strict) == 1:
-        return strict[0].api_key or ""
-    if index < len(old_models) and triple_match(old_models[index]):
-        return old_models[index].api_key or ""
-    loose = [m for m in old_models if (m.name or "").strip() == name and (m.model or "").strip() == model_id]
-    if len(loose) == 1:
-        return loose[0].api_key or ""
-    matched = next(
-        (m for m in old_models if m.name == x.get("name") and m.model == x.get("model")),
-        None,
-    )
-    return (matched.api_key if matched else "") or ""
 
 
 @router.get("/config/models-full")
 async def api_get_models_full():
-    """Return all model fields with masked api_key for frontend editing."""
+    """Return all model fields for local frontend editing."""
     cfg = get_config()
     return {
         "models": [
             {
                 "name": mdl.name,
                 "api_base_url": mdl.api_base_url,
-                "api_key": _mask_api_key(mdl.api_key),
+                "api_key": mdl.api_key,
                 "model": mdl.model,
                 "supports_think": mdl.supports_think,
                 "supports_vision": mdl.supports_vision,
@@ -171,13 +137,10 @@ async def api_update_config(body: ConfigUpdate):
     d = body.model_dump(exclude_none=True)
     try:
         if "models" in d:
-            cfg = get_config()
             raw_models = []
             for i, x in enumerate(d["models"]):
                 if not isinstance(x, dict):
                     continue
-                if _MASK_MARKER in (x.get("api_key") or ""):
-                    x["api_key"] = _resolve_masked_api_key(x, i, cfg.models)
                 raw_models.append(ModelConfig(**x))
             d["models"] = raw_models
             if not d["models"]:
@@ -273,6 +236,7 @@ async def api_update_config(body: ConfigUpdate):
             d["kb_deadline_ms"] = max(20, min(2000, int(d["kb_deadline_ms"])))
         if "kb_asr_deadline_ms" in d:
             d["kb_asr_deadline_ms"] = max(20, min(1000, int(d["kb_asr_deadline_ms"])))
+
         await run_in_threadpool(update_config, d)
     except HTTPException:
         raise
@@ -474,14 +438,17 @@ async def api_stt_test():
     if cfg.stt_provider == "iflytek":
         return {"ok": False, "detail": "讯飞 STT 已下线，请改为通用 ASR 或 Whisper"}
     if cfg.stt_provider == "doubao":
-        if not cfg.doubao_stt_access_token:
-            return {"ok": False, "detail": "豆包 Access Token 未配置"}
-        if not cfg.doubao_stt_app_id:
-            return {"ok": False, "detail": "豆包 App ID 未配置"}
+        doubao_api_key = getattr(cfg, "doubao_stt_api_key", "") or ""
+        doubao_access_token = cfg.doubao_stt_access_token or ""
+        if not doubao_api_key and not doubao_access_token:
+            return {"ok": False, "detail": "豆包 API Key 或 Access Token 未配置"}
+        if not doubao_api_key and not cfg.doubao_stt_app_id:
+            return {"ok": False, "detail": "豆包 App ID 未配置（新版控制台请填 API Key）"}
     elif cfg.stt_provider == "generic":
+        generic_api_key = getattr(cfg, "generic_stt_api_key", "") or ""
         if not getattr(cfg, "generic_stt_api_base_url", ""):
             return {"ok": False, "detail": "通用 ASR Base URL 未配置"}
-        if not getattr(cfg, "generic_stt_api_key", ""):
+        if not generic_api_key:
             return {"ok": False, "detail": "通用 ASR API Key 未配置"}
         if not getattr(cfg, "generic_stt_model", ""):
             return {"ok": False, "detail": "通用 ASR Model 未配置"}

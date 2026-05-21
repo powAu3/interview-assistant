@@ -50,9 +50,13 @@ class AppConfig(BaseModel):
     whisper_model: str = "base"
     # "auto" is more robust for Chinese interview speech mixed with English terms.
     whisper_language: str = "auto"
+    # 启动时预加载 whisper 降级模型（远程 ASR 为主引擎时，~300MB 内存换即时降级）
+    whisper_preload: bool = True
     # 豆包语音识别 API（当 stt_provider=doubao 时使用），使用小时版 + WebSocket 双流式
     doubao_stt_app_id: str = ""
     doubao_stt_access_token: str = ""
+    # 新版控制台 API Key（优先于 app_id + access_token）
+    doubao_stt_api_key: str = ""
     # 资源 ID：豆包流式语音识别模型2.0 小时版
     doubao_stt_resource_id: str = "volc.seedasr.sauc.duration"
     # 热词表 ID：在自学习平台上传热词文件后获得；有则传入请求，没有则不传
@@ -61,6 +65,8 @@ class AppConfig(BaseModel):
     generic_stt_api_base_url: str = ""
     generic_stt_api_key: str = ""
     generic_stt_model: str = ""
+    # 自定义 HTTP header，JSON 格式如 {"X-Custom":"value"} 或每行 Key: Value
+    generic_stt_custom_headers: str = ""
     # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
     practice_tts_provider: str = "edge_tts"
     edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"

@@ -133,18 +133,25 @@ def _parse_ws_response(data: bytes) -> tuple[int, Optional[dict]]:
 
 
 class DoubaoSTT:
-    """豆包流式语音识别模型2.0 小时版，WebSocket 双流式。"""
+    """豆包流式语音识别模型，WebSocket 双流式。
+
+    支持两种鉴权方式（自动选择）：
+    - 新版控制台：X-Api-Key（api_key 非空时优先使用）
+    - 旧版控制台：X-Api-App-Key + X-Api-Access-Key
+    """
 
     def __init__(
         self,
-        app_id: str,
-        access_token: str,
+        app_id: str = "",
+        access_token: str = "",
+        api_key: str = "",
         resource_id: str = "volc.seedasr.sauc.duration",
         boosting_table_id: str = "",
     ):
         self.app_id = app_id or ""
         self.access_token = access_token or ""
-        self.resource_id = resource_id or "volc.seedasr.sauc.duration"
+        self.api_key = api_key or ""
+        self.resource_id = resource_id or "volc.bigasr.sauc.duration"
         self.boosting_table_id = boosting_table_id or ""
 
     @property
@@ -153,7 +160,7 @@ class DoubaoSTT:
 
     @property
     def is_loaded(self) -> bool:
-        return True
+        return bool(self.api_key or self.access_token)
 
     @property
     def is_loading(self) -> bool:
@@ -165,11 +172,28 @@ class DoubaoSTT:
     def change_model(self, _model_size: str) -> None:
         pass
 
-    def transcribe(self, audio: np.ndarray, sample_rate: int = 16000,
-                  position: str = "后端开发", language: str = "Python") -> str:
-        if not self.access_token or websocket is None:
-            return ""
+    def _build_headers(self) -> dict:
+        if self.api_key:
+            return {
+                "X-Api-Key": self.api_key,
+                "X-Api-Resource-Id": self.resource_id,
+                "X-Api-Connect-Id": str(uuid.uuid4()),
+            }
         app_key = self.app_id or self.access_token
+        return {
+            "X-Api-App-Key": app_key,
+            "X-Api-Access-Key": self.access_token,
+            "X-Api-Resource-Id": self.resource_id,
+            "X-Api-Connect-Id": str(uuid.uuid4()),
+        }
+
+    def transcribe(self, audio: np.ndarray, sample_rate: int = 16000,
+                   position: str = "后端开发", language: str = "Python") -> str:
+        if not self.api_key and not self.access_token:
+            return ""
+        if websocket is None:
+            return ""
+        app_key = self.app_id or self.access_token or self.api_key
         pcm = _audio_to_pcm_int16(audio)
         if sample_rate != 16000:
             n_orig = len(pcm)
@@ -195,12 +219,7 @@ class DoubaoSTT:
             pad = np.zeros(CHUNK_SAMPLES, dtype=np.int16)
             chunks = [_build_ws_frame_audio(pad.tobytes(), is_last=True)]
 
-        headers = {
-            "X-Api-App-Key": app_key,
-            "X-Api-Access-Key": self.access_token,
-            "X-Api-Resource-Id": self.resource_id,
-            "X-Api-Connect-Id": str(uuid.uuid4()),
-        }
+        headers = self._build_headers()
         try:
             ws = websocket.create_connection(
                 DOUBAO_ASR_WS_URL,
@@ -257,10 +276,12 @@ class DoubaoSTT:
 class GenericHTTPSTT:
     """通用 HTTP ASR: POST {base_url}/audio/transcriptions with multipart file."""
 
-    def __init__(self, api_base_url: str, api_key: str, model: str):
+    def __init__(self, api_base_url: str, api_key: str, model: str,
+                 custom_headers: str = ""):
         self.api_base_url = (api_base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.model = model or ""
+        self.custom_headers = custom_headers or ""
 
     @property
     def model_size(self) -> str:
@@ -268,7 +289,7 @@ class GenericHTTPSTT:
 
     @property
     def is_loaded(self) -> bool:
-        return True
+        return bool(self.api_base_url and self.api_key and self.model)
 
     @property
     def is_loading(self) -> bool:
@@ -309,6 +330,17 @@ class GenericHTTPSTT:
         url = f"{self.api_base_url}/audio/transcriptions"
         wav_bytes = _audio_to_wav_bytes(audio, sample_rate=sample_rate)
         headers = {"Authorization": f"Bearer {self.api_key}"}
+        if self.custom_headers.strip():
+            try:
+                extra = json.loads(self.custom_headers)
+                if isinstance(extra, dict):
+                    headers.update({k: str(v) for k, v in extra.items()})
+            except (json.JSONDecodeError, ValueError):
+                for line in self.custom_headers.strip().splitlines():
+                    line = line.strip()
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        headers[k.strip()] = v.strip()
         files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
         data = {"model": self.model, "response_format": "json"}
         try:
