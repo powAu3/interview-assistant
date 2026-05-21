@@ -108,16 +108,22 @@ TERM_CORRECTIONS = {
     r"(?i)k\s*eight\s*s|kates|k8s": "Kubernetes",
     r"(?i)(?<![a-zA-Z])mq(?![a-zA-Z])": "MQ",
     r"(?i)my\s*sql": "MySQL",
-    r"下皮|下屏|下期": "虾皮",
+    r"(?i)(?<![a-zA-Z])circle(?![a-zA-Z])": "SQL",
+    r"(?i)(?<![a-zA-Z])setcode(?![a-zA-Z])": "SQL code",
+    r"(?i)SekoAI": "SQL AI",
+    r"下皮|下屏|下期|沙皮": "虾皮",
     r"自动词史|自动价史|自动价是|自动价值": "自动驾驶",
     r"简率|减力": "简历",
     r"纳机回收|拿去回收": "垃圾回收",
     r"类诊陷漏|类诊泄漏": "内存泄漏",
     r"偶尔M": "OOM",
     r"财与": "参与",
-    r"平衫|平侧|平测|频测|评课": "评测",
+    r"平衫|平侧|平测|频测|评课|平分": "评测",
     r"材料圆模型": "裁判员模型",
     r"机座模型": "基座模型",
+    r"侧开": "测开",
+    r"新脑": "新老",
+    r"选心": "选型",
     r"(?<![a-zA-Z])AZNT(?![a-zA-Z])": "Agent",
     r"(?<![a-zA-Z])R\s*N\s*A\s*G(?![a-zA-Z])": "RAG",
     r"大家的车载": "大疆的车载",
@@ -128,6 +134,16 @@ TERM_CORRECTIONS = {
     r"购件": "构建",
     r"体校": "提效",
     r"用力(?!气|量|心|来|劲)": "用例",
+    r"说1[。.]下": "说一下",
+    r"介绍1[。.]下": "介绍一下",
+    r"解释1[。.]下": "解释一下",
+    r"展开讲1[。.]下": "展开讲一下",
+    r"举个例子[!！]1": "举个例子",
+}
+
+INTERVIEW_TERM_CORRECTIONS = {
+    r"(?i)(?<![a-zA-Z])child(?![a-zA-Z])": "pipeline",
+    r"(?i)色吧": "server",
 }
 
 # ---------------------------------------------------------------------------
@@ -221,7 +237,7 @@ def _strip_feedback_loop(text: str) -> str:
     return t.strip()
 
 
-def _postprocess(text: str) -> str:
+def _postprocess(text: str, context: str = "") -> str:
     """Apply term corrections, t2s conversion, slow-speech normalization, and feedback-loop filter."""
     text = _strip_feedback_loop(text)
     converter = _get_t2s_converter()
@@ -229,8 +245,20 @@ def _postprocess(text: str) -> str:
         text = converter.convert(text)
     for pattern, replacement in TERM_CORRECTIONS.items():
         text = re.sub(pattern, replacement, text)
+    if context == "interview":
+        for pattern, replacement in INTERVIEW_TERM_CORRECTIONS.items():
+            text = re.sub(pattern, replacement, text)
     text = _normalize_slow_speech_intraword_punct(text)
     return text.strip()
+
+
+def postprocess_interview_transcription(text: str) -> str:
+    """Apply interview-context-only term corrections on top of already-postprocessed text."""
+    if not text:
+        return text
+    for pattern, replacement in INTERVIEW_TERM_CORRECTIONS.items():
+        text = re.sub(pattern, replacement, text)
+    return text
 
 
 def _build_initial_prompt(position: str, language: str) -> str:
@@ -254,6 +282,8 @@ def transcription_significant_len(text: str) -> int:
 def transcription_for_publish(text: str, min_significant_chars: int = 2) -> Optional[str]:
     t = (text or "").strip()
     if not t:
+        return None
+    if is_interview_boilerplate_text(t):
         return None
     need = max(1, int(min_significant_chars))
     if transcription_significant_len(t) < need:
@@ -307,6 +337,15 @@ _INCOMPLETE_TAIL = re.compile(
     r"(?:因为|所以|然后|但是|并且|或者|以及|如果|比如|例如|就是|那个|这个|首先|其次|再然后)$",
     re.IGNORECASE,
 )
+_LOW_VALUE_FRAGMENT = re.compile(
+    r"^(?:"
+    r"和|因为这个|因为这个呢|然后呢|还有呢|就是这个|什么|什么呢|那个|那个呢|"
+    r"那个还是那个东西|继续说|继续说说|说完了是吧|完了是吧|"
+    r"还有什么|还是什么|对吧|是吧|"
+    r"对(?:[，,。.]?在.*里面)?|嗯+|啊+|哦+|噢+|好+|OK|ok|Uh"
+    r")$",
+    re.IGNORECASE,
+)
 _QUESTION_SPLIT = re.compile(r"[？?]+")
 _QUESTION_CONNECTOR_SPLIT = re.compile(
     r"(?:[，,；;]\s*|\s+)(?=(?:再说|再讲|再聊|然后|另外|还有|还有一个|顺便|"
@@ -316,6 +355,22 @@ _QUESTION_CONNECTOR_SPLIT = re.compile(
 _SENTENCE_START_AFTER_SPLIT = re.compile(
     r"^(?:那|那么|然后|所以|但是|不过|另外|还有|以及|就是|呃|额|哎|噢|"
     r"请问|能不能|可不可以|为什么|怎么|如何|什么)",
+)
+_ASR_GARBAGE_PUNCT = re.compile(r"(?<=[\u4e00-\u9fffA-Za-z0-9])[？?](?=[\u4e00-\u9fffA-Za-z0-9])")
+_ASR_TRAILING_TECH_TAG = re.compile(
+    r"(?:[。.!！?？,，;；:：、\s]|^)(JVM|SQL|Redis|Java|Python|MySQL|Kafka|HTTP)$",
+    re.IGNORECASE,
+)
+_INTERVIEW_BOILERPLATE = re.compile(
+    r"(?:"
+    r"欢迎参与(?:ai)?面试|欢迎参加.*面试|我是本次的面试官|这是一个相互了解的机会|"
+    r"为保障公平|全程面试记录将被存档|取消资格|永久拉黑|"
+    r"如果音量过大或过小请调整|请调整你的设备音量|"
+    r"时间差不多了|今天的面试就先|我们今天的面试就先|"
+    r"突发情况|超时将自动结束|返回超时将自动结束|"
+    r"谢谢参加本次面试|好再见|请问你.*还有什么其他的问题"
+    r")",
+    re.IGNORECASE,
 )
 
 AsrQuestionCandidate = Literal["ignore", "candidate", "promote"]
@@ -332,9 +387,20 @@ def _strip_filler_prefix(text: str) -> str:
 
 def normalize_transcription_for_analysis(text: str) -> str:
     t = _strip_filler_prefix((text or "").strip())
+    t = _ASR_GARBAGE_PUNCT.sub("", t)
     t = re.sub(r"\s+", " ", t)
     t = t.strip(" \t\r\n,，。.!！?？;；:：、")
+    t = _ASR_TRAILING_TECH_TAG.sub("", t).strip(" \t\r\n,，。.!！?？;；:：、")
     return t
+
+
+def is_interview_boilerplate_text(text: str) -> bool:
+    normalized = normalize_transcription_for_analysis(text)
+    if not normalized:
+        return True
+    if transcription_significant_len(normalized) < 6:
+        return False
+    return bool(_INTERVIEW_BOILERPLATE.search(normalized))
 
 
 def split_question_like_text(text: str) -> list[str]:
@@ -384,6 +450,8 @@ def classify_asr_question_candidate(
     normalized = normalize_transcription_for_analysis(text)
     if not normalized:
         return "ignore", ""
+    if is_interview_boilerplate_text(normalized):
+        return "ignore", normalized
     backchannel_cleaned = re.sub(r"^(?:嗯+|恩+|啊+|呃+|额+|诶+|欸+|哦+|噢+)", "", normalized).strip()
     if is_backchannel_text(normalized):
         return "ignore", backchannel_cleaned or normalized
@@ -394,6 +462,9 @@ def classify_asr_question_candidate(
     has_directive_cue = bool(_DIRECTIVE_QUESTION_CUE.search(normalized))
     has_tail_question = bool(re.search(r"(?:吗|么|呢)$", normalized))
     incomplete_tail = bool(_INCOMPLETE_TAIL.search(normalized))
+    low_value_fragment = bool(_LOW_VALUE_FRAGMENT.fullmatch(normalized))
+    if low_value_fragment:
+        return "ignore", normalized
     if has_question_mark and sig >= 2:
         return "promote", normalized
     if has_question_cue or has_directive_cue:
@@ -404,6 +475,9 @@ def classify_asr_question_candidate(
         if sig >= need:
             return "candidate", normalized
         return "ignore", normalized
+    if not has_question_mark and not has_question_cue and not has_directive_cue and not has_tail_question:
+        if sig < 8:
+            return "ignore", normalized
     if sig >= need:
         return "candidate", normalized
     return "ignore", normalized
@@ -429,6 +503,8 @@ def is_viable_asr_question_group(
         return True
     if len(cleaned_parts) >= 2:
         return True
+    if len(cleaned_parts) == 1:
+        return False
     merged = "".join(cleaned_parts)
     return transcription_significant_len(merged) >= max(3, int(min_significant_chars))
 
@@ -440,6 +516,10 @@ def build_asr_question_group_text(texts: list[str], max_items: int = 4) -> str:
         for part in parts:
             if not part:
                 continue
+            kind, cleaned = classify_asr_question_candidate(part, 2)
+            if kind == "ignore":
+                continue
+            part = cleaned or part
             if not items or items[-1] != part:
                 items.append(part)
     items = [it for it in items if len(it) >= 3 or it == items[0]]

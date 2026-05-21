@@ -17,6 +17,7 @@ from services.stt import (
     get_stt_engine,
     transcribe_with_fallback,
     transcription_for_publish,
+    postprocess_interview_transcription,
 )
 from api.common import get_model_health
 from api.realtime.ws import broadcast
@@ -530,7 +531,7 @@ def _interview_worker():
     engine = get_stt_engine()
 
     if not engine.is_loaded:
-        broadcast({"type": "stt_status", "loaded": False, "loading": True})
+        broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": cfg.stt_provider})
         try:
             engine.load_model()
         except Exception as e:
@@ -539,7 +540,7 @@ def _interview_worker():
             with conversation_lock:
                 get_session().is_recording = False
             return
-    broadcast({"type": "stt_status", "loaded": True, "loading": False})
+    broadcast({"type": "stt_status", "loaded": bool(engine.is_loaded), "loading": False, "provider": cfg.stt_provider})
 
     vad = VADBuffer(
         sample_rate=AudioCapture.SAMPLE_RATE,
@@ -595,6 +596,7 @@ def _interview_worker():
                         position=cfg.position,
                         language=cfg.language,
                     )
+                    text = postprocess_interview_transcription(text)
                     stt_ms = (time.monotonic() - t0) * 1000
                     audio_sec = len(speech_audio) / AudioCapture.SAMPLE_RATE
                     _ilog.info(
@@ -621,6 +623,7 @@ def _interview_worker():
                 text = transcribe_with_fallback(
                     remaining, AudioCapture.SAMPLE_RATE, position=cfg.position, language=cfg.language
                 )
+                text = postprocess_interview_transcription(text)
                 min_sig = getattr(
                     get_config(), "transcription_min_sig_chars", 2
                 )

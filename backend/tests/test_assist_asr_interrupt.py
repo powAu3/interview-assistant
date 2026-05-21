@@ -72,6 +72,15 @@ def test_classify_asr_question_candidate_promotes_short_followups():
     assert cleaned == "举个例子"
 
 
+def test_classify_asr_question_candidate_ignores_interview_intro_boilerplate():
+    kind, cleaned = stt.classify_asr_question_candidate(
+        "欢迎参与AI面试如果音量过大或过小请调整你的设备音量至合适的大小欢迎参与 AI 面试。",
+        2,
+    )
+    assert kind == "ignore"
+    assert "欢迎参与AI面试" in cleaned
+
+
 def test_build_asr_question_group_text_dedupes_and_keeps_followups():
     text = stt.build_asr_question_group_text(
         ["Redis 持久化讲一下", "再说一下 AOF", "再说一下 AOF"]
@@ -80,6 +89,22 @@ def test_build_asr_question_group_text_dedupes_and_keeps_followups():
     assert "Redis 持久化讲一下" in text
     assert "再说一下 AOF" in text
     assert text.count("再说一下 AOF") == 1
+
+
+def test_build_asr_question_group_text_drops_low_value_followup_tails():
+    text = stt.build_asr_question_group_text([
+        "您在去年10月还在虾皮时期现在还在吗",
+        "因为这个",
+        "和",
+    ])
+
+    assert text == "您在去年10月还在虾皮时期现在还在吗"
+
+
+def test_classify_asr_question_candidate_ignores_short_non_question_fragments():
+    kind, cleaned = stt.classify_asr_question_candidate("对，在 Java，在 Java 里面", 2)
+    assert kind == "ignore"
+    assert cleaned == "对，在 Java，在 Java 里面"
 
 
 def test_auto_detect_group_flush_ignores_backchannel_and_submits_latest_group(
@@ -112,6 +137,26 @@ def test_auto_detect_group_flush_ignores_backchannel_and_submits_latest_group(
     assert manual_input is False
     assert source == "conversation_mic"
     assert meta["origin"] == "asr"
+
+
+def test_auto_detect_group_flush_does_not_submit_single_statement_without_question_signal(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    session = reset_session()
+    submitted: list[tuple] = []
+    monkeypatch.setattr(assist_router, "submit_answer_task", lambda task: submitted.append(task))
+
+    cfg = _cfg()
+    assist_router._handle_auto_detect_asr_text(
+        cfg,
+        session,
+        "从产品角度一般是运营、产品、研发、测试",
+        "conversation_mic",
+        0.0,
+    )
+    assist_router._try_flush_asr_question_group(cfg, session, 1.0, True)
+
+    assert submitted == []
 
 
 def test_begin_asr_turn_drops_pending_asr_but_keeps_manual():
