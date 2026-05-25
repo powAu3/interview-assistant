@@ -792,6 +792,274 @@ code, pre, .font-mono {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.ov-root--focus {
+  padding: 8px 10px;
+  background: transparent;
+}
+
+.ov-shell--focus {
+  color: #263241;
+  border: 1px solid rgba(220, 226, 236, 0.72);
+  background: rgba(255, 255, 255, var(--ov-focus-bg-alpha, 0.58));
+  box-shadow:
+    0 22px 70px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(10px) saturate(1.08);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+  border-radius: 10px;
+}
+
+.ov-shell--focus .ov-grip {
+  display: none;
+}
+
+.ov-focus-toolbar,
+.ov-focus-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  min-height: 46px;
+  padding: 8px 44px 8px 26px;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.42);
+  color: rgba(45, 55, 72, 0.7);
+  font-family: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ov-focus-toolbar {
+  background: rgba(255, 255, 255, var(--ov-focus-toolbar-alpha, 0.2));
+}
+
+.ov-focus-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  transition: color 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+.ov-focus-tool:hover {
+  color: rgba(30, 41, 59, 0.92);
+}
+
+.ov-focus-tool--busy {
+  opacity: 0.68;
+}
+
+.ov-focus-tool kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(241, 245, 249, var(--ov-focus-key-alpha, 0.72));
+  color: rgba(86, 99, 116, 0.72);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.22);
+}
+
+.ov-focus-tool--icon {
+  color: rgba(71, 85, 105, 0.72);
+  font-size: 18px;
+}
+
+.ov-focus-tabs {
+  position: relative;
+  gap: 0;
+  justify-content: center;
+  min-height: 52px;
+  padding: 6px 132px;
+  background: rgba(255, 255, 255, var(--ov-focus-tabs-alpha, 0.34));
+  font-size: 15px;
+  font-weight: 700;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.ov-focus-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ov-focus-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  max-width: 180px;
+  padding: 0 19px;
+  border-radius: 12px;
+  color: rgba(47, 58, 74, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.ov-focus-tab--active {
+  color: #ffffff;
+  background: rgba(96, 145, 230, 0.82);
+  box-shadow: 0 5px 14px rgba(78, 127, 218, 0.22);
+}
+
+.ov-focus-tab--forming {
+  position: relative;
+  overflow: hidden;
+}
+
+.ov-focus-tab--forming::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+  animation: ov-focus-tab-scan 1.4s ease-in-out infinite;
+}
+
+.ov-focus-tab-keys {
+  position: absolute;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(71, 85, 105, 0.52);
+  pointer-events: none;
+}
+
+.ov-focus-tab-keys kbd {
+  min-width: 30px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 7px;
+  background: rgba(241, 245, 249, var(--ov-focus-key-alpha, 0.64));
+  color: rgba(71, 85, 105, 0.62);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.2);
+}
+
+@keyframes ov-focus-tab-scan {
+  0% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(100%); }
+}
+
+@media (max-width: 760px) {
+  .ov-focus-tabs {
+    justify-content: flex-start;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .ov-focus-tab-keys {
+    display: none;
+  }
+}
+
+.ov-focus-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 30px clamp(22px, 5vw, 72px) 40px;
+  line-height: 1.72;
+  font-family: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96, 145, 230, 0.35) transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+
+.ov-focus-content::selection,
+.ov-focus-content *::selection {
+  background: transparent;
+}
+
+.ov-focus-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ov-focus-content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(96, 145, 230, 0.36);
+}
+
+.ov-focus-section {
+  margin: 0 auto 24px;
+  max-width: 1280px;
+}
+
+.ov-focus-active-pane {
+  min-height: 100%;
+}
+
+.ov-focus-section h2 {
+  position: relative;
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: rgba(31, 41, 55, 0.86);
+  font-size: 1.05em;
+  font-weight: 800;
+}
+
+.ov-focus-section h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.58em;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.78);
+}
+
+.ov-focus-section > div {
+  color: inherit;
+  opacity: 0.92;
+}
+
+.ov-focus-section--active > div {
+  padding-left: 20px;
+}
+
+.ov-focus-muted {
+  opacity: 0.48 !important;
+}
+
+.ov-focus-handle {
+  position: absolute;
+  top: 50%;
+  right: -1px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 86px;
+  border-radius: 22px 0 0 22px;
+  background: rgba(255, 202, 15, 0.95);
+  color: #111827;
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow: -4px 8px 18px rgba(184, 134, 11, 0.24);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .ov-grip {
   position: absolute;
   top: 6px;

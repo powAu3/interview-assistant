@@ -50,6 +50,20 @@ const DEFAULT_SHORTCUTS = {
     label: '移动悬浮窗到鼠标位置',
     category: '实时辅助',
   },
+  focusPrevTab: {
+    action: 'focusPrevTab',
+    key: 'CommandOrControl+Left',
+    defaultKey: 'CommandOrControl+Left',
+    label: '专注面板上一栏',
+    category: '专注面板',
+  },
+  focusNextTab: {
+    action: 'focusNextTab',
+    key: 'CommandOrControl+Right',
+    defaultKey: 'CommandOrControl+Right',
+    label: '专注面板下一栏',
+    category: '专注面板',
+  },
 };
 
 const SUPPORTED_KEYS = new Set([

@@ -91,6 +91,9 @@ let lastOverlayState = {
   fontSize: 14,
   fontColor: '#e2e8f0',
   showBg: true,
+  mode: 'glass',
+  focusWidthPct: 96,
+  focusHeightPct: 90,
   maxLines: 0,
 };
 
@@ -183,9 +186,11 @@ function synthesizeSystemTts({ text, voiceName = '', rate = 180 }) {
 }
 
 const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
+const FOCUS_OVERLAY_MARGIN = 14;
 
 let _frontReassertTimer = null;
 const FRONT_REASSERT_LEVEL = 1;
+const FOCUS_OVERLAY_SHORTCUT_ACTIONS = new Set(['focusPrevTab', 'focusNextTab']);
 const FRONT_REASSERT_DURATION = 5000;
 const FRONT_REASSERT_INTERVAL = 500;
 
@@ -256,8 +261,63 @@ function getStoredOverlayPosition() {
   };
 }
 
+function getDefaultOverlayBounds() {
+  const primary = screen.getPrimaryDisplay().workArea;
+  return {
+    x: primary.x + Math.max(16, Math.round((primary.width - OVERLAY_PRESET.width) / 2)),
+    y: primary.y + Math.max(16, Math.round((primary.height - OVERLAY_PRESET.height) * 0.18)),
+    width: OVERLAY_PRESET.width,
+    height: OVERLAY_PRESET.height,
+  };
+}
+
+function getFocusOverlayBounds() {
+  const point = overlayWindow && !overlayWindow.isDestroyed()
+    ? {
+        x: overlayWindow.getBounds().x + Math.round(overlayWindow.getBounds().width / 2),
+        y: overlayWindow.getBounds().y + Math.round(overlayWindow.getBounds().height / 2),
+      }
+    : screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(point);
+  const area = display.workArea;
+  const margin = FOCUS_OVERLAY_MARGIN;
+  const widthPct = Math.max(50, Math.min(100, Number(lastOverlayState?.focusWidthPct) || 96));
+  const heightPct = Math.max(35, Math.min(100, Number(lastOverlayState?.focusHeightPct) || 90));
+  const width = Math.round((area.width - margin * 2) * (widthPct / 100));
+  const height = Math.round((area.height - margin * 2) * (heightPct / 100));
+  return {
+    x: area.x + margin + Math.max(0, Math.round(((area.width - margin * 2) - width) / 2)),
+    y: area.y + margin + Math.max(0, Math.round(((area.height - margin * 2) - height) / 2)),
+    width: Math.max(OVERLAY_PRESET.minWidth, width),
+    height: Math.max(OVERLAY_PRESET.minHeight, height),
+  };
+}
+
+function getNormalOverlayBounds() {
+  const storedPos = getStoredOverlayPosition();
+  const saved = loadOverlayWindowState();
+  const storedSize = saved?.position;
+  const minOverlayWidth = OVERLAY_PRESET.minWidth || OVERLAY_PRESET.width;
+  const minOverlayHeight = OVERLAY_PRESET.minHeight || OVERLAY_PRESET.height;
+  const width = Math.max((storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width, minOverlayWidth);
+  const height = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
+  return {
+    ...(storedPos ? storedPos : getDefaultOverlayBounds()),
+    width,
+    height,
+  };
+}
+
+function applyOverlayModeBounds() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const mode = lastOverlayState?.mode || (lastOverlayState?.showBg === false ? 'prompt' : 'glass');
+  const bounds = mode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds();
+  overlayWindow.setBounds(bounds, false);
+}
+
 function persistOverlayPosition() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (lastOverlayState?.mode === 'focus') return;
   const bounds = overlayWindow.getBounds();
   const saved = loadOverlayWindowState();
   saved.position = { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height };
@@ -383,21 +443,16 @@ function createOverlayWindow() {
     return overlayWindow;
   }
 
-  const storedPos = getStoredOverlayPosition();
-  const saved = loadOverlayWindowState();
-  const storedSize = saved?.position;
-  const minOverlayWidth = OVERLAY_PRESET.minWidth || OVERLAY_PRESET.width;
-  const minOverlayHeight = OVERLAY_PRESET.minHeight || OVERLAY_PRESET.height;
-  const w = Math.max((storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width, minOverlayWidth);
-  const h = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
+  const initialBounds = lastOverlayState?.mode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds();
 
   // 透明浮窗: 视觉上能看到桌面, 需要 transparent: true + alpha=0 背景.
   // 注意: setContentProtection 在 macOS 的透明窗口上只是 best effort,
   // 对部分截图路径 (尤其是 ScreenCaptureKit) 可能无效; 这是 OS 级限制.
   overlayWindow = new BrowserWindow({
-    width: w,
-    height: h,
-    ...(storedPos ? storedPos : {}),
+    width: initialBounds.width,
+    height: initialBounds.height,
+    x: initialBounds.x,
+    y: initialBounds.y,
     minWidth: OVERLAY_PRESET.minWidth,
     minHeight: OVERLAY_PRESET.minHeight,
     ...createOverlayChromeOptions(process.platform, OVERLAY_PRESET.resizable),
@@ -497,12 +552,20 @@ function sendOverlayState(payload) {
   });
 }
 
+function sendShortcutsState() {
+  [mainWindow, overlayWindow].forEach((win) => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('shortcuts-state', shortcuts);
+  });
+}
+
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   if (!overlayWindow._overlayReady) {
     overlayWindow._pendingShow = true;
     return;
   }
+  applyOverlayModeBounds();
   overlayWindow.setFocusable(false);
   if (process.platform === 'darwin' || process.platform === 'win32') {
     overlayWindow.showInactive();
@@ -665,17 +728,35 @@ function createTray() {
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); });
 }
 
+function isFocusOverlayActive() {
+  const mode = lastOverlayState?.mode || (lastOverlayState?.showBg === false ? 'prompt' : 'glass');
+  return Boolean(lastOverlayState?.visible) && mode === 'focus';
+}
+
+function registerManagedShortcut(shortcut) {
+  const callback = shortcutCallbacks[shortcut.action];
+  if (!callback) {
+    shortcut.status = ShortcutStatus.Available;
+    return false;
+  }
+  if (globalShortcut.register(shortcut.key, callback)) {
+    shortcut.status = ShortcutStatus.Registered;
+    return true;
+  }
+  shortcut.status = ShortcutStatus.Failed;
+  return false;
+}
+
 function registerShortcuts() {
   shortcuts = loadShortcutConfig(app);
   Object.values(shortcuts).forEach((shortcut) => {
-    const callback = shortcutCallbacks[shortcut.action];
-    if (!callback) return;
-    if (globalShortcut.register(shortcut.key, callback)) {
-      shortcut.status = ShortcutStatus.Registered;
-    } else {
-      shortcut.status = ShortcutStatus.Failed;
+    if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(shortcut.action)) {
+      shortcut.status = ShortcutStatus.Available;
+      return;
     }
+    registerManagedShortcut(shortcut);
   });
+  syncFocusOverlayShortcuts();
 }
 
 function unregisterShortcut(action) {
@@ -687,6 +768,19 @@ function unregisterShortcut(action) {
 
 function unregisterAllManagedShortcuts() {
   Object.keys(shortcuts).forEach((action) => unregisterShortcut(action));
+}
+
+function syncFocusOverlayShortcuts() {
+  for (const action of FOCUS_OVERLAY_SHORTCUT_ACTIONS) {
+    const shortcut = shortcuts[action];
+    if (!shortcut) continue;
+    if (isFocusOverlayActive()) {
+      if (shortcut.status !== ShortcutStatus.Registered) registerManagedShortcut(shortcut);
+    } else if (shortcut.status === ShortcutStatus.Registered || shortcut.status === ShortcutStatus.Failed) {
+      unregisterShortcut(action);
+    }
+  }
+  sendShortcutsState();
 }
 
 function registerShortcutSet(nextShortcuts) {
@@ -701,6 +795,10 @@ function registerShortcutSet(nextShortcuts) {
   const nextState = JSON.parse(JSON.stringify(nextShortcuts));
   let failedKey = null;
   for (const shortcut of Object.values(nextState)) {
+    if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(shortcut.action) && !isFocusOverlayActive()) {
+      shortcut.status = ShortcutStatus.Available;
+      continue;
+    }
     const callback = shortcutCallbacks[shortcut.action];
     if (!callback) continue;
     if (globalShortcut.register(shortcut.key, callback)) {
@@ -716,6 +814,10 @@ function registerShortcutSet(nextShortcuts) {
     Object.values(nextState).forEach((shortcut) => globalShortcut.unregister(shortcut.key));
     shortcuts = prevShortcuts;
     Object.values(shortcuts).forEach((shortcut) => {
+      if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(shortcut.action) && !isFocusOverlayActive()) {
+        shortcut.status = ShortcutStatus.Available;
+        return;
+      }
       const callback = shortcutCallbacks[shortcut.action];
       if (!callback) return;
       globalShortcut.register(shortcut.key, callback);
@@ -725,6 +827,7 @@ function registerShortcutSet(nextShortcuts) {
   }
 
   shortcuts = nextState;
+  syncFocusOverlayShortcuts();
   saveShortcutConfig(app, shortcuts);
   return { ok: true, shortcuts };
 }
@@ -755,6 +858,7 @@ const shortcutCallbacks = {
       visible: nextVisible,
     };
     sendOverlayState(nextState);
+    syncFocusOverlayShortcuts();
 
     if (nextVisible) {
       if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
@@ -779,7 +883,15 @@ const shortcutCallbacks = {
     overlayWindow.setPosition(nextX, nextY);
     schedulePersistOverlayPosition();
   },
+  focusPrevTab: () => sendFocusTabCommand('prev'),
+  focusNextTab: () => sendFocusTabCommand('next'),
 };
+
+function sendFocusTabCommand(direction) {
+  if (!isFocusOverlayActive()) return;
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  overlayWindow.webContents.send('focus-tab-command', direction);
+}
 
 ipcMain.handle('hide-window', () => mainWindow?.hide());
 ipcMain.handle('minimize-window', () => mainWindow?.minimize());
@@ -793,12 +905,16 @@ ipcMain.handle('update-shortcuts', (_event, updates) => {
     if (!next[update.action]) continue;
     next[update.action].key = update.key;
   }
-  return registerShortcutSet(next);
+  const result = registerShortcutSet(next);
+  if (result.ok) sendShortcutsState();
+  return result;
 });
 ipcMain.handle('reset-shortcuts', () => {
   try { fs.unlinkSync(path.join(app.getPath('userData'), 'shortcuts.json')); } catch {}
   const defaults = createShortcutState();
-  return registerShortcutSet(defaults);
+  const result = registerShortcutSet(defaults);
+  if (result.ok) sendShortcutsState();
+  return result;
 });
 ipcMain.handle('toggle-always-on-top', () => {
   if (!mainWindow) return false;
@@ -835,6 +951,20 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   if ('showBg' in payload && typeof payload.showBg === 'boolean') {
     style.showBg = payload.showBg;
   }
+  if ('mode' in payload && ['glass', 'prompt', 'focus'].includes(payload.mode)) {
+    style.mode = payload.mode;
+    style.showBg = payload.mode !== 'prompt';
+  } else if ('showBg' in style && !('mode' in payload)) {
+    style.mode = style.showBg ? 'glass' : 'prompt';
+  }
+  if ('focusWidthPct' in payload) {
+    const focusWidthPct = Number(payload.focusWidthPct);
+    if (Number.isFinite(focusWidthPct)) style.focusWidthPct = Math.max(50, Math.min(100, Math.round(focusWidthPct)));
+  }
+  if ('focusHeightPct' in payload) {
+    const focusHeightPct = Number(payload.focusHeightPct);
+    if (Number.isFinite(focusHeightPct)) style.focusHeightPct = Math.max(35, Math.min(100, Math.round(focusHeightPct)));
+  }
   if ('maxLines' in payload) {
     const maxLines = Number(payload.maxLines);
     if (Number.isFinite(maxLines)) style.maxLines = Math.max(0, Math.min(50, Math.round(maxLines)));
@@ -849,6 +979,7 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
 
   lastOverlayState = state;
   sendOverlayState(state);
+  syncFocusOverlayShortcuts();
 
   if (visibleChanged) {
     if (state.visible) {

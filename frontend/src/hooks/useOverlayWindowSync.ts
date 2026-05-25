@@ -9,6 +9,9 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
   const interviewOverlayFontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
   const interviewOverlayFontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
   const interviewOverlayShowBg = useUiPrefsStore((s) => s.interviewOverlayShowBg)
+  const interviewOverlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
+  const interviewOverlayFocusWidthPct = useUiPrefsStore((s) => s.interviewOverlayFocusWidthPct)
+  const interviewOverlayFocusHeightPct = useUiPrefsStore((s) => s.interviewOverlayFocusHeightPct)
   const interviewOverlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const applyInterviewOverlayState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
 
@@ -25,6 +28,9 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
       fontSize: interviewOverlayFontSize,
       fontColor: interviewOverlayFontColor,
       showBg: interviewOverlayShowBg,
+      mode: interviewOverlayMode,
+      focusWidthPct: interviewOverlayFocusWidthPct,
+      focusHeightPct: interviewOverlayFocusHeightPct,
       maxLines: interviewOverlayMaxLines,
     }
 
@@ -41,6 +47,9 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
     interviewOverlayFontSize,
     interviewOverlayFontColor,
     interviewOverlayShowBg,
+    interviewOverlayMode,
+    interviewOverlayFocusWidthPct,
+    interviewOverlayFocusHeightPct,
     interviewOverlayMaxLines,
   ])
 

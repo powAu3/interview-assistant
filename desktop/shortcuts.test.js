@@ -27,6 +27,8 @@ test('isValidShortcutKey accepts CommandOrControl with optional Shift and Alt pl
   assert.equal(isValidShortcutKey('CommandOrControl+.'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+/'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Enter'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Left'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Right'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+J'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+Enter'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+/'), true);
@@ -56,6 +58,8 @@ test('load and save shortcut config roundtrip', () => {
     addMultiServerScreenShot: { key: 'CommandOrControl+Shift+/' },
     hardClearSession: { key: 'CommandOrControl+.' },
     toggleInterviewOverlay: { key: 'CommandOrControl+Shift+Enter' },
+    focusPrevTab: { key: 'CommandOrControl+Left' },
+    focusNextTab: { key: 'CommandOrControl+Right' },
   });
 
   saveShortcutConfig(app, shortcuts);
@@ -65,5 +69,7 @@ test('load and save shortcut config roundtrip', () => {
   assert.equal(loaded.addMultiServerScreenShot.key, 'CommandOrControl+Shift+/');
   assert.equal(loaded.hardClearSession.key, 'CommandOrControl+.');
   assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+Shift+Enter');
+  assert.equal(loaded.focusPrevTab.key, 'CommandOrControl+Left');
+  assert.equal(loaded.focusNextTab.key, 'CommandOrControl+Right');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
 });

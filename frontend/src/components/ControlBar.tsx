@@ -191,6 +191,9 @@ export default function ControlBar() {
           fontSize: s.interviewOverlayFontSize,
           fontColor: s.interviewOverlayFontColor,
           showBg: s.interviewOverlayShowBg,
+          mode: s.interviewOverlayMode,
+          focusWidthPct: s.interviewOverlayFocusWidthPct,
+          focusHeightPct: s.interviewOverlayFocusHeightPct,
           maxLines: s.interviewOverlayMaxLines,
         }).catch(() => {})
       }

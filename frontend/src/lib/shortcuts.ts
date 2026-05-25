@@ -5,6 +5,8 @@ export type ShortcutAction =
   | 'addMultiServerScreenShot'
   | 'toggleInterviewOverlay'
   | 'moveOverlayToMouse'
+  | 'focusPrevTab'
+  | 'focusNextTab'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
 
 export type ShortcutConfig = {
@@ -63,6 +65,22 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     defaultKey: 'CommandOrControl+M',
     label: '移动悬浮窗到鼠标位置',
     category: '实时辅助',
+    status: 'available',
+  },
+  focusPrevTab: {
+    action: 'focusPrevTab',
+    key: 'CommandOrControl+Left',
+    defaultKey: 'CommandOrControl+Left',
+    label: '专注面板上一栏',
+    category: '专注面板',
+    status: 'available',
+  },
+  focusNextTab: {
+    action: 'focusNextTab',
+    key: 'CommandOrControl+Right',
+    defaultKey: 'CommandOrControl+Right',
+    label: '专注面板下一栏',
+    category: '专注面板',
     status: 'available',
   },
 }
@@ -125,7 +143,7 @@ export function getShortcutDisplay(accelerator: string) {
 }
 
 const VALID_ACTIONS = new Set<string>(Object.keys(defaultShortcuts))
-const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+[A-Za-z0-9./\\\- =;,'`\[\]\{\}]$/
+const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+([A-Za-z0-9./\\\- =;,'`\[\]\{\}]|Enter|Up|Down|Left|Right)$/
 
 export function mergeShortcutConfigs(
   input: Record<string, Partial<ShortcutConfig> | Record<string, unknown>> | undefined,

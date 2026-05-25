@@ -36,6 +36,9 @@ beforeEach(() => {
     interviewOverlayFontSize: 14,
     interviewOverlayFontColor: '#e2e8f0',
     interviewOverlayShowBg: true,
+    interviewOverlayMode: 'glass',
+    interviewOverlayFocusWidthPct: 96,
+    interviewOverlayFocusHeightPct: 90,
     interviewOverlayMaxLines: 0,
   })
 })
@@ -51,7 +54,7 @@ describe('useOverlayWindowSync', () => {
     render(<Harness isRecording={false} appMode="assist" />)
     expect(api.syncOverlayWindow).toHaveBeenCalledTimes(1)
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false, opacity: 0.88 }),
+      expect.objectContaining({ enabled: false, opacity: 0.88, mode: 'glass', focusWidthPct: 96, focusHeightPct: 90 }),
     )
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
       expect.not.objectContaining({ visible: expect.anything() }),
@@ -122,6 +125,9 @@ describe('useOverlayWindowSync', () => {
         opacity: 0.42,
         fontSize: 19.6,
         fontColor: '#abcdef',
+        mode: 'focus',
+        focusWidthPct: 83,
+        focusHeightPct: 71,
         showBg: false,
         maxLines: 7.4,
       })
@@ -132,14 +138,20 @@ describe('useOverlayWindowSync', () => {
       interviewOverlayOpacity: 0.42,
       interviewOverlayFontSize: 20,
       interviewOverlayFontColor: '#abcdef',
-      interviewOverlayShowBg: false,
+      interviewOverlayShowBg: true,
+      interviewOverlayMode: 'focus',
+      interviewOverlayFocusWidthPct: 83,
+      interviewOverlayFocusHeightPct: 71,
       interviewOverlayMaxLines: 7,
     })
     expect(localStorage.getItem('ia_overlay_enabled')).toBe('1')
     expect(localStorage.getItem('ia_overlay_opacity')).toBe('0.42')
     expect(localStorage.getItem('ia_overlay_font_size')).toBe('20')
     expect(localStorage.getItem('ia_overlay_font_color')).toBe('#abcdef')
-    expect(localStorage.getItem('ia_overlay_show_bg')).toBe('0')
+    expect(localStorage.getItem('ia_overlay_mode')).toBe('focus')
+    expect(localStorage.getItem('ia_overlay_show_bg')).toBe('1')
+    expect(localStorage.getItem('ia_overlay_focus_width_pct')).toBe('83')
+    expect(localStorage.getItem('ia_overlay_focus_height_pct')).toBe('71')
     expect(localStorage.getItem('ia_overlay_max_lines')).toBe('7')
     expect(eventSpy).not.toHaveBeenCalled()
 
@@ -167,6 +179,9 @@ describe('useOverlayWindowSync', () => {
       interviewOverlayOpacity: 0.7,
       interviewOverlayFontColor: '#123456',
       interviewOverlayShowBg: false,
+      interviewOverlayMode: 'prompt',
+      interviewOverlayFocusWidthPct: 96,
+      interviewOverlayFocusHeightPct: 90,
     })
     expect(localStorage.getItem('ia_overlay_font_color')).toBe('#123456')
     expect(localStorage.getItem('ia_overlay_opacity')).toBeNull()

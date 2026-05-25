@@ -11,10 +11,12 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
+import { useShortcutsStore } from '@/stores/shortcutsStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
+import { getShortcutDisplay } from '@/lib/shortcuts'
 import { Section, Field, matchSettingsSearch, useSettingsSearch } from './shared'
 import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
@@ -83,14 +85,19 @@ export default function PreferencesTab() {
   const overlayOpacity = useUiPrefsStore((s) => s.interviewOverlayOpacity)
   const overlayFontSize = useUiPrefsStore((s) => s.interviewOverlayFontSize)
   const overlayFontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
-  const overlayShowBg = useUiPrefsStore((s) => s.interviewOverlayShowBg)
+  const overlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
+  const overlayFocusWidthPct = useUiPrefsStore((s) => s.interviewOverlayFocusWidthPct)
+  const overlayFocusHeightPct = useUiPrefsStore((s) => s.interviewOverlayFocusHeightPct)
   const overlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const setOverlayEnabled = useUiPrefsStore((s) => s.setInterviewOverlayEnabled)
   const setOverlayOpacity = useUiPrefsStore((s) => s.setInterviewOverlayOpacity)
   const setOverlayFontSize = useUiPrefsStore((s) => s.setInterviewOverlayFontSize)
   const setOverlayFontColor = useUiPrefsStore((s) => s.setInterviewOverlayFontColor)
-  const setOverlayShowBg = useUiPrefsStore((s) => s.setInterviewOverlayShowBg)
+  const setOverlayMode = useUiPrefsStore((s) => s.setInterviewOverlayMode)
+  const setOverlayFocusWidthPct = useUiPrefsStore((s) => s.setInterviewOverlayFocusWidthPct)
+  const setOverlayFocusHeightPct = useUiPrefsStore((s) => s.setInterviewOverlayFocusHeightPct)
   const setOverlayMaxLines = useUiPrefsStore((s) => s.setInterviewOverlayMaxLines)
+  const shortcuts = useShortcutsStore((s) => s.shortcuts)
 
   const [scrollBottomPx, setScrollBottomPx] = useState(40)
   const [generalSaving, setGeneralSaving] = useState(false)
@@ -277,31 +284,64 @@ export default function PreferencesTab() {
         </div>
         {overlayEnabled && (
           <>
-            <Field label="背景样式">
-              <div className="flex gap-2">
-                {([true, false] as const).map((bg) => (
+            <Field label="显示模式">
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: 'glass' as const, label: '磨砂面板', hint: '半透明深色背景' },
+                  { key: 'prompt' as const, label: '提词模式', hint: '纯文字不带框' },
+                  { key: 'focus' as const, label: '专注面板', hint: '浅色解题面板' },
+                ]).map((item) => (
                   <button
-                    key={String(bg)}
+                    key={item.key}
                     type="button"
-                    onClick={() => setOverlayShowBg(bg)}
-                    className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                      overlayShowBg === bg
+                    onClick={() => setOverlayMode(item.key)}
+                    className={`px-3 py-2 text-xs rounded-lg border text-left transition-all ${
+                      overlayMode === item.key
                         ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
                         : 'border-bg-hover bg-bg-tertiary/30 text-text-secondary hover:border-bg-hover'
                     }`}
                   >
-                    {bg ? '磨砂面板' : '提词模式'}
+                    <span className="block font-medium">{item.label}</span>
+                    <span className="mt-0.5 block text-[10px] text-text-muted leading-snug">{item.hint}</span>
                   </button>
                 ))}
               </div>
               <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
-                {overlayShowBg ? '半透明磨砂玻璃背景，含状态栏与问题预览' : '无框纯文字、隐藏多余信息，仅保留答案'}
+                {overlayMode === 'focus'
+                  ? '浅色半透明大面板，复用悬浮窗防捕获与不抢焦点能力'
+                  : overlayMode === 'glass'
+                    ? '半透明磨砂玻璃背景，适合暗色桌面'
+                    : '无框纯文字、隐藏多余信息，仅保留答案'}
               </p>
             </Field>
             <Field label={`不透明度: ${Math.round(overlayOpacity * 100)}%`}>
               <input type="range" min={10} max={100} value={Math.round(overlayOpacity * 100)}
                 onChange={(e) => setOverlayOpacity(Number(e.target.value) / 100)} className="w-full max-w-[200px]" />
             </Field>
+            {overlayMode === 'focus' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label={`专注面板宽度: ${overlayFocusWidthPct}%`}>
+                  <input
+                    type="range"
+                    min={50}
+                    max={100}
+                    value={overlayFocusWidthPct}
+                    onChange={(e) => setOverlayFocusWidthPct(Number(e.target.value))}
+                    className="w-full max-w-[200px]"
+                  />
+                </Field>
+                <Field label={`专注面板高度: ${overlayFocusHeightPct}%`}>
+                  <input
+                    type="range"
+                    min={35}
+                    max={100}
+                    value={overlayFocusHeightPct}
+                    onChange={(e) => setOverlayFocusHeightPct(Number(e.target.value))}
+                    className="w-full max-w-[200px]"
+                  />
+                </Field>
+              </div>
+            )}
             <Field label={`字号: ${overlayFontSize}px`}>
               <input type="range" min={10} max={48} value={overlayFontSize}
                 onChange={(e) => setOverlayFontSize(Number(e.target.value))} className="w-full max-w-[200px]" />
@@ -322,7 +362,12 @@ export default function PreferencesTab() {
             </div>
             <p className="text-[10px] text-text-muted leading-relaxed -mt-1">
               悬浮窗不会抢占焦点,直接用鼠标滚轮即可滚动内容,
-              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">Cmd+M</kbd> 可把窗口一键移到鼠标附近。
+              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">{getShortcutDisplay(shortcuts.moveOverlayToMouse?.key ?? 'CommandOrControl+M')}</kbd> 可把窗口一键移到鼠标附近。
+              专注面板打开时,
+              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">{getShortcutDisplay(shortcuts.focusPrevTab?.key ?? 'CommandOrControl+Left')}</kbd>
+              /
+              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">{getShortcutDisplay(shortcuts.focusNextTab?.key ?? 'CommandOrControl+Right')}</kbd>
+              切换分区。
             </p>
           </>
         )}

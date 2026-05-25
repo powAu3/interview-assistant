@@ -101,7 +101,8 @@ def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
     p = _asr_prompt(high_churn=False)
     assert "真人候选人口吻" in p
     assert "结论先行" in p
-    assert "不要把这些当标题" in p
+    assert "专注面板输出协议" in p
+    assert "## 标题" in p
 
 
 def test_asr_high_churn_keeps_oral_short_answer_shape():
@@ -113,7 +114,8 @@ def test_asr_high_churn_keeps_oral_short_answer_shape():
 def test_manual_prompt_warns_not_to_emit_template_labels():
     p = _manual_prompt()
     assert "真人候选人口吻" in p
-    assert "不要输出题型模板标题" in p
+    assert "贴合本题的 `##` section 标题" in p
+    assert "题型模板" in p
 
 
 def test_stream_sanitizer_removes_split_think_tags():
@@ -130,6 +132,13 @@ def test_stream_sanitizer_cleans_manual_markdown_and_meta_preface():
     assert "#" not in out
     assert "回答" not in out
     assert "**" not in out
+    assert "核心是先止血。" in out
+
+
+def test_stream_sanitizer_keeps_focus_tab_headings_for_manual_text():
+    s = create_answer_stream_sanitizer("manual_text")
+    out = s.push("## 多元答案\n核心是先止血。") + s.finish()
+    assert "## 多元答案" in out
     assert "核心是先止血。" in out
 
 

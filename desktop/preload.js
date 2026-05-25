@@ -23,6 +23,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('overlay-state', wrapped);
     return () => ipcRenderer.removeListener('overlay-state', wrapped);
   },
+  onShortcuts: (listener) => {
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('shortcuts-state', wrapped);
+    return () => ipcRenderer.removeListener('shortcuts-state', wrapped);
+  },
+  onFocusTabCommand: (listener) => {
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('focus-tab-command', wrapped);
+    return () => ipcRenderer.removeListener('focus-tab-command', wrapped);
+  },
   removeOverlayStateListener: (listener) => {
     if (listener) ipcRenderer.removeListener('overlay-state', listener);
   },
