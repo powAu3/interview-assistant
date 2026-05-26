@@ -327,6 +327,8 @@ def process_question_parallel(
                     "answer": full_answer,
                     "think": full_think,
                     "model_name": model_cfg.name,
+                    "first_token_ms": int(first_token_ms),
+                    "total_ms": int(gen_elapsed),
                 }
             )
             deps.broadcast(

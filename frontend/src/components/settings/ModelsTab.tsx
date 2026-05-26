@@ -50,6 +50,7 @@ function toModelRow(model: ModelFullInfo, index: number): ModelRow {
 export default function ModelsTab() {
   const config = useInterviewStore((s) => s.config)
   const modelHealth = useInterviewStore((s) => s.modelHealth)
+  const modelHealthLatency = useInterviewStore((s) => s.modelHealthLatency)
 
   const [modelRows, setModelRows] = useState<ModelRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -422,7 +423,7 @@ export default function ModelsTab() {
                         </span>
                         <StatusBadge
                           status={st === 'ok' ? 'ok' : st === 'error' ? 'error' : st === 'checking' ? 'checking' : 'idle'}
-                          label={st === 'ok' ? '可用' : st === 'error' ? '不可用' : st === 'checking' ? '检测中…' : '未检测'}
+                          label={st === 'ok' ? (modelHealthLatency[row.originalIndex] ? `可用 · ${modelHealthLatency[row.originalIndex]}ms` : '可用') : st === 'error' ? '不可用' : st === 'checking' ? '检测中…' : '未检测'}
                         />
                       </div>
                     </button>

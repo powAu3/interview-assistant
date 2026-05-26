@@ -111,6 +111,8 @@ export interface QAPair {
   timestamp: number
   questionSource?: string
   modelLabel?: string
+  firstTokenMs?: number
+  totalMs?: number
   visionVerify?: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }
   status?: QAStatus
   errorMessage?: string

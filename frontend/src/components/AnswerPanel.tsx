@@ -191,6 +191,23 @@ const QACard = memo(function QACard({ qa, isStreaming, stream, colorScheme, anim
         <div className="flex items-start gap-2 sm:gap-3 pl-1 sm:pl-2">
           <span className="w-7 sm:w-8 flex-shrink-0 text-center text-accent-green text-xs font-bold pt-1">A</span>
           <div className="flex-1 min-w-0 pb-4 border-l-2 border-accent-green/25 pl-3 sm:pl-4 -ml-1">
+            <div className="flex items-center gap-1.5 mb-1">
+              {qa.modelLabel && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
+                  {qa.modelLabel}
+                </span>
+              )}
+              {qa.firstTokenMs != null && (
+                <span className="text-[10px] font-mono text-text-muted tabular-nums">
+                  首字 {qa.firstTokenMs}ms
+                </span>
+              )}
+              {qa.totalMs != null && (
+                <span className="text-[10px] font-mono text-text-muted tabular-nums">
+                  总 {qa.totalMs}ms
+                </span>
+              )}
+            </div>
             <KbReferenceBanner qaId={qa.id} />
             {renderAnswerBody(qa, isStreaming, stream, colorScheme)}
           </div>
@@ -222,6 +239,23 @@ const QACard = memo(function QACard({ qa, isStreaming, stream, colorScheme, anim
           <span className="text-accent-green text-xs font-bold">A</span>
         </div>
         <div className="flex-1 min-w-0 max-h-[280px] overflow-y-auto rounded-xl bg-bg-tertiary/15 p-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            {qa.modelLabel && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
+                {qa.modelLabel}
+              </span>
+            )}
+            {qa.firstTokenMs != null && (
+              <span className="text-[10px] font-mono text-text-muted tabular-nums">
+                首字 {qa.firstTokenMs}ms
+              </span>
+            )}
+            {qa.totalMs != null && (
+              <span className="text-[10px] font-mono text-text-muted tabular-nums">
+                总 {qa.totalMs}ms
+              </span>
+            )}
+          </div>
           <KbReferenceBanner qaId={qa.id} />
           {renderAnswerBody(qa, isStreaming, stream, colorScheme)}
         </div>

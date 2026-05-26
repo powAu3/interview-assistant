@@ -69,6 +69,8 @@ describe('useInterviewWS', () => {
       sttActiveProvider: '',
       sttFallbackLoaded: false,
       modelHealth: {},
+      modelHealthDetail: {},
+      modelHealthLatency: {},
       tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
       resumeOptLoading: false,
       resumeOptStreaming: '',

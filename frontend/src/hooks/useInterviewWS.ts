@@ -172,6 +172,8 @@ export function useInterviewWS() {
           msg.answer as string,
           msg.think as string,
           msg.model_name as string,
+          msg.first_token_ms as number | undefined,
+          msg.total_ms as number | undefined,
         )
         break
       case 'answer_cancelled':
@@ -205,7 +207,12 @@ export function useInterviewWS() {
         s.appendPracticeAnswerDraft(msg.text as string)
         break
       case 'model_health':
-        s.setModelHealth(msg.index as number, msg.status as Parameters<typeof s.setModelHealth>[1])
+        s.setModelHealth(
+          msg.index as number,
+          msg.status as Parameters<typeof s.setModelHealth>[1],
+          msg.detail as string | undefined,
+          msg.latency_ms as number | undefined,
+        )
         break
       case 'token_update':
         s.setTokenUsage({

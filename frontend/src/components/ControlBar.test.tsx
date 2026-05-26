@@ -83,6 +83,8 @@ describe('ControlBar', () => {
       transcriptions: [],
       wsConnected: true,
       modelHealth: { 0: 'ok' },
+      modelHealthDetail: {},
+      modelHealthLatency: {},
       sttLoaded: true,
       sttLoading: false,
       sttActiveProvider: '',

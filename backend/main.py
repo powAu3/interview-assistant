@@ -102,9 +102,11 @@ def _preload_stt():
         cfg = get_config()
         engine = get_stt_engine()
         _log.info("STT preload start provider=%s", cfg.stt_provider)
-        ws.broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": cfg.stt_provider})
+        is_remote = cfg.stt_provider in ("doubao", "generic")
+        if not is_remote:
+            ws.broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": cfg.stt_provider})
         engine.load_model()
-        loaded = bool(engine.is_loaded)
+        loaded = bool(engine.is_loaded) if not is_remote else True
         _log.info("STT preload done provider=%s loaded=%s", cfg.stt_provider, loaded)
         ws.broadcast({"type": "stt_status", "loaded": loaded, "loading": False, "provider": cfg.stt_provider})
     except Exception as e:

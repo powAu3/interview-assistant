@@ -7,6 +7,7 @@ from core.resource_lanes import submit_low_priority_background
 
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
+_model_health_latency: dict[int, int] = {}
 
 
 def get_model_health(index: int) -> Optional[str]:
@@ -14,7 +15,7 @@ def get_model_health(index: int) -> Optional[str]:
 
 
 def get_model_health_snapshot() -> dict:
-    return {"health": _model_health, "detail": _model_health_detail}
+    return {"health": _model_health, "detail": _model_health_detail, "latency": _model_health_latency}
 
 
 def _check_single_model(index: int):
@@ -26,11 +27,13 @@ def _check_single_model(index: int):
     model = cfg.models[index]
     _model_health[index] = "checking"
     _model_health_detail[index] = ""
+    _model_health_latency[index] = 0
     broadcast({"type": "model_health", "index": index, "status": "checking"})
 
     if not model.api_key or model.api_key in ("", "sk-your-api-key-here"):
         _model_health[index] = "error"
         _model_health_detail[index] = "未配置 API Key"
+        _model_health_latency[index] = 0
         broadcast({"type": "model_health", "index": index, "status": "error", "detail": "未配置 API Key"})
         return
 
@@ -48,12 +51,15 @@ def _check_single_model(index: int):
             "max_tokens": 1,
             "stream": False,
         }
+        import time as _time
+        t0 = _time.monotonic()
         response = requests.post(
             url,
             headers=headers,
             json=payload,
             timeout=12,
         )
+        latency_ms = int((_time.monotonic() - t0) * 1000)
         if response.status_code >= 400:
             try:
                 body = response.json()
@@ -62,12 +68,14 @@ def _check_single_model(index: int):
             raise RuntimeError(f"HTTP {response.status_code}: {str(body)[:120]}")
         _model_health[index] = "ok"
         _model_health_detail[index] = ""
-        broadcast({"type": "model_health", "index": index, "status": "ok"})
+        _model_health_latency[index] = latency_ms
+        broadcast({"type": "model_health", "index": index, "status": "ok", "latency_ms": latency_ms})
     except Exception as e:
+        latency_ms_val = _model_health_latency.get(index, 0)
         _model_health[index] = "error"
         detail = str(e)[:120]
         _model_health_detail[index] = detail
-        broadcast({"type": "model_health", "index": index, "status": "error", "detail": detail})
+        broadcast({"type": "model_health", "index": index, "status": "error", "detail": detail, "latency_ms": latency_ms_val})
 
 
 def start_all_model_checks() -> bool:

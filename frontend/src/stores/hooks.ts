@@ -60,6 +60,8 @@ export const useStt = makeShallowHook((s) => ({
   sttActiveProvider: s.sttActiveProvider,
   sttFallbackLoaded: s.sttFallbackLoaded,
   modelHealth: s.modelHealth,
+  modelHealthDetail: s.modelHealthDetail,
+  modelHealthLatency: s.modelHealthLatency,
   tokenUsage: s.tokenUsage,
   setSttStatus: s.setSttStatus,
   setModelHealth: s.setModelHealth,
