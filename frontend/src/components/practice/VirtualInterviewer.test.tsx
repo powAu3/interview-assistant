@@ -53,14 +53,19 @@ describe('VirtualInterviewer', () => {
       <VirtualInterviewer
         persona="calm_pressing"
         state="idle"
+        speechSignal={{
+          active: true,
+          energy: 0.68,
+          mouthOpen: 0.52,
+          speakingElapsedMs: 420,
+        }}
         data-testid="virtual-interviewer"
       />,
     )
 
-    expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute(
-      'data-renderer',
-      'rocketbox-three',
-    )
+    const avatar = screen.getByTestId('virtual-interviewer')
+    expect(avatar).toHaveAttribute('data-renderer', 'rocketbox-three')
+    expect(avatar).toHaveAttribute('data-speech-active', 'true')
     expect(screen.getByTestId('virtual-interviewer-three-stage')).toBeInTheDocument()
     expect(screen.queryByTestId('virtual-interviewer-portrait')).not.toBeInTheDocument()
     expect(screen.queryByTestId('virtual-interviewer-live2d-stage')).not.toBeInTheDocument()
@@ -71,6 +76,12 @@ describe('VirtualInterviewer', () => {
       <VirtualInterviewer
         persona="pressure_bigtech"
         state="listening"
+        speechSignal={{
+          active: true,
+          energy: 0.8,
+          mouthOpen: 0.7,
+          speakingElapsedMs: 1200,
+        }}
         compact
         data-testid="virtual-interviewer"
       />,
@@ -80,6 +91,7 @@ describe('VirtualInterviewer', () => {
       'data-renderer',
       'rocketbox-poster',
     )
+    expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute('data-speech-active', 'true')
     expect(screen.getByTestId('virtual-interviewer-rocketbox-poster')).toBeInTheDocument()
     expect(screen.queryByTestId('virtual-interviewer-rig-preview')).not.toBeInTheDocument()
   })

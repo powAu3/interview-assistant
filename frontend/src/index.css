@@ -1484,6 +1484,11 @@ select:focus-visible {
   overflow: hidden;
   isolation: isolate;
   opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.virtual-interviewer__three-stage[data-rocketbox-status='ready'] {
+  opacity: 1;
 }
 
 .virtual-interviewer__three-stage canvas {
@@ -1626,7 +1631,7 @@ select:focus-visible {
 }
 
 .virtual-interviewer[data-state='speaking'] .virtual-interviewer__aura {
-  opacity: 0.76;
+  opacity: 0.62;
 }
 
 .virtual-interviewer[data-state='speaking'] .virtual-interviewer__pulse {
@@ -1655,6 +1660,11 @@ select:focus-visible {
   animation: virtual-interviewer-wave 1.02s ease-in-out infinite;
   animation-delay: calc(var(--vi-wave-index) * 80ms);
   opacity: 0.82;
+}
+
+.virtual-interviewer[data-speech-active='true'] .virtual-interviewer__wave-bar {
+  animation-duration: 0.46s;
+  opacity: calc(0.48 + var(--vi-speech-energy) * 0.44);
 }
 
 .virtual-interviewer[data-state='listening'] .virtual-interviewer__pulse {

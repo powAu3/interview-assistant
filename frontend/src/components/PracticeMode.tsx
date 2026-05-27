@@ -317,6 +317,7 @@ export default function PracticeMode() {
       setPracticeCodeDraft={setPracticeCodeDraft}
       setSelectedMic={setSelectedMic}
       sttLoaded={sttLoaded}
+      speechSignal={playback.speechSignal}
       ttsSourceLabel={resolvedTtsSourceLabel}
       practiceTheme={practiceTheme}
     />

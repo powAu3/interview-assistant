@@ -3,6 +3,7 @@ import { Code2, Loader2, Mic, MicOff, RotateCcw, Send, Square, Volume2 } from 'l
 import { VirtualInterviewer } from '@/components/practice/VirtualInterviewer'
 import type { DeviceItem, PracticePhase, PracticeSessionSnapshot } from '@/stores/configStore'
 import { resolveVirtualInterviewerPersona } from '@/components/practice/virtualInterviewerPersona'
+import type { VirtualInterviewerSpeechSignal } from '@/components/practice/virtualInterviewerState'
 import type { PracticeTurn } from '@/stores/slices/types'
 
 interface PracticeActiveSessionViewProps {
@@ -32,6 +33,7 @@ interface PracticeActiveSessionViewProps {
   setPracticeAnswerDraft: (text: string) => void
   setPracticeCodeDraft: (text: string) => void
   setSelectedMic: (value: number | null) => void
+  speechSignal: VirtualInterviewerSpeechSignal
   sttLoaded: boolean
   ttsSourceLabel: string
   activePersona: ReturnType<typeof resolveVirtualInterviewerPersona>
@@ -85,6 +87,7 @@ export function PracticeActiveSessionView(props: PracticeActiveSessionViewProps)
               persona={props.activePersona.key}
               state={props.interviewerState}
               signal={props.currentTurn?.interviewer_signal}
+              speechSignal={props.speechSignal}
               subtitle={props.currentTurn?.transition_line}
               writtenPromptMode={props.isWrittenPromptMode}
             />

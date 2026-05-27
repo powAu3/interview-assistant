@@ -10,6 +10,8 @@ import {
 } from './virtualInterviewerPersona'
 import {
   getVirtualInterviewerStateLabel,
+  IDLE_VIRTUAL_INTERVIEWER_SPEECH_SIGNAL,
+  type VirtualInterviewerSpeechSignal,
   type VirtualInterviewerState,
 } from './virtualInterviewerState'
 
@@ -17,6 +19,7 @@ export interface VirtualInterviewerProps extends HTMLAttributes<HTMLDivElement> 
   persona: VirtualInterviewerPersonaKey
   state: VirtualInterviewerState
   signal?: string | null
+  speechSignal?: VirtualInterviewerSpeechSignal
   subtitle?: string | null
   compact?: boolean
   writtenPromptMode?: boolean
@@ -26,6 +29,7 @@ export function VirtualInterviewer({
   persona,
   state,
   signal,
+  speechSignal = IDLE_VIRTUAL_INTERVIEWER_SPEECH_SIGNAL,
   subtitle,
   compact = false,
   writtenPromptMode = false,
@@ -36,12 +40,15 @@ export function VirtualInterviewer({
   const spec = resolveVirtualInterviewerPersona({ style: persona })
   const stateLabel = getVirtualInterviewerStateLabel(state, { writtenPromptMode })
   const renderer = compact ? 'rocketbox-poster' : 'rocketbox-three'
+  const waveEnergy = speechSignal.active ? Math.max(0, Math.min(1, speechSignal.energy)) : 0
 
   const visualStyle = {
     '--vi-line': spec.palette.line,
     '--vi-accent': spec.palette.accent,
     '--vi-accent-soft': spec.palette.accentSoft,
     '--vi-wave': spec.palette.wave,
+    '--vi-speech-energy': `${waveEnergy}`,
+    '--vi-mouth-open': `${Math.max(0, Math.min(1, speechSignal.mouthOpen))}`,
     ...style,
   } as CSSProperties
 
@@ -54,6 +61,7 @@ export function VirtualInterviewer({
       data-state={state}
       data-signal={signal ?? 'neutral'}
       data-renderer={renderer}
+      data-speech-active={speechSignal.active ? 'true' : 'false'}
       className={clsx(
         'virtual-interviewer',
         compact && 'virtual-interviewer--compact',
@@ -75,7 +83,7 @@ export function VirtualInterviewer({
             <img src={ROCKETBOX_POSTER_PATH} alt="" />
           </div>
         ) : (
-          <RocketboxStage state={state} />
+          <RocketboxStage state={state} speechSignal={speechSignal} />
         )}
 
         <div className="virtual-interviewer__wave" aria-hidden>
@@ -83,7 +91,14 @@ export function VirtualInterviewer({
             <span
               key={index}
               className="virtual-interviewer__wave-bar"
-              style={{ '--vi-wave-scale': `${size}`, '--vi-wave-index': `${index}` } as CSSProperties}
+              style={{
+                '--vi-wave-scale': `${
+                  speechSignal.active
+                    ? Math.max(0.22, Math.min(1.65, size * (0.42 + waveEnergy * 1.6)))
+                    : size
+                }`,
+                '--vi-wave-index': `${index}`,
+              } as CSSProperties}
             />
           ))}
         </div>

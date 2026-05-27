@@ -55,6 +55,7 @@ function Harness(props: HarnessProps) {
 
 function installBrowserSpeechMock() {
   const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
+    utterance.onstart?.(new Event('start') as SpeechSynthesisEvent)
     window.setTimeout(() => utterance.onend?.(new Event('end') as SpeechSynthesisEvent), 0)
   })
   Object.defineProperty(window, 'speechSynthesis', {
@@ -152,7 +153,12 @@ describe('usePracticeTurnPlayback', () => {
       }),
     }
     const startRecording = vi.fn().mockResolvedValue(undefined)
-    let playback: ReturnType<typeof usePracticeTurnPlayback> | null = null
+    type PlaybackHandle = ReturnType<typeof usePracticeTurnPlayback>
+    let playback: PlaybackHandle | null = null
+    const getPlayback = (): PlaybackHandle => {
+      if (!playback) throw new Error('playback handle was not captured')
+      return playback
+    }
 
     render(<Harness api={api} startRecording={startRecording} onReady={(next) => { playback = next }} />)
 
@@ -161,9 +167,10 @@ describe('usePracticeTurnPlayback', () => {
       await Promise.resolve()
     })
     expect(createdAudio).not.toBeNull()
+    expect(getPlayback().speechSignal.active).toBe(true)
 
     act(() => {
-      playback?.resetPlaybackState()
+      getPlayback().resetPlaybackState()
       createdAudio!.onended?.()
     })
     await act(async () => {
@@ -171,6 +178,11 @@ describe('usePracticeTurnPlayback', () => {
     })
 
     expect(startRecording).not.toHaveBeenCalled()
+    expect(getPlayback().speechSignal).toMatchObject({
+      active: false,
+      energy: 0,
+      mouthOpen: 0,
+    })
   })
 
   it('keeps in-flight cloud TTS alive across unrelated rerenders', async () => {
@@ -222,5 +234,63 @@ describe('usePracticeTurnPlayback', () => {
     act(() => {
       createdAudio!.onended?.()
     })
+  })
+
+  it('resets the visual speech signal when cloud playback ends', async () => {
+    type FakeAudioHandle = {
+      onended: (() => void) | null
+      onerror: (() => void) | null
+      onplay: (() => void) | null
+      pause: ReturnType<typeof vi.fn>
+      play: ReturnType<typeof vi.fn>
+      removeAttribute: ReturnType<typeof vi.fn>
+      src: string
+    }
+    let createdAudio: FakeAudioHandle | null = null
+    vi.stubGlobal(
+      'Audio',
+      class {
+        onended: (() => void) | null = null
+        onerror: (() => void) | null = null
+        onplay: (() => void) | null = null
+        pause = vi.fn()
+        play = vi.fn(() => {
+          this.onplay?.()
+          return Promise.resolve()
+        })
+        removeAttribute = vi.fn()
+        src = ''
+
+        constructor(src: string) {
+          this.src = src
+          createdAudio = this
+        }
+      },
+    )
+    const api = {
+      practiceTts: vi.fn().mockResolvedValue({
+        audio_base64: 'ZmFrZQ==',
+        content_type: 'audio/mpeg',
+      }),
+    }
+    type PlaybackHandle = ReturnType<typeof usePracticeTurnPlayback>
+    let playback: PlaybackHandle | null = null
+    const getPlayback = (): PlaybackHandle => {
+      if (!playback) throw new Error('playback handle was not captured')
+      return playback
+    }
+
+    render(<Harness api={api} canSpeakAnswer={false} onReady={(next) => { playback = next }} />)
+
+    await waitFor(() => expect(createdAudio).not.toBeNull())
+    await waitFor(() => expect(getPlayback().speechSignal.active).toBe(true))
+
+    act(() => {
+      createdAudio!.onended?.()
+    })
+
+    await waitFor(() => expect(getPlayback().speechSignal.active).toBe(false))
+    expect(getPlayback().speechSignal.energy).toBe(0)
+    expect(getPlayback().speechSignal.mouthOpen).toBe(0)
   })
 })

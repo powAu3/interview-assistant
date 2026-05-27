@@ -70,6 +70,26 @@ describe('resolveVirtualInterviewerState', () => {
     ).toBe('speaking')
   })
 
+  it('keeps terminal and thinking states ahead of playback flags', () => {
+    expect(
+      resolveVirtualInterviewerState({
+        practiceStatus: 'thinking_next_turn',
+        practiceTtsSpeaking: true,
+        practiceRecording: false,
+        turn: { category: 'project', answer_mode: 'voice' },
+      }),
+    ).toBe('thinking')
+
+    expect(
+      resolveVirtualInterviewerState({
+        practiceStatus: 'finished',
+        practiceTtsSpeaking: true,
+        practiceRecording: true,
+        turn: { category: 'project', answer_mode: 'voice' },
+      }),
+    ).toBe('debrief')
+  })
+
   it('does not enter speaking during coding prompt mode', () => {
     expect(
       resolveVirtualInterviewerState({
