@@ -875,12 +875,12 @@ code, pre, .font-mono {
 
 .ov-focus-tabs {
   position: relative;
-  gap: 0;
+  gap: 4px;
   justify-content: center;
-  min-height: 52px;
-  padding: 6px 132px;
+  min-height: 42px;
+  padding: 5px 132px;
   background: rgba(255, 255, 255, var(--ov-focus-tabs-alpha, 0.34));
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   overflow-x: auto;
   overflow-y: hidden;
@@ -894,16 +894,61 @@ code, pre, .font-mono {
 .ov-focus-tab {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  max-width: 180px;
-  padding: 0 19px;
-  border-radius: 12px;
+  min-height: 30px;
+  max-width: 168px;
+  padding: 0 15px;
+  border-radius: 10px;
   color: rgba(47, 58, 74, 0.78);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: default;
   transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.ov-focus-question-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 4px clamp(20px, 4vw, 54px);
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(71, 85, 105, 0.66);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ov-focus-question-strip strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(31, 41, 55, 0.76);
+}
+
+.ov-focus-question-strip span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ov-focus-key-label {
+  color: rgba(71, 85, 105, 0.5);
+  font-size: 11px;
+}
+
+.ov-focus-question-strip kbd {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(241, 245, 249, var(--ov-focus-key-alpha, 0.64));
+  color: rgba(71, 85, 105, 0.62);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 800;
 }
 
 .ov-focus-tab--active {
@@ -934,6 +979,11 @@ code, pre, .font-mono {
   gap: 6px;
   color: rgba(71, 85, 105, 0.52);
   pointer-events: none;
+}
+
+.ov-focus-tab-keys > span {
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .ov-focus-tab-keys kbd {
@@ -971,8 +1021,8 @@ code, pre, .font-mono {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 30px clamp(22px, 5vw, 72px) 40px;
-  line-height: 1.72;
+  padding: 20px clamp(22px, 4vw, 60px) 30px;
+  line-height: 1.58;
   font-family: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
   font-weight: 600;
   white-space: pre-wrap;
@@ -999,8 +1049,8 @@ code, pre, .font-mono {
 }
 
 .ov-focus-section {
-  margin: 0 auto 24px;
-  max-width: 1280px;
+  margin: 0 auto 18px;
+  max-width: 1380px;
 }
 
 .ov-focus-active-pane {
@@ -1009,11 +1059,23 @@ code, pre, .font-mono {
 
 .ov-focus-section h2 {
   position: relative;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   padding-left: 18px;
   color: rgba(31, 41, 55, 0.86);
   font-size: 1.05em;
   font-weight: 800;
+}
+
+.ov-review-line {
+  margin: 0 0 8px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  color: rgba(100, 116, 139, 0.72);
+  font-size: 0.78em;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ov-focus-section h2::before {
@@ -1038,26 +1100,6 @@ code, pre, .font-mono {
 
 .ov-focus-muted {
   opacity: 0.48 !important;
-}
-
-.ov-focus-handle {
-  position: absolute;
-  top: 50%;
-  right: -1px;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 86px;
-  border-radius: 22px 0 0 22px;
-  background: rgba(255, 202, 15, 0.95);
-  color: #111827;
-  font-size: 30px;
-  font-weight: 900;
-  box-shadow: -4px 8px 18px rgba(184, 134, 11, 0.24);
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .ov-grip {
@@ -1093,6 +1135,114 @@ code, pre, .font-mono {
   user-select: none;
   -webkit-user-select: none;
   caret-color: transparent;
+}
+
+.ov-markdown {
+  color: inherit;
+  white-space: normal;
+}
+
+.ov-markdown h1,
+.ov-markdown h2,
+.ov-markdown h3 {
+  margin-top: 0.8em;
+  margin-bottom: 0.36em;
+  color: inherit;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.ov-markdown h1:first-child,
+.ov-markdown h2:first-child,
+.ov-markdown h3:first-child,
+.ov-markdown p:first-child,
+.ov-markdown ul:first-child,
+.ov-markdown ol:first-child,
+.ov-markdown pre:first-child {
+  margin-top: 0;
+}
+
+.ov-markdown h1 {
+  font-size: 1.08em;
+}
+
+.ov-markdown h2 {
+  font-size: 1.02em;
+}
+
+.ov-markdown h3 {
+  font-size: 0.98em;
+}
+
+.ov-markdown p {
+  margin-bottom: 0.45em;
+  color: inherit;
+  line-height: inherit;
+}
+
+.ov-markdown ul,
+.ov-markdown ol {
+  margin-left: 1.25em;
+  margin-bottom: 0.45em;
+  color: inherit;
+}
+
+.ov-markdown li {
+  margin-bottom: 0.18em;
+  line-height: inherit;
+}
+
+.ov-markdown code {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.16);
+  color: inherit;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.ov-markdown pre {
+  margin: 0.48em 0 0.62em;
+  padding: 0.72em 0.88em;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.ov-markdown pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  white-space: inherit;
+}
+
+.ov-markdown blockquote {
+  margin: 0.45em 0;
+  border-left-color: rgba(96, 145, 230, 0.76);
+  color: inherit;
+  opacity: 0.82;
+}
+
+.ov-shell--nobg .ov-markdown code {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ov-shell--nobg .ov-markdown pre {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.ov-focus-content .ov-markdown h1,
+.ov-focus-content .ov-markdown h2,
+.ov-focus-content .ov-markdown h3 {
+  color: rgba(31, 41, 55, 0.84);
+}
+
+.ov-focus-content .ov-markdown pre {
+  background: rgba(255, 255, 255, 0.38);
 }
 .ov-answer::selection,
 .ov-answer *::selection {

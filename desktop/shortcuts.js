@@ -64,6 +64,20 @@ const DEFAULT_SHORTCUTS = {
     label: '专注面板下一栏',
     category: '专注面板',
   },
+  overlayPrevQuestion: {
+    action: 'overlayPrevQuestion',
+    key: 'CommandOrControl+Up',
+    defaultKey: 'CommandOrControl+Up',
+    label: '悬浮窗上一题',
+    category: '悬浮窗',
+  },
+  overlayNextQuestion: {
+    action: 'overlayNextQuestion',
+    key: 'CommandOrControl+Down',
+    defaultKey: 'CommandOrControl+Down',
+    label: '悬浮窗下一题',
+    category: '悬浮窗',
+  },
 };
 
 const SUPPORTED_KEYS = new Set([

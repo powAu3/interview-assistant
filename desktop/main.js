@@ -191,6 +191,7 @@ const FOCUS_OVERLAY_MARGIN = 14;
 let _frontReassertTimer = null;
 const FRONT_REASSERT_LEVEL = 1;
 const FOCUS_OVERLAY_SHORTCUT_ACTIONS = new Set(['focusPrevTab', 'focusNextTab']);
+const VISIBLE_OVERLAY_SHORTCUT_ACTIONS = new Set(['overlayPrevQuestion', 'overlayNextQuestion']);
 const FRONT_REASSERT_DURATION = 5000;
 const FRONT_REASSERT_INTERVAL = 500;
 
@@ -733,6 +734,13 @@ function isFocusOverlayActive() {
   return Boolean(lastOverlayState?.visible) && mode === 'focus';
 }
 
+function isOverlayShortcutActive(action) {
+  if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(action)) return isFocusOverlayActive();
+  if (VISIBLE_OVERLAY_SHORTCUT_ACTIONS.has(action)) return Boolean(lastOverlayState?.visible);
+  // Non-overlay shortcuts are intentionally global and should stay registered.
+  return true;
+}
+
 function registerManagedShortcut(shortcut) {
   const callback = shortcutCallbacks[shortcut.action];
   if (!callback) {
@@ -750,7 +758,7 @@ function registerManagedShortcut(shortcut) {
 function registerShortcuts() {
   shortcuts = loadShortcutConfig(app);
   Object.values(shortcuts).forEach((shortcut) => {
-    if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(shortcut.action)) {
+    if (!isOverlayShortcutActive(shortcut.action)) {
       shortcut.status = ShortcutStatus.Available;
       return;
     }
@@ -774,7 +782,16 @@ function syncFocusOverlayShortcuts() {
   for (const action of FOCUS_OVERLAY_SHORTCUT_ACTIONS) {
     const shortcut = shortcuts[action];
     if (!shortcut) continue;
-    if (isFocusOverlayActive()) {
+    if (isOverlayShortcutActive(action)) {
+      if (shortcut.status !== ShortcutStatus.Registered) registerManagedShortcut(shortcut);
+    } else if (shortcut.status === ShortcutStatus.Registered || shortcut.status === ShortcutStatus.Failed) {
+      unregisterShortcut(action);
+    }
+  }
+  for (const action of VISIBLE_OVERLAY_SHORTCUT_ACTIONS) {
+    const shortcut = shortcuts[action];
+    if (!shortcut) continue;
+    if (isOverlayShortcutActive(action)) {
       if (shortcut.status !== ShortcutStatus.Registered) registerManagedShortcut(shortcut);
     } else if (shortcut.status === ShortcutStatus.Registered || shortcut.status === ShortcutStatus.Failed) {
       unregisterShortcut(action);
@@ -795,7 +812,7 @@ function registerShortcutSet(nextShortcuts) {
   const nextState = JSON.parse(JSON.stringify(nextShortcuts));
   let failedKey = null;
   for (const shortcut of Object.values(nextState)) {
-    if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(shortcut.action) && !isFocusOverlayActive()) {
+    if (!isOverlayShortcutActive(shortcut.action)) {
       shortcut.status = ShortcutStatus.Available;
       continue;
     }
@@ -814,7 +831,7 @@ function registerShortcutSet(nextShortcuts) {
     Object.values(nextState).forEach((shortcut) => globalShortcut.unregister(shortcut.key));
     shortcuts = prevShortcuts;
     Object.values(shortcuts).forEach((shortcut) => {
-      if (FOCUS_OVERLAY_SHORTCUT_ACTIONS.has(shortcut.action) && !isFocusOverlayActive()) {
+      if (!isOverlayShortcutActive(shortcut.action)) {
         shortcut.status = ShortcutStatus.Available;
         return;
       }
@@ -885,12 +902,20 @@ const shortcutCallbacks = {
   },
   focusPrevTab: () => sendFocusTabCommand('prev'),
   focusNextTab: () => sendFocusTabCommand('next'),
+  overlayPrevQuestion: () => sendOverlayQuestionCommand('prev'),
+  overlayNextQuestion: () => sendOverlayQuestionCommand('next'),
 };
 
 function sendFocusTabCommand(direction) {
   if (!isFocusOverlayActive()) return;
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   overlayWindow.webContents.send('focus-tab-command', direction);
+}
+
+function sendOverlayQuestionCommand(direction) {
+  if (!lastOverlayState?.visible) return;
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  overlayWindow.webContents.send('overlay-question-command', direction);
 }
 
 ipcMain.handle('hide-window', () => mainWindow?.hide());

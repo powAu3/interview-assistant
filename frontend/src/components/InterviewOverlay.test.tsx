@@ -63,6 +63,22 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-shell--nobg')).toBeInTheDocument()
   })
 
+  it('formats markdown in the regular overlay modes', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '## 回答要点\n- 使用双指针\n\n```ts\nconst total = 0\n```',
+      }],
+    })
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByRole('heading', { name: '回答要点' })).toBeInTheDocument()
+    expect(screen.getByRole('listitem')).toHaveTextContent('使用双指针')
+    expect(screen.getByText('const total = 0')).toBeInTheDocument()
+    expect(screen.queryByText(/## 回答要点/)).not.toBeInTheDocument()
+  })
+
   it('renders focus overlay mode with visual toolbar and tabs', () => {
     useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
     localStorage.setItem('ia_overlay_mode', 'focus')
@@ -73,6 +89,8 @@ describe('InterviewOverlay', () => {
     expect(screen.getByText('截图审题')).toBeInTheDocument()
     expect(screen.getByText('取消生成')).toBeInTheDocument()
     expect(screen.getAllByText('结论').length).toBeGreaterThan(0)
+    expect(screen.getByText('切换分区')).toBeInTheDocument()
+    expect(screen.getByText('切换题目')).toBeInTheDocument()
     expect(screen.getByText(/双指针维护左右最大高度/)).toBeInTheDocument()
     expect(document.querySelector('.ov-shell--focus')).toBeInTheDocument()
   })
@@ -81,6 +99,7 @@ describe('InterviewOverlay', () => {
     useInterviewStore.setState({
       qaPairs: [{
         ...qa,
+        question: 'CAP 理论怎么回答？',
         answer: '## 多元答案\n可以从一致性和可用性两条线回答。\n\n## 识别修正\n如果 ASR 把 CAP 识别成 cache，需要切回分布式理论。',
       }],
     })
@@ -92,7 +111,29 @@ describe('InterviewOverlay', () => {
 
     expect(screen.getAllByText('多元答案').length).toBeGreaterThan(0)
     fireEvent.click(screen.getAllByText('识别修正')[0])
+    expect(screen.getByRole('heading', { name: '识别修正' })).toBeInTheDocument()
     expect(screen.getByText(/ASR 把 CAP 识别成 cache/)).toBeInTheDocument()
+  })
+
+  it('uses model-provided self introduction tabs instead of forcing code buckets', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        question: '请介绍一下自己',
+        answer: '## 核心背景\n我是后端开发方向。\n\n## 项目亮点\n最近做过推荐系统改造。\n\n## 追问准备\n可以展开讲性能优化。',
+      }],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getAllByText('核心背景').length).toBeGreaterThan(0)
+    expect(screen.getByText('项目亮点')).toBeInTheDocument()
+    expect(screen.getByText('追问准备')).toBeInTheDocument()
+    expect(screen.queryByText('代码')).not.toBeInTheDocument()
+    expect(screen.queryByText('复杂度')).not.toBeInTheDocument()
   })
 
   it('keeps the model preamble before the first markdown section', () => {
@@ -132,9 +173,139 @@ describe('InterviewOverlay', () => {
 
     render(<InterviewOverlay />)
 
-    expect(screen.getByText('双指针。')).toBeInTheDocument()
+    expect(screen.getByText(/双指针/)).toBeInTheDocument()
     act(() => { tabListener?.('next') })
     expect(await screen.findByText(/return 0/)).toBeInTheDocument()
+  })
+
+  it('reviews previous and next questions from the overlay question command without changing generation', async () => {
+    let questionListener: ((direction: 'prev' | 'next') => void) | null = null
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = {
+      onOverlayQuestionCommand: (listener: (direction: 'prev' | 'next') => void) => {
+        questionListener = listener
+        return vi.fn()
+      },
+    }
+    useInterviewStore.setState({
+      qaPairs: [
+        { ...qa, id: 'qa-1', question: '第一题', answer: '第一题答案。' },
+        { ...qa, id: 'qa-2', question: '第二题', answer: '第二题正在生成。', status: 'streaming' },
+      ],
+      streamingIds: ['qa-2'],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'glass', interviewOverlayShowBg: true })
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByText(/第二题正在生成/)).toBeInTheDocument()
+    act(() => { questionListener?.('prev') })
+    expect(await screen.findByText(/第一题答案/)).toBeInTheDocument()
+    expect(useInterviewStore.getState().streamingIds).toEqual(['qa-2'])
+    act(() => { questionListener?.('next') })
+    expect(await screen.findByText(/第二题正在生成/)).toBeInTheDocument()
+  })
+
+  it('keeps the streaming question focus tab isolated while reviewing history', async () => {
+    let questionListener: ((direction: 'prev' | 'next') => void) | null = null
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = {
+      onOverlayQuestionCommand: (listener: (direction: 'prev' | 'next') => void) => {
+        questionListener = listener
+        return vi.fn()
+      },
+    }
+    useInterviewStore.setState({
+      qaPairs: [
+        {
+          ...qa,
+          id: 'qa-1',
+          question: '第一题',
+          answer: '## 多元答案\n历史回答。\n\n## 识别修正\n历史纠错。',
+        },
+        {
+          ...qa,
+          id: 'qa-2',
+          question: '第二题代码',
+          answer: '## 解题思路\n当前思路。\n\n## 代码解决方案\n正在写代码。',
+          status: 'streaming',
+        },
+      ],
+      streamingIds: ['qa-2'],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByText(/正在写代码/)).toBeInTheDocument()
+    fireEvent.click(screen.getAllByText('解题思路')[0])
+    expect(screen.getByText(/当前思路/)).toBeInTheDocument()
+
+    act(() => { questionListener?.('prev') })
+    expect(await screen.findByText(/历史回答/)).toBeInTheDocument()
+    fireEvent.click(screen.getAllByText('识别修正')[0])
+    expect(screen.getByText(/历史纠错/)).toBeInTheDocument()
+
+    act(() => { questionListener?.('next') })
+    expect(await screen.findByText(/当前思路/)).toBeInTheDocument()
+    expect(useInterviewStore.getState().streamingIds).toEqual(['qa-2'])
+  })
+
+  it('keeps tab state for older questions that are still generating in parallel', async () => {
+    let questionListener: ((direction: 'prev' | 'next') => void) | null = null
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = {
+      onOverlayQuestionCommand: (listener: (direction: 'prev' | 'next') => void) => {
+        questionListener = listener
+        return vi.fn()
+      },
+    }
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        id: 'qa-1',
+        question: '第一题代码',
+        answer: '## 解题思路\n旧题思路。\n\n## 代码解决方案\nreturn 1\n\n## 复杂度与测试\nO(n)',
+        status: 'streaming',
+      }],
+      streamingIds: ['qa-1'],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    const { rerender } = render(<InterviewOverlay />)
+    fireEvent.click(screen.getAllByText('代码解决方案')[0])
+    expect(screen.getByText(/return 1/)).toBeInTheDocument()
+
+    const manyQaPairs = [
+      useInterviewStore.getState().qaPairs[0],
+      ...Array.from({ length: 24 }, (_, index) => ({
+        ...qa,
+        id: `qa-${index + 2}`,
+        question: `第 ${index + 2} 题`,
+        answer: index === 23 ? '最新题正在生成。' : `第 ${index + 2} 题答案。`,
+        status: index === 23 ? 'streaming' as const : 'done' as const,
+      })),
+    ]
+    useInterviewStore.setState({
+      qaPairs: manyQaPairs,
+      streamingIds: ['qa-1', 'qa-25'],
+    })
+    rerender(<InterviewOverlay />)
+    expect(screen.getByText(/return 1/)).toBeInTheDocument()
+    expect(screen.queryByText(/最新题正在生成/)).not.toBeInTheDocument()
+
+    act(() => {
+      for (let i = 0; i < 24; i += 1) questionListener?.('next')
+    })
+    expect(await screen.findByText(/最新题正在生成/)).toBeInTheDocument()
+
+    act(() => {
+      for (let i = 0; i < 24; i += 1) questionListener?.('prev')
+    })
+
+    expect(await screen.findByText(/return 1/)).toBeInTheDocument()
+    expect(screen.queryByText(/^O\(n\)$/)).not.toBeInTheDocument()
   })
 
   it('marks the latest streamed tab as forming while the model is still generating', () => {
@@ -191,6 +362,10 @@ describe('InterviewOverlay', () => {
       askFromServerScreen: { key: 'CommandOrControl+Shift+9' },
       hardClearSession: { key: 'CommandOrControl+Shift+8' },
       toggleInterviewOverlay: { key: 'CommandOrControl+Shift+7' },
+      focusPrevTab: { key: 'CommandOrControl+Shift+[' },
+      focusNextTab: { key: 'CommandOrControl+Shift+]' },
+      overlayPrevQuestion: { key: 'CommandOrControl+Shift+Up' },
+      overlayNextQuestion: { key: 'CommandOrControl+Shift+Down' },
     })
     const onShortcuts = vi.fn((listener: (payload: Record<string, Record<string, unknown>>) => void) => {
       shortcutsListener = listener
@@ -208,6 +383,10 @@ describe('InterviewOverlay', () => {
       expect(useShortcutsStore.getState().shortcuts.askFromServerScreen.key).toBe('CommandOrControl+Shift+9')
     })
     expect(await screen.findByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && /9$/.test(text))).toBeInTheDocument()
+    expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+[')).toBeInTheDocument()
+    expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+]')).toBeInTheDocument()
+    expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+↑')).toBeInTheDocument()
+    expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+↓')).toBeInTheDocument()
     expect(onShortcuts).toHaveBeenCalled()
 
     act(() => {

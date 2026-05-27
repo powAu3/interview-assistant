@@ -7,6 +7,8 @@ export type ShortcutAction =
   | 'moveOverlayToMouse'
   | 'focusPrevTab'
   | 'focusNextTab'
+  | 'overlayPrevQuestion'
+  | 'overlayNextQuestion'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
 
 export type ShortcutConfig = {
@@ -81,6 +83,22 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     defaultKey: 'CommandOrControl+Right',
     label: '专注面板下一栏',
     category: '专注面板',
+    status: 'available',
+  },
+  overlayPrevQuestion: {
+    action: 'overlayPrevQuestion',
+    key: 'CommandOrControl+Up',
+    defaultKey: 'CommandOrControl+Up',
+    label: '悬浮窗上一题',
+    category: '悬浮窗',
+    status: 'available',
+  },
+  overlayNextQuestion: {
+    action: 'overlayNextQuestion',
+    key: 'CommandOrControl+Down',
+    defaultKey: 'CommandOrControl+Down',
+    label: '悬浮窗下一题',
+    category: '悬浮窗',
     status: 'available',
   },
 }

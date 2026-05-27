@@ -60,6 +60,8 @@ test('load and save shortcut config roundtrip', () => {
     toggleInterviewOverlay: { key: 'CommandOrControl+Shift+Enter' },
     focusPrevTab: { key: 'CommandOrControl+Left' },
     focusNextTab: { key: 'CommandOrControl+Right' },
+    overlayPrevQuestion: { key: 'CommandOrControl+Up' },
+    overlayNextQuestion: { key: 'CommandOrControl+Down' },
   });
 
   saveShortcutConfig(app, shortcuts);
@@ -71,5 +73,7 @@ test('load and save shortcut config roundtrip', () => {
   assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+Shift+Enter');
   assert.equal(loaded.focusPrevTab.key, 'CommandOrControl+Left');
   assert.equal(loaded.focusNextTab.key, 'CommandOrControl+Right');
+  assert.equal(loaded.overlayPrevQuestion.key, 'CommandOrControl+Up');
+  assert.equal(loaded.overlayNextQuestion.key, 'CommandOrControl+Down');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
 });

@@ -11,29 +11,24 @@ import numpy as np
 
 from api.realtime.ws import broadcast
 from core.config import get_config
+from core.logger import get_logger
 from services.audio import AudioCapture, play_audio_file
-from services.llm.streaming import get_client
+from services.llm import (
+    PROMPT_MODE_MANUAL_TEXT,
+    build_system_prompt,
+    chat_stream_single_model,
+    create_answer_stream_sanitizer,
+    postprocess_answer_for_mode,
+)
 from services.stt import get_stt_engine
 
 PREFLIGHT_SCENARIOS = [
     {
         "id": "self_intro",
-        "label": "自我介绍",
-        "question": "请做一下自我介绍",
+        "label": "项目经历",
+        "question": "请介绍一下你最近做过的项目",
         "recommended": True,
-    },
-    {
-        "id": "algo",
-        "label": "算法题",
-        "question": "说一下快速排序的时间复杂度",
-        "recommended": False,
-    },
-    {
-        "id": "system_design",
-        "label": "系统设计",
-        "question": "如何设计一个高并发的短链服务",
-        "recommended": False,
-    },
+    }
 ]
 
 PREFLIGHT_EXPECTED_PHRASE = "请介绍一下你最近做过的项目"
@@ -41,6 +36,7 @@ PREFLIGHT_AUDIO_PATH = Path(__file__).resolve().parents[2] / "assets" / "preflig
 
 _running = False
 _lock = threading.Lock()
+_log = get_logger("assist.preflight")
 _status: dict = {
     "running": False,
     "scenario_id": None,
@@ -132,13 +128,60 @@ def play_preflight_audio() -> float:
     return time.monotonic() - started
 
 
+def resolve_preflight_scenario(scenario_id: str) -> dict:
+    for scenario in PREFLIGHT_SCENARIOS:
+        if scenario.get("id") == scenario_id:
+            return scenario
+    for scenario in PREFLIGHT_SCENARIOS:
+        if scenario.get("recommended"):
+            return scenario
+    return PREFLIGHT_SCENARIOS[0]
+
+
+def generate_preflight_answer(cfg, model_cfg, question: str) -> dict:
+    prompt_mode = PROMPT_MODE_MANUAL_TEXT
+    system_prompt = build_system_prompt(
+        manual_input=True,
+        mode=prompt_mode,
+        screen_region=getattr(cfg, "screen_capture_region", "left_half"),
+    )
+    sanitizer = create_answer_stream_sanitizer(prompt_mode)
+    raw_answer = ""
+    started = time.monotonic()
+    first_token_mono: Optional[float] = None
+    for chunk_type, chunk_text in chat_stream_single_model(
+        model_cfg,
+        [{"role": "user", "content": question}],
+        system_prompt=system_prompt,
+    ):
+        if chunk_type != "text":
+            continue
+        if first_token_mono is None and chunk_text:
+            first_token_mono = time.monotonic()
+        raw_answer += chunk_text
+        sanitizer.push(chunk_text)
+    sanitizer.finish()
+    total_ms = int((time.monotonic() - started) * 1000)
+    first_token_ms = int((first_token_mono - started) * 1000) if first_token_mono is not None else total_ms
+    return {
+        "answer": postprocess_answer_for_mode(raw_answer, prompt_mode).strip(),
+        "first_token_ms": first_token_ms,
+        "total_ms": total_ms,
+    }
+
+
 def _run_preflight(device_id: Optional[int], scenario_id: str):
     global _running
+    started_mono = time.monotonic()
+    scenario = resolve_preflight_scenario(scenario_id)
+    resolved_scenario_id = scenario.get("id", scenario_id)
+    expected_phrase = scenario.get("expected_phrase") or PREFLIGHT_EXPECTED_PHRASE
+    llm_question = scenario.get("question") or expected_phrase
     _set_status(
         running=True,
-        scenario_id=scenario_id,
+        scenario_id=resolved_scenario_id,
         device_id=device_id,
-        expected_phrase=PREFLIGHT_EXPECTED_PHRASE,
+        expected_phrase=expected_phrase,
         captured_transcript=None,
         match_ok=None,
         steps={},
@@ -147,12 +190,11 @@ def _run_preflight(device_id: Optional[int], scenario_id: str):
         finished_at=None,
     )
     try:
+        _log.info("PREFLIGHT_START scenario=%s requested=%s device_id=%s", resolved_scenario_id, scenario_id, device_id)
         if device_id is None:
             raise RuntimeError("未选择音频设备，无法进行真实音频链路测试")
 
         cfg = get_config()
-        scenario = next((s for s in PREFLIGHT_SCENARIOS if s["id"] == scenario_id), PREFLIGHT_SCENARIOS[0])
-
         cap = AudioCapture()
         _set_step("playback", "running", "准备播放测试音频…")
         _set_step("capture", "running", "准备捕获真实音频…")
@@ -179,31 +221,45 @@ def _run_preflight(device_id: Optional[int], scenario_id: str):
         engine = get_stt_engine()
         transcript = engine.transcribe(captured.astype(np.float32), sample_rate=AudioCapture.SAMPLE_RATE) or ""
         _set_status(captured_transcript=transcript)
-        ok, detail = match_phrase(PREFLIGHT_EXPECTED_PHRASE, transcript)
+        ok, detail = match_phrase(expected_phrase, transcript)
         _set_step("stt", "pass" if transcript.strip() else "fail", transcript.strip() or "识别结果为空", {"transcript": transcript})
         _set_status(match_ok=ok)
-        _set_step("match", "pass" if ok else "fail", detail, {"transcript": transcript, "expected_phrase": PREFLIGHT_EXPECTED_PHRASE})
+        _set_step("match", "pass" if ok else "fail", detail, {"transcript": transcript, "expected_phrase": expected_phrase})
         if not ok:
             raise RuntimeError(detail)
 
-        _set_step("llm", "running", "正在检测 LLM 模型连接…")
-        client = get_client()
+        _set_step("llm", "running", "正在通过真实答题链路检测 LLM…")
         model_cfg = cfg.get_active_model()
-        resp = client.chat.completions.create(
-            model=model_cfg.model,
-            messages=[
-                {"role": "system", "content": "你是一位技术面试官。用一句话回答。"},
-                {"role": "user", "content": scenario["question"]},
-            ],
-            max_tokens=120,
-            stream=False,
+        llm_result = generate_preflight_answer(cfg, model_cfg, llm_question)
+        answer = llm_result["answer"]
+        if not answer:
+            raise RuntimeError("模型回答为空")
+        _log.info(
+            "PREFLIGHT_LLM_OK model=%s question=%r first_token=%dms total=%dms answer_len=%d",
+            model_cfg.name,
+            llm_question,
+            llm_result["first_token_ms"],
+            llm_result["total_ms"],
+            len(answer),
         )
-        answer = resp.choices[0].message.content or ""
-        _set_step("llm", "pass", f"模型 ({model_cfg.name}) 响应正常", {"answer": answer.strip(), "question": scenario["question"]})
+        _set_step(
+            "llm",
+            "pass",
+            f"首 token {llm_result['first_token_ms']}ms · 完整 {llm_result['total_ms']}ms",
+            {
+                "answer": answer,
+                "question": llm_question,
+                "first_token_ms": llm_result["first_token_ms"],
+                "total_ms": llm_result["total_ms"],
+                "model_name": model_cfg.name,
+            },
+        )
 
         _set_step("ws", "pass", "WebSocket 链路正常（您看到这条就说明已通）")
         _set_step("done", "done", "真实音频链路检测完成")
+        _log.info("PREFLIGHT_DONE scenario=%s elapsed=%.0fms", resolved_scenario_id, (time.monotonic() - started_mono) * 1000)
     except Exception as e:
+        _log.error("PREFLIGHT_ERROR scenario=%s requested=%s device_id=%s: %s", resolved_scenario_id, scenario_id, device_id, e, exc_info=True)
         _set_status(error=str(e))
         _set_step("error", "fail", f"检测异常: {e}")
     finally:

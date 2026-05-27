@@ -103,6 +103,8 @@ def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
     assert "结论先行" in p
     assert "专注面板输出协议" in p
     assert "## 标题" in p
+    assert "普通题 360-700 字" in p
+    assert "复杂排障/设计题 700-1100 字" in p
 
 
 def test_asr_high_churn_keeps_oral_short_answer_shape():
@@ -115,6 +117,10 @@ def test_manual_prompt_warns_not_to_emit_template_labels():
     p = _manual_prompt()
     assert "真人候选人口吻" in p
     assert "贴合本题的 `##` section 标题" in p
+    assert "不要输出固定模板" in p
+    assert "给代码时固定三段" not in p
+    assert "普通题 500-900 字" in p
+    assert "复杂设计/排障/治理题 900-1500 字" in p
     assert "题型模板" in p
 
 

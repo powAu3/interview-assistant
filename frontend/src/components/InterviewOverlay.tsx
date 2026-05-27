@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
 import { applyStoredColorSchemeToDocument, COLOR_SCHEME_STORAGE_KEY } from '@/lib/colorScheme'
 import { api, getErrorMessage } from '@/lib/api'
@@ -17,6 +18,14 @@ type FocusTabPane = {
   label: string
   content: string
   isGenerating?: boolean
+}
+
+const FOCUS_TAB_CACHE_LIMIT = 20
+
+const OVERLAY_MARKDOWN_COMPONENTS: Components = {
+  a({ children }) {
+    return <span>{children}</span>
+  },
 }
 
 export default function InterviewOverlay() {
@@ -39,10 +48,11 @@ export default function InterviewOverlay() {
   const maxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const syncPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
   const applyState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
-  const [activeFocusTab, setActiveFocusTab] = useState('answer')
+  const [activeFocusTabsByQaId, setActiveFocusTabsByQaId] = useState<Record<string, string>>({})
   const [busyAction, setBusyAction] = useState<string | null>(null)
-  const userPinnedFocusTabRef = useRef(false)
-  const lastQaIdRef = useRef<string | null>(null)
+  const [reviewQaId, setReviewQaId] = useState<string | null>(null)
+  const [liveFocusQaId, setLiveFocusQaId] = useState<string | null>(null)
+  const pinnedFocusTabsByQaIdRef = useRef<Record<string, boolean>>({})
 
   const latestQa = useMemo(() => {
     if (streamingIds.length > 0) {
@@ -52,19 +62,35 @@ export default function InterviewOverlay() {
     }
     return qaPairs[qaPairs.length - 1] ?? null
   }, [qaPairs, streamingIds])
+  const liveFocusQa = useMemo(
+    () => (liveFocusQaId ? qaPairs.find((item) => item.id === liveFocusQaId) : null),
+    [liveFocusQaId, qaPairs],
+  )
+  const displayedQa = useMemo(
+    () => (reviewQaId ? qaPairs.find((item) => item.id === reviewQaId) : null) ?? liveFocusQa ?? latestQa,
+    [latestQa, liveFocusQa, qaPairs, reviewQaId],
+  )
+  const displayedQaIndex = displayedQa ? qaPairs.findIndex((item) => item.id === displayedQa.id) : -1
+  const isReviewingHistory = Boolean(reviewQaId && displayedQa)
 
   const answerText =
-    latestQa?.status === 'cancelled'
+    displayedQa?.status === 'cancelled'
       ? '上一条回答已取消'
-      : latestQa?.status === 'error'
-        ? `保存失败: ${latestQa.errorMessage || '未知原因'}`
-        : latestQa?.answer?.trim() || (latestQa ? (latestQa.isThinking ? '思考中…' : '正在组织回答…') : '')
-  const isStreaming = latestQa ? streamingIds.includes(latestQa.id) : false
-  const hasContent = Boolean(latestQa)
+      : displayedQa?.status === 'error'
+        ? `保存失败: ${displayedQa.errorMessage || '未知原因'}`
+        : displayedQa?.answer?.trim() || (displayedQa ? (displayedQa.isThinking ? '思考中…' : '正在组织回答…') : '')
+  const isStreaming = displayedQa ? streamingIds.includes(displayedQa.id) : false
+  const hasContent = Boolean(displayedQa)
   const focusTabs = useMemo(
-    () => buildFocusTabs(answerText, latestQa?.question ?? '', isStreaming),
-    [answerText, isStreaming, latestQa?.question],
+    () => buildFocusTabs(answerText, displayedQa?.question ?? '', isStreaming),
+    [answerText, displayedQa?.question, isStreaming],
   )
+  const displayedQaKey = displayedQa?.id ?? '__empty__'
+  const retainedFocusQaIds = useMemo(
+    () => getRetainedFocusQaIds(qaPairs.map((item) => item.id), displayedQa?.id ?? null, streamingIds),
+    [displayedQa?.id, qaPairs, streamingIds],
+  )
+  const activeFocusTab = activeFocusTabsByQaId[displayedQaKey] ?? focusTabs[0]?.key ?? 'answer'
   const activeSection = focusTabs.find((tab) => tab.key === activeFocusTab) ?? focusTabs[0]
 
   const displayLines = useMemo(() => {
@@ -166,41 +192,89 @@ export default function InterviewOverlay() {
   }, [busyAction, clearSession, setToastMessage])
 
   useEffect(() => {
-    const nextQaId = latestQa?.id ?? null
-    if (lastQaIdRef.current === nextQaId) return
-    lastQaIdRef.current = nextQaId
-    userPinnedFocusTabRef.current = false
-  }, [latestQa?.id])
+    if (reviewQaId && !qaPairs.some((item) => item.id === reviewQaId)) {
+      setReviewQaId(null)
+    }
+  }, [qaPairs, reviewQaId])
+
+  useEffect(() => {
+    if (reviewQaId) return
+    setLiveFocusQaId((current) => {
+      const currentStillLive = Boolean(
+        current
+        && streamingIds.includes(current)
+        && qaPairs.some((item) => item.id === current),
+      )
+      if (currentStillLive) return current
+      return latestQa?.id ?? null
+    })
+  }, [latestQa?.id, qaPairs, reviewQaId, streamingIds])
+
+  useEffect(() => {
+    setActiveFocusTabsByQaId((current) => {
+      const next = pruneFocusTabCache(current, retainedFocusQaIds)
+      return next === current ? current : next
+    })
+
+    const pinnedTabs = pinnedFocusTabsByQaIdRef.current
+    for (const qaId of Object.keys(pinnedTabs)) {
+      if (!retainedFocusQaIds.has(qaId)) delete pinnedTabs[qaId]
+    }
+  }, [retainedFocusQaIds])
 
   useEffect(() => {
     if (!focusTabs.length) return
     if (!focusTabs.some((tab) => tab.key === activeFocusTab)) {
-      userPinnedFocusTabRef.current = false
-      setActiveFocusTab(focusTabs[0].key)
+      pinnedFocusTabsByQaIdRef.current[displayedQaKey] = false
+      setActiveFocusTabsByQaId((current) => {
+        if (current[displayedQaKey] === focusTabs[0].key) return current
+        return pruneFocusTabCache({ ...current, [displayedQaKey]: focusTabs[0].key }, retainedFocusQaIds)
+      })
       return
     }
-    if (isStreaming && !userPinnedFocusTabRef.current) {
+    if (isStreaming && !pinnedFocusTabsByQaIdRef.current[displayedQaKey]) {
       const latestGeneratingTab = [...focusTabs].reverse().find((tab) => tab.isGenerating)
       if (latestGeneratingTab && latestGeneratingTab.key !== activeFocusTab) {
-        setActiveFocusTab(latestGeneratingTab.key)
+        setActiveFocusTabsByQaId((current) => ({
+          ...pruneFocusTabCache(current, retainedFocusQaIds),
+          ...(retainedFocusQaIds.has(displayedQaKey) ? { [displayedQaKey]: latestGeneratingTab.key } : {}),
+        }))
       }
     }
-  }, [activeFocusTab, focusTabs, isStreaming])
+  }, [activeFocusTab, displayedQaKey, focusTabs, isStreaming, retainedFocusQaIds])
 
   const moveFocusTab = useCallback((direction: 'prev' | 'next') => {
-    userPinnedFocusTabRef.current = true
-    setActiveFocusTab((current) => {
-      if (!focusTabs.length) return current
+    pinnedFocusTabsByQaIdRef.current[displayedQaKey] = true
+    setActiveFocusTabsByQaId((currentTabs) => {
+      if (!focusTabs.length) return currentTabs
+      const current = currentTabs[displayedQaKey] ?? focusTabs[0]?.key ?? 'answer'
       const currentIndex = Math.max(0, focusTabs.findIndex((tab) => tab.key === current))
       const delta = direction === 'next' ? 1 : -1
       const nextIndex = (currentIndex + delta + focusTabs.length) % focusTabs.length
-      return focusTabs[nextIndex]?.key ?? current
+      const nextKey = focusTabs[nextIndex]?.key ?? current
+      return pruneFocusTabCache({ ...currentTabs, [displayedQaKey]: nextKey }, retainedFocusQaIds)
     })
-  }, [focusTabs])
+  }, [displayedQaKey, focusTabs, retainedFocusQaIds])
+
+  const moveOverlayQuestion = useCallback((direction: 'prev' | 'next') => {
+    if (qaPairs.length < 2) return
+    setReviewQaId((currentReviewId) => {
+      const baseId = currentReviewId ?? displayedQa?.id ?? latestQa?.id ?? qaPairs[qaPairs.length - 1]?.id
+      const currentIndex = Math.max(0, qaPairs.findIndex((item) => item.id === baseId))
+      const delta = direction === 'next' ? 1 : -1
+      const nextIndex = Math.max(0, Math.min(qaPairs.length - 1, currentIndex + delta))
+      const nextId = qaPairs[nextIndex]?.id ?? baseId
+      return nextId === liveFocusQaId ? null : nextId
+    })
+  }, [displayedQa?.id, latestQa?.id, liveFocusQaId, qaPairs])
 
   useEffect(() => {
     return window.electronAPI?.onFocusTabCommand?.((direction) => { moveFocusTab(direction) })
   }, [moveFocusTab])
+
+  useEffect(() => {
+    return window.electronAPI?.onOverlayQuestionCommand?.((direction) => { moveOverlayQuestion(direction) })
+  }, [moveOverlayQuestion])
 
   if (!enabled) {
     return <div className="h-screen w-screen bg-transparent" />
@@ -225,14 +299,12 @@ export default function InterviewOverlay() {
 
   const renderedAnswer = hasContent ? (
     <>
-      {trimmedLines
-        ? trimmedLines.map((line, i) => (
-            <span key={i}>
-              {line}
-              {i < trimmedLines.length - 1 && '\n'}
-            </span>
-          ))
-        : answerText}
+      {displayedQa && qaPairs.length > 1 && (
+        <div className="ov-review-line">
+          {isReviewingHistory ? '回看' : '当前'} {displayedQaIndex + 1}/{qaPairs.length} · {displayedQa.question}
+        </div>
+      )}
+      <OverlayMarkdown content={trimmedLines ? trimmedLines.join('\n') : answerText} />
       {isStreaming && <span className="ov-caret" />}
     </>
   ) : (
@@ -271,18 +343,32 @@ export default function InterviewOverlay() {
                 tabIndex={-1}
                 onMouseDown={suppressToolbarMouseDown}
                 onClick={() => {
-                  userPinnedFocusTabRef.current = true
-                  setActiveFocusTab(tab.key)
+                  pinnedFocusTabsByQaIdRef.current[displayedQaKey] = true
+                  setActiveFocusTabsByQaId((current) => (
+                    pruneFocusTabCache({ ...current, [displayedQaKey]: tab.key }, retainedFocusQaIds)
+                  ))
                 }}
               >
                 {tab.label}
               </span>
             ))}
             <span className="ov-focus-tab-keys" aria-hidden>
+              <span>切换分区</span>
               <kbd>{getShortcutDisplay(shortcuts.focusPrevTab?.key ?? 'CommandOrControl+Left')}</kbd>
               <kbd>{getShortcutDisplay(shortcuts.focusNextTab?.key ?? 'CommandOrControl+Right')}</kbd>
             </span>
           </div>
+          {displayedQa && (
+            <div className="ov-focus-question-strip" aria-label="题目导航">
+              <span>{isReviewingHistory ? '回看' : '当前'} {displayedQaIndex + 1}/{qaPairs.length || 1}</span>
+              <strong>{displayedQa.question}</strong>
+              <span aria-hidden>
+                <span className="ov-focus-key-label">切换题目</span>
+                <kbd>{getShortcutDisplay(shortcuts.overlayPrevQuestion?.key ?? 'CommandOrControl+Up')}</kbd>
+                <kbd>{getShortcutDisplay(shortcuts.overlayNextQuestion?.key ?? 'CommandOrControl+Down')}</kbd>
+              </span>
+            </div>
+          )}
 
           <div
             ref={answerScrollRef}
@@ -290,7 +376,7 @@ export default function InterviewOverlay() {
             style={{ fontSize: `${answerFontSize}px`, color: fontColor }}
           >
             {hasContent ? (
-              <div className="ov-focus-active-pane">
+              <div className="ov-focus-active-pane" key={`${displayedQaKey}:${activeSection.key}`}>
                 <FocusSection
                   title={activeSection.label}
                   content={sliceMaxLines(activeSection.content, maxLines)}
@@ -305,7 +391,6 @@ export default function InterviewOverlay() {
               </span>
             )}
           </div>
-          <div className="ov-focus-handle" aria-hidden>‹</div>
         </div>
       </div>
     )
@@ -331,6 +416,39 @@ export default function InterviewOverlay() {
   )
 }
 
+function getRetainedFocusQaIds(qaIds: string[], displayedQaId: string | null, streamingQaIds: string[]) {
+  const liveQaIds = new Set(qaIds)
+  const retained: string[] = []
+  const seen = new Set<string>()
+  const add = (qaId: string | null | undefined) => {
+    if (!qaId || seen.has(qaId) || !liveQaIds.has(qaId) || retained.length >= FOCUS_TAB_CACHE_LIMIT) return
+    seen.add(qaId)
+    retained.push(qaId)
+  }
+
+  add(displayedQaId)
+  for (let i = streamingQaIds.length - 1; i >= 0 && retained.length < FOCUS_TAB_CACHE_LIMIT; i -= 1) {
+    add(streamingQaIds[i])
+  }
+  for (let i = qaIds.length - 1; i >= 0 && retained.length < FOCUS_TAB_CACHE_LIMIT; i -= 1) {
+    add(qaIds[i])
+  }
+  return seen
+}
+
+function pruneFocusTabCache<T>(cache: Record<string, T>, retainedQaIds: Set<string>) {
+  let changed = false
+  const next: Record<string, T> = {}
+  for (const [qaId, value] of Object.entries(cache)) {
+    if (retainedQaIds.has(qaId)) {
+      next[qaId] = value
+    } else {
+      changed = true
+    }
+  }
+  return changed ? next : cache
+}
+
 function sliceMaxLines(text: string, maxLines: number) {
   if (maxLines <= 0) return text
   const lines = text.split('\n')
@@ -338,11 +456,13 @@ function sliceMaxLines(text: string, maxLines: number) {
 }
 
 function buildFocusTabs(answerText: string, question: string, isStreaming: boolean): FocusTabPane[] {
-  const parsed = parseMarkdownFocusTabs(answerText)
-  if (parsed.length) {
-    return parsed.map((tab, index) => ({
-      ...tab,
-      isGenerating: isStreaming && index === parsed.length - 1,
+  const sections = parseMarkdownFocusSections(answerText)
+  if (sections.length) {
+    return sections.map((section, index) => ({
+      key: `section-${index}-${slugFocusLabel(section.label)}`,
+      label: section.label,
+      content: section.content,
+      isGenerating: isStreaming && index === sections.length - 1,
     }))
   }
 
@@ -374,9 +494,9 @@ function buildFocusTabs(answerText: string, question: string, isStreaming: boole
   }]
 }
 
-function parseMarkdownFocusTabs(answerText: string): FocusTabPane[] {
-  const tabs: FocusTabPane[] = []
-  let current: FocusTabPane | null = null
+function parseMarkdownFocusSections(answerText: string): Array<{ label: string; content: string }> {
+  const sections: Array<{ label: string; content: string }> = []
+  let current: { label: string; content: string } | null = null
   let inCode = false
   let preamble = ''
 
@@ -390,8 +510,8 @@ function parseMarkdownFocusTabs(answerText: string): FocusTabPane[] {
 
     const label = inCode ? null : getFocusHeadingLabel(line)
     if (label) {
-      current = { key: `${slugFocusLabel(label)}-${tabs.length}`, label, content: '' }
-      tabs.push(current)
+      current = { label, content: '' }
+      sections.push(current)
       continue
     }
 
@@ -403,9 +523,7 @@ function parseMarkdownFocusTabs(answerText: string): FocusTabPane[] {
   }
 
   const cleanPreamble = preamble.trim()
-  const withPreamble = cleanPreamble
-    ? [{ key: 'opening-0', label: getOpeningTabLabel(cleanPreamble), content: cleanPreamble }, ...tabs]
-    : tabs
+  const withPreamble = cleanPreamble ? [{ label: getOpeningTabLabel(cleanPreamble), content: cleanPreamble }, ...sections] : sections
 
   return withPreamble
     .map((tab) => ({ ...tab, content: tab.content.trim() }))
@@ -443,6 +561,14 @@ function slugFocusLabel(label: string) {
   return slug || 'tab'
 }
 
+function OverlayMarkdown({ content }: { content: string }) {
+  return (
+    <div className="ov-markdown markdown-body">
+      <ReactMarkdown components={OVERLAY_MARKDOWN_COMPONENTS}>{content}</ReactMarkdown>
+    </div>
+  )
+}
+
 function FocusSection({
   title,
   content,
@@ -458,7 +584,9 @@ function FocusSection({
   return (
     <section className="ov-focus-section">
       <h2>{title}</h2>
-      <div className={muted ? 'ov-focus-muted' : ''}>{body || emptyHint}</div>
+      <div className={muted ? 'ov-focus-muted' : ''}>
+        {body ? <OverlayMarkdown content={body} /> : emptyHint}
+      </div>
     </section>
   )
 }

@@ -30,6 +30,7 @@ declare global {
       onOverlayState?: (callback: (payload: OverlayStatePayload) => void) => (() => void)
       onShortcuts?: (callback: (payload: Record<string, Record<string, unknown>> | undefined) => void) => (() => void)
       onFocusTabCommand?: (callback: (direction: 'prev' | 'next') => void) => (() => void)
+      onOverlayQuestionCommand?: (callback: (direction: 'prev' | 'next') => void) => (() => void)
       removeOverlayStateListener?: (listener?: (...args: unknown[]) => void) => void
     }
   }

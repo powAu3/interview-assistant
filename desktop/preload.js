@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('focus-tab-command', wrapped);
     return () => ipcRenderer.removeListener('focus-tab-command', wrapped);
   },
+  onOverlayQuestionCommand: (listener) => {
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('overlay-question-command', wrapped);
+    return () => ipcRenderer.removeListener('overlay-question-command', wrapped);
+  },
   removeOverlayStateListener: (listener) => {
     if (listener) ipcRenderer.removeListener('overlay-state', listener);
   },

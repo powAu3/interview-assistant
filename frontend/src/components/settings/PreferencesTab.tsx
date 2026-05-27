@@ -9,6 +9,7 @@ import {
   PenLine,
   ChevronDown,
   BookOpen,
+  Keyboard,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
@@ -368,6 +369,11 @@ export default function PreferencesTab() {
               /
               <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">{getShortcutDisplay(shortcuts.focusNextTab?.key ?? 'CommandOrControl+Right')}</kbd>
               切换分区。
+              悬浮窗打开时,
+              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">{getShortcutDisplay(shortcuts.overlayPrevQuestion?.key ?? 'CommandOrControl+Up')}</kbd>
+              /
+              <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[9px]">{getShortcutDisplay(shortcuts.overlayNextQuestion?.key ?? 'CommandOrControl+Down')}</kbd>
+              回看上一题/下一题, 不影响当前生成。
             </p>
           </>
         )}
@@ -582,7 +588,7 @@ export default function PreferencesTab() {
         </Field>
       </Collapsible>
 
-      <Collapsible title="快捷操作" keywords="quick prompt 快捷词 模板 shortcut 快捷键 手机 二维码">
+      <Collapsible title="快捷操作" icon={<Keyboard className="w-3.5 h-3.5" />} keywords="quick prompt 快捷词 模板 shortcut 快捷键 手机 二维码">
         <NetworkQRCode />
         <QuickPromptsEditor />
         <GlobalShortcutsEditor />
