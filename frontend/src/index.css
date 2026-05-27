@@ -928,6 +928,30 @@ code, pre, .font-mono {
   color: rgba(31, 41, 55, 0.76);
 }
 
+.ov-focus-live-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: rgba(29, 78, 216, 0.76);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ov-focus-live-hint::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.78);
+  box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.38);
+  animation: ov-focus-live-pulse 1.25s ease-out infinite;
+}
+
 .ov-focus-question-strip span:last-child {
   display: inline-flex;
   align-items: center;
@@ -1002,6 +1026,11 @@ code, pre, .font-mono {
 @keyframes ov-focus-tab-scan {
   0% { transform: translateX(-100%); }
   55%, 100% { transform: translateX(100%); }
+}
+
+@keyframes ov-focus-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.38); }
+  100% { box-shadow: 0 0 0 9px rgba(37, 99, 235, 0); }
 }
 
 @media (max-width: 760px) {
@@ -1100,6 +1129,13 @@ code, pre, .font-mono {
 
 .ov-focus-muted {
   opacity: 0.48 !important;
+}
+
+.ov-focus-omitted {
+  margin-bottom: 8px;
+  color: rgba(100, 116, 139, 0.68);
+  font-size: 0.82em;
+  font-weight: 700;
 }
 
 .ov-grip {

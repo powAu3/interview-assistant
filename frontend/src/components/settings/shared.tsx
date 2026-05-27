@@ -62,7 +62,15 @@ export function GradientCard({ children, className = '' }: { children: React.Rea
   )
 }
 
-export function StatusBadge({ status, label }: { status: 'ok' | 'error' | 'checking' | 'idle'; label: string }) {
+export function StatusBadge({
+  status,
+  label,
+  title,
+}: {
+  status: 'ok' | 'error' | 'checking' | 'idle'
+  label: string
+  title?: string
+}) {
   const styles = {
     ok: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
     error: 'bg-red-500/15 text-red-400 border-red-500/20',
@@ -70,7 +78,10 @@ export function StatusBadge({ status, label }: { status: 'ok' | 'error' | 'check
     idle: 'bg-bg-hover text-text-muted border-bg-hover',
   }
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium border ${styles[status]}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium border ${styles[status]}`}
+      title={title}
+    >
       {status === 'checking' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
       {status === 'ok' && <CheckCircle2 className="w-2.5 h-2.5" />}
       {status === 'error' && <XCircle className="w-2.5 h-2.5" />}

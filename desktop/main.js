@@ -191,7 +191,7 @@ const FOCUS_OVERLAY_MARGIN = 14;
 let _frontReassertTimer = null;
 const FRONT_REASSERT_LEVEL = 1;
 const FOCUS_OVERLAY_SHORTCUT_ACTIONS = new Set(['focusPrevTab', 'focusNextTab']);
-const VISIBLE_OVERLAY_SHORTCUT_ACTIONS = new Set(['overlayPrevQuestion', 'overlayNextQuestion']);
+const VISIBLE_OVERLAY_SHORTCUT_ACTIONS = new Set(['cancelAnswer', 'overlayPrevQuestion', 'overlayNextQuestion']);
 const FRONT_REASSERT_DURATION = 5000;
 const FRONT_REASSERT_INTERVAL = 500;
 
@@ -273,7 +273,10 @@ function getDefaultOverlayBounds() {
 }
 
 function getFocusOverlayBounds() {
-  const point = overlayWindow && !overlayWindow.isDestroyed()
+  const canUseOverlayBounds = overlayWindow
+    && !overlayWindow.isDestroyed()
+    && (typeof overlayWindow.isVisible !== 'function' || overlayWindow.isVisible());
+  const point = canUseOverlayBounds
     ? {
         x: overlayWindow.getBounds().x + Math.round(overlayWindow.getBounds().width / 2),
         y: overlayWindow.getBounds().y + Math.round(overlayWindow.getBounds().height / 2),
@@ -863,6 +866,13 @@ const shortcutCallbacks = {
       await postBackend('/api/ask-from-server-screen');
     } catch (error) {
       console.error('askFromServerScreen failed:', error);
+    }
+  },
+  cancelAnswer: async () => {
+    try {
+      await postBackend('/api/ask/cancel');
+    } catch (error) {
+      console.error('cancelAnswer failed:', error);
     }
   },
   addMultiServerScreenShot,

@@ -95,6 +95,24 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-shell--focus')).toBeInTheDocument()
   })
 
+  it('uses a readable dark text color in focus mode regardless of the regular overlay font color', () => {
+    useInterviewStore.setState({
+      qaPairs: [{ ...qa, answer: '## 结论\n浅色用户字体不应该影响专注面板。' }],
+    })
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'focus',
+      interviewOverlayShowBg: true,
+      interviewOverlayFontColor: '#e2e8f0',
+    })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+    localStorage.setItem('ia_overlay_max_lines', '2')
+
+    render(<InterviewOverlay />)
+
+    expect(document.querySelector('.ov-focus-content')).toHaveStyle({ color: '#263241' })
+  })
+
   it('renders model-provided markdown sections as dynamic focus tabs', () => {
     useInterviewStore.setState({
       qaPairs: [{
@@ -178,6 +196,39 @@ describe('InterviewOverlay', () => {
     expect(await screen.findByText(/return 0/)).toBeInTheDocument()
   })
 
+  it('keeps the active focus tab stable when a streaming heading label changes', async () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '## 解题思路\n先说思路。\n\n## 代码\nreturn 1',
+      }],
+      streamingIds: ['qa-1'],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    const { rerender } = render(<InterviewOverlay />)
+
+    fireEvent.click(screen.getAllByText('代码')[0])
+    expect(screen.getByText(/return 1/)).toBeInTheDocument()
+
+    act(() => {
+      useInterviewStore.setState({
+        qaPairs: [{
+          ...qa,
+          answer: '## 解题思路\n先说思路。\n\n## 代码解决方案\nreturn 1\nreturn 2',
+        }],
+        streamingIds: ['qa-1'],
+      })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(await screen.findByRole('heading', { name: '代码解决方案' })).toBeInTheDocument()
+    expect(screen.getByText(/return 2/)).toBeInTheDocument()
+    expect(screen.queryByText(/先说思路/)).not.toBeInTheDocument()
+  })
+
   it('reviews previous and next questions from the overlay question command without changing generation', async () => {
     let questionListener: ((direction: 'prev' | 'next') => void) | null = null
     ;(window as unknown as { electronAPI: unknown }).electronAPI = {
@@ -243,6 +294,7 @@ describe('InterviewOverlay', () => {
 
     act(() => { questionListener?.('prev') })
     expect(await screen.findByText(/历史回答/)).toBeInTheDocument()
+    expect(screen.getByText('新答案生成中')).toBeInTheDocument()
     fireEvent.click(screen.getAllByText('识别修正')[0])
     expect(screen.getByText(/历史纠错/)).toBeInTheDocument()
 
@@ -325,6 +377,30 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-focus-tab--forming')).toBeInTheDocument()
   })
 
+  it('shows an omission hint when focus content is limited by max lines', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '## 详细说明\n第一行\n第二行\n第三行\n第四行',
+      }],
+    })
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'focus',
+      interviewOverlayShowBg: true,
+      interviewOverlayMaxLines: 2,
+    })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+    localStorage.setItem('ia_overlay_max_lines', '2')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByText('…以上内容已省略')).toBeInTheDocument()
+    expect(screen.queryByText('第一行')).not.toBeInTheDocument()
+    expect(screen.getByText(/第三行/)).toBeInTheDocument()
+    expect(screen.getByText(/第四行/)).toBeInTheDocument()
+  })
+
   it('auto-follows the latest streamed tab until the user manually pins a tab', () => {
     const { rerender } = render(<InterviewOverlay />)
     useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
@@ -360,6 +436,7 @@ describe('InterviewOverlay', () => {
     let shortcutsListener: ((payload: Record<string, Record<string, unknown>>) => void) | null = null
     const getShortcuts = vi.fn().mockResolvedValue({
       askFromServerScreen: { key: 'CommandOrControl+Shift+9' },
+      cancelAnswer: { key: 'CommandOrControl+Escape' },
       hardClearSession: { key: 'CommandOrControl+Shift+8' },
       toggleInterviewOverlay: { key: 'CommandOrControl+Shift+7' },
       focusPrevTab: { key: 'CommandOrControl+Shift+[' },
@@ -383,6 +460,7 @@ describe('InterviewOverlay', () => {
       expect(useShortcutsStore.getState().shortcuts.askFromServerScreen.key).toBe('CommandOrControl+Shift+9')
     })
     expect(await screen.findByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && /9$/.test(text))).toBeInTheDocument()
+    expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Esc')).toBeInTheDocument()
     expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+[')).toBeInTheDocument()
     expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+]')).toBeInTheDocument()
     expect(screen.getByText((text, element) => element?.tagName.toLowerCase() === 'kbd' && text === 'Ctrl+Shift+↑')).toBeInTheDocument()

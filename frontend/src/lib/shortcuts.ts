@@ -2,6 +2,7 @@ export type ShortcutAction =
   | 'hideOrShowWindow'
   | 'hardClearSession'
   | 'askFromServerScreen'
+  | 'cancelAnswer'
   | 'addMultiServerScreenShot'
   | 'toggleInterviewOverlay'
   | 'moveOverlayToMouse'
@@ -42,6 +43,14 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     key: 'CommandOrControl+/',
     defaultKey: 'CommandOrControl+/',
     label: '服务端截图审题',
+    category: '实时辅助',
+    status: 'available',
+  },
+  cancelAnswer: {
+    action: 'cancelAnswer',
+    key: 'CommandOrControl+Escape',
+    defaultKey: 'CommandOrControl+Escape',
+    label: '取消生成',
     category: '实时辅助',
     status: 'available',
   },
@@ -118,6 +127,7 @@ const supportedPhysicalKeys = new Map<string, string>([
   ['BracketRight', ']'],
   ['Backquote', '`'],
   ['Enter', 'Enter'],
+  ['Escape', 'Escape'],
   ['ArrowUp', 'Up'],
   ['ArrowDown', 'Down'],
   ['ArrowLeft', 'Left'],
@@ -142,6 +152,7 @@ export function getShortcutAccelerator(event: KeyboardEvent): string | null {
 
 const KEY_DISPLAY: Record<string, string> = {
   Enter: 'Enter',
+  Escape: 'Esc',
   Up: '↑', Down: '↓', Left: '←', Right: '→',
 }
 
@@ -161,7 +172,7 @@ export function getShortcutDisplay(accelerator: string) {
 }
 
 const VALID_ACTIONS = new Set<string>(Object.keys(defaultShortcuts))
-const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+([A-Za-z0-9./\\\- =;,'`\[\]\{\}]|Enter|Up|Down|Left|Right)$/
+const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+([A-Za-z0-9./\\\- =;,'`\[\]\{\}]|Enter|Escape|Up|Down|Left|Right)$/
 
 export function mergeShortcutConfigs(
   input: Record<string, Partial<ShortcutConfig> | Record<string, unknown>> | undefined,

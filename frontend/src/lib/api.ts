@@ -236,7 +236,11 @@ export const api = {
   getSttStatus: () => request('/api/stt/status'),
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
   /** 当前各模型健康状态（检测中/可用/不可用） */
-  getModelsHealth: () => request<{ health: Record<string, string> }>('/api/models/health'),
+  getModelsHealth: () => request<{
+    health: Record<string, string>
+    detail?: Record<string, string>
+    latency?: Record<string, number>
+  }>('/api/models/health'),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
   sttTest: () => request<{ ok: boolean; detail?: string; text?: string }>('/api/stt/test', { method: 'POST' }),
 

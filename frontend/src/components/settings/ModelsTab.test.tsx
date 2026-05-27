@@ -92,6 +92,8 @@ describe('ModelsTab state sync', () => {
         max_parallel_answers: 1,
       },
       modelHealth: { 0: 'ok' },
+      modelHealthDetail: {},
+      modelHealthLatency: {},
       toastMessage: null,
     } as any)
   })
@@ -111,5 +113,18 @@ describe('ModelsTab state sync', () => {
 
     const payload = apiMock.updateConfig.mock.calls[0][0]
     expect(payload.models[0].enabled).toBe(false)
+  })
+
+  it('shows model health detail as a tooltip in the model list', async () => {
+    apiMock.getModelsHealth.mockResolvedValue({
+      health: { 0: 'error' },
+      detail: { 0: '401 unauthorized' },
+      latency: { 0: 0 },
+    })
+
+    render(<ModelsTab />)
+
+    expect(await screen.findByText('不可用')).toBeInTheDocument()
+    expect(screen.getByTitle('模型连接详情：401 unauthorized')).toBeInTheDocument()
   })
 })

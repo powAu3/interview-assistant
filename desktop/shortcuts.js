@@ -29,6 +29,13 @@ const DEFAULT_SHORTCUTS = {
     label: '服务端截图审题',
     category: '实时辅助',
   },
+  cancelAnswer: {
+    action: 'cancelAnswer',
+    key: 'CommandOrControl+Escape',
+    defaultKey: 'CommandOrControl+Escape',
+    label: '取消生成',
+    category: '实时辅助',
+  },
   addMultiServerScreenShot: {
     action: 'addMultiServerScreenShot',
     key: 'CommandOrControl+Shift+/',
@@ -85,6 +92,7 @@ const SUPPORTED_KEYS = new Set([
   ...'0123456789'.split(''),
   '.', '/', '\\', '-', '=', ',', ';', "'", '[', ']', '`',
   'Enter',
+  'Escape',
   'Up', 'Down', 'Left', 'Right',
 ]);
 

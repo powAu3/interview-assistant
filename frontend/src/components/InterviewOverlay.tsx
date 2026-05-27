@@ -21,6 +21,7 @@ type FocusTabPane = {
 }
 
 const FOCUS_TAB_CACHE_LIMIT = 20
+const FOCUS_TEXT_COLOR = '#263241'
 
 const OVERLAY_MARKDOWN_COMPONENTS: Components = {
   a({ children }) {
@@ -81,6 +82,10 @@ export default function InterviewOverlay() {
         : displayedQa?.answer?.trim() || (displayedQa ? (displayedQa.isThinking ? '思考中…' : '正在组织回答…') : '')
   const isStreaming = displayedQa ? streamingIds.includes(displayedQa.id) : false
   const hasContent = Boolean(displayedQa)
+  const liveGeneratingQa = useMemo(
+    () => qaPairs.find((item) => item.id !== displayedQa?.id && streamingIds.includes(item.id)) ?? null,
+    [displayedQa?.id, qaPairs, streamingIds],
+  )
   const focusTabs = useMemo(
     () => buildFocusTabs(answerText, displayedQa?.question ?? '', isStreaming),
     [answerText, displayedQa?.question, isStreaming],
@@ -292,7 +297,7 @@ export default function InterviewOverlay() {
   } as CSSProperties
   const focusTools = [
     { key: 'screen' as const, label: '截图审题', shortcut: shortcuts.askFromServerScreen?.key },
-    { key: 'cancel' as const, label: '取消生成', shortcut: null },
+    { key: 'cancel' as const, label: '取消生成', shortcut: shortcuts.cancelAnswer?.key },
     { key: 'clear' as const, label: '清空重来', shortcut: shortcuts.hardClearSession?.key },
     { key: 'hide' as const, label: '隐藏面板', shortcut: shortcuts.toggleInterviewOverlay?.key },
   ]
@@ -362,6 +367,11 @@ export default function InterviewOverlay() {
             <div className="ov-focus-question-strip" aria-label="题目导航">
               <span>{isReviewingHistory ? '回看' : '当前'} {displayedQaIndex + 1}/{qaPairs.length || 1}</span>
               <strong>{displayedQa.question}</strong>
+              {liveGeneratingQa && (
+                <span className="ov-focus-live-hint" title={liveGeneratingQa.question}>
+                  新答案生成中
+                </span>
+              )}
               <span aria-hidden>
                 <span className="ov-focus-key-label">切换题目</span>
                 <kbd>{getShortcutDisplay(shortcuts.overlayPrevQuestion?.key ?? 'CommandOrControl+Up')}</kbd>
@@ -373,13 +383,13 @@ export default function InterviewOverlay() {
           <div
             ref={answerScrollRef}
             className="ov-focus-content"
-            style={{ fontSize: `${answerFontSize}px`, color: fontColor }}
+            style={{ fontSize: `${answerFontSize}px`, color: FOCUS_TEXT_COLOR }}
           >
             {hasContent ? (
               <div className="ov-focus-active-pane" key={`${displayedQaKey}:${activeSection.key}`}>
                 <FocusSection
                   title={activeSection.label}
-                  content={sliceMaxLines(activeSection.content, maxLines)}
+                  section={sliceMaxLines(activeSection.content, maxLines)}
                   muted={!activeSection.content.trim()}
                   emptyHint={activeSection.isGenerating ? '正在生成这个分区…' : '当前回答还没有拆出这个分区。'}
                 />
@@ -449,17 +459,19 @@ function pruneFocusTabCache<T>(cache: Record<string, T>, retainedQaIds: Set<stri
   return changed ? next : cache
 }
 
-function sliceMaxLines(text: string, maxLines: number) {
-  if (maxLines <= 0) return text
+function sliceMaxLines(text: string, maxLines: number): { text: string; omitted: boolean } {
+  if (maxLines <= 0) return { text, omitted: false }
   const lines = text.split('\n')
-  return lines.length > maxLines ? lines.slice(-maxLines).join('\n') : text
+  return lines.length > maxLines
+    ? { text: lines.slice(-maxLines).join('\n'), omitted: true }
+    : { text, omitted: false }
 }
 
 function buildFocusTabs(answerText: string, question: string, isStreaming: boolean): FocusTabPane[] {
   const sections = parseMarkdownFocusSections(answerText)
   if (sections.length) {
     return sections.map((section, index) => ({
-      key: `section-${index}-${slugFocusLabel(section.label)}`,
+      key: `section-${index}`,
       label: section.label,
       content: section.content,
       isGenerating: isStreaming && index === sections.length - 1,
@@ -553,14 +565,6 @@ function appendFocusLine(content: string, line: string) {
   return `${content}${content ? '\n' : ''}${line}`
 }
 
-function slugFocusLabel(label: string) {
-  const slug = label
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return slug || 'tab'
-}
-
 function OverlayMarkdown({ content }: { content: string }) {
   return (
     <div className="ov-markdown markdown-body">
@@ -571,20 +575,21 @@ function OverlayMarkdown({ content }: { content: string }) {
 
 function FocusSection({
   title,
-  content,
+  section,
   muted = false,
   emptyHint = '等待内容…',
 }: {
   title: string
-  content: string
+  section: { text: string; omitted: boolean }
   muted?: boolean
   emptyHint?: string
 }) {
-  const body = content.trim()
+  const body = section.text.trim()
   return (
     <section className="ov-focus-section">
       <h2>{title}</h2>
       <div className={muted ? 'ov-focus-muted' : ''}>
+        {section.omitted && <div className="ov-focus-omitted">…以上内容已省略</div>}
         {body ? <OverlayMarkdown content={body} /> : emptyHint}
       </div>
     </section>

@@ -50,6 +50,7 @@ function toModelRow(model: ModelFullInfo, index: number): ModelRow {
 export default function ModelsTab() {
   const config = useInterviewStore((s) => s.config)
   const modelHealth = useInterviewStore((s) => s.modelHealth)
+  const modelHealthDetail = useInterviewStore((s) => s.modelHealthDetail)
   const modelHealthLatency = useInterviewStore((s) => s.modelHealthLatency)
 
   const [modelRows, setModelRows] = useState<ModelRow[]>([])
@@ -72,10 +73,13 @@ export default function ModelsTab() {
 
   const syncHealthFromServer = useCallback(async () => {
     try {
-      const { health } = await api.getModelsHealth()
+      const { health, detail, latency } = await api.getModelsHealth()
       const setH = useInterviewStore.getState().setModelHealth
       Object.entries(health ?? {}).forEach(([k, v]) => {
-        if (v === 'ok' || v === 'error' || v === 'checking') setH(Number(k), v)
+        if (v === 'ok' || v === 'error' || v === 'checking') {
+          const index = Number(k)
+          setH(index, v, detail?.[k], latency?.[k])
+        }
       })
     } catch {
       /* ignore */
@@ -193,11 +197,11 @@ export default function ModelsTab() {
       const deadline = Date.now() + 20000
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 2000))
-        const { health } = await api.getModelsHealth()
+        const { health, detail, latency } = await api.getModelsHealth()
         const st = health[String(idx)]
         if (st === 'ok' || st === 'error') {
           setTestResults((prev) => ({ ...prev, [idx]: st as 'ok' | 'error' }))
-          useInterviewStore.getState().setModelHealth(idx, st as 'ok' | 'error')
+          useInterviewStore.getState().setModelHealth(idx, st as 'ok' | 'error', detail?.[String(idx)], latency?.[String(idx)])
           break
         }
       }
@@ -369,8 +373,10 @@ export default function ModelsTab() {
               const keyHasValue = m.api_key.trim().length > 0 || m.has_key
               const tr = testResults[idx]
               const st = tr ?? modelHealth[row.originalIndex]
+              const healthDetail = modelHealthDetail[row.originalIndex]?.trim()
               const on = m.enabled !== false
               const keyLabel = keyHasValue ? '已填写' : '未配置'
+              const healthTitle = healthDetail ? `模型连接详情：${healthDetail}` : undefined
 
               return (
                 <div
@@ -424,6 +430,7 @@ export default function ModelsTab() {
                         <StatusBadge
                           status={st === 'ok' ? 'ok' : st === 'error' ? 'error' : st === 'checking' ? 'checking' : 'idle'}
                           label={st === 'ok' ? (modelHealthLatency[row.originalIndex] ? `可用 · ${modelHealthLatency[row.originalIndex]}ms` : '可用') : st === 'error' ? '不可用' : st === 'checking' ? '检测中…' : '未检测'}
+                          title={healthTitle}
                         />
                       </div>
                     </button>

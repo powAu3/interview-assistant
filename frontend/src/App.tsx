@@ -124,6 +124,7 @@ export default function App() {
   }, [])
 
   const modelHealth = useInterviewStore((s) => s.modelHealth)
+  const modelHealthDetail = useInterviewStore((s) => s.modelHealthDetail)
   const modelHealthLatency = useInterviewStore((s) => s.modelHealthLatency)
   const fallbackToast = useInterviewStore((s) => s.fallbackToast)
   const toastMessage = useInterviewStore((s) => s.toastMessage)
@@ -250,6 +251,7 @@ export default function App() {
             <ModelPriorityDropdown
               config={config}
               modelHealth={modelHealth}
+              modelHealthDetail={modelHealthDetail}
               modelHealthLatency={modelHealthLatency}
               onModelChange={handleModelChange}
             />
