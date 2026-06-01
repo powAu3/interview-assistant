@@ -25,6 +25,11 @@ def _check_single_model(index: int):
     if index >= len(cfg.models):
         return
     model = cfg.models[index]
+    if getattr(model, "enabled", True) is False:
+        _model_health.pop(index, None)
+        _model_health_detail.pop(index, None)
+        _model_health_latency.pop(index, None)
+        return
     _model_health[index] = "checking"
     _model_health_detail[index] = ""
     _model_health_latency[index] = 0
@@ -47,8 +52,8 @@ def _check_single_model(index: int):
         }
         payload = {
             "model": model.model,
-            "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "请回复“ok”，用于连接测试。"}],
+            "max_tokens": 16,
             "stream": False,
         }
         import time as _time
@@ -81,14 +86,32 @@ def _check_single_model(index: int):
 def start_all_model_checks() -> bool:
     cfg = get_config()
     accepted = 0
-    for i in range(len(cfg.models)):
+    enabled_indexes = [
+        i
+        for i, model in enumerate(cfg.models)
+        if getattr(model, "enabled", True) is not False
+    ]
+    disabled_indexes = set(range(len(cfg.models))) - set(enabled_indexes)
+    for i in disabled_indexes:
+        _model_health.pop(i, None)
+        _model_health_detail.pop(i, None)
+        _model_health_latency.pop(i, None)
+    for i in enabled_indexes:
         if start_single_model_check(i):
             accepted += 1
         else:
             _model_health[i] = "error"
             _model_health_detail[i] = "后台队列繁忙，请稍后重试"
-    return accepted > 0 or not cfg.models
+    return accepted > 0 or not enabled_indexes
 
 
 def start_single_model_check(index: int) -> bool:
+    cfg = get_config()
+    if index < 0:
+        return False
+    if index < len(cfg.models) and getattr(cfg.models[index], "enabled", True) is False:
+        _model_health.pop(index, None)
+        _model_health_detail.pop(index, None)
+        _model_health_latency.pop(index, None)
+        return True
     return submit_low_priority_background(_check_single_model, index)

@@ -62,6 +62,87 @@ def test_model_health_checks_are_submitted_to_low_priority_lane(monkeypatch):
     assert submitted == [(model_health._check_single_model, (2,))]
 
 
+def test_all_model_health_checks_skip_disabled_models(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    submitted: list[tuple[object, tuple[object, ...]]] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type("Model", (), {"enabled": True})(),
+                type("Model", (), {"enabled": False})(),
+                type("Model", (), {"enabled": True})(),
+            ]
+        },
+    )()
+
+    def fake_submit(fn, *args):
+        submitted.append((fn, args))
+        return True
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health, "submit_low_priority_background", fake_submit)
+    model_health._model_health[1] = "error"
+    model_health._model_health_detail[1] = "old disabled error"
+
+    assert model_health.start_all_model_checks() is True
+
+    assert submitted == [
+        (model_health._check_single_model, (0,)),
+        (model_health._check_single_model, (2,)),
+    ]
+    assert 1 not in model_health._model_health
+    assert 1 not in model_health._model_health_detail
+
+
+def test_model_health_probe_uses_compatible_chat_payload(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    ws = importlib.import_module("api.realtime.ws")
+    seen: dict[str, object] = {}
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://example.test/v1",
+                        "api_key": "sk-test",
+                        "model": "demo-model",
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen["url"] = url
+        seen["headers"] = headers
+        seen["json"] = json
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+    monkeypatch.setattr(ws, "broadcast", lambda _data: None)
+
+    model_health._check_single_model(0)
+
+    assert seen["url"] == "https://example.test/v1/chat/completions"
+    assert seen["json"]["messages"][0]["content"] == "请回复“ok”，用于连接测试。"
+    assert seen["json"]["max_tokens"] == 16
+    assert seen["json"]["stream"] is False
+
+
 def test_resume_optimize_is_submitted_to_low_priority_lane(monkeypatch):
     resume_router = importlib.import_module("api.resume.router")
     submitted: list[tuple[object, tuple[object, ...]]] = []

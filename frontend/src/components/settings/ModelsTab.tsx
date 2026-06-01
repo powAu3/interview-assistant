@@ -185,6 +185,10 @@ export default function ModelsTab() {
   }
 
   const handleTestModel = async (idx: number) => {
+    if (modelRows[idx]?.model.enabled === false) {
+      useInterviewStore.getState().setToastMessage('请先启用该模型，再测试连接')
+      return
+    }
     setTestingIdx(idx)
     setTestResults((prev) => ({ ...prev, [idx]: 'checking' }))
     try {
@@ -217,16 +221,27 @@ export default function ModelsTab() {
     try {
       const saved = await handleSaveModels()
       if (!saved) return
-      const n = useInterviewStore.getState().config?.models?.length ?? 0
-      for (let i = 0; i < n; i++) useInterviewStore.getState().setModelHealth(i, 'checking')
+      const models = useInterviewStore.getState().config?.models ?? []
+      const enabledIndexes = models
+        .map((model, index) => ({ model, index }))
+        .filter(({ model }) => model.enabled !== false)
+        .map(({ index }) => index)
+      if (enabledIndexes.length === 0) {
+        useInterviewStore.getState().setToastMessage('没有已启用的模型可检测')
+        return
+      }
+      enabledIndexes.forEach((index) => useInterviewStore.getState().setModelHealth(index, 'checking'))
       await api.checkModelsHealth()
       const deadline = Date.now() + 25000
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 2000))
         await syncHealthFromServer()
         const { health } = await api.getModelsHealth().catch(() => ({ health: {} as Record<string, string> }))
-        const vals = Object.values(health ?? {})
-        if (vals.length >= n && !vals.includes('checking')) break
+        const done = enabledIndexes.every((index) => {
+          const value = health?.[String(index)]
+          return value === 'ok' || value === 'error'
+        })
+        if (done) break
       }
       useInterviewStore.getState().setToastMessage('模型连通性已更新')
     } catch (e: any) {
@@ -316,9 +331,9 @@ export default function ModelsTab() {
               <button
                 type="button"
                 onClick={runHealthCheck}
-                disabled={healthChecking || modelRows.length === 0}
+                disabled={healthChecking || enabledCount === 0}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-50"
-                title="向各模型 API 发探测请求"
+                title={enabledCount === 0 ? '请先启用至少一个模型' : '只向已启用模型 API 发探测请求'}
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${healthChecking ? 'animate-spin' : ''}`} />
                 检测
@@ -372,9 +387,9 @@ export default function ModelsTab() {
               const isExpanded = expandedIdx === idx
               const keyHasValue = m.api_key.trim().length > 0 || m.has_key
               const tr = testResults[idx]
-              const st = tr ?? modelHealth[row.originalIndex]
               const healthDetail = modelHealthDetail[row.originalIndex]?.trim()
               const on = m.enabled !== false
+              const st = on ? (tr ?? modelHealth[row.originalIndex]) : undefined
               const keyLabel = keyHasValue ? '已填写' : '未配置'
               const healthTitle = healthDetail ? `模型连接详情：${healthDetail}` : undefined
 
@@ -429,8 +444,8 @@ export default function ModelsTab() {
                         </span>
                         <StatusBadge
                           status={st === 'ok' ? 'ok' : st === 'error' ? 'error' : st === 'checking' ? 'checking' : 'idle'}
-                          label={st === 'ok' ? (modelHealthLatency[row.originalIndex] ? `可用 · ${modelHealthLatency[row.originalIndex]}ms` : '可用') : st === 'error' ? '不可用' : st === 'checking' ? '检测中…' : '未检测'}
-                          title={healthTitle}
+                          label={!on ? '已停用' : st === 'ok' ? (modelHealthLatency[row.originalIndex] ? `可用 · ${modelHealthLatency[row.originalIndex]}ms` : '可用') : st === 'error' ? '不可用' : st === 'checking' ? '检测中…' : '未检测'}
+                          title={on ? healthTitle : undefined}
                         />
                       </div>
                     </button>
@@ -543,8 +558,9 @@ export default function ModelsTab() {
                             <button
                               type="button"
                               onClick={() => handleTestModel(idx)}
-                              disabled={testingIdx !== null}
+                              disabled={testingIdx !== null || !on}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
+                              title={on ? '测试该模型连接' : '请先启用该模型'}
                             >
                               {testingIdx === idx ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                               {testingIdx === idx ? '测试中…' : '测试连接'}
