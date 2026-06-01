@@ -49,6 +49,20 @@ _status: dict = {
     "started_at": None,
     "finished_at": None,
 }
+_level_lock = threading.Lock()
+_level_stop_event = threading.Event()
+_level_thread: Optional[threading.Thread] = None
+_level_status: dict = {
+    "running": False,
+    "device_id": None,
+    "rms": 0.0,
+    "peak": 0.0,
+    "level_pct": 0,
+    "has_signal": False,
+    "error": None,
+    "started_at": None,
+    "updated_at": None,
+}
 
 
 def normalize_phrase(text: str) -> str:
@@ -126,6 +140,143 @@ def play_preflight_audio() -> float:
     started = time.monotonic()
     play_audio_file(PREFLIGHT_AUDIO_PATH)
     return time.monotonic() - started
+
+
+def test_input_audio(device_id: int, duration_sec: float = 1.2) -> dict:
+    cap = AudioCapture()
+    started = time.monotonic()
+    try:
+        cap.start(int(device_id), owner="audio-test")
+        time.sleep(0.1)
+        captured = collect_capture_audio(
+            cap,
+            duration_sec=max(0.5, min(3.0, float(duration_sec or 1.2))),
+        )
+    finally:
+        cap.stop(owner="audio-test")
+
+    elapsed_sec = time.monotonic() - started
+    if captured is None or len(captured) == 0:
+        return {
+            "ok": False,
+            "device_id": int(device_id),
+            "elapsed_sec": elapsed_sec,
+            "rms": 0.0,
+            "peak": 0.0,
+            "has_signal": False,
+            "detail": "未捕获到音频，请检查麦克风权限或设备选择",
+        }
+
+    audio = captured.astype(np.float32)
+    rms = float(AudioCapture.compute_energy(audio))
+    peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
+    has_signal = rms > 0.003 or peak > 0.02
+    return {
+        "ok": True,
+        "device_id": int(device_id),
+        "elapsed_sec": elapsed_sec,
+        "samples": int(len(audio)),
+        "rms": rms,
+        "peak": peak,
+        "has_signal": has_signal,
+        "detail": (
+            f"已捕获输入信号（RMS {rms:.4f}，峰值 {peak:.3f}）"
+            if has_signal
+            else f"已打开麦克风，但音量偏低（RMS {rms:.4f}，峰值 {peak:.3f}）"
+        ),
+    }
+
+
+def _input_level_pct(rms: float, peak: float) -> int:
+    return max(0, min(100, int(round(max(rms * 2500, peak * 250)))))
+
+
+def _set_level_status(**updates) -> None:
+    with _level_lock:
+        _level_status.update(updates)
+        _level_status["updated_at"] = time.time()
+
+
+def get_input_level_status() -> dict:
+    with _level_lock:
+        return dict(_level_status)
+
+
+def _run_input_level_monitor(device_id: int, stop_event: threading.Event) -> None:
+    cap = AudioCapture()
+    rms = 0.0
+    peak = 0.0
+    try:
+        cap.start(int(device_id), owner="audio-level-test")
+        _set_level_status(running=True, error=None)
+        while not stop_event.is_set():
+            chunk = cap.get_audio_chunk(max_chunks=4)
+            if chunk is not None and len(chunk) > 0:
+                audio = chunk.astype(np.float32)
+                next_rms = float(AudioCapture.compute_energy(audio))
+                next_peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
+                rms = (rms * 0.35) + (next_rms * 0.65)
+                peak = max(next_peak, peak * 0.72)
+            else:
+                rms *= 0.82
+                peak *= 0.72
+            _set_level_status(
+                rms=rms,
+                peak=peak,
+                level_pct=_input_level_pct(rms, peak),
+                has_signal=rms > 0.003 or peak > 0.02,
+            )
+            stop_event.wait(0.08)
+    except Exception as exc:
+        _log.warning("input level monitor failed device=%s: %s", device_id, exc, exc_info=True)
+        _set_level_status(error=str(exc), running=False)
+    finally:
+        try:
+            cap.stop(owner="audio-level-test")
+        finally:
+            _set_level_status(running=False)
+
+
+def start_input_level_monitor(device_id: int) -> dict:
+    global _level_thread, _level_stop_event, _level_status
+    stop_input_level_monitor()
+    with _level_lock:
+        _level_stop_event = threading.Event()
+        _level_status = {
+            "running": True,
+            "device_id": int(device_id),
+            "rms": 0.0,
+            "peak": 0.0,
+            "level_pct": 0,
+            "has_signal": False,
+            "error": None,
+            "started_at": time.time(),
+            "updated_at": time.time(),
+        }
+        thread = threading.Thread(
+            target=_run_input_level_monitor,
+            args=(int(device_id), _level_stop_event),
+            daemon=True,
+            name="audio-level-test",
+        )
+        _level_thread = thread
+    thread.start()
+    return get_input_level_status()
+
+
+def stop_input_level_monitor() -> dict:
+    global _level_thread
+    with _level_lock:
+        thread = _level_thread
+        _level_stop_event.set()
+    if thread and thread.is_alive():
+        thread.join(timeout=1.5)
+    with _level_lock:
+        if _level_thread is thread:
+            _level_thread = None
+        _level_status["running"] = False
+        _level_status["updated_at"] = time.time()
+    return get_input_level_status()
 
 
 def resolve_preflight_scenario(scenario_id: str) -> dict:

@@ -213,11 +213,23 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ summary }),
     }),
-  start: (device_id?: number | null) =>
-    request('/api/start', { method: 'POST', body: JSON.stringify(device_id != null ? { device_id } : {}) }),
+  start: (device_id?: number | null, candidate_mic_device_id?: number | null) =>
+    request('/api/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(device_id != null ? { device_id } : {}),
+        ...(candidate_mic_device_id != null ? { candidate_mic_device_id } : {}),
+      }),
+    }),
   stop: () => request('/api/stop', { method: 'POST' }),
   pause: () => request('/api/pause', { method: 'POST' }),
-  resume: (device_id?: number) => request('/api/unpause', { method: 'POST', body: JSON.stringify(device_id != null ? { device_id } : {}) }),
+  resume: (device_id?: number, candidate_mic_device_id?: number | null) => request('/api/unpause', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(device_id != null ? { device_id } : {}),
+      ...(candidate_mic_device_id != null ? { candidate_mic_device_id } : {}),
+    }),
+  }),
   clear: () => request('/api/clear', { method: 'POST' }),
   ask: (text: string, image?: string) =>
     request('/api/ask', { method: 'POST', body: JSON.stringify({ text, image }) }),
@@ -226,6 +238,41 @@ export const api = {
   preflightRun: (scenario_id: string, device_id?: number | null) =>
     request('/api/preflight/run', { method: 'POST', body: JSON.stringify({ scenario_id, device_id: device_id ?? undefined }) }),
   preflightStatus: () => request('/api/preflight/status'),
+  audioOutputTest: () =>
+    request<{ ok: boolean; elapsed_sec: number }>('/api/audio-test/output', { method: 'POST', body: '{}' }),
+  audioInputTest: (device_id: number, duration_sec = 1.2) =>
+    request<{
+      ok: boolean
+      device_id: number
+      elapsed_sec: number
+      samples?: number
+      rms: number
+      peak: number
+      has_signal: boolean
+      detail: string
+    }>('/api/audio-test/input', { method: 'POST', body: JSON.stringify({ device_id, duration_sec }) }),
+  audioInputMonitorStart: (device_id: number) =>
+    request<{
+      running: boolean
+      device_id: number
+      rms: number
+      peak: number
+      level_pct: number
+      has_signal: boolean
+      error?: string | null
+    }>('/api/audio-test/input/start', { method: 'POST', body: JSON.stringify({ device_id }) }),
+  audioInputMonitorStatus: () =>
+    request<{
+      running: boolean
+      device_id: number | null
+      rms: number
+      peak: number
+      level_pct: number
+      has_signal: boolean
+      error?: string | null
+    }>('/api/audio-test/input/status'),
+  audioInputMonitorStop: () =>
+    request<{ running: boolean }>('/api/audio-test/input/stop', { method: 'POST', body: '{}' }),
   /** 服务端截取本机主屏左半幅 + VL 写码（手机端用，不经过手机截图 API） */
   askFromServerScreen: () =>
     request('/api/ask-from-server-screen', { method: 'POST', body: '{}' }),

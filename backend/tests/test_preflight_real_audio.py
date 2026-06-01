@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import importlib
 import sys
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -49,6 +50,75 @@ def test_collect_capture_audio_merges_chunks(monkeypatch: pytest.MonkeyPatch):
     merged = sound_test.collect_capture_audio(FakeCapture(), duration_sec=0.2, poll_interval=0.05)
     assert merged is not None
     assert len(merged) == 5
+
+
+def test_input_audio_returns_level_metrics(monkeypatch: pytest.MonkeyPatch):
+    starts: list[tuple[int, str | None]] = []
+    stops: list[str | None] = []
+
+    class FakeCapture:
+        def start(self, device_id, owner=None):
+            starts.append((device_id, owner))
+
+        def stop(self, owner=None):
+            stops.append(owner)
+
+        @staticmethod
+        def compute_energy(audio):
+            return float(np.sqrt(np.mean(audio ** 2)))
+
+    monkeypatch.setattr(sound_test, 'AudioCapture', FakeCapture)
+    monkeypatch.setattr(sound_test.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(
+        sound_test,
+        'collect_capture_audio',
+        lambda cap, duration_sec, poll_interval=0.05: np.array([0.0, 0.02, -0.04], dtype=np.float32),
+    )
+
+    result = sound_test.test_input_audio(7, duration_sec=0.8)
+
+    assert result['ok'] is True
+    assert result['device_id'] == 7
+    assert result['has_signal'] is True
+    assert result['rms'] > 0
+    assert result['peak'] == pytest.approx(0.04)
+    assert starts == [(7, 'audio-test')]
+    assert stops == ['audio-test']
+
+
+def test_input_level_monitor_updates_until_stopped(monkeypatch: pytest.MonkeyPatch):
+    starts: list[tuple[int, str | None]] = []
+    stops: list[str | None] = []
+
+    class FakeCapture:
+        def start(self, device_id, owner=None):
+            starts.append((device_id, owner))
+
+        def stop(self, owner=None):
+            stops.append(owner)
+
+        def get_audio_chunk(self, max_chunks=None):
+            return np.array([0.0, 0.03, -0.05], dtype=np.float32)
+
+        @staticmethod
+        def compute_energy(audio):
+            return float(np.sqrt(np.mean(audio ** 2)))
+
+    monkeypatch.setattr(sound_test, 'AudioCapture', FakeCapture)
+
+    sound_test.start_input_level_monitor(9)
+    deadline = time.monotonic() + 1.0
+    status = sound_test.get_input_level_status()
+    while time.monotonic() < deadline and status['level_pct'] <= 0:
+        time.sleep(0.02)
+        status = sound_test.get_input_level_status()
+    stopped = sound_test.stop_input_level_monitor()
+
+    assert starts == [(9, 'audio-level-test')]
+    assert stops == ['audio-level-test']
+    assert status['level_pct'] > 0
+    assert status['has_signal'] is True
+    assert stopped['running'] is False
 
 
 def test_resolve_preflight_scenario_falls_back_to_recommended(monkeypatch: pytest.MonkeyPatch):

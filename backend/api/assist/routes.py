@@ -41,6 +41,7 @@ async def api_start(body: dict):
     cfg = get_config()
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
     device_id = body.get("device_id")
+    candidate_mic_device_id = body.get("candidate_mic_device_id")
     if not written_exam and device_id is None:
         raise HTTPException(400, "\u8bf7\u9009\u62e9\u97f3\u9891\u8bbe\u5907")
     if device_id is not None:
@@ -50,8 +51,18 @@ async def api_start(body: dict):
             raise HTTPException(400, "device_id \u5fc5\u987b\u662f\u6574\u6570")
     else:
         dev = None
+    if candidate_mic_device_id is not None:
+        try:
+            candidate_dev = int(candidate_mic_device_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "candidate_mic_device_id \u5fc5\u987b\u662f\u6574\u6570")
+    else:
+        candidate_dev = None
     try:
-        await run_in_threadpool(start_nonblocking, dev)
+        if candidate_dev is None:
+            await run_in_threadpool(start_nonblocking, dev)
+        else:
+            await run_in_threadpool(start_nonblocking, dev, candidate_dev)
         return {"ok": True}
     except AudioBusyError as e:
         raise HTTPException(409, str(e))
@@ -85,16 +96,29 @@ async def api_resume_interview(body: Optional[dict] = None):
     if not is_paused():
         raise HTTPException(400, "\u9762\u8bd5\u672a\u5904\u4e8e\u6682\u505c\u72b6\u6001")
     device_id = (body or {}).get("device_id")
+    candidate_mic_device_id = (body or {}).get("candidate_mic_device_id")
     if device_id is not None:
         try:
             int(device_id)
         except (TypeError, ValueError):
             raise HTTPException(400, "device_id \u5fc5\u987b\u662f\u6574\u6570")
+    if candidate_mic_device_id is not None:
+        try:
+            int(candidate_mic_device_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "candidate_mic_device_id \u5fc5\u987b\u662f\u6574\u6570")
     try:
-        await run_in_threadpool(
-            unpause_interview,
-            int(device_id) if device_id is not None else None,
-        )
+        if candidate_mic_device_id is None:
+            await run_in_threadpool(
+                unpause_interview,
+                int(device_id) if device_id is not None else None,
+            )
+        else:
+            await run_in_threadpool(
+                unpause_interview,
+                int(device_id) if device_id is not None else None,
+                int(candidate_mic_device_id),
+            )
     except AudioBusyError as e:
         raise HTTPException(409, str(e))
     return {"ok": True}
@@ -214,6 +238,79 @@ async def api_preflight_run(body: dict):
 async def api_preflight_status():
     from .sound_test import get_preflight_status
     return get_preflight_status()
+
+
+@router.post("/audio-test/output")
+async def api_audio_test_output():
+    session = get_session()
+    if session.is_recording and not session.is_paused:
+        raise HTTPException(409, "请先暂停或结束面试，再测试音频输出")
+    try:
+        from .sound_test import play_preflight_audio
+        elapsed_sec = await run_in_threadpool(play_preflight_audio)
+        return {"ok": True, "elapsed_sec": elapsed_sec}
+    except Exception as e:
+        _rlog.warning("audio output test failed: %s", e, exc_info=True)
+        raise HTTPException(503, f"测试音频播放失败: {e}")
+
+
+@router.post("/audio-test/input")
+async def api_audio_test_input(body: dict):
+    session = get_session()
+    if session.is_recording and not session.is_paused:
+        raise HTTPException(409, "请先暂停或结束面试，再测试麦克风输入")
+    device_id = body.get("device_id")
+    if device_id is None:
+        raise HTTPException(400, "device_id 必须提供")
+    try:
+        device_id = int(device_id)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "device_id 必须是整数")
+    duration_sec = body.get("duration_sec", 1.2)
+    try:
+        duration_sec = float(duration_sec)
+    except (TypeError, ValueError):
+        duration_sec = 1.2
+    try:
+        from .sound_test import test_input_audio
+        return await run_in_threadpool(test_input_audio, device_id, duration_sec)
+    except AudioBusyError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        _rlog.warning("audio input test failed device=%s: %s", device_id, e, exc_info=True)
+        raise HTTPException(503, f"麦克风输入测试失败: {e}")
+
+
+@router.post("/audio-test/input/start")
+async def api_audio_test_input_start(body: dict):
+    session = get_session()
+    if session.is_recording and not session.is_paused:
+        raise HTTPException(409, "请先暂停或结束面试，再测试麦克风输入")
+    device_id = body.get("device_id")
+    if device_id is None:
+        raise HTTPException(400, "device_id 必须提供")
+    try:
+        device_id = int(device_id)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "device_id 必须是整数")
+    try:
+        from .sound_test import start_input_level_monitor
+        return await run_in_threadpool(start_input_level_monitor, device_id)
+    except Exception as e:
+        _rlog.warning("audio input monitor start failed device=%s: %s", device_id, e, exc_info=True)
+        raise HTTPException(503, f"麦克风输入监听失败: {e}")
+
+
+@router.get("/audio-test/input/status")
+async def api_audio_test_input_status():
+    from .sound_test import get_input_level_status
+    return get_input_level_status()
+
+
+@router.post("/audio-test/input/stop")
+async def api_audio_test_input_stop():
+    from .sound_test import stop_input_level_monitor
+    return await run_in_threadpool(stop_input_level_monitor)
 
 
 @router.get("/session")

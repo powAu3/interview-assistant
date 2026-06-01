@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Check,
   ChevronDown,
@@ -83,6 +83,17 @@ interface AudioDevicePickerProps {
   onRefresh: () => Promise<void>
   refreshing: boolean
   selectionDisabled: boolean
+  ariaLabel?: string
+  placeholder?: string
+  selectedPrefix?: string
+  action?: {
+    ariaLabel: string
+    title: string
+    icon: ReactNode
+    loading?: boolean
+    disabled?: boolean
+    onClick: () => void
+  }
 }
 
 export function AudioDevicePicker({
@@ -92,6 +103,10 @@ export function AudioDevicePicker({
   onRefresh,
   refreshing,
   selectionDisabled,
+  ariaLabel = '选择音频输入设备',
+  placeholder = '选择音频输入',
+  selectedPrefix = '当前',
+  action,
 }: AudioDevicePickerProps) {
   const [open, setOpen] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
@@ -131,34 +146,51 @@ export function AudioDevicePicker({
 
   return (
     <div ref={rootRef} className="relative flex-1 min-w-0 max-w-[190px] md:max-w-[230px]">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        disabled={selectionDisabled}
-        aria-label="选择音频输入设备"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title={selectionDisabled ? '录音中不可切换设备，请先暂停' : '选择音频输入设备'}
-        className="w-full min-h-[36px] bg-bg-tertiary text-text-primary text-xs rounded-lg pl-2.5 pr-2 py-2 border border-bg-hover hover:bg-bg-hover/70 focus:outline-none focus:border-accent-blue flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {selected?.is_loopback ? (
-          <Volume2 className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />
-        ) : (
-          <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-        )}
-        <span className="min-w-0 flex-1 text-left truncate">
-          {selected ? `当前: ${selected.name}${selected.is_loopback ? ' ⟳' : ''}` : '选择音频输入'}
-        </span>
-        {hidden.length > 0 && (
-          <span
-            className="hidden md:inline-flex rounded-md bg-accent-amber/15 px-1.5 py-0.5 text-[10px] text-accent-amber"
-            title={`已自动隐藏 ${hidden.length} 个疑似无用设备`}
-          >
-            -{hidden.length}
+      <div className="w-full min-h-[36px] bg-bg-tertiary text-text-primary text-xs rounded-lg border border-bg-hover hover:bg-bg-hover/70 focus-within:border-accent-blue flex items-stretch overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          disabled={selectionDisabled}
+          aria-label={ariaLabel}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          title={selectionDisabled ? '录音中不可切换设备，请先暂停' : ariaLabel}
+          className="min-w-0 flex-1 pl-2.5 pr-2 py-2 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none"
+        >
+          {selected?.is_loopback ? (
+            <Volume2 className="w-3.5 h-3.5 text-accent-blue flex-shrink-0" />
+          ) : (
+            <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+          )}
+          <span className="min-w-0 flex-1 text-left truncate">
+            {selected ? `${selectedPrefix}：${selected.name}${selected.is_loopback ? ' ⟳' : ''}` : placeholder}
           </span>
+          {hidden.length > 0 && (
+            <span
+              className="hidden md:inline-flex rounded-md bg-accent-amber/15 px-1.5 py-0.5 text-[10px] text-accent-amber"
+              title={`已自动隐藏 ${hidden.length} 个疑似无用设备`}
+            >
+              -{hidden.length}
+            </span>
+          )}
+          <ChevronDown className={`w-3.5 h-3.5 text-text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {action && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              action.onClick()
+            }}
+            disabled={action.disabled || action.loading}
+            aria-label={action.ariaLabel}
+            title={action.title}
+            className="inline-flex w-9 flex-shrink-0 items-center justify-center border-l border-bg-hover/70 text-text-secondary hover:bg-bg-hover hover:text-accent-blue disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:bg-bg-hover"
+          >
+            {action.loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : action.icon}
+          </button>
         )}
-        <ChevronDown className={`w-3.5 h-3.5 text-text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      </div>
 
       {open && (
         <div

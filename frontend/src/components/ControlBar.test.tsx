@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ControlBar from './ControlBar'
 import { useInterviewStore } from '@/stores/configStore'
@@ -13,6 +13,11 @@ const apiMock = vi.hoisted(() => ({
   resume: vi.fn(),
   clear: vi.fn(),
   cancelAsk: vi.fn(),
+  audioOutputTest: vi.fn(),
+  audioInputTest: vi.fn(),
+  audioInputMonitorStart: vi.fn(),
+  audioInputMonitorStatus: vi.fn(),
+  audioInputMonitorStop: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -48,6 +53,35 @@ describe('ControlBar', () => {
     apiMock.resume.mockResolvedValue({ ok: true })
     apiMock.clear.mockResolvedValue({ ok: true })
     apiMock.cancelAsk.mockResolvedValue({ ok: true })
+    apiMock.audioOutputTest.mockResolvedValue({ ok: true, elapsed_sec: 1.0 })
+    apiMock.audioInputTest.mockResolvedValue({
+      ok: true,
+      device_id: 11,
+      elapsed_sec: 1.2,
+      rms: 0.02,
+      peak: 0.1,
+      has_signal: true,
+      detail: '已捕获输入信号',
+    })
+    apiMock.audioInputMonitorStart.mockResolvedValue({
+      running: true,
+      device_id: 11,
+      rms: 0.02,
+      peak: 0.1,
+      level_pct: 50,
+      has_signal: true,
+      error: null,
+    })
+    apiMock.audioInputMonitorStatus.mockResolvedValue({
+      running: true,
+      device_id: 11,
+      rms: 0.02,
+      peak: 0.1,
+      level_pct: 50,
+      has_signal: true,
+      error: null,
+    })
+    apiMock.audioInputMonitorStop.mockResolvedValue({ running: false })
     useInterviewStore.setState({
       config: {
         models: [{ name: 'TextOnly', supports_think: false, supports_vision: false, enabled: true }],
@@ -130,7 +164,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: '选择音频输入设备' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择会议音频设备' }))
 
     expect(screen.getAllByText(/BlackHole 2ch/).length).toBeGreaterThan(0)
     expect(screen.getByText('MacBook Pro Microphone')).toBeInTheDocument()
@@ -153,11 +187,11 @@ describe('ControlBar', () => {
 
     render(<ControlBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: '选择音频输入设备' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择会议音频设备' }))
     fireEvent.click(screen.getByRole('button', { name: /显示全部设备/ }))
     fireEvent.click(screen.getByText('ZoomAudioDevice'))
 
-    expect(screen.getByRole('button', { name: '选择音频输入设备' })).toHaveTextContent('当前: ZoomAudioDevice')
+    expect(screen.getByRole('button', { name: '选择会议音频设备' })).toHaveTextContent('当前：ZoomAudioDevice')
   })
 
   it('refreshes audio devices from the picker', async () => {
@@ -170,7 +204,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: '选择音频输入设备' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择会议音频设备' }))
     fireEvent.click(screen.getByRole('button', { name: '刷新设备列表' }))
 
     expect(apiMock.getDevices).toHaveBeenCalledTimes(1)
@@ -239,5 +273,81 @@ describe('ControlBar', () => {
     fireEvent.click(screen.getByRole('button', { name: '取消正在生成的回答' }))
 
     expect(await screen.findByText('取消生成失败：cancel down')).toBeInTheDocument()
+  })
+
+  it('starts assist mode with meeting audio and candidate microphone devices', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 10, name: 'System Loopback', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '开始面试' }))
+
+    await waitFor(() => {
+      expect(apiMock.start).toHaveBeenCalledWith(10, 11)
+    })
+  })
+
+  it('does not pass candidate microphone when candidate ASR is disabled', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: false,
+      },
+      devices: [
+        { id: 10, name: 'System Loopback', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    expect(screen.getByText(/我的麦克风未开启/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '开始面试' }))
+
+    await waitFor(() => {
+      expect(apiMock.start).toHaveBeenCalledWith(10, null)
+    })
+  })
+
+  it('plays a speaker test sound from the meeting audio picker', async () => {
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '测试音频输出' }))
+
+    await waitFor(() => {
+      expect(apiMock.audioOutputTest).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('opens a live candidate microphone meter and renders the input level', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 10, name: 'System Loopback', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '测试麦克风输入' }))
+
+    await waitFor(() => {
+      expect(apiMock.audioInputMonitorStart).toHaveBeenCalledWith(11)
+    })
+    expect(await screen.findByText('50%')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '麦克风输入测试' })).toBeInTheDocument()
   })
 })
