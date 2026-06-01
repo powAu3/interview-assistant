@@ -44,6 +44,43 @@ def test_session_snapshot_contains_serialized_qa_fields():
     assert snapshot['qa_pairs'][0]['model_name'] == 'demo'
 
 
+def test_candidate_asr_pending_preserves_active_qa_after_window_closes():
+    session = session_mod.reset_session()
+    session.open_candidate_answer_window("qa-prev")
+    session.mark_candidate_asr_busy()
+    session.close_candidate_answer_window()
+    session.mark_candidate_asr_busy()
+
+    assert session.has_candidate_asr_pending_for_qa("qa-prev")
+    segment = session.add_candidate_transcription("真实回答片段", qa_id=session.candidate_asr_active_qa_id)
+    assert segment is not None
+    assert segment.qa_id == "qa-prev"
+    assert session.get_candidate_answer_for_qa("qa-prev") == "真实回答片段"
+
+
+def test_candidate_partial_transcription_is_replaced_by_final_text():
+    session = session_mod.reset_session()
+    partial = session.add_candidate_transcription(
+        "我做了风控",
+        qa_id="qa-prev",
+        provider="whisper",
+        segment_id="seg-1",
+        is_final=False,
+    )
+    final = session.add_candidate_transcription(
+        "我做了风控规则引擎，支持灰度发布。",
+        qa_id="qa-prev",
+        provider="whisper",
+        segment_id="seg-1",
+        is_final=True,
+    )
+
+    assert partial is final
+    assert len(session.candidate_answer_segments) == 1
+    assert session.candidate_answer_segments[0].is_final is True
+    assert session.get_candidate_answer_for_qa("qa-prev") == "我做了风控规则引擎，支持灰度发布。"
+
+
 def test_api_session_uses_snapshot_shape():
     session = session_mod.reset_session()
     session.add_transcription('one')
@@ -61,6 +98,12 @@ def test_websocket_init_uses_session_snapshot(monkeypatch: pytest.MonkeyPatch):
     session.is_recording = True
     session.add_transcription('one')
     session.add_qa('q', 'a', source='manual_text', model_name='demo')
+    session.add_candidate_transcription(
+        '候选人真实回答',
+        qa_id='qa-prev',
+        provider='whisper',
+        segment_id='cand-1',
+    )
 
     sent: list[dict] = []
 
@@ -86,4 +129,6 @@ def test_websocket_init_uses_session_snapshot(monkeypatch: pytest.MonkeyPatch):
 
     assert sent[0]['type'] == 'init'
     assert sent[0]['transcriptions'] == ['one']
+    assert sent[0]['candidate_transcriptions'] == ['候选人真实回答']
+    assert sent[0]['candidate_answer_segments'][0]['segment_id'] == 'cand-1'
     assert sent[0]['qa_pairs'][0]['source'] == 'manual_text'

@@ -15,14 +15,32 @@ class QAPair:
 
 
 @dataclass
+class CandidateAnswerSegment:
+    text: str
+    timestamp: float = field(default_factory=time.time)
+    qa_id: str = ""
+    provider: str = ""
+    segment_id: str = ""
+    is_final: bool = True
+
+
+@dataclass
 class Session:
     transcription_history: list[str] = field(default_factory=list)
+    candidate_transcription_history: list[str] = field(default_factory=list)
+    candidate_answer_segments: list[CandidateAnswerSegment] = field(default_factory=list)
     conversation_history: list[dict] = field(default_factory=list)
     qa_pairs: list[QAPair] = field(default_factory=list)
     current_transcription: str = ""
+    current_candidate_transcription: str = ""
+    current_candidate_qa_id: str = ""
+    candidate_asr_busy: bool = False
+    candidate_asr_active_qa_id: str = ""
+    candidate_asr_activity_at: float = 0.0
     is_recording: bool = False
     is_paused: bool = False
     last_device_id: int = 0
+    last_candidate_mic_device_id: int = 0
     capture_is_loopback: bool = True
     created_at: float = field(default_factory=time.time)
     system_summary: str = ""
@@ -30,6 +48,8 @@ class Session:
 
     MAX_HISTORY = 20
     MAX_TRANSCRIPTION_HISTORY = 200
+    MAX_CANDIDATE_TRANSCRIPTION_HISTORY = 200
+    MAX_CANDIDATE_SEGMENTS = 120
     MAX_QA_PAIRS = 80
     CONVERSATION_TURNS_FOR_LLM = 6
     SCREEN_TURNS_FOR_LLM = 2
@@ -45,6 +65,90 @@ class Session:
             self.current_transcription = text.strip()
             if len(self.transcription_history) > self.MAX_TRANSCRIPTION_HISTORY:
                 self.transcription_history = self.transcription_history[-self.MAX_TRANSCRIPTION_HISTORY:]
+
+    def add_candidate_transcription(
+        self,
+        text: str,
+        *,
+        qa_id: Optional[str] = None,
+        provider: str = "",
+        segment_id: str = "",
+        is_final: bool = True,
+    ) -> Optional[CandidateAnswerSegment]:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return None
+        self.current_candidate_transcription = cleaned
+        segment_key = (segment_id or "").strip()
+        if segment_key:
+            for idx, seg in enumerate(self.candidate_answer_segments):
+                if seg.segment_id == segment_key:
+                    seg.text = cleaned
+                    seg.timestamp = time.time()
+                    seg.qa_id = (qa_id if qa_id is not None else seg.qa_id or self.current_candidate_qa_id) or ""
+                    seg.provider = provider or seg.provider
+                    seg.is_final = bool(is_final)
+                    if self.candidate_transcription_history:
+                        self.candidate_transcription_history[-1] = cleaned
+                    else:
+                        self.candidate_transcription_history.append(cleaned)
+                    return seg
+        self.candidate_transcription_history.append(cleaned)
+        if len(self.candidate_transcription_history) > self.MAX_CANDIDATE_TRANSCRIPTION_HISTORY:
+            self.candidate_transcription_history = self.candidate_transcription_history[-self.MAX_CANDIDATE_TRANSCRIPTION_HISTORY:]
+        segment = CandidateAnswerSegment(
+            text=cleaned,
+            qa_id=(qa_id if qa_id is not None else self.current_candidate_qa_id) or "",
+            provider=provider or "",
+            segment_id=segment_key,
+            is_final=bool(is_final),
+        )
+        self.candidate_answer_segments.append(segment)
+        if len(self.candidate_answer_segments) > self.MAX_CANDIDATE_SEGMENTS:
+            self.candidate_answer_segments = self.candidate_answer_segments[-self.MAX_CANDIDATE_SEGMENTS:]
+        return segment
+
+    def open_candidate_answer_window(self, qa_id: str):
+        self.current_candidate_qa_id = (qa_id or "").strip()
+
+    def close_candidate_answer_window(self):
+        self.current_candidate_qa_id = ""
+
+    def mark_candidate_asr_busy(self, qa_id: str = ""):
+        self.candidate_asr_busy = True
+        self.candidate_asr_active_qa_id = (
+            qa_id or self.candidate_asr_active_qa_id or self.current_candidate_qa_id or ""
+        ).strip()
+        self.candidate_asr_activity_at = time.time()
+
+    def mark_candidate_asr_idle(self):
+        self.candidate_asr_busy = False
+        self.candidate_asr_active_qa_id = ""
+        self.candidate_asr_activity_at = time.time()
+
+    def has_candidate_asr_pending_for_qa(self, qa_id: str, stale_after_sec: float = 8.0) -> bool:
+        target = (qa_id or "").strip()
+        if not target or not self.candidate_asr_busy:
+            return False
+        if self.candidate_asr_active_qa_id != target:
+            return False
+        if stale_after_sec > 0 and self.candidate_asr_activity_at:
+            return time.time() - self.candidate_asr_activity_at <= stale_after_sec
+        return True
+
+    def get_candidate_answer_for_qa(self, qa_id: str, max_chars: int = 1200) -> str:
+        target = (qa_id or "").strip()
+        if not target:
+            return ""
+        parts = [
+            seg.text.strip()
+            for seg in self.candidate_answer_segments
+            if seg.qa_id == target and seg.text.strip()
+        ]
+        text = "\n".join(parts).strip()
+        if len(text) > max_chars:
+            text = "…" + text[-max_chars:].strip()
+        return text
 
     def add_user_message(self, content: Union[str, list]):
         self.conversation_history.append({"role": "user", "content": content})
@@ -156,12 +260,20 @@ class Session:
 
     def clear(self):
         self.transcription_history.clear()
+        self.candidate_transcription_history.clear()
+        self.candidate_answer_segments.clear()
         self.conversation_history.clear()
         self.qa_pairs.clear()
         self.current_transcription = ""
+        self.current_candidate_transcription = ""
+        self.current_candidate_qa_id = ""
+        self.candidate_asr_busy = False
+        self.candidate_asr_active_qa_id = ""
+        self.candidate_asr_activity_at = 0.0
         self.is_recording = False
         self.is_paused = False
         self.last_device_id = 0
+        self.last_candidate_mic_device_id = 0
         self.capture_is_loopback = True
         self.created_at = time.time()
         self.system_summary = ""
@@ -172,6 +284,10 @@ class Session:
             "is_recording": self.is_recording,
             "is_paused": self.is_paused,
             "transcriptions": list(self.transcription_history[-50:]),
+            "candidate_transcriptions": list(self.candidate_transcription_history[-50:]),
+            "candidate_answer_segments": [
+                asdict(seg) for seg in self.candidate_answer_segments[-50:]
+            ],
             "qa_pairs": [
                 {
                     **asdict(qa),

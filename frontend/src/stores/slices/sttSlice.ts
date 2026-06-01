@@ -7,6 +7,9 @@ export interface SttSliceState {
   sttLoading: boolean
   sttActiveProvider: string
   sttFallbackLoaded: boolean
+  candidateSttLoaded: boolean
+  candidateSttLoading: boolean
+  candidateSttProvider: string
   modelHealth: Record<number, ModelHealthStatus>
   modelHealthDetail: Record<number, string>
   modelHealthLatency: Record<number, number>
@@ -15,6 +18,7 @@ export interface SttSliceState {
 
 export interface SttSliceActions {
   setSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
+  setCandidateSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
   setModelHealth: (index: number, status: ModelHealthStatus, detail?: string, latencyMs?: number) => void
   setTokenUsage: (usage: TokenUsage) => void
 }
@@ -26,6 +30,9 @@ export const createSttSlice: StateCreator<RootState, [], [], SttSlice> = (set) =
   sttLoading: false,
   sttActiveProvider: '',
   sttFallbackLoaded: false,
+  candidateSttLoaded: false,
+  candidateSttLoading: false,
+  candidateSttProvider: '',
   modelHealth: {},
   modelHealthDetail: {},
   modelHealthLatency: {},
@@ -41,6 +48,11 @@ export const createSttSlice: StateCreator<RootState, [], [], SttSlice> = (set) =
       ...(provider != null ? { sttActiveProvider: provider } : {}),
     }
   }),
+  setCandidateSttStatus: (loaded, loading, provider) => set((s) => ({
+    candidateSttLoaded: loaded,
+    candidateSttLoading: loading,
+    ...(provider != null ? { candidateSttProvider: provider } : {}),
+  })),
   setModelHealth: (index, status, detail, latencyMs) => set((s) => ({
     modelHealth: { ...s.modelHealth, [index]: status },
     ...(detail != null ? { modelHealthDetail: { ...s.modelHealthDetail, [index]: detail } } : {}),

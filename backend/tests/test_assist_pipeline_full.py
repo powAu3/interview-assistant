@@ -27,6 +27,12 @@ class _DeferredThread:
     def start(self):
         self.started.append(self)
 
+    def is_alive(self):
+        return False
+
+    def join(self, timeout=None):
+        return None
+
     def run(self):
         self.target(*self.args, **self.kwargs)
 
@@ -80,6 +86,8 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     pipeline._next_commit_seq = 0
     pipeline._next_submit_seq = 0
     pipeline._task_session_version = 0
+    pipeline._interview_thread = None
+    pipeline._candidate_thread = None
     pipeline._sync_compat_globals_to_asr_state()
     _DeferredThread.started = []
 
@@ -196,3 +204,110 @@ def test_stale_asr_worker_is_cancelled_after_new_asr_turn(
     assert get_session().qa_pairs == []
     assert pipeline._next_commit_seq == 1
     assert pipeline._in_flight_tasks == {}
+
+
+def test_candidate_whisper_preload_runs_in_background(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    calls = {"load": 0}
+
+    class _FakeWhisper:
+        @property
+        def is_loaded(self):
+            return calls["load"] > 0
+
+        def load_model(self):
+            calls["load"] += 1
+
+    def fake_get_stt_engine(**kwargs):
+        assert kwargs == {
+            "provider": "whisper",
+            "model_size": "base",
+            "language": "auto",
+        }
+        return _FakeWhisper()
+
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(pipeline, "get_stt_engine", fake_get_stt_engine)
+
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+
+    assert len(_DeferredThread.started) == 1
+    _DeferredThread.started[0].run()
+
+    assert calls["load"] == 1
+    assert broadcasts[-1] == {
+        "type": "candidate_asr_status",
+        "loaded": True,
+        "loading": False,
+        "provider": "whisper",
+    }
+
+
+def test_candidate_whisper_preload_failure_only_reports_candidate_status(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(
+        pipeline,
+        "get_stt_engine",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("candidate model bad")),
+    )
+
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+    _DeferredThread.started[0].run()
+
+    assert broadcasts[-1]["type"] == "candidate_asr_status"
+    assert broadcasts[-1]["provider"] == "whisper"
+    assert broadcasts[-1]["loaded"] is False
+    assert "candidate model bad" in broadcasts[-1]["error"]
+
+
+def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    class _MainAudio:
+        SAMPLE_RATE = 16000
+
+        def __init__(self):
+            self.start_calls = []
+            self.stop_calls = []
+
+        def start(self, device_id, owner=None):
+            self.start_calls.append((device_id, owner))
+
+        def stop(self, owner=None):
+            self.stop_calls.append(owner)
+
+    class _BrokenCandidateAudio(_MainAudio):
+        def start(self, device_id, owner=None):
+            self.start_calls.append((device_id, owner))
+            raise RuntimeError("mic unavailable")
+
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    main_audio = _MainAudio()
+    candidate_audio = _BrokenCandidateAudio()
+    session = get_session()
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "audio_capture", main_audio)
+    monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
+    monkeypatch.setattr(pipeline, "_device_is_loopback", lambda _device_id: True)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    pipeline.start_nonblocking(10, 11)
+
+    assert session.is_recording is True
+    assert main_audio.start_calls == [(10, "assist")]
+    assert candidate_audio.start_calls == [(11, "assist-candidate")]
+    assert len(_DeferredThread.started) == 1
+    assert _DeferredThread.started[0].target is pipeline._interview_worker
+    assert any(
+        event.get("type") == "candidate_asr_status"
+        and event.get("provider") == "off"
+        and "mic unavailable" in event.get("error", "")
+        for event in broadcasts
+    )

@@ -198,6 +198,223 @@ def test_process_question_parallel_sanitizes_streamed_answer_chunks(
     assert done["answer"] == "用 AOF 和 RDB。"
 
 
+def test_followup_prompt_prefers_candidate_spoken_answer(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：我做了通用缓存项目，QPS 提升 20%。",
+        qa_id="qa-prev",
+        source="asr",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控规则引擎，核心是灰度发布和回滚，误杀率下降了三成。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "围绕真实口述追问。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("那你刚才说的这个怎么验证？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert "候选人真实口述回答（最高优先级）" in prompt
+    assert "风控规则引擎" in prompt
+    assert "误杀率下降了三成" in prompt
+    assert "助手上一轮建议答案（仅作低优先级参考" in prompt
+    assert "通用缓存项目" in prompt
+
+
+def test_realtime_asr_source_uses_candidate_context_and_opens_next_window(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：缓存项目。",
+        qa_id="qa-prev",
+        source="conversation_loopback",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控规则引擎。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: True)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "继续追问。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "那这个怎么验证？",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert "候选人真实口述回答（最高优先级）" in seen["user"]
+    assert "风控规则引擎" in seen["user"]
+    answer_start = next(event for event in broadcasts if event["type"] == "answer_start")
+    assert session.current_candidate_qa_id == answer_start["id"]
+
+
+def test_non_followup_prompt_can_include_candidate_spoken_background(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：我做了通用缓存项目。",
+        qa_id="qa-prev",
+        source="asr",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控规则引擎，里面用了灰度发布和规则回滚。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: False)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "普通问题回答。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("MySQL 索引为什么用 B+ 树？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert "[候选人真实口述背景]" in prompt
+    assert "风控规则引擎" in prompt
+    assert "如果当前问题与上一轮无关，请忽略它" in prompt
+    assert "现在面试官问题：MySQL 索引为什么用 B+ 树？" in prompt
+
+
+def test_followup_prompt_uses_legacy_context_when_candidate_context_disabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：缓存项目。",
+        qa_id="qa-prev",
+        source="asr",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "真实口述：风控规则引擎。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+
+    cfg = _cfg()
+    cfg.candidate_context_enabled = False
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "旧逻辑回答。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("那刚才这个怎么验证？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert "你上次回答的要点：助手建议答案：缓存项目。" in prompt
+    assert "候选人真实口述回答" not in prompt
+    assert "风控规则引擎" not in prompt
+
+
+def test_followup_prompt_uses_legacy_context_when_candidate_asr_disabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：缓存项目。",
+        qa_id="qa-prev",
+        source="asr",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "真实口述：风控规则引擎。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = False
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "旧逻辑回答。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("那刚才这个怎么验证？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert "你上次回答的要点：助手建议答案：缓存项目。" in prompt
+    assert "候选人真实口述回答" not in prompt
+    assert "风控规则引擎" not in prompt
+
+
 def test_process_question_parallel_flushes_clean_tail_before_error(
     monkeypatch: pytest.MonkeyPatch,
 ):

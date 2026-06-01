@@ -150,6 +150,12 @@ export function useInterviewWS() {
       case 'transcription':
         s.addTranscription(msg.text as string)
         break
+      case 'candidate_transcription':
+        s.addCandidateTranscription(msg.text as string, {
+          segmentId: msg.segment_id as string | undefined,
+          isFinal: msg.is_final as boolean | undefined,
+        })
+        break
       case 'session_cleared':
         s.clearSession()
         break
@@ -193,6 +199,16 @@ export function useInterviewWS() {
       case 'stt_status':
         s.setSttStatus((msg.loaded as boolean) ?? false, (msg.loading as boolean) ?? false, msg.provider as string | undefined)
         break
+      case 'candidate_asr_status':
+        s.setCandidateSttStatus(
+          (msg.loaded as boolean) ?? false,
+          (msg.loading as boolean) ?? false,
+          msg.provider as string | undefined,
+        )
+        if (msg.error) {
+          s.pushToast(`候选人麦克风 ASR 异常: ${msg.error as string}`, 'warn')
+        }
+        break
       // Practice mode messages
       case 'practice_status':
         s.setPracticeStatus(normalizePracticeStatus(msg.status) as Parameters<typeof s.setPracticeStatus>[0])
@@ -231,6 +247,9 @@ export function useInterviewWS() {
           to: `STT:${msg.to as string}`,
           reason: msg.reason as string,
         })
+        break
+      case 'candidate_stt_fallback':
+        s.pushToast(`候选人麦克风 ASR 已降级到 ${msg.to as string}`, 'warn')
         break
       case 'resume_opt_start':
         s.resetResumeOpt(typeof msg.job_id === 'string' ? msg.job_id : null)

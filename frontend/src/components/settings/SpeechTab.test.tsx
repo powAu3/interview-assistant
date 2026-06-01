@@ -41,6 +41,18 @@ describe('SpeechTab', () => {
         generic_stt_api_base_url: '',
         generic_stt_api_key: '',
         generic_stt_model: '',
+        generic_stt_custom_headers: '',
+        candidate_asr_enabled: true,
+        candidate_stt_provider: 'whisper',
+        candidate_whisper_model: '',
+        candidate_whisper_language: '',
+        candidate_remote_stt_enabled: false,
+        candidate_context_enabled: true,
+        candidate_context_wait_ms: 200,
+        candidate_context_max_chars: 900,
+        candidate_context_min_chars: 6,
+        candidate_streaming_asr_enabled: true,
+        candidate_streaming_asr_interval_ms: 1500,
         practice_tts_provider: 'edge_tts',
         edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -74,5 +86,21 @@ describe('SpeechTab', () => {
 
     expect(await screen.findByText(/该 provider 已不再受支持/)).toBeInTheDocument()
     expect(screen.getByText(/请切换到“通用 ASR”或“Whisper”/)).toBeInTheDocument()
+  })
+
+  it('shows candidate microphone ASR defaults as local whisper', () => {
+    render(<SpeechTab />)
+
+    expect(screen.getByText('实时辅助语音链路')).toBeInTheDocument()
+    expect(screen.getByText('主链路 ASR（面试官 / 会议音频）')).toBeInTheDocument()
+    expect(screen.getByText('可选辅助 ASR（我的麦克风）')).toBeInTheDocument()
+    expect(screen.getByText('读取我的麦克风')).toBeInTheDocument()
+    expect(screen.getAllByText(/不会触发自动答题/).length).toBeGreaterThan(0)
+    expect(screen.getByDisplayValue('Whisper（本地，免费）')).toBeInTheDocument()
+    expect(screen.getByText(/高级设置：Whisper 模型与追问上下文/)).toBeInTheDocument()
+    expect(screen.getByText(/生成下一轮答案时会携带上一轮/)).toBeInTheDocument()
+    expect(screen.getByText('边听边写')).toBeInTheDocument()
+    expect(screen.getByText('兜底等最后一句 (ms)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('200')).toBeInTheDocument()
   })
 })

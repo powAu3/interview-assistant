@@ -46,6 +46,17 @@ export interface AppConfig {
   generic_stt_api_key: string
   generic_stt_model: string
   generic_stt_custom_headers: string
+  candidate_asr_enabled?: boolean
+  candidate_stt_provider?: string
+  candidate_whisper_model?: string
+  candidate_whisper_language?: string
+  candidate_remote_stt_enabled?: boolean
+  candidate_context_enabled?: boolean
+  candidate_context_wait_ms?: number
+  candidate_context_max_chars?: number
+  candidate_context_min_chars?: number
+  candidate_streaming_asr_enabled?: boolean
+  candidate_streaming_asr_interval_ms?: number
   practice_tts_provider?: string
   edge_tts_available?: boolean
   edge_tts_status_detail?: string

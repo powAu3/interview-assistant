@@ -530,6 +530,15 @@ class VADBuffer:
     def is_speaking(self) -> bool:
         return self._speech_started and self._silence_start is None
 
+    @property
+    def has_pending_audio(self) -> bool:
+        return self._speech_started and bool(self._buffer)
+
+    def pending_audio(self) -> Optional[np.ndarray]:
+        if not self._buffer:
+            return None
+        return np.concatenate(self._buffer)
+
 
 audio_capture = AudioCapture()
 

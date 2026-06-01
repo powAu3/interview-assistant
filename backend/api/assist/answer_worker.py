@@ -65,6 +65,36 @@ def _normalize_task_images(image: Any) -> list[str]:
     return []
 
 
+def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
+    enabled = bool(getattr(cfg, "candidate_asr_enabled", False)) and bool(
+        getattr(cfg, "candidate_context_enabled", True)
+    )
+    return (
+        enabled,
+        max(0, min(2000, int(getattr(cfg, "candidate_context_wait_ms", 200) or 0))),
+        max(100, min(4000, int(getattr(cfg, "candidate_context_max_chars", 900) or 900))),
+        max(1, min(100, int(getattr(cfg, "candidate_context_min_chars", 6) or 6))),
+    )
+
+
+def _wait_for_candidate_context_if_pending(session_ref, qa_id: str, wait_ms: int) -> None:
+    if wait_ms <= 0 or not qa_id:
+        return
+    deadline = time.monotonic() + (wait_ms / 1000.0)
+    while time.monotonic() < deadline:
+        if not getattr(session_ref, "has_candidate_asr_pending_for_qa", lambda *_args, **_kwargs: False)(qa_id):
+            return
+        time.sleep(0.025)
+
+
+def _supports_candidate_context_source(source: str, meta: dict[str, Any]) -> bool:
+    if source == "manual_text":
+        return True
+    if source in ("asr", "conversation_loopback", "conversation_mic"):
+        return True
+    return meta.get("origin") == "asr"
+
+
 def prompt_mode_for_task(
     source: str,
     manual_input: bool,
@@ -148,21 +178,73 @@ def process_question_parallel(
         session_ref = get_session()
         base_messages = list(session_ref.get_conversation_messages_for_llm())
         last_qa = session_ref.get_last_qa()
+        candidate_context_enabled, candidate_wait_ms, candidate_max_chars, candidate_min_chars = _candidate_context_settings(cfg)
+        candidate_source_ok = _supports_candidate_context_source(source, meta)
+        should_use_candidate_context = bool(
+            not images
+            and last_qa
+            and candidate_source_ok
+            and candidate_context_enabled
+        )
+        actual_spoken_answer = (
+            session_ref.get_candidate_answer_for_qa(last_qa.id, max_chars=candidate_max_chars)
+            if last_qa
+            and should_use_candidate_context
+            else ""
+        )
+
+    if should_use_candidate_context and last_qa and not actual_spoken_answer:
+        _wait_for_candidate_context_if_pending(session_ref, last_qa.id, candidate_wait_ms)
+        with conversation_lock:
+            actual_spoken_answer = session_ref.get_candidate_answer_for_qa(
+                last_qa.id,
+                max_chars=candidate_max_chars,
+            )
+    if len(actual_spoken_answer.strip()) < candidate_min_chars:
+        actual_spoken_answer = ""
 
     is_followup = False
     if (
         not images
         and last_qa
-        and source in ("asr", "manual_text")
-        and classify_followup(question_text, last_qa.question, last_qa.answer)
+        and _supports_candidate_context_source(source, meta)
+        and classify_followup(question_text, last_qa.question, actual_spoken_answer or last_qa.answer[:500])
     ):
         is_followup = True
-        prev_answer_summary = last_qa.answer[:500]
+        prev_answer_budget = max(200, min(500, candidate_max_chars // 2))
+        prev_answer_summary = last_qa.answer[:prev_answer_budget]
+        if not candidate_context_enabled:
+            user_for_llm = (
+                f"[追问上下文] 上一个问题：{last_qa.question}\n"
+                f"你上次回答的要点：{prev_answer_summary}\n\n"
+                f"现在面试官追问：{question_text}"
+            )
+        else:
+            actual_block = (
+                f"候选人真实口述回答（最高优先级）：{actual_spoken_answer[:candidate_max_chars]}\n"
+                if actual_spoken_answer
+                else "候选人真实口述回答：未启用或未捕获到；本轮按旧逻辑仅参考助手建议答案。\n"
+            )
+            user_for_llm = (
+                f"[追问上下文] 上一个问题：{last_qa.question}\n"
+                f"{actual_block}"
+                f"助手上一轮建议答案（仅作低优先级参考，不代表候选人照读）：{prev_answer_summary}\n"
+                "追问回答规则：如果真实口述与助手建议冲突，必须以真实口述为准；"
+                "不要补造真实口述里没有出现的项目细节、数据或决策。\n\n"
+                f"现在面试官追问：{question_text}"
+            )
+    elif should_use_candidate_context and last_qa and actual_spoken_answer:
         user_for_llm = (
-            f"[追问上下文] 上一个问题：{last_qa.question}\n"
-            f"你上次回答的要点：{prev_answer_summary}\n\n"
-            f"现在面试官追问：{question_text}"
+            f"[候选人真实口述背景] 上一个问题：{last_qa.question}\n"
+            f"候选人上一轮真实口述（背景信息）：{actual_spoken_answer[:candidate_max_chars]}\n"
+            "使用规则：这段真实口述可帮助延续候选人的项目经历、技术选型和事实细节；"
+            "如果当前问题与上一轮无关，请忽略它，不要强行关联。"
+            "不得假设候选人照读了助手上一轮建议答案。\n\n"
+            f"现在面试官问题：{question_text}"
         )
+
+    with conversation_lock:
+        session_ref.close_candidate_answer_window()
 
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
 
@@ -189,6 +271,9 @@ def process_question_parallel(
             "model_index": model_idx,
         }
     )
+    if not images and _supports_candidate_context_source(source, meta) and candidate_context_enabled:
+        with conversation_lock:
+            get_session().open_candidate_answer_window(qa_id)
 
     if kb_hits or kb_degraded:
         try:

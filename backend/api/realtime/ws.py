@@ -175,6 +175,8 @@ async def websocket_endpoint(ws: WebSocket):
             "is_paused": snapshot["is_paused"],
             "stt_loaded": engine.is_loaded,
             "transcriptions": snapshot["transcriptions"],
+            "candidate_transcriptions": snapshot.get("candidate_transcriptions", []),
+            "candidate_answer_segments": snapshot.get("candidate_answer_segments", []),
             "qa_pairs": snapshot["qa_pairs"],
             "practice_session": get_practice().to_dict(
                 reveal_feedback=get_practice().status == "finished"

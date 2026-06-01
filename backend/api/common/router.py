@@ -85,6 +85,17 @@ class ConfigUpdate(BaseModel):
     generic_stt_api_key: Optional[str] = None
     generic_stt_model: Optional[str] = None
     generic_stt_custom_headers: Optional[str] = None
+    candidate_asr_enabled: Optional[bool] = None
+    candidate_stt_provider: Optional[str] = None
+    candidate_whisper_model: Optional[str] = None
+    candidate_whisper_language: Optional[str] = None
+    candidate_remote_stt_enabled: Optional[bool] = None
+    candidate_context_enabled: Optional[bool] = None
+    candidate_context_wait_ms: Optional[int] = None
+    candidate_context_max_chars: Optional[int] = None
+    candidate_context_min_chars: Optional[int] = None
+    candidate_streaming_asr_enabled: Optional[bool] = None
+    candidate_streaming_asr_interval_ms: Optional[int] = None
     practice_tts_provider: Optional[str] = None
     edge_tts_voice_female: Optional[str] = None
     edge_tts_voice_male: Optional[str] = None
@@ -159,6 +170,32 @@ async def api_update_config(body: ConfigUpdate):
                 422,
                 f"stt_provider 必须是 {list(STT_PROVIDER_OPTIONS)} 之一",
             )
+        if d.get("candidate_stt_provider") in _LEGACY_STT_PROVIDER_MAP:
+            raise HTTPException(
+                422,
+                f"candidate_stt_provider={d['candidate_stt_provider']} 已废弃，请改用 whisper",
+            )
+        if d.get("candidate_stt_provider") == "":
+            d.pop("candidate_stt_provider", None)
+        elif "candidate_stt_provider" in d and d["candidate_stt_provider"] not in STT_PROVIDER_OPTIONS:
+            raise HTTPException(
+                422,
+                f"candidate_stt_provider 必须是 {list(STT_PROVIDER_OPTIONS)} 之一",
+            )
+        if d.get("candidate_stt_provider") in ("doubao", "generic") and not bool(d.get("candidate_remote_stt_enabled", get_config().candidate_remote_stt_enabled)):
+            d["candidate_stt_provider"] = "whisper"
+        if "candidate_whisper_model" in d:
+            d["candidate_whisper_model"] = str(d["candidate_whisper_model"]).strip()
+        if "candidate_whisper_language" in d:
+            d["candidate_whisper_language"] = str(d["candidate_whisper_language"]).strip()
+        if "candidate_context_wait_ms" in d:
+            d["candidate_context_wait_ms"] = max(0, min(2000, int(d["candidate_context_wait_ms"])))
+        if "candidate_context_max_chars" in d:
+            d["candidate_context_max_chars"] = max(100, min(4000, int(d["candidate_context_max_chars"])))
+        if "candidate_context_min_chars" in d:
+            d["candidate_context_min_chars"] = max(1, min(100, int(d["candidate_context_min_chars"])))
+        if "candidate_streaming_asr_interval_ms" in d:
+            d["candidate_streaming_asr_interval_ms"] = max(800, min(5000, int(d["candidate_streaming_asr_interval_ms"])))
         if "max_parallel_answers" in d:
             d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
         if "answer_autoscroll_bottom_px" in d:

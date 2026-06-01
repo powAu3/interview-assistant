@@ -32,7 +32,7 @@ def test_build_start_command_preserves_port_and_adds_rebuild():
     ]
 
 
-def test_install_dependencies_runs_python_frontend_and_desktop_installs(monkeypatch):
+def test_install_dependencies_runs_python_and_frontend_installs(monkeypatch):
     quick_start = load_quick_start()
     calls = []
 
@@ -52,5 +52,4 @@ def test_install_dependencies_runs_python_frontend_and_desktop_installs(monkeypa
     assert calls == [
         ([sys.executable, "-m", "pip", "install", "-r", quick_start.REQUIREMENTS], quick_start.ROOT),
         (["npm", "install"], quick_start.FRONTEND_DIR),
-        (["npm", "install"], quick_start.DESKTOP_DIR),
     ]

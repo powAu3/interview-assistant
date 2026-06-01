@@ -67,6 +67,19 @@ class AppConfig(BaseModel):
     generic_stt_model: str = ""
     # 自定义 HTTP header，JSON 格式如 {"X-Custom":"value"} 或每行 Key: Value
     generic_stt_custom_headers: str = ""
+    # 实时辅助候选人麦克风 ASR：默认关闭；开启后默认本地 Whisper，避免额外远程识别成本。
+    candidate_asr_enabled: bool = False
+    candidate_stt_provider: str = "whisper"
+    candidate_whisper_model: str = ""
+    candidate_whisper_language: str = ""
+    candidate_remote_stt_enabled: bool = False
+    # 候选人真实回答上下文：下一轮问题可携带，追问时强优先，非追问时作为可忽略背景。
+    candidate_context_enabled: bool = True
+    candidate_context_wait_ms: int = 200
+    candidate_context_max_chars: int = 900
+    candidate_context_min_chars: int = 6
+    candidate_streaming_asr_enabled: bool = True
+    candidate_streaming_asr_interval_ms: int = 1500
     # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
     practice_tts_provider: str = "edge_tts"
     edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"
@@ -149,6 +162,23 @@ class AppConfig(BaseModel):
             logger.warning(
                 "检测到已废弃的 stt_provider=iflytek；请在设置中改为 generic 或 whisper"
             )
+        if self.candidate_stt_provider == "iflytek":
+            logger.warning(
+                "检测到已废弃的 candidate_stt_provider=iflytek；已重置为 whisper"
+            )
+            self.candidate_stt_provider = "whisper"
+        if self.candidate_stt_provider not in STT_PROVIDER_OPTIONS:
+            logger.warning(
+                "candidate_stt_provider=%r 不支持，已重置为 whisper",
+                self.candidate_stt_provider,
+            )
+            self.candidate_stt_provider = "whisper"
+        if self.candidate_stt_provider in ("doubao", "generic") and not self.candidate_remote_stt_enabled:
+            self.candidate_stt_provider = "whisper"
+        self.candidate_context_wait_ms = max(0, min(2000, int(self.candidate_context_wait_ms or 0)))
+        self.candidate_context_max_chars = max(100, min(4000, int(self.candidate_context_max_chars or 900)))
+        self.candidate_context_min_chars = max(1, min(100, int(self.candidate_context_min_chars or 6)))
+        self.candidate_streaming_asr_interval_ms = max(800, min(5000, int(self.candidate_streaming_asr_interval_ms or 1500)))
         wl = (self.whisper_language or "").strip()
         if wl and wl != "auto":
             import re as _re
@@ -157,6 +187,15 @@ class AppConfig(BaseModel):
                     "whisper_language=%r 格式不正确，已重置为 auto (应为 ISO 639-1 码如 en/zh)", wl
                 )
                 self.whisper_language = "auto"
+        cwl = (self.candidate_whisper_language or "").strip()
+        if cwl and cwl != "auto":
+            import re as _re
+            if not _re.match(r"^[a-z]{2}(-[A-Z]{2})?$", cwl):
+                logger.warning(
+                    "candidate_whisper_language=%r 格式不正确，已重置为空（沿用 whisper_language）",
+                    cwl,
+                )
+                self.candidate_whisper_language = ""
         if not self.models:
             self.models = [_default_model_config()]
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))

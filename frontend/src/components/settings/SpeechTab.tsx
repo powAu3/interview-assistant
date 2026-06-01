@@ -35,6 +35,17 @@ export default function SpeechTab() {
     generic_stt_api_key: '',
     generic_stt_model: '',
     generic_stt_custom_headers: '',
+    candidate_asr_enabled: false,
+    candidate_stt_provider: 'whisper',
+    candidate_whisper_model: '',
+    candidate_whisper_language: '',
+    candidate_remote_stt_enabled: false,
+    candidate_context_enabled: true,
+    candidate_context_wait_ms: 200,
+    candidate_context_max_chars: 900,
+    candidate_context_min_chars: 6,
+    candidate_streaming_asr_enabled: true,
+    candidate_streaming_asr_interval_ms: 1500,
     practice_tts_provider: 'edge_tts' as string,
     edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
     edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -74,6 +85,17 @@ export default function SpeechTab() {
         generic_stt_api_key: config.generic_stt_api_key ?? '',
         generic_stt_model: config.generic_stt_model ?? '',
         generic_stt_custom_headers: config.generic_stt_custom_headers ?? '',
+        candidate_asr_enabled: config.candidate_asr_enabled ?? false,
+        candidate_stt_provider: config.candidate_stt_provider ?? 'whisper',
+        candidate_whisper_model: config.candidate_whisper_model ?? '',
+        candidate_whisper_language: config.candidate_whisper_language ?? '',
+        candidate_remote_stt_enabled: config.candidate_remote_stt_enabled ?? false,
+        candidate_context_enabled: config.candidate_context_enabled ?? true,
+        candidate_context_wait_ms: config.candidate_context_wait_ms ?? 200,
+        candidate_context_max_chars: config.candidate_context_max_chars ?? 900,
+        candidate_context_min_chars: config.candidate_context_min_chars ?? 6,
+        candidate_streaming_asr_enabled: config.candidate_streaming_asr_enabled ?? true,
+        candidate_streaming_asr_interval_ms: config.candidate_streaming_asr_interval_ms ?? 1500,
         practice_tts_provider: config.practice_tts_provider ?? 'edge_tts',
         edge_tts_voice_female: config.edge_tts_voice_female ?? 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: config.edge_tts_voice_male ?? 'zh-CN-YunxiNeural',
@@ -98,7 +120,10 @@ export default function SpeechTab() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateConfigAndRefresh(form)
+      await updateConfigAndRefresh({
+        ...form,
+        candidate_remote_stt_enabled: form.candidate_stt_provider !== 'whisper',
+      })
       useInterviewStore.getState().setToastMessage('语音配置已保存')
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
@@ -195,12 +220,48 @@ export default function SpeechTab() {
     return false
   }
 
+  const mainSttLabel = providerMeta[form.stt_provider]?.label ?? form.stt_provider
+  const candidateSttLabel = form.candidate_stt_provider === 'whisper'
+    ? 'Whisper 本地'
+    : form.candidate_stt_provider === 'doubao'
+      ? '豆包云端'
+      : '通用云端'
+  const candidateContextActive = form.candidate_asr_enabled && form.candidate_context_enabled
   const searchQuery = useSettingsSearch()
   const inSearch = searchQuery.trim().length > 0
 
   return (
     <div className="p-5 space-y-5 pb-8" data-in-search={inSearch ? '1' : undefined}>
-      <Section title="语音识别引擎" icon={<Mic className="w-3.5 h-3.5" />} keywords="stt asr whisper funasr paraformer 识别引擎 model device 转写 sense-voice">
+      <Section title="实时辅助语音链路" icon={<Mic className="w-3.5 h-3.5" />} keywords="实时辅助 双路 asr 面试官 候选人 麦克风 追问">
+        <GradientCard className="p-4 border-accent-blue/25">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-text-primary">1. 面试官 / 会议音频 ASR</h3>
+                <StatusBadge status="ok" label="主链路" />
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                识别控制条里的“会议音频”。识别到面试官问题后，会继续走自动判题、追问判断和生成答案链路。
+              </p>
+              <p className="mt-2 text-[11px] text-text-muted">当前：{mainSttLabel}，这是下面“主链路 ASR”的配置。</p>
+            </div>
+            <div className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-text-primary">2. 我的麦克风 ASR</h3>
+                <StatusBadge status={form.candidate_asr_enabled ? 'ok' : 'idle'} label={form.candidate_asr_enabled ? '辅助上下文' : '已关闭'} />
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                只识别你实际说出口的回答，写入追问上下文；不会触发自动答题，也不会混入面试官问题流。
+              </p>
+              <p className="mt-2 text-[11px] text-text-muted">
+                当前：{form.candidate_asr_enabled ? `${candidateSttLabel}，追问${candidateContextActive ? '优先使用真实口述' : '按旧逻辑'}` : '不读取麦克风，完全按旧逻辑追问'}。
+              </p>
+            </div>
+          </div>
+        </GradientCard>
+      </Section>
+
+      <Section title="主链路 ASR（面试官 / 会议音频）" icon={<Mic className="w-3.5 h-3.5" />} keywords="stt asr whisper funasr paraformer 识别引擎 model device 转写 sense-voice 面试官 会议音频">
         <div className="grid grid-cols-3 gap-2">
           {providers.map((p) => {
             const meta = providerMeta[p] || { label: p, desc: '', icon: <Mic className="w-5 h-5" />, brandClass: 'blue' }
@@ -248,9 +309,9 @@ export default function SpeechTab() {
       <GradientCard className={`p-4 space-y-3 transition-all duration-200 ${brandBorder[form.stt_provider] ?? ''}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-text-primary">当前引擎配置</h3>
+            <h3 className="text-sm font-semibold text-text-primary">面试官 ASR 引擎配置</h3>
             <p className="text-[11px] text-text-muted mt-0.5">
-              {providerMeta[form.stt_provider]?.label ?? form.stt_provider}
+              这一路识别面试官声音，识别出的题目会触发自动生成答案。
             </p>
           </div>
           <StatusBadge
@@ -350,6 +411,202 @@ export default function SpeechTab() {
           )}
         </div>
       </GradientCard>
+
+      <Section title="可选辅助 ASR（我的麦克风）" icon={<Mic className="w-3.5 h-3.5" />} keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本">
+        <GradientCard className="p-4 space-y-4 border-emerald-400/30">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">读取我的麦克风</h3>
+              <p className="text-[11px] text-text-muted mt-0.5">
+                只用于记录你真实说出口的回答，给下一轮追问做上下文；不会触发自动答题。
+              </p>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.candidate_asr_enabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked
+                  setForm({
+                    ...form,
+                    candidate_asr_enabled: enabled,
+                  })
+                }}
+                className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
+              />
+              <span className="text-xs text-text-secondary">{form.candidate_asr_enabled ? '读取麦克风' : '不读取'}</span>
+            </label>
+          </div>
+          {!form.candidate_asr_enabled && (
+            <div className="rounded-lg border border-bg-hover bg-bg-tertiary/40 px-3 py-2 text-xs text-text-muted">
+              当前已关闭候选人麦克风 ASR：启动面试时不会传入“我的麦克风”设备，追问上下文会退回旧的模型答案链路。
+            </div>
+          )}
+          {form.candidate_asr_enabled && (
+            <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+              开启后控制条会多选一路“我的麦克风”。这一路转写会单独显示为“我的回答上下文”，下一轮生成时作为你的真实回答背景；面试官问题仍由“会议音频”主链路识别和触发。
+            </div>
+          )}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="候选人语音识别引擎" hint="默认 Whisper 本地识别，不产生远程 ASR 成本">
+              <select
+                value={form.candidate_stt_provider}
+                onChange={(e) => {
+                const nextProvider = e.target.value
+                setForm({
+                  ...form,
+                  candidate_stt_provider: nextProvider,
+                  candidate_remote_stt_enabled: nextProvider !== 'whisper',
+                })
+              }}
+                className="input-field"
+                disabled={!form.candidate_asr_enabled}
+              >
+                {providers.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider === 'whisper'
+                      ? 'Whisper（本地，免费）'
+                      : provider === 'doubao'
+                        ? '豆包（云端，会增加成本）'
+                        : '通用 ASR（云端，会增加成本）'}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="下一题使用真实回答上下文" hint="开启后下一轮问题会带上你的真实口述；追问时强优先，非追问时只作背景">
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.candidate_context_enabled}
+                  onChange={(e) => setForm({ ...form, candidate_context_enabled: e.target.checked })}
+                  className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
+                  disabled={!form.candidate_asr_enabled}
+                />
+                <span className="text-xs text-text-secondary">{
+                  !form.candidate_asr_enabled
+                    ? (form.candidate_context_enabled ? '开启麦克风后生效' : '按旧逻辑')
+                    : (candidateContextActive ? '下一题携带真实口述' : '按旧逻辑')
+                }</span>
+              </label>
+            </Field>
+          </div>
+          {form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper' && (
+            <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+              已选择云端候选人 ASR：候选人麦克风转写会调用对应云端接口并产生额外成本。切回 Whisper 即恢复本地免费识别。
+            </div>
+          )}
+
+          <details className="group rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-2">
+            <summary className="cursor-pointer select-none text-xs font-medium text-text-secondary group-open:text-text-primary">
+              高级设置：Whisper 模型与追问上下文
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div className="rounded-lg border border-bg-hover bg-bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+                上下文流程：先由“会议音频”识别面试官问题；生成下一轮答案时会携带上一轮“我的麦克风”真实转写作为背景。若系统判断这是追问，真实口述会强优先；若不是追问，真实口述只作背景，和当前问题无关时会被忽略。
+              </div>
+
+              <Field label="边听边写" hint="开启后会一边听你的麦克风一边预转写；面试官提下一题时，直接使用已经写入的内容。停顿后再用完整结果覆盖。云端 ASR 不做预转写，避免反复计费。">
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.candidate_streaming_asr_enabled}
+                    onChange={(e) => setForm({ ...form, candidate_streaming_asr_enabled: e.target.checked })}
+                    className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
+                    disabled={!form.candidate_asr_enabled || form.candidate_stt_provider !== 'whisper'}
+                  />
+                  <span className="text-xs text-text-secondary">
+                    {form.candidate_stt_provider === 'whisper'
+                      ? form.candidate_streaming_asr_enabled ? '已开启' : '已关闭'
+                      : '云端 ASR 不做预转写'}
+                  </span>
+                </label>
+              </Field>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="候选人 Whisper 模型" hint="留空则沿用主链路 Whisper 模型">
+                  <select
+                    value={form.candidate_whisper_model}
+                    onChange={(e) => setForm({ ...form, candidate_whisper_model: e.target.value })}
+                    className="input-field"
+                    disabled={!form.candidate_asr_enabled}
+                  >
+                    <option value="">沿用主配置 ({form.whisper_model})</option>
+                    {(options?.whisper_models ?? ['tiny', 'base', 'small', 'medium', 'large-v3']).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="候选人识别语言" hint="留空则沿用主链路语言">
+                  <select
+                    value={form.candidate_whisper_language}
+                    onChange={(e) => setForm({ ...form, candidate_whisper_language: e.target.value })}
+                    className="input-field"
+                    disabled={!form.candidate_asr_enabled}
+                  >
+                    <option value="">沿用主配置 ({form.whisper_language})</option>
+                    <option value="auto">自动检测 (auto)</option>
+                    <option value="zh">中文 (zh)</option>
+                    <option value="en">English (en)</option>
+                    <option value="ja">日本語 (ja)</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-4">
+                <Field label="边写刷新间隔 (ms)" hint="每隔多久尝试把你正在说的话写进上下文。拿不到本地 Whisper 空闲资源时会跳过本次，优先保证面试官 ASR。">
+                  <input
+                    type="number"
+                    min={800}
+                    max={5000}
+                    step={100}
+                    value={form.candidate_streaming_asr_interval_ms}
+                    onChange={(e) => setForm({ ...form, candidate_streaming_asr_interval_ms: Math.max(800, Math.min(5000, parseInt(e.target.value, 10) || 1500)) })}
+                    className="input-field"
+                    disabled={!form.candidate_asr_enabled || !form.candidate_streaming_asr_enabled || form.candidate_stt_provider !== 'whisper'}
+                  />
+                </Field>
+                <Field label="兜底等最后一句 (ms)" hint="边听边写已经会提前写入上下文；这个只是在你刚说完、最后一句还没写进去时，下一题生成前最多再等一下。0=不等。">
+                  <input
+                    type="number"
+                    min={0}
+                    max={2000}
+                    step={50}
+                    value={form.candidate_context_wait_ms}
+                    onChange={(e) => setForm({ ...form, candidate_context_wait_ms: Math.max(0, Math.min(2000, parseInt(e.target.value, 10) || 0)) })}
+                    className="input-field"
+                    disabled={!form.candidate_asr_enabled || !form.candidate_context_enabled}
+                  />
+                </Field>
+                <Field label="上下文字数" hint="注入下一轮 prompt 的真实回答上限">
+                  <input
+                    type="number"
+                    min={100}
+                    max={4000}
+                    step={100}
+                    value={form.candidate_context_max_chars}
+                    onChange={(e) => setForm({ ...form, candidate_context_max_chars: Math.max(100, Math.min(4000, parseInt(e.target.value, 10) || 900)) })}
+                    className="input-field"
+                    disabled={!form.candidate_asr_enabled || !form.candidate_context_enabled}
+                  />
+                </Field>
+                <Field label="最少有效字" hint="太短的候选人转写不作为上下文">
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={form.candidate_context_min_chars}
+                    onChange={(e) => setForm({ ...form, candidate_context_min_chars: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 6)) })}
+                    className="input-field"
+                    disabled={!form.candidate_asr_enabled || !form.candidate_context_enabled}
+                  />
+                </Field>
+              </div>
+            </div>
+          </details>
+        </GradientCard>
+      </Section>
 
       <Section title="模拟面试播报 (TTS)" icon={<Volume2 className="w-3.5 h-3.5" />} keywords="tts 发音人 播报 面试官 音色 男声 女声 volcengine">
         <Field label="播报方案" hint="本地 speechSynthesis 作为 fallback；云端只保留火山引擎">

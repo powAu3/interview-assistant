@@ -33,3 +33,27 @@ def test_active_model_keeps_clamped_index_when_all_models_are_disabled():
     )
 
     assert cfg.active_model == 1
+
+
+def test_candidate_remote_stt_requires_explicit_cost_opt_in():
+    cfg = AppConfig(
+        candidate_stt_provider="doubao",
+        candidate_remote_stt_enabled=False,
+    )
+
+    assert cfg.candidate_stt_provider == "whisper"
+
+
+def test_candidate_mic_asr_defaults_to_opt_in():
+    cfg = AppConfig()
+
+    assert cfg.candidate_asr_enabled is False
+
+
+def test_candidate_remote_stt_can_be_enabled_explicitly():
+    cfg = AppConfig(
+        candidate_stt_provider="generic",
+        candidate_remote_stt_enabled=True,
+    )
+
+    assert cfg.candidate_stt_provider == "generic"
