@@ -115,6 +115,7 @@ def test_model_health_probe_uses_compatible_chat_payload(monkeypatch):
                         "api_base_url": "https://example.test/v1",
                         "api_key": "sk-test",
                         "model": "demo-model",
+                        "supports_think": True,
                     },
                 )()
             ]
@@ -123,6 +124,9 @@ def test_model_health_probe_uses_compatible_chat_payload(monkeypatch):
 
     class FakeResponse:
         status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
 
     def fake_post(url, headers=None, json=None, timeout=None):
         seen["url"] = url
@@ -138,9 +142,52 @@ def test_model_health_probe_uses_compatible_chat_payload(monkeypatch):
     model_health._check_single_model(0)
 
     assert seen["url"] == "https://example.test/v1/chat/completions"
-    assert seen["json"]["messages"][0]["content"] == "请回复“ok”，用于连接测试。"
+    assert seen["json"]["messages"][0]["content"] == "只回复 OK 两个字母，用于连接测试。"
     assert seen["json"]["max_tokens"] == 16
     assert seen["json"]["stream"] is False
+    assert seen["json"]["think_mode"] is False
+
+
+def test_model_health_probe_rejects_reasoning_leak(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    ws = importlib.import_module("api.realtime.ws")
+    events: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://example.test/v1",
+                        "api_key": "sk-test",
+                        "model": "glm-5.1",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK", "reasoning_content": "thinking"}}]}
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(ws, "broadcast", events.append)
+
+    model_health._check_single_model(0)
+
+    assert model_health.get_model_health(0) == "error"
+    assert "reasoning" in model_health.get_model_health_snapshot()["detail"][0]
+    assert events[-1]["status"] == "error"
 
 
 def test_resume_optimize_is_submitted_to_low_priority_lane(monkeypatch):

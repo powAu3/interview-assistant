@@ -77,6 +77,10 @@ def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
     )
 
 
+def _max_tokens_for_prompt(prompt_mode: PromptMode, cfg) -> int:
+    return max(1, int(getattr(cfg, "max_tokens", 4096) or 4096))
+
+
 def _wait_for_candidate_context_if_pending(session_ref, qa_id: str, wait_ms: int) -> None:
     if wait_ms <= 0 or not qa_id:
         return
@@ -296,6 +300,14 @@ def process_question_parallel(
     raw_full_answer = ""
     stream_sanitizer = create_answer_stream_sanitizer(prompt_mode)
     full_think = ""
+    token_prompt_delta = 0
+    token_completion_delta = 0
+
+    def _record_usage(prompt_tokens: int, completion_tokens: int, _model_name: str) -> None:
+        nonlocal token_prompt_delta, token_completion_delta
+        token_prompt_delta += int(prompt_tokens or 0)
+        token_completion_delta += int(completion_tokens or 0)
+
     exam_think_notified = False
     gen_start = time.monotonic()
     first_token_mono: Optional[float] = None
@@ -310,6 +322,8 @@ def process_question_parallel(
             system_prompt=system_prompt,
             abort_check=deps.abort_check,
             override_think_mode=think_override,
+            usage_callback=_record_usage,
+            override_max_tokens=_max_tokens_for_prompt(prompt_mode, cfg),
         ):
             if deps.abort_check():
                 break
@@ -394,13 +408,16 @@ def process_question_parallel(
             stats = get_token_stats()
             deps.logger.info(
                 "ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms "
-                "answer_len=%d think_len=%d tokens_prompt=%d tokens_completion=%d",
+                "answer_len=%d think_len=%d tokens_prompt_delta=%d tokens_completion_delta=%d "
+                "tokens_prompt=%d tokens_completion=%d",
                 qa_id,
                 model_cfg.name,
                 first_token_ms,
                 gen_elapsed,
                 len(full_answer),
                 len(full_think),
+                token_prompt_delta,
+                token_completion_delta,
                 stats["prompt"],
                 stats["completion"],
             )

@@ -128,6 +128,49 @@ def test_process_question_parallel_streams_and_commits_answer(monkeypatch: pytes
     assert session.qa_pairs[0].model_name == "模型一"
 
 
+def test_process_question_parallel_logs_token_delta_and_uses_configured_max_tokens(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    info_calls: list[tuple[tuple, dict]] = []
+    captured: dict[str, object] = {}
+
+    class CaptureLogger(_Logger):
+        def info(self, *args, **kwargs):
+            info_calls.append((args, kwargs))
+
+    def fake_stream(*_args, **kwargs):
+        captured["override_max_tokens"] = kwargs.get("override_max_tokens")
+        kwargs["usage_callback"](123, 45, "模型一")
+        yield ("text", "回答")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    deps = _deps(broadcasts=broadcasts)
+    deps = answer_worker.AnswerWorkerDeps(
+        abort_check=deps.abort_check,
+        is_session_current=deps.is_session_current,
+        flush_commit=deps.flush_commit,
+        mark_seq_skipped=deps.mark_seq_skipped,
+        submit_knowledge_record=deps.submit_knowledge_record,
+        broadcast=deps.broadcast,
+        logger=CaptureLogger(),
+        error_logger=deps.error_logger,
+    )
+
+    answer_worker.process_question_parallel(
+        ("Redis 怎么持久化？", None, False, "conversation_mic", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=deps,
+    )
+
+    assert captured["override_max_tokens"] == 4096
+    done_call = next(args for args, _kwargs in info_calls if "ANSWER_DONE" in args[0])
+    assert "tokens_prompt_delta" in done_call[0]
+    assert 123 in done_call
+    assert 45 in done_call
+
+
 def test_process_question_parallel_marks_seq_skipped_when_aborted(
     monkeypatch: pytest.MonkeyPatch,
 ):

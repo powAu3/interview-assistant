@@ -278,6 +278,29 @@ _EFFORT_BUDGET = {
     "high": 10240,
 }
 
+_THINK_DISABLED_BASE_PARAMS = {
+    "thinking": {"type": "disabled"},
+    "think_mode": False,
+    "enable_thinking": False,
+}
+
+_THINK_DISABLED_LOCAL_PARAMS = {
+    **_THINK_DISABLED_BASE_PARAMS,
+    "chat_template_kwargs": {"enable_thinking": False},
+}
+
+
+def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
+    base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
+    model_name = (getattr(model_cfg, "model", "") or "").lower()
+    if style == "gpt":
+        return {"reasoning_effort": "off", "think_mode": False}
+    if "localhost" in base_url or "127.0.0.1" in base_url or "sglang" in base_url:
+        return dict(_THINK_DISABLED_LOCAL_PARAMS)
+    if "glm" in model_name or "bigmodel" in base_url:
+        return {**_THINK_DISABLED_BASE_PARAMS, "reasoning_effort": "off"}
+    return dict(_THINK_DISABLED_BASE_PARAMS)
+
 def _detect_think_style(model_cfg) -> str:
     """Detect which thinking parameter format the model expects.
 
@@ -299,10 +322,8 @@ def _build_think_params(model_cfg, cfg) -> dict:
         return {}
     effort = cfg.think_effort
     style = _detect_think_style(model_cfg)
-    if effort == "off":
-        if style == "gpt":
-            return {"reasoning_effort": "off", "think_mode": False}
-        return {"thinking": {"type": "disabled"}, "think_mode": False}
+    if not getattr(cfg, "think_mode", False) or effort == "off":
+        return _disabled_think_params_for_model(model_cfg, style)
     if style == "gpt":
         return {
             "reasoning_effort": effort,
@@ -318,6 +339,14 @@ def _build_think_params(model_cfg, cfg) -> dict:
         "thinking": {"type": "enabled"},
         "think_mode": True,
     }
+
+
+def _should_emit_think(model_cfg, cfg) -> bool:
+    return bool(
+        model_cfg.supports_think
+        and getattr(cfg, "think_mode", False)
+        and getattr(cfg, "think_effort", "off") != "off"
+    )
 
 
 def _try_stream_with_model(model_cfg, full_messages, cfg):
@@ -462,7 +491,7 @@ def chat_stream(
                 if chunk.choices:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
-                    if reasoning:
+                    if reasoning and _should_emit_think(model, cfg):
                         yield ("think", reasoning)
                     if delta.content:
                         yield ("text", delta.content)
@@ -509,11 +538,15 @@ def chat_stream_single_model(
     system_prompt: Optional[str] = None,
     abort_check: Optional[Callable[[], bool]] = None,
     override_think_mode: Optional[bool] = None,
+    usage_callback: Optional[Callable[[int, int, str], None]] = None,
+    override_max_tokens: Optional[int] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """仅使用指定模型流式输出，不做跨模型降级（供并行答题）。"""
     cfg = get_config()
     if override_think_mode is not None:
         cfg = cfg.model_copy(update={"think_mode": override_think_mode})
+    if override_max_tokens is not None:
+        cfg = cfg.model_copy(update={"max_tokens": max(1, int(override_max_tokens))})
     clean_messages = _sanitize_messages(messages, model_cfg.supports_vision)
     full_messages: list = []
     if system_prompt:
@@ -521,6 +554,7 @@ def chat_stream_single_model(
     full_messages.extend(clean_messages)
     model_name = model_cfg.name
     try:
+        emit_think = _should_emit_think(model_cfg, cfg)
         response = _try_stream_with_model(model_cfg, full_messages, cfg)
         for chunk in response:
             if abort_check and abort_check():
@@ -528,16 +562,20 @@ def chat_stream_single_model(
             if chunk.choices:
                 delta = chunk.choices[0].delta
                 reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
-                if reasoning:
+                if reasoning and emit_think:
                     yield ("think", reasoning)
                 if delta.content:
                     yield ("text", delta.content)
             if hasattr(chunk, "usage") and chunk.usage:
+                prompt_tokens = chunk.usage.prompt_tokens or 0
+                completion_tokens = chunk.usage.completion_tokens or 0
                 _add_tokens(
-                    chunk.usage.prompt_tokens or 0,
-                    chunk.usage.completion_tokens or 0,
+                    prompt_tokens,
+                    completion_tokens,
                     model_name,
                 )
+                if usage_callback:
+                    usage_callback(prompt_tokens, completion_tokens, model_name)
                 _broadcast_tokens()
     except Exception as e:
         err = _classify_exception(e)

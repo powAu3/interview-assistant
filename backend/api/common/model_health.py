@@ -4,10 +4,40 @@ import requests
 
 from core.config import get_config
 from core.resource_lanes import submit_low_priority_background
+from services.llm.streaming import _build_think_params
 
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
 _model_health_latency: dict[int, int] = {}
+
+
+def _extract_health_probe_text_and_reasoning(body: object) -> tuple[str, str]:
+    if not isinstance(body, dict):
+        return "", ""
+    choices = body.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return "", ""
+    first = choices[0] if isinstance(choices[0], dict) else {}
+    message = first.get("message") if isinstance(first.get("message"), dict) else {}
+    delta = first.get("delta") if isinstance(first.get("delta"), dict) else {}
+    content = message.get("content", first.get("text", ""))
+    if isinstance(content, list):
+        text_parts = [
+            str(part.get("text") or "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        ]
+        text = "".join(text_parts)
+    else:
+        text = str(content or "")
+    reasoning = (
+        message.get("reasoning_content")
+        or message.get("reasoning")
+        or delta.get("reasoning_content")
+        or delta.get("reasoning")
+        or ""
+    )
+    return text.strip(), str(reasoning or "").strip()
 
 
 def get_model_health(index: int) -> Optional[str]:
@@ -52,10 +82,16 @@ def _check_single_model(index: int):
         }
         payload = {
             "model": model.model,
-            "messages": [{"role": "user", "content": "请回复“ok”，用于连接测试。"}],
+            "messages": [{"role": "user", "content": "只回复 OK 两个字母，用于连接测试。"}],
             "max_tokens": 16,
             "stream": False,
         }
+        payload.update(
+            _build_think_params(
+                model,
+                type("HealthCfg", (), {"think_mode": False, "think_effort": "off"})(),
+            )
+        )
         import time as _time
         t0 = _time.monotonic()
         response = requests.post(
@@ -71,6 +107,15 @@ def _check_single_model(index: int):
             except Exception:
                 body = response.text
             raise RuntimeError(f"HTTP {response.status_code}: {str(body)[:120]}")
+        try:
+            body = response.json()
+        except Exception:
+            body = {}
+        text, reasoning = _extract_health_probe_text_and_reasoning(body)
+        if reasoning:
+            raise RuntimeError("关闭思考后仍返回 reasoning，已暂不参与答题")
+        if not text:
+            raise RuntimeError("连接成功但模型未返回正文")
         _model_health[index] = "ok"
         _model_health_detail[index] = ""
         _model_health_latency[index] = latency_ms
