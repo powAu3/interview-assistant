@@ -403,7 +403,7 @@ describe('ControlBar', () => {
 
     render(<ControlBar />)
 
-    expect(screen.getByText(/我的麦克风未开启/)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: '我的回答上下文状态' })).toHaveTextContent('我的回答上下文已关闭')
     fireEvent.click(screen.getByRole('button', { name: '开始面试' }))
 
     await waitFor(() => {

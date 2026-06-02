@@ -146,7 +146,7 @@ export function AudioDevicePicker({
 
   return (
     <div ref={rootRef} className="relative w-full min-w-0">
-      <div className="w-full min-h-[36px] bg-bg-tertiary text-text-primary text-xs rounded-lg border border-bg-hover hover:bg-bg-hover/70 focus-within:border-accent-blue flex items-stretch overflow-hidden">
+      <div className="w-full h-10 bg-bg-tertiary text-text-primary text-xs rounded-lg border border-bg-hover hover:bg-bg-hover/70 focus-within:border-accent-blue flex items-stretch overflow-hidden">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}

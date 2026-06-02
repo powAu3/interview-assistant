@@ -418,8 +418,8 @@ export default function SpeechTab() {
       <Section
         title={
           <span className="inline-flex items-center gap-1.5">
-            可选辅助 ASR（我的麦克风）
-            <BetaBadge title="候选人麦克风 ASR — Beta" className="scale-90 origin-left" />
+            可选辅助 ASR（我的回答）
+            <BetaBadge title="我的麦克风 ASR — Beta" className="scale-90 origin-left" />
           </span>
         }
         icon={<Mic className="w-3.5 h-3.5" />}
@@ -428,35 +428,51 @@ export default function SpeechTab() {
         <GradientCard className="p-4 space-y-4 border-emerald-400/30">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-text-primary">读取我的麦克风</h3>
+              <h3 className="text-sm font-semibold text-text-primary">我的回答上下文（麦克风）</h3>
               <p className="text-[11px] leading-relaxed text-text-muted mt-0.5">
                 只用于记录你真实说出口的回答，给下一轮追问做上下文；不会触发自动答题。
               </p>
             </div>
-            <label className="inline-flex h-9 shrink-0 items-center gap-2 self-start rounded-lg border border-bg-hover bg-bg-tertiary/50 px-3 text-xs text-text-secondary cursor-pointer select-none transition-colors hover:bg-bg-hover/60">
-              <input
-                type="checkbox"
-                checked={form.candidate_asr_enabled}
-                onChange={(e) => {
-                  const enabled = e.target.checked
-                  setForm({
-                    ...form,
-                    candidate_asr_enabled: enabled,
-                  })
-                }}
-                className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
-              />
-              <span className="whitespace-nowrap">{form.candidate_asr_enabled ? '读取麦克风' : '不读取'}</span>
-            </label>
+            <button
+              type="button"
+              role="switch"
+              aria-label="我的回答上下文（麦克风）"
+              aria-checked={form.candidate_asr_enabled}
+              onClick={() => {
+                const enabled = !form.candidate_asr_enabled
+                setForm({
+                  ...form,
+                  candidate_asr_enabled: enabled,
+                })
+              }}
+              className={`inline-flex h-9 shrink-0 items-center gap-2 self-start rounded-full border px-2.5 text-xs font-medium transition-colors ${
+                form.candidate_asr_enabled
+                  ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                  : 'border-bg-hover bg-bg-tertiary/60 text-text-muted hover:bg-bg-hover/60'
+              }`}
+            >
+              <span
+                className={`relative h-5 w-9 rounded-full transition-colors ${
+                  form.candidate_asr_enabled ? 'bg-emerald-500/80' : 'bg-bg-hover'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                    form.candidate_asr_enabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+              <span className="whitespace-nowrap">{form.candidate_asr_enabled ? '已开启' : '已关闭'}</span>
+            </button>
           </div>
           {!form.candidate_asr_enabled && (
             <div className="rounded-lg border border-bg-hover bg-bg-tertiary/40 px-3 py-2 text-xs text-text-muted">
-              当前已关闭候选人麦克风 ASR：启动面试时不会传入“我的麦克风”设备，追问上下文会退回旧的模型答案链路。
+              当前已关闭我的麦克风 ASR：启动面试时不会传入“我的麦克风”设备，追问上下文会退回旧的模型答案链路。
             </div>
           )}
           {form.candidate_asr_enabled && (
             <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
-              开启后控制条会多选一路“我的麦克风”。这一路只用共享方式读取；如果会议软件独占麦克风，会自动关闭候选人口述记录，不影响面试录音。
+              开启后控制条会多选一路“我的麦克风”。这一路只用共享方式读取；如果会议软件独占麦克风，会自动关闭我的口述记录，不影响面试录音。
             </div>
           )}
 
@@ -476,7 +492,7 @@ export default function SpeechTab() {
           </Field>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="候选人语音识别引擎" hint="默认 Whisper 本地识别，不产生远程 ASR 成本">
+            <Field label="我的语音识别引擎" hint="默认 Whisper 本地识别，不产生远程 ASR 成本">
               <select
                 value={form.candidate_stt_provider}
                 onChange={(e) => {
@@ -520,7 +536,7 @@ export default function SpeechTab() {
           </div>
           {form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper' && (
             <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
-              已选择云端候选人 ASR：候选人麦克风转写会调用对应云端接口并产生额外成本。切回 Whisper 即恢复本地免费识别。
+              已选择云端麦克风 ASR：我的麦克风转写会调用对应云端接口并产生额外成本。切回 Whisper 即恢复本地免费识别。
             </div>
           )}
 
@@ -551,7 +567,7 @@ export default function SpeechTab() {
               </Field>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="候选人 Whisper 模型" hint="留空则沿用主链路 Whisper 模型">
+                <Field label="我的 Whisper 模型" hint="留空则沿用主链路 Whisper 模型">
                   <select
                     value={form.candidate_whisper_model}
                     onChange={(e) => setForm({ ...form, candidate_whisper_model: e.target.value })}
@@ -564,7 +580,7 @@ export default function SpeechTab() {
                     ))}
                   </select>
                 </Field>
-                <Field label="候选人识别语言" hint="留空则沿用主链路语言">
+                <Field label="我的识别语言" hint="留空则沿用主链路语言">
                   <select
                     value={form.candidate_whisper_language}
                     onChange={(e) => setForm({ ...form, candidate_whisper_language: e.target.value })}

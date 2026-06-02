@@ -530,9 +530,9 @@ export default function ControlBar() {
       )}
 
       {/* 主控制行 */}
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
+      <div className="grid gap-2 rounded-lg border border-bg-hover/70 bg-bg-secondary/75 p-2 shadow-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
         {!isExamMode && (
-          <div className="grid w-full min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="flex min-w-0 flex-col gap-1">
               <span className="text-[10px] font-medium text-text-muted leading-none">会议音频 · 听面试官</span>
               <AudioDevicePicker
@@ -581,58 +581,77 @@ export default function ControlBar() {
                 />
               </div>
             ) : (
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5 py-1">
-                <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-                <span className="text-xs text-text-muted">我的麦克风未开启，</span>
-                <span className="text-xs text-accent-blue cursor-pointer hover:underline" onClick={() => useInterviewStore.getState().toggleSettings()}>去设置开启</span>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-[10px] font-medium text-text-muted leading-none">我的麦克风 · 记录我的回答</span>
+                <div
+                  role="status"
+                  aria-label="我的回答上下文状态"
+                  className="flex h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-bg-hover bg-bg-tertiary px-3"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                    <span className="min-w-0 truncate text-xs font-medium text-text-secondary">
+                      我的回答上下文已关闭
+                      <span className="hidden lg:inline text-text-muted"> · 不影响会议音频</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="打开我的回答上下文设置"
+                    className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/10"
+                    onClick={() => useInterviewStore.getState().toggleSettings()}
+                  >
+                    设置
+                  </button>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex h-full min-h-[56px] w-full min-w-0 flex-wrap items-center gap-1.5 xl:w-auto xl:max-w-[34rem] xl:justify-end xl:border-l xl:border-bg-hover/60 xl:pl-2">
         {isRecording ? (
           <>
             {isPaused ? (
               <button onClick={handleResume} disabled={loading}
-                className="flex items-center gap-1.5 px-3.5 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}>
+                className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-3.5 py-2 btn-primary text-xs font-semibold disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}>
                 <PlayCircle className="w-3.5 h-3.5" />
                 <span>继续</span>
               </button>
             ) : (
               <button onClick={handlePause} disabled={loading}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs font-semibold rounded-xl transition-all duration-150 disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
+                className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-3.5 py-2 text-white text-xs font-semibold transition-all duration-150 disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
                 <Pause className="w-3.5 h-3.5" />
                 <span>暂停</span>
               </button>
             )}
             <button onClick={handleStop} disabled={loading}
-              className="flex items-center gap-1.5 px-3.5 py-2 btn-danger text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
+              className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-3.5 py-2 btn-danger text-xs font-semibold disabled:opacity-50 flex-shrink-0">
               <Square className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{isExamMode ? '结束' : '结束面试'}</span>
             </button>
           </>
         ) : !isExamMode && sttLoading ? (
           <button disabled
-            className="flex items-center gap-1.5 px-4 py-2 bg-bg-tertiary text-text-muted text-xs font-semibold rounded-xl cursor-not-allowed flex-shrink-0">
+            className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-4 py-2 bg-bg-tertiary text-text-muted text-xs font-semibold cursor-not-allowed flex-shrink-0">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             <span>{sttActiveProvider === 'whisper' ? '降级加载 Whisper…' : '语音加载中…'}</span>
           </button>
         ) : !isExamMode && !sttLoaded ? (
           <button onClick={handleStart} disabled={loading || selectedDevice === null}
-            className="flex items-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
+            className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-4 py-2 text-white text-xs font-semibold flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>语音未就绪，开始面试</span>
           </button>
         ) : (
           <button onClick={handleStart} disabled={loading || (!isExamMode && selectedDevice === null)}
-            className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
+            className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-4 py-2 btn-primary text-xs font-semibold disabled:opacity-50 flex-shrink-0">
             <Play className="w-3.5 h-3.5" />
             <span>{isExamMode ? '开始笔试' : '开始面试'}</span>
           </button>
         )}
 
-        {!isExamMode && <ResumeMountInline />}
+        {!isExamMode && <ResumeMountInline className="bg-bg-primary/45" />}
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}
