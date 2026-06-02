@@ -140,6 +140,27 @@ describe('ModelsTab state sync', () => {
     expect(screen.getByTitle('模型连接详情：401 unauthorized')).toBeInTheDocument()
   })
 
+  it('collapses an opened new model after saving without reloading the list', async () => {
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('添加'))
+    const nameInputs = screen.getAllByPlaceholderText('如：GPT-4o、DeepSeek-V3')
+    fireEvent.change(nameInputs[nameInputs.length - 1], { target: { value: 'Backup Model' } })
+    fireEvent.click(screen.getByText('保存模型队列'))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalled()
+    })
+
+    expect(apiMock.getModelsFull).toHaveBeenCalledTimes(1)
+    const savedNameInput = screen
+      .getAllByPlaceholderText('如：GPT-4o、DeepSeek-V3')
+      .find((input) => (input as HTMLInputElement).value === 'Backup Model')
+    expect(savedNameInput?.closest('[aria-hidden="true"]')).toBeInTheDocument()
+    expect(screen.getByText('Backup Model')).toBeInTheDocument()
+  })
+
   it('auto-checks probed vision and think capabilities when testing a model', async () => {
     apiMock.probeModelCapabilities.mockResolvedValue({
       ok: true,

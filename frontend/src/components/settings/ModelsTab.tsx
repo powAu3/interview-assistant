@@ -182,15 +182,26 @@ export default function ModelsTab() {
     }
     setSaving(true)
     try {
+      const savedRows = modelRows.map((row, index) => ({
+        ...row,
+        id: `${index}:${row.model.name}:${row.model.model}:${row.model.api_base_url}`,
+        originalIndex: index,
+        model: {
+          ...row.model,
+          has_key: row.model.has_key || row.model.api_key.trim().length > 0,
+        },
+      }))
       await updateConfigAndRefresh({
-        models: buildModelPayload(),
+        models: buildModelPayload(savedRows),
         active_model: resolveActiveIndex(),
         max_parallel_answers: maxP,
       })
+      setModelRows(savedRows)
+      setExpandedIdx(null)
+      setProbeResults({})
       if (!quiet) {
         useInterviewStore.getState().setToastMessage('模型队列已保存')
       }
-      await loadModels()
       return true
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
@@ -515,7 +526,10 @@ export default function ModelsTab() {
                     </div>
                   </div>
 
-                  <div className={`grid transition-all duration-200 ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                  <div
+                    aria-hidden={!isExpanded}
+                    className={`grid transition-all duration-200 ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+                  >
                     <div className="overflow-hidden">
                       <div className="px-4 pb-4 space-y-3 border-t border-bg-hover/50 pt-3">
                         <div className="grid sm:grid-cols-2 gap-3">

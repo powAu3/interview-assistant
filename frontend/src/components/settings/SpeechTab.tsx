@@ -426,14 +426,14 @@ export default function SpeechTab() {
         keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本 beta"
       >
         <GradientCard className="p-4 space-y-4 border-emerald-400/30">
-          <div className="flex items-start justify-between gap-3">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <h3 className="text-sm font-semibold text-text-primary">读取我的麦克风</h3>
-              <p className="text-[11px] text-text-muted mt-0.5">
+              <p className="text-[11px] leading-relaxed text-text-muted mt-0.5">
                 只用于记录你真实说出口的回答，给下一轮追问做上下文；不会触发自动答题。
               </p>
             </div>
-            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+            <label className="inline-flex h-9 shrink-0 items-center gap-2 self-start rounded-lg border border-bg-hover bg-bg-tertiary/50 px-3 text-xs text-text-secondary cursor-pointer select-none transition-colors hover:bg-bg-hover/60">
               <input
                 type="checkbox"
                 checked={form.candidate_asr_enabled}
@@ -446,7 +446,7 @@ export default function SpeechTab() {
                 }}
                 className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
               />
-              <span className="text-xs text-text-secondary">{form.candidate_asr_enabled ? '读取麦克风' : '不读取'}</span>
+              <span className="whitespace-nowrap">{form.candidate_asr_enabled ? '读取麦克风' : '不读取'}</span>
             </label>
           </div>
           {!form.candidate_asr_enabled && (
