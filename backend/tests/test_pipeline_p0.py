@@ -52,8 +52,8 @@ class _RecordingAudioCapture:
         self.start_calls: list[tuple] = []
         self._chunk_provider = lambda: None  # 默认无音频, 走 sleep 分支
 
-    def start(self, device_id, owner=None):
-        self.start_calls.append((device_id, owner))
+    def start(self, device_id, owner=None, **kwargs):
+        self.start_calls.append((device_id, owner, kwargs))
 
     def stop(self, owner=None):
         self.stop_calls.append(owner)
@@ -296,7 +296,7 @@ def test_start_nonblocking_with_device_in_exam_mode(monkeypatch):
 
     pipeline.start_nonblocking(device_id=1)
 
-    assert audio.start_calls == [(1, "assist")], (
+    assert audio.start_calls == [(1, "assist", {})], (
         f"传了 device_id 时应走音频路径; 实际 start_calls={audio.start_calls}"
     )
 

@@ -129,6 +129,27 @@ describe('useInterviewWS', () => {
     expect(FakeWebSocket.instances.length).toBe(2)
   })
 
+  it('warns when candidate microphone degrades safely', () => {
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({
+        type: 'candidate_asr_status',
+        loaded: false,
+        loading: false,
+        provider: 'off',
+        error: 'mic unavailable',
+        safe_degraded: true,
+      })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.candidateSttLoaded).toBe(false)
+    expect(state.toastMessage).toContain('候选人口述记录已关闭，不影响面试录音')
+  })
+
   it('ignores stale resume optimization chunks from older jobs', () => {
     render(<Harness />)
     const ws = FakeWebSocket.instances[0]

@@ -16,6 +16,16 @@ interface TagSummary {
   trend: 'up' | 'down' | 'stable'
 }
 
+interface InputMonitorStatus {
+  running: boolean
+  device_id: number | null
+  rms: number
+  peak: number
+  level_pct: number
+  has_signal: boolean
+  error?: string | null
+}
+
 function trendLabel(trend: string) {
   if (trend === 'up') return '上升'
   if (trend === 'down') return '下降'
@@ -113,9 +123,35 @@ export default function KnowledgeMap() {
   const [loading, setLoading] = useState(true)
   const [firstLoaded, setFirstLoaded] = useState(false)
   const [genLoading, setGenLoading] = useState(false)
+  const [inputMonitorStatus, setInputMonitorStatus] = useState<InputMonitorStatus | null>(null)
+  const [inputMonitorError, setInputMonitorError] = useState<string | null>(null)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
+  const candidateTranscriptions = useInterviewStore((s) => s.candidateTranscriptions)
+  const candidateSttLoaded = useInterviewStore((s) => s.candidateSttLoaded ?? false)
+  const candidateSttLoading = useInterviewStore((s) => s.candidateSttLoading ?? false)
+  const candidateSttProvider = useInterviewStore((s) => s.candidateSttProvider ?? '')
+  const candidateCaptureEnabled = useInterviewStore((s) => s.config?.candidate_asr_enabled)
 
   const history = useMemo(() => mergeHistoryByTimeGap(rawHistory), [rawHistory])
+  const latestCandidateTranscript = useMemo(
+    () => candidateTranscriptions.slice(-1)[0]?.trim() ?? '',
+    [candidateTranscriptions],
+  )
+  const candidateContextCount = useMemo(
+    () => candidateTranscriptions.filter((text) => text.trim()).length,
+    [candidateTranscriptions],
+  )
+  const inputLevelPct = Math.max(0, Math.min(100, Math.round(inputMonitorStatus?.level_pct ?? 0)))
+  const inputMonitorRunning = inputMonitorStatus?.running === true
+  const candidateAsrStatus = candidateCaptureEnabled === false
+    ? '未开启'
+    : candidateSttLoading
+      ? '加载中'
+      : candidateSttLoaded
+        ? `${candidateSttProvider || 'ASR'} 已就绪`
+        : candidateCaptureEnabled
+          ? '等待启动'
+          : '等待配置'
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -134,6 +170,26 @@ export default function KnowledgeMap() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  useEffect(() => {
+    let cancelled = false
+    const pollInputMonitor = async () => {
+      try {
+        const status = await api.audioInputMonitorStatus()
+        if (cancelled) return
+        setInputMonitorStatus(status)
+        setInputMonitorError(status.error || null)
+      } catch {
+        if (!cancelled) setInputMonitorError('读取麦克风测试状态失败')
+      }
+    }
+    void pollInputMonitor()
+    const timer = window.setInterval(pollInputMonitor, 800)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
   const loadMoreHistory = async () => {
     const next = historyPage + 1
@@ -191,6 +247,51 @@ export default function KnowledgeMap() {
             className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-muted hover:text-accent-red transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+        </div>
+      </div>
+
+      <div className="bg-bg-secondary rounded-xl p-3 border border-bg-tertiary space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+            <Mic className="w-3.5 h-3.5 text-accent-blue" />
+            口述输入联动
+          </h3>
+          <span className="text-[10px] text-text-muted shrink-0">
+            {candidateContextCount > 0 ? `已采样 ${candidateContextCount} 段` : '暂无口述样本'}
+          </span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.4fr]">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-text-muted">麦克风测试</span>
+              <span className={inputMonitorRunning ? 'text-accent-green' : 'text-text-muted'}>
+                {inputMonitorRunning ? `${inputLevelPct}%` : '未打开测试监听'}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-bg-tertiary overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${inputMonitorRunning ? 'bg-accent-green' : 'bg-bg-hover'}`}
+                style={{ width: `${inputMonitorRunning ? inputLevelPct : 0}%` }}
+              />
+            </div>
+            {inputMonitorError && <p className="text-[10px] text-accent-red truncate">{inputMonitorError}</p>}
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-text-muted">真实口述 ASR</p>
+            <p className="text-xs text-text-primary">{candidateAsrStatus}</p>
+            <p className="text-[10px] text-text-muted">
+              {candidateCaptureEnabled === false ? '设置页开启后可参与追问上下文' : '下一轮追问优先参考真实回答'}
+            </p>
+          </div>
+          <div className="min-w-0 space-y-1">
+            <p className="text-[10px] text-text-muted">最近口述</p>
+            <p className="text-xs text-text-primary truncate">
+              {latestCandidateTranscript || '还没有从“我的麦克风”采集到回答'}
+            </p>
+            <p className="text-[10px] text-text-muted truncate">
+              能力分析会结合已入库问答；实时口述先进入追问上下文，结束记录后沉淀为画像样本。
+            </p>
+          </div>
         </div>
       </div>
 

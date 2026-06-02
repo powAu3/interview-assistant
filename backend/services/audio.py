@@ -288,6 +288,7 @@ class AudioCapture:
         device_id,
         on_audio: Optional[Callable[[np.ndarray], None]] = None,
         owner: Optional[str] = None,
+        mic_compatibility_mode: bool = False,
     ):
         """Start audio capture on the requested device.
 
@@ -316,7 +317,7 @@ class AudioCapture:
                 self._start_soundcard(int(device_id))
             else:
                 self._use_agc = False
-                self._start_sounddevice(int(device_id))
+                self._start_sounddevice(int(device_id), mic_compatibility_mode=mic_compatibility_mode)
 
     def _push(self, audio: np.ndarray):
         """Common path: optionally AGC → queue → callback."""
@@ -388,30 +389,116 @@ class AudioCapture:
 
     # sounddevice (mic) path -----------------------------------------------
 
-    def _start_sounddevice(self, device_id: int):
+    @staticmethod
+    def _host_api_name_for_device(device_id) -> str:
+        try:
+            dev_info = sd.query_devices(device_id, "input") if device_id is None else sd.query_devices(device_id)
+            return str(sd.query_hostapis(dev_info["hostapi"])["name"])
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _wasapi_shared_settings(host_api_name: str):
+        if platform.system() != "Windows" or "wasapi" not in host_api_name.lower():
+            return None
+        try:
+            return sd.WasapiSettings(exclusive=False, auto_convert=True)
+        except Exception:
+            return None
+
+    def _sounddevice_attempts(self, device_id: int, compatibility_mode: bool) -> list[dict]:
+        primary = sd.query_devices(device_id)
+        primary_sr = int(primary["default_samplerate"])
+        primary_host = str(sd.query_hostapis(primary["hostapi"])["name"])
+        attempts = [
+            {
+                "device": device_id,
+                "samplerate": primary_sr,
+                "native_sr": primary_sr,
+                "blocksize": self.BLOCK_SIZE,
+                "extra_settings": self._wasapi_shared_settings(primary_host),
+                "label": f"selected:{device_id} shared",
+            },
+        ]
+        if compatibility_mode:
+            if primary_sr != self.SAMPLE_RATE:
+                attempts.append(
+                    {
+                        "device": device_id,
+                        "samplerate": self.SAMPLE_RATE,
+                        "native_sr": self.SAMPLE_RATE,
+                        "blocksize": self.BLOCK_SIZE * 2,
+                        "extra_settings": self._wasapi_shared_settings(primary_host),
+                        "label": f"selected:{device_id} 16k shared",
+                    }
+                )
+            try:
+                default_input = sd.default.device[0] if isinstance(sd.default.device, (list, tuple)) else sd.default.device
+                default_input = int(default_input)
+            except Exception:
+                default_input = -1
+            if default_input >= 0 and default_input != device_id:
+                default_info = sd.query_devices(default_input)
+                default_sr = int(default_info["default_samplerate"])
+                default_host = str(sd.query_hostapis(default_info["hostapi"])["name"])
+                attempts.append(
+                    {
+                        "device": default_input,
+                        "samplerate": default_sr,
+                        "native_sr": default_sr,
+                        "blocksize": self.BLOCK_SIZE * 2,
+                        "extra_settings": self._wasapi_shared_settings(default_host),
+                        "label": f"default:{default_input} shared",
+                    }
+                )
+        return attempts
+
+    def _start_sounddevice(self, device_id: int, mic_compatibility_mode: bool = False):
         def audio_cb(indata, frames, time_info, status):
             audio = indata[:, 0].copy() if indata.ndim > 1 else indata.copy().flatten()
             native_sr = getattr(self, '_native_sr', self.SAMPLE_RATE)
             audio = _resample_chunk(audio, native_sr, self.SAMPLE_RATE, self._resample_state)
             self._push(audio)
 
+        last_error: Optional[Exception] = None
         try:
-            dev_info = sd.query_devices(device_id)
-            native_sr = int(dev_info["default_samplerate"])
-            self._native_sr = native_sr
-            use_sr = self.SAMPLE_RATE if native_sr == self.SAMPLE_RATE else native_sr
-            self._stream = sd.InputStream(
-                device=device_id,
-                samplerate=use_sr,
-                channels=self.CHANNELS,
-                dtype=self.DTYPE,
-                blocksize=self.BLOCK_SIZE,
-                callback=audio_cb,
-            )
-            self._stream.start()
+            attempts = self._sounddevice_attempts(device_id, mic_compatibility_mode)
         except Exception as e:
             self._running = False
-            raise RuntimeError(f"无法启动麦克风: {e}")
+            raise RuntimeError(f"无法查询麦克风设备: {e}")
+
+        for attempt in attempts:
+            try:
+                self._native_sr = int(attempt["native_sr"])
+                kwargs = {
+                    "device": attempt["device"],
+                    "samplerate": attempt["samplerate"],
+                    "channels": self.CHANNELS,
+                    "dtype": self.DTYPE,
+                    "blocksize": attempt["blocksize"],
+                    "callback": audio_cb,
+                }
+                if attempt["extra_settings"] is not None:
+                    kwargs["extra_settings"] = attempt["extra_settings"]
+                self._stream = sd.InputStream(**kwargs)
+                self._stream.start()
+                _alog.info("sounddevice mic opened: %s", attempt["label"])
+                return
+            except Exception as e:
+                last_error = e
+                if self._stream:
+                    try:
+                        self._stream.close()
+                    except Exception:
+                        pass
+                    self._stream = None
+                _alog.warning("sounddevice mic open failed (%s): %s", attempt["label"], e)
+
+        self._running = False
+        raise RuntimeError(
+            "无法以共享模式启动麦克风，候选人口述记录已关闭，不会影响会议软件。"
+            f"最后错误: {last_error}"
+        )
 
     def stop(self, owner: Optional[str] = None):
         """Stop the running stream.

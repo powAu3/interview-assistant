@@ -146,7 +146,7 @@ def test_input_audio(device_id: int, duration_sec: float = 1.2) -> dict:
     cap = AudioCapture()
     started = time.monotonic()
     try:
-        cap.start(int(device_id), owner="audio-test")
+        cap.start(int(device_id), owner="audio-test", mic_compatibility_mode=True)
         time.sleep(0.1)
         captured = collect_capture_audio(
             cap,
@@ -207,7 +207,7 @@ def _run_input_level_monitor(device_id: int, stop_event: threading.Event) -> Non
     rms = 0.0
     peak = 0.0
     try:
-        cap.start(int(device_id), owner="audio-level-test")
+        cap.start(int(device_id), owner="audio-level-test", mic_compatibility_mode=True)
         _set_level_status(running=True, error=None)
         while not stop_event.is_set():
             chunk = cap.get_audio_chunk(max_chunks=4)

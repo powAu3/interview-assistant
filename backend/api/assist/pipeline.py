@@ -490,7 +490,11 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
         and int(candidate_mic_device_id) != int(device_id)
     ):
         try:
-            _candidate_audio_capture.start(int(candidate_mic_device_id), owner="assist-candidate")
+            _candidate_audio_capture.start(
+                int(candidate_mic_device_id),
+                owner="assist-candidate",
+                mic_compatibility_mode=bool(getattr(cfg, "candidate_mic_compatibility_mode", True)),
+            )
             with conversation_lock:
                 session.last_candidate_mic_device_id = int(candidate_mic_device_id)
             _candidate_thread = threading.Thread(target=_candidate_worker, daemon=True)
@@ -500,7 +504,15 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
             with conversation_lock:
                 session.last_candidate_mic_device_id = 0
             _elog.warning("CANDIDATE_ASR_START_FAIL device=%s err=%s", candidate_mic_device_id, exc)
-            broadcast({"type": "candidate_asr_status", "loaded": False, "loading": False, "provider": "off", "error": str(exc)[:160]})
+            broadcast({
+                "type": "candidate_asr_status",
+                "loaded": False,
+                "loading": False,
+                "provider": "off",
+                "error": str(exc)[:160],
+                "reason": "mic_unavailable",
+                "safe_degraded": True,
+            })
     elif device_id is not None:
         with conversation_lock:
             session.last_candidate_mic_device_id = 0
@@ -567,14 +579,26 @@ def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: 
         and int(next_candidate_id) != int(next_device_id)
     ):
         try:
-            _candidate_audio_capture.start(next_candidate_id, owner="assist-candidate")
+            _candidate_audio_capture.start(
+                next_candidate_id,
+                owner="assist-candidate",
+                mic_compatibility_mode=bool(getattr(cfg, "candidate_mic_compatibility_mode", True)),
+            )
             if not _candidate_thread or not _candidate_thread.is_alive():
                 _candidate_thread = threading.Thread(target=_candidate_worker, daemon=True)
                 _candidate_thread.start()
         except Exception as exc:
             next_candidate_id = 0
             _elog.warning("CANDIDATE_ASR_RESUME_FAIL err=%s", exc)
-            broadcast({"type": "candidate_asr_status", "loaded": False, "loading": False, "provider": "off", "error": str(exc)[:160]})
+            broadcast({
+                "type": "candidate_asr_status",
+                "loaded": False,
+                "loading": False,
+                "provider": "off",
+                "error": str(exc)[:160],
+                "reason": "mic_unavailable",
+                "safe_degraded": True,
+            })
     _candidate_flush_event.clear()
     _pause_event.clear()
     with conversation_lock:

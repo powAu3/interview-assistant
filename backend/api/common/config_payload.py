@@ -47,6 +47,7 @@ def build_config_payload(cfg) -> dict:
         "candidate_context_min_chars": max(1, min(100, int(getattr(cfg, "candidate_context_min_chars", 6) or 6))),
         "candidate_streaming_asr_enabled": bool(getattr(cfg, "candidate_streaming_asr_enabled", True)),
         "candidate_streaming_asr_interval_ms": max(800, min(5000, int(getattr(cfg, "candidate_streaming_asr_interval_ms", 1500) or 1500))),
+        "candidate_mic_compatibility_mode": bool(getattr(cfg, "candidate_mic_compatibility_mode", True)),
         "practice_tts_provider": getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts",
         "edge_tts_voice_female": getattr(cfg, "edge_tts_voice_female", "zh-CN-XiaoxiaoNeural") or "zh-CN-XiaoxiaoNeural",
         "edge_tts_voice_male": getattr(cfg, "edge_tts_voice_male", "zh-CN-YunxiNeural") or "zh-CN-YunxiNeural",

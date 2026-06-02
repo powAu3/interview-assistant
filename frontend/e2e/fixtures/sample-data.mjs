@@ -28,6 +28,18 @@ export const SAMPLE_CONFIG = {
   generic_stt_api_base_url: '',
   generic_stt_api_key: '',
   generic_stt_model: '',
+  candidate_asr_enabled: true,
+  candidate_stt_provider: 'whisper',
+  candidate_whisper_model: 'small',
+  candidate_whisper_language: 'zh',
+  candidate_remote_stt_enabled: false,
+  candidate_context_enabled: true,
+  candidate_context_wait_ms: 1200,
+  candidate_context_max_chars: 1600,
+  candidate_context_min_chars: 8,
+  candidate_streaming_asr_enabled: true,
+  candidate_streaming_asr_interval_ms: 900,
+  candidate_mic_compatibility_mode: true,
   practice_tts_provider: 'edge_tts',
   edge_tts_available: true,
   edge_tts_status_detail: 'edge-tts Python 包可用',
@@ -71,6 +83,8 @@ export const SAMPLE_DEVICES = {
   devices: [
     { id: 1001, name: 'BlackHole 2ch ⟳', channels: 2, is_loopback: true, host_api: 'Core Audio' },
     { id: 1002, name: 'MacBook Pro 麦克风', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+    { id: 1003, name: '外接 USB 麦克风', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+    { id: 1004, name: '会议软件系统音频 ⟳', channels: 2, is_loopback: true, host_api: 'Core Audio' },
   ],
   platform: {
     platform: 'darwin',
@@ -114,6 +128,9 @@ export const SAMPLE_KNOWLEDGE_SUMMARY = {
     { tag: '消息队列', count: 8, avg_score: 6.1, trend: 'up' },
     { tag: '并发控制', count: 7, avg_score: 5.9, trend: 'down' },
     { tag: '系统设计', count: 6, avg_score: 5.6, trend: 'up' },
+    { tag: '候选人口述表达', count: 5, avg_score: 6.2, trend: 'up' },
+    { tag: '故障排查', count: 5, avg_score: 6.9, trend: 'stable' },
+    { tag: '项目复盘', count: 4, avg_score: 5.4, trend: 'down' },
   ],
 }
 
@@ -137,8 +154,35 @@ export const SAMPLE_KNOWLEDGE_HISTORY = {
       tags: ['MySQL'],
       created_at: now() - 5400,
     },
+    {
+      id: 103,
+      session_type: 'assist',
+      question: '候选人刚才通过麦克风说缓存击穿用互斥锁，你会怎么继续追问？',
+      answer: '我的回答上下文：热点 key 过期后用互斥锁重建缓存，同时给缓存加随机过期时间，避免大量请求打到数据库。',
+      score: 6.8,
+      tags: ['Redis', '候选人口述表达'],
+      created_at: now() - 3600,
+    },
+    {
+      id: 104,
+      session_type: 'practice',
+      question: '如果线上接口 P99 突然升高，你会如何定位？',
+      answer: '先看监控确认是整体流量、下游依赖还是数据库慢查询，再用 trace 还原链路，最后针对瓶颈做限流、缓存或 SQL 优化。',
+      score: 6.9,
+      tags: ['故障排查', '系统设计'],
+      created_at: now() - 2400,
+    },
+    {
+      id: 105,
+      session_type: 'assist',
+      question: '真实口述里提到“用了 MQ 削峰”，还应该补问哪些边界？',
+      answer: '需要补充消息堆积、重复消费、幂等、失败重试和最终一致性的处理，不能只停留在“加了 MQ”。',
+      score: 5.7,
+      tags: ['消息队列', '项目复盘'],
+      created_at: now() - 1800,
+    },
   ],
-  total: 2,
+  total: 5,
 }
 
 export const SAMPLE_TOKEN_STATS = {
@@ -305,6 +349,29 @@ export function resolveApiPayload(pathname, method) {
   if (pathname === '/api/session') return { session_id: 'mock-session', started_at: now() }
   if (pathname === '/api/clear') return { ok: true }
   if (pathname === '/api/ask/cancel') return { ok: true, cancelled: 0 }
+  if (pathname === '/api/audio-test/input/status') {
+    return {
+      running: true,
+      device_id: 1002,
+      rms: 0.043,
+      peak: 0.18,
+      level_pct: 64,
+      has_signal: true,
+      error: null,
+    }
+  }
+  if (pathname === '/api/audio-test/input/start') {
+    return {
+      running: true,
+      device_id: 1002,
+      rms: 0.035,
+      peak: 0.16,
+      level_pct: 58,
+      has_signal: true,
+      error: null,
+    }
+  }
+  if (pathname === '/api/audio-test/input/stop') return { running: false }
 
   if (pathname === '/api/preflight/scenarios') {
     return {

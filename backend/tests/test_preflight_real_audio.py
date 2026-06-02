@@ -53,12 +53,12 @@ def test_collect_capture_audio_merges_chunks(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_input_audio_returns_level_metrics(monkeypatch: pytest.MonkeyPatch):
-    starts: list[tuple[int, str | None]] = []
+    starts: list[tuple[int, str | None, dict]] = []
     stops: list[str | None] = []
 
     class FakeCapture:
-        def start(self, device_id, owner=None):
-            starts.append((device_id, owner))
+        def start(self, device_id, owner=None, **kwargs):
+            starts.append((device_id, owner, kwargs))
 
         def stop(self, owner=None):
             stops.append(owner)
@@ -82,17 +82,17 @@ def test_input_audio_returns_level_metrics(monkeypatch: pytest.MonkeyPatch):
     assert result['has_signal'] is True
     assert result['rms'] > 0
     assert result['peak'] == pytest.approx(0.04)
-    assert starts == [(7, 'audio-test')]
+    assert starts == [(7, 'audio-test', {'mic_compatibility_mode': True})]
     assert stops == ['audio-test']
 
 
 def test_input_level_monitor_updates_until_stopped(monkeypatch: pytest.MonkeyPatch):
-    starts: list[tuple[int, str | None]] = []
+    starts: list[tuple[int, str | None, dict]] = []
     stops: list[str | None] = []
 
     class FakeCapture:
-        def start(self, device_id, owner=None):
-            starts.append((device_id, owner))
+        def start(self, device_id, owner=None, **kwargs):
+            starts.append((device_id, owner, kwargs))
 
         def stop(self, owner=None):
             stops.append(owner)
@@ -114,7 +114,7 @@ def test_input_level_monitor_updates_until_stopped(monkeypatch: pytest.MonkeyPat
         status = sound_test.get_input_level_status()
     stopped = sound_test.stop_input_level_monitor()
 
-    assert starts == [(9, 'audio-level-test')]
+    assert starts == [(9, 'audio-level-test', {'mic_compatibility_mode': True})]
     assert stops == ['audio-level-test']
     assert status['level_pct'] > 0
     assert status['has_signal'] is True

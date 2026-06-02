@@ -80,6 +80,8 @@ class AppConfig(BaseModel):
     candidate_context_min_chars: int = 6
     candidate_streaming_asr_enabled: bool = True
     candidate_streaming_asr_interval_ms: int = 1500
+    # 只用于“我的麦克风”：始终共享读取；开启后冲突时会尝试更保守的采样与默认输入设备。
+    candidate_mic_compatibility_mode: bool = True
     # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
     practice_tts_provider: str = "edge_tts"
     edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"
@@ -179,6 +181,7 @@ class AppConfig(BaseModel):
         self.candidate_context_max_chars = max(100, min(4000, int(self.candidate_context_max_chars or 900)))
         self.candidate_context_min_chars = max(1, min(100, int(self.candidate_context_min_chars or 6)))
         self.candidate_streaming_asr_interval_ms = max(800, min(5000, int(self.candidate_streaming_asr_interval_ms or 1500)))
+        self.candidate_mic_compatibility_mode = bool(self.candidate_mic_compatibility_mode)
         wl = (self.whisper_language or "").strip()
         if wl and wl != "auto":
             import re as _re

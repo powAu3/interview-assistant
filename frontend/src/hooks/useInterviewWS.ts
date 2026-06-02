@@ -206,7 +206,7 @@ export function useInterviewWS() {
           msg.provider as string | undefined,
         )
         if (msg.error) {
-          s.pushToast(`候选人麦克风 ASR 异常: ${msg.error as string}`, 'warn')
+          s.pushToast(`会议软件可能独占麦克风，候选人口述记录已关闭，不影响面试录音: ${msg.error as string}`, 'warn')
         }
         break
       // Practice mode messages

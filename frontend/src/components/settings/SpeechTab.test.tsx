@@ -53,6 +53,7 @@ describe('SpeechTab', () => {
         candidate_context_min_chars: 6,
         candidate_streaming_asr_enabled: true,
         candidate_streaming_asr_interval_ms: 1500,
+        candidate_mic_compatibility_mode: true,
         practice_tts_provider: 'edge_tts',
         edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -96,6 +97,8 @@ describe('SpeechTab', () => {
     expect(screen.getByText('可选辅助 ASR（我的麦克风）')).toBeInTheDocument()
     expect(screen.getByText('读取我的麦克风')).toBeInTheDocument()
     expect(screen.getAllByText(/不会触发自动答题/).length).toBeGreaterThan(0)
+    expect(screen.getByText('麦克风兼容模式')).toBeInTheDocument()
+    expect(screen.getByText('共享兼容优先')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Whisper（本地，免费）')).toBeInTheDocument()
     expect(screen.getByText(/高级设置：Whisper 模型与追问上下文/)).toBeInTheDocument()
     expect(screen.getByText(/生成下一轮答案时会携带上一轮/)).toBeInTheDocument()

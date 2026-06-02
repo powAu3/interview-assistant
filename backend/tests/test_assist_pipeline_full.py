@@ -275,15 +275,15 @@ def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
             self.start_calls = []
             self.stop_calls = []
 
-        def start(self, device_id, owner=None):
-            self.start_calls.append((device_id, owner))
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
 
         def stop(self, owner=None):
             self.stop_calls.append(owner)
 
     class _BrokenCandidateAudio(_MainAudio):
-        def start(self, device_id, owner=None):
-            self.start_calls.append((device_id, owner))
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
             raise RuntimeError("mic unavailable")
 
     cfg = _cfg()
@@ -301,13 +301,14 @@ def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
     pipeline.start_nonblocking(10, 11)
 
     assert session.is_recording is True
-    assert main_audio.start_calls == [(10, "assist")]
-    assert candidate_audio.start_calls == [(11, "assist-candidate")]
+    assert main_audio.start_calls == [(10, "assist", {})]
+    assert candidate_audio.start_calls == [(11, "assist-candidate", {"mic_compatibility_mode": True})]
     assert len(_DeferredThread.started) == 1
     assert _DeferredThread.started[0].target is pipeline._interview_worker
     assert any(
         event.get("type") == "candidate_asr_status"
         and event.get("provider") == "off"
+        and event.get("safe_degraded") is True
         and "mic unavailable" in event.get("error", "")
         for event in broadcasts
     )

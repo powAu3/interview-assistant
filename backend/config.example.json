@@ -39,6 +39,7 @@
   "candidate_context_min_chars": 6,
   "candidate_streaming_asr_enabled": true,
   "candidate_streaming_asr_interval_ms": 1500,
+  "candidate_mic_compatibility_mode": true,
   "practice_tts_provider": "edge_tts",
   "edge_tts_voice_female": "zh-CN-XiaoxiaoNeural",
   "edge_tts_voice_male": "zh-CN-YunxiNeural",

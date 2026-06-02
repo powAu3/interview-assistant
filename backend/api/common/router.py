@@ -96,6 +96,7 @@ class ConfigUpdate(BaseModel):
     candidate_context_min_chars: Optional[int] = None
     candidate_streaming_asr_enabled: Optional[bool] = None
     candidate_streaming_asr_interval_ms: Optional[int] = None
+    candidate_mic_compatibility_mode: Optional[bool] = None
     practice_tts_provider: Optional[str] = None
     edge_tts_voice_female: Optional[str] = None
     edge_tts_voice_male: Optional[str] = None

@@ -57,6 +57,7 @@ export interface AppConfig {
   candidate_context_min_chars?: number
   candidate_streaming_asr_enabled?: boolean
   candidate_streaming_asr_interval_ms?: number
+  candidate_mic_compatibility_mode?: boolean
   practice_tts_provider?: string
   edge_tts_available?: boolean
   edge_tts_status_detail?: string

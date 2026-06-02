@@ -46,6 +46,7 @@ export default function SpeechTab() {
     candidate_context_min_chars: 6,
     candidate_streaming_asr_enabled: true,
     candidate_streaming_asr_interval_ms: 1500,
+    candidate_mic_compatibility_mode: true,
     practice_tts_provider: 'edge_tts' as string,
     edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
     edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -96,6 +97,7 @@ export default function SpeechTab() {
         candidate_context_min_chars: config.candidate_context_min_chars ?? 6,
         candidate_streaming_asr_enabled: config.candidate_streaming_asr_enabled ?? true,
         candidate_streaming_asr_interval_ms: config.candidate_streaming_asr_interval_ms ?? 1500,
+        candidate_mic_compatibility_mode: config.candidate_mic_compatibility_mode ?? true,
         practice_tts_provider: config.practice_tts_provider ?? 'edge_tts',
         edge_tts_voice_female: config.edge_tts_voice_female ?? 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: config.edge_tts_voice_male ?? 'zh-CN-YunxiNeural',
@@ -444,9 +446,24 @@ export default function SpeechTab() {
           )}
           {form.candidate_asr_enabled && (
             <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
-              开启后控制条会多选一路“我的麦克风”。这一路转写会单独显示为“我的回答上下文”，下一轮生成时作为你的真实回答背景；面试官问题仍由“会议音频”主链路识别和触发。
+              开启后控制条会多选一路“我的麦克风”。这一路只用共享方式读取；如果会议软件独占麦克风，会自动关闭候选人口述记录，不影响面试录音。
             </div>
           )}
+
+          <Field label="麦克风兼容模式" hint="推荐开启。只使用共享读取；冲突时尝试更保守采样和默认输入设备，失败则关闭候选人口述，不抢会议软件麦克风。">
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.candidate_mic_compatibility_mode}
+                onChange={(e) => setForm({ ...form, candidate_mic_compatibility_mode: e.target.checked })}
+                className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
+                disabled={!form.candidate_asr_enabled}
+              />
+              <span className="text-xs text-text-secondary">
+                {form.candidate_mic_compatibility_mode ? '共享兼容优先' : '仅按所选麦克风尝试'}
+              </span>
+            </label>
+          </Field>
 
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="候选人语音识别引擎" hint="默认 Whisper 本地识别，不产生远程 ASR 成本">
