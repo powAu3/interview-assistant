@@ -19,6 +19,8 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(ROOT, "backend")
@@ -26,6 +28,8 @@ FRONTEND_DIR = os.path.join(ROOT, "frontend")
 DESKTOP_DIR = os.path.join(ROOT, "desktop")
 REQUIREMENTS = os.path.join(BACKEND_DIR, "requirements.txt")
 HIDE_CONSOLE_ENV = "IA_HIDE_CONSOLE"
+DEFAULT_PORT = 18080
+DEFAULT_READY_TIMEOUT_SEC = 180
 
 
 def _find_npm() -> str | None:
@@ -101,6 +105,66 @@ def _hide_console_window() -> None:
         pass
 
 
+def _extract_port(extra_args: list[str]) -> int:
+    for i, arg in enumerate(extra_args):
+        if arg == "--port" and i + 1 < len(extra_args):
+            try:
+                return int(extra_args[i + 1])
+            except ValueError:
+                return DEFAULT_PORT
+        if arg.startswith("--port="):
+            try:
+                return int(arg.split("=", 1)[1])
+            except ValueError:
+                return DEFAULT_PORT
+    return DEFAULT_PORT
+
+
+def _current_primary_stt_provider() -> str:
+    try:
+        import json
+
+        with open(os.path.join(BACKEND_DIR, "config.json"), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return str(data.get("stt_provider") or "whisper").strip().lower()
+    except Exception:
+        return "whisper"
+
+
+def _get_json(url: str, timeout: float = 2.0) -> dict | None:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            import json
+
+            return json.loads(resp.read().decode("utf-8", errors="replace") or "{}")
+    except (OSError, urllib.error.URLError, ValueError):
+        return None
+
+
+def _wait_for_app_ready(port: int, timeout_sec: int = DEFAULT_READY_TIMEOUT_SEC) -> bool:
+    deadline = time.monotonic() + max(5, timeout_sec)
+    base = f"http://127.0.0.1:{port}"
+    print(f"[...] 等待桌面应用加载完成 (端口 {port})...")
+    while time.monotonic() < deadline:
+        if _get_json(f"{base}/api/options", timeout=1.5) is not None:
+            break
+        time.sleep(0.5)
+    else:
+        return False
+
+    if _current_primary_stt_provider() != "whisper":
+        return True
+
+    while time.monotonic() < deadline:
+        status = _get_json(f"{base}/api/stt/status", timeout=1.5)
+        if status and status.get("loaded") and not status.get("loading"):
+            return True
+        time.sleep(0.8)
+    return False
+
+
 def launch_start_command(extra_args: list[str], *, foreground: bool = False) -> int:
     cmd = build_start_command(extra_args)
     if _is_windows() and not foreground:
@@ -114,8 +178,12 @@ def launch_start_command(extra_args: list[str], *, foreground: bool = False) -> 
             env=env,
             creationflags=_hidden_creationflags(),
         )
-        print("[OK] 桌面应用正在后台启动，命令行窗口即将隐藏。")
-        _hide_console_window()
+        port = _extract_port(extra_args)
+        if _wait_for_app_ready(port):
+            print("[OK] 桌面应用已加载完成，命令行窗口即将隐藏。")
+            _hide_console_window()
+        else:
+            print("[WARN] 桌面应用启动等待超时，保留命令行窗口便于查看。")
         return 0
 
     return subprocess.call(cmd, cwd=ROOT)
