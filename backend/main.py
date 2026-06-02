@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
     assist.init_background_workers()
     threading.Thread(target=_preload_stt, daemon=True).start()
+    assist.preload_candidate_asr_if_enabled()
     try:
         from services.storage.resume_history import restore_active_resume
         if restore_active_resume():

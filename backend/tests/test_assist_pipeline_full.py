@@ -88,6 +88,7 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     pipeline._task_session_version = 0
     pipeline._interview_thread = None
     pipeline._candidate_thread = None
+    pipeline._candidate_whisper_preload_inflight.clear()
     pipeline._sync_compat_globals_to_asr_state()
     _DeferredThread.started = []
 
@@ -261,6 +262,66 @@ def test_candidate_whisper_preload_failure_only_reports_candidate_status(
     assert broadcasts[-1]["provider"] == "whisper"
     assert broadcasts[-1]["loaded"] is False
     assert "candidate model bad" in broadcasts[-1]["error"]
+
+
+def test_startup_preloads_candidate_whisper_when_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_stt_provider = "whisper"
+    cfg.candidate_whisper_model = "tiny"
+    cfg.candidate_whisper_language = "zh"
+
+    calls: list[tuple[str, str, str]] = []
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(
+        pipeline,
+        "_preload_candidate_whisper_async",
+        lambda provider, model, language: calls.append((provider, model, language)),
+    )
+
+    pipeline.preload_candidate_asr_if_enabled()
+
+    assert broadcasts == [{"type": "candidate_asr_status", "loaded": False, "loading": True, "provider": "whisper"}]
+    assert calls == [("whisper", "tiny", "zh")]
+
+
+def test_startup_candidate_preload_skips_when_disabled(monkeypatch: pytest.MonkeyPatch):
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = False
+    cfg.candidate_stt_provider = "whisper"
+    calls: list[tuple[str, str, str]] = []
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(
+        pipeline,
+        "_preload_candidate_whisper_async",
+        lambda provider, model, language: calls.append((provider, model, language)),
+    )
+
+    pipeline.preload_candidate_asr_if_enabled()
+
+    assert calls == []
+
+
+def test_candidate_whisper_preload_deduplicates_inflight_model(monkeypatch: pytest.MonkeyPatch):
+    class _LoadedWhisper:
+        is_loaded = True
+
+        def load_model(self):
+            raise AssertionError("already loaded")
+
+    monkeypatch.setattr(pipeline, "get_stt_engine", lambda **_kwargs: _LoadedWhisper())
+
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+
+    assert len(_DeferredThread.started) == 1
+    assert ("base", "auto") in pipeline._candidate_whisper_preload_inflight
+    _DeferredThread.started[0].run()
+    assert pipeline._candidate_whisper_preload_inflight == set()
 
 
 def test_candidate_audio_start_failure_does_not_block_interviewer_chain(

@@ -61,6 +61,8 @@ _candidate_audio_capture = AudioCapture()
 _stop_event = threading.Event()
 _pause_event = threading.Event()
 _candidate_flush_event = threading.Event()
+_candidate_whisper_preload_lock = threading.Lock()
+_candidate_whisper_preload_inflight: set[tuple[str, str]] = set()
 
 _answer_generation = 0
 _gen_lock = threading.Lock()
@@ -778,6 +780,11 @@ def _candidate_streaming_config(cfg, provider: str) -> tuple[bool, int]:
 def _preload_candidate_whisper_async(provider: str, model: str, language: str) -> None:
     if provider != "whisper":
         return
+    preload_key = (model or "base", language or "auto")
+    with _candidate_whisper_preload_lock:
+        if preload_key in _candidate_whisper_preload_inflight:
+            return
+        _candidate_whisper_preload_inflight.add(preload_key)
 
     def _load() -> None:
         try:
@@ -815,8 +822,22 @@ def _preload_candidate_whisper_async(provider: str, model: str, language: str) -
                     "error": str(exc)[:160],
                 }
             )
+        finally:
+            with _candidate_whisper_preload_lock:
+                _candidate_whisper_preload_inflight.discard(preload_key)
 
     threading.Thread(target=_load, daemon=True, name="candidate-whisper-preload").start()
+
+
+def preload_candidate_asr_if_enabled() -> None:
+    cfg = get_config()
+    if not bool(getattr(cfg, "candidate_asr_enabled", False)):
+        return
+    provider, model, language, _allow_remote = _candidate_provider_config(cfg)
+    if provider != "whisper":
+        return
+    broadcast({"type": "candidate_asr_status", "loaded": False, "loading": True, "provider": "whisper"})
+    _preload_candidate_whisper_async(provider, model, language)
 
 
 def _publish_candidate_transcription(
