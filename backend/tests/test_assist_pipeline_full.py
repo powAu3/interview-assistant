@@ -63,7 +63,7 @@ def _cfg():
         screen_capture_region="left_half",
         kb_enabled=False,
         kb_trigger_modes=[],
-        assist_asr_interrupt_running=True,
+        assist_asr_interrupt_running=False,
     )
     cfg.get_active_model = lambda: cfg.models[cfg.active_model]
     return cfg
@@ -174,14 +174,14 @@ def test_parallel_answers_commit_in_submit_order_when_workers_finish_out_of_orde
     assert pipeline._commit_buffer == {}
 
 
-def test_stale_asr_worker_is_cancelled_after_new_asr_turn(
+def test_running_asr_worker_is_not_cancelled_by_new_asr_turn_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ):
     broadcasts: list[dict] = []
     monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
 
     def fake_stream(*_args, **_kwargs):
-        yield ("text", "旧回答不应提交")
+        yield ("text", "旧回答继续提交")
 
     monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
 
@@ -201,10 +201,43 @@ def test_stale_asr_worker_is_cancelled_after_new_asr_turn(
     _DeferredThread.started[0].run()
 
     event_types = [event["type"] for event in broadcasts]
-    assert event_types == ["answer_start", "answer_cancelled"]
-    assert get_session().qa_pairs == []
+    assert event_types == ["answer_start", "answer_chunk", "answer_done", "token_update"]
+    assert [qa.answer for qa in get_session().qa_pairs] == ["旧回答继续提交"]
     assert pipeline._next_commit_seq == 1
     assert pipeline._in_flight_tasks == {}
+
+
+def test_running_asr_worker_can_still_be_cancelled_when_interrupt_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    cfg = _cfg()
+    cfg.assist_asr_interrupt_running = True
+    broadcasts: list[dict] = []
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "旧回答不应提交")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    pipeline._latest_asr_turn_id = 1
+    assert pipeline.submit_answer_task(
+        (
+            "旧 ASR 问题",
+            None,
+            False,
+            "conversation_mic",
+            {"origin": "asr", "asr_turn_id": 1},
+        )
+    )
+    assert pipeline._begin_asr_turn() == 2
+    _DeferredThread.started[0].run()
+
+    event_types = [event["type"] for event in broadcasts]
+    assert event_types == ["answer_start", "answer_cancelled"]
+    assert get_session().qa_pairs == []
 
 
 def test_candidate_whisper_preload_runs_in_background(monkeypatch: pytest.MonkeyPatch):

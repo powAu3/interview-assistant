@@ -77,7 +77,7 @@ def build_config_payload(cfg) -> dict:
         "assist_asr_group_max_wait_sec": max(
             0.2, min(8.0, float(getattr(cfg, "assist_asr_group_max_wait_sec", 1.2) or 1.2))
         ),
-        "assist_asr_interrupt_running": bool(getattr(cfg, "assist_asr_interrupt_running", True)),
+        "assist_asr_interrupt_running": bool(getattr(cfg, "assist_asr_interrupt_running", False)),
         "assist_high_churn_short_answer": bool(getattr(cfg, "assist_high_churn_short_answer", False)),
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "multi_screen_capture_idle_sec": max(

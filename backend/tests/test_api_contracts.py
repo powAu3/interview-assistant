@@ -48,10 +48,11 @@ def test_api_ask_returns_error_when_no_answer_model_available(monkeypatch: pytes
 
 def test_api_ask_from_server_screens_submits_multi_image_task(monkeypatch: pytest.MonkeyPatch):
     submitted = []
+    cancel_calls = []
 
     monkeypatch.setattr("services.llm.has_vision_model", lambda: True)
     monkeypatch.setattr(assist_routes, "pick_model_index", lambda task, busy: 0)
-    monkeypatch.setattr(assist_routes, "cancel_answer_work", lambda reset_session_data=False: None)
+    monkeypatch.setattr(assist_routes, "cancel_answer_work", lambda reset_session_data=False: cancel_calls.append(reset_session_data))
     monkeypatch.setattr(assist_routes, "submit_answer_task", lambda task: submitted.append(task) or True)
 
     res = asyncio.run(
@@ -68,3 +69,23 @@ def test_api_ask_from_server_screens_submits_multi_image_task(monkeypatch: pytes
     assert manual is True
     assert source == "server_screen_multi"
     assert meta["image_count"] == 2
+    assert cancel_calls == []
+
+
+def test_api_ask_from_server_screen_does_not_cancel_existing_generation(monkeypatch: pytest.MonkeyPatch):
+    submitted = []
+    cancel_calls = []
+
+    monkeypatch.setattr("services.llm.has_vision_model", lambda: True)
+    monkeypatch.setattr("services.capture.capture_primary_left_half_data_url", lambda: "data:image/jpeg;base64,a")
+    monkeypatch.setattr(assist_routes, "pick_model_index", lambda task, busy: 0)
+    monkeypatch.setattr(assist_routes, "cancel_answer_work", lambda reset_session_data=False: cancel_calls.append(reset_session_data))
+    monkeypatch.setattr(assist_routes, "submit_answer_task", lambda task: submitted.append(task) or True)
+
+    res = asyncio.run(assist_routes.api_ask_from_server_screen())
+
+    assert res == {"ok": True}
+    assert len(submitted) == 1
+    assert submitted[0][1] == "data:image/jpeg;base64,a"
+    assert submitted[0][3] == "server_screen_left"
+    assert cancel_calls == []

@@ -145,8 +145,6 @@ def dispatch_snapshot(
     busy_models: set[int] = set()
     effective_slots = 0
     for model_idx, task in in_flight_tasks.values():
-        if is_stale_inflight_asr_task(task, latest_asr_turn_id):
-            continue
         busy_models.add(model_idx)
         effective_slots += 1
     return busy_models, effective_slots
