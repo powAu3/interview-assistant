@@ -13,10 +13,12 @@ available in the web UI settings panel.
 """
 
 import argparse
+import ctypes
 import os
 import shutil
 import subprocess
 import sys
+import time
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(ROOT, "backend")
@@ -87,6 +89,18 @@ def _hidden_creationflags() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
 
+def _hide_console_window() -> None:
+    if not _is_windows():
+        return
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            time.sleep(0.25)
+            ctypes.windll.user32.ShowWindow(hwnd, 0)
+    except Exception:
+        pass
+
+
 def launch_start_command(extra_args: list[str], *, foreground: bool = False) -> int:
     cmd = build_start_command(extra_args)
     if _is_windows() and not foreground:
@@ -100,7 +114,8 @@ def launch_start_command(extra_args: list[str], *, foreground: bool = False) -> 
             env=env,
             creationflags=_hidden_creationflags(),
         )
-        print("[OK] 桌面应用正在后台启动，命令行窗口可以关闭。")
+        print("[OK] 桌面应用正在后台启动，命令行窗口即将隐藏。")
+        _hide_console_window()
         return 0
 
     return subprocess.call(cmd, cwd=ROOT)

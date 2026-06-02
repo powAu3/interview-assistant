@@ -58,9 +58,11 @@ def test_install_dependencies_runs_python_and_frontend_installs(monkeypatch):
 def test_launch_start_command_hides_windows_console(monkeypatch):
     quick_start = load_quick_start()
     popen_calls = []
+    hide_calls = []
 
     monkeypatch.setattr(quick_start, "_is_windows", lambda: True)
     monkeypatch.setattr(quick_start, "_hidden_creationflags", lambda: 1234)
+    monkeypatch.setattr(quick_start, "_hide_console_window", lambda: hide_calls.append(True))
 
     def fake_popen(cmd, **kwargs):
         popen_calls.append((cmd, kwargs))
@@ -80,6 +82,7 @@ def test_launch_start_command_hides_windows_console(monkeypatch):
     assert popen_calls[0][1]["stdin"] == quick_start.subprocess.DEVNULL
     assert popen_calls[0][1]["stdout"] == quick_start.subprocess.DEVNULL
     assert popen_calls[0][1]["stderr"] == quick_start.subprocess.DEVNULL
+    assert hide_calls == [True]
 
 
 def test_launch_start_command_foreground_uses_blocking_call(monkeypatch):

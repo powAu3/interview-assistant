@@ -199,7 +199,7 @@ def build_frontend(force: bool = False):
     print("[...] 构建前端...")
     if not os.path.isdir(os.path.join(FRONTEND_DIR, "node_modules")):
         print("  安装前端 npm 依赖...")
-    r = subprocess.run([npm, "install"], cwd=FRONTEND_DIR, **_hidden_process_kwargs())
+        r = subprocess.run([npm, "install"], cwd=FRONTEND_DIR, **_hidden_process_kwargs())
         if r.returncode != 0:
             print("[ERROR] npm install 失败")
             return False
