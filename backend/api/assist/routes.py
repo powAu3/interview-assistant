@@ -167,6 +167,7 @@ async def api_ask_from_server_screen():
     text = prompt_server_screen_code(cfg.language, region)
     if pick_model_index((text, data_url, True, "server_screen_left", {"origin": "server_screen"}), set()) is None:
         raise HTTPException(400, "\u6ca1\u6709\u53ef\u7528\u7684\u8bc6\u56fe\u6a21\u578b\uff0c\u8bf7\u68c0\u67e5\u542f\u7528\u72b6\u6001\u4e0e API Key")
+    cancel_answer_work(reset_session_data=False)
     queued = submit_answer_task((text, data_url, True, "server_screen_left", {"origin": "server_screen"}))
     if not queued:
         raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")
@@ -201,6 +202,7 @@ async def api_ask_from_server_screens(body: MultiServerScreenQuestion):
     task = (text, images, True, "server_screen_multi", {"origin": "server_screen", "image_count": len(images)})
     if pick_model_index(task, set()) is None:
         raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
+    cancel_answer_work(reset_session_data=False)
     queued = submit_answer_task(task)
     if not queued:
         raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")

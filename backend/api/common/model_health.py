@@ -4,7 +4,7 @@ import requests
 
 from core.config import get_config
 from core.resource_lanes import submit_low_priority_background
-from services.llm.streaming import _build_think_params
+from services.llm.streaming import _build_think_params, _completion_token_kwargs
 
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
@@ -83,8 +83,8 @@ def _check_single_model(index: int):
         payload = {
             "model": model.model,
             "messages": [{"role": "user", "content": "只回复 OK 两个字母，用于连接测试。"}],
-            "max_tokens": 16,
             "stream": False,
+            **_completion_token_kwargs(model, 16),
         }
         payload.update(
             _build_think_params(

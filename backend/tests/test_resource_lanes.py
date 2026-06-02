@@ -145,7 +145,54 @@ def test_model_health_probe_uses_compatible_chat_payload(monkeypatch):
     assert seen["json"]["messages"][0]["content"] == "只回复 OK 两个字母，用于连接测试。"
     assert seen["json"]["max_tokens"] == 16
     assert seen["json"]["stream"] is False
-    assert seen["json"]["think_mode"] is False
+    assert "think_mode" not in seen["json"]
+    assert "thinking" not in seen["json"]
+
+
+def test_model_health_probe_uses_o_series_token_param(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    ws = importlib.import_module("api.realtime.ws")
+    seen: dict[str, object] = {}
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://api.openai.com/v1",
+                        "api_key": "sk-test",
+                        "model": "o3-mini",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen["json"] = json
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+    monkeypatch.setattr(ws, "broadcast", lambda _data: None)
+
+    model_health._check_single_model(0)
+
+    assert "max_tokens" not in seen["json"]
+    assert seen["json"]["max_completion_tokens"] == 16
+    assert "reasoning_effort" not in seen["json"]
 
 
 def test_model_health_probe_rejects_reasoning_leak(monkeypatch):

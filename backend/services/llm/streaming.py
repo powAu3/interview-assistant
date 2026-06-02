@@ -293,13 +293,38 @@ _THINK_DISABLED_LOCAL_PARAMS = {
 def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
     base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
     model_name = (getattr(model_cfg, "model", "") or "").lower()
-    if style == "gpt":
-        return {"reasoning_effort": "off", "think_mode": False}
     if "localhost" in base_url or "127.0.0.1" in base_url or "sglang" in base_url:
         return dict(_THINK_DISABLED_LOCAL_PARAMS)
     if "glm" in model_name or "bigmodel" in base_url:
-        return {**_THINK_DISABLED_BASE_PARAMS, "reasoning_effort": "off"}
-    return dict(_THINK_DISABLED_BASE_PARAMS)
+        return dict(_THINK_DISABLED_BASE_PARAMS)
+    return {}
+
+
+def _completion_token_kwargs(model_cfg, max_tokens: int) -> dict:
+    token_limit = max(1, int(max_tokens or 1))
+    if _detect_think_style(model_cfg) == "gpt":
+        return {"max_completion_tokens": token_limit}
+    return {"max_tokens": token_limit}
+
+
+def _claude_thinking_budget(effort: str, max_tokens: int) -> int:
+    token_limit = max(2, int(max_tokens or 2))
+    requested = _EFFORT_BUDGET.get(effort, 4096)
+    visible_answer_reserve = min(1024, max(1, token_limit // 4))
+    return max(1, min(requested, token_limit - visible_answer_reserve))
+
+
+def _usage_delta(prompt_tokens: int, completion_tokens: int, previous: tuple[int, int]) -> tuple[int, int, tuple[int, int]]:
+    prompt_tokens = int(prompt_tokens or 0)
+    completion_tokens = int(completion_tokens or 0)
+    previous_prompt, previous_completion = previous
+    if prompt_tokens >= previous_prompt and completion_tokens >= previous_completion:
+        return (
+            prompt_tokens - previous_prompt,
+            completion_tokens - previous_completion,
+            (prompt_tokens, completion_tokens),
+        )
+    return prompt_tokens, completion_tokens, (prompt_tokens, completion_tokens)
 
 def _detect_think_style(model_cfg) -> str:
     """Detect which thinking parameter format the model expects.
@@ -330,7 +355,7 @@ def _build_think_params(model_cfg, cfg) -> dict:
             "think_mode": True,
         }
     if style == "claude":
-        budget = _EFFORT_BUDGET.get(effort, 4096)
+        budget = _claude_thinking_budget(effort, getattr(cfg, "max_tokens", 4096))
         return {
             "thinking": {"type": "enabled", "budget_tokens": budget},
             "think_mode": True,
@@ -356,13 +381,14 @@ def _try_stream_with_model(model_cfg, full_messages, cfg):
     if think_params:
         extra_kwargs["extra_body"] = think_params
     extra_kwargs["stream_options"] = {"include_usage": True}
+    token_kwargs = _completion_token_kwargs(model_cfg, cfg.max_tokens)
     try:
         response = client.chat.completions.create(
             model=model_cfg.model,
             messages=full_messages,
             temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
             stream=True,
+            **token_kwargs,
             **extra_kwargs,
         )
         return response
@@ -385,9 +411,9 @@ def _stream_via_http(model_cfg, full_messages, cfg, think_params):
         "model": model_cfg.model,
         "messages": full_messages,
         "temperature": cfg.temperature,
-        "max_tokens": cfg.max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
+        **_completion_token_kwargs(model_cfg, cfg.max_tokens),
     }
     if think_params:
         payload.update(think_params)
@@ -485,6 +511,7 @@ def chat_stream(
                 full_messages_adj = full_messages
 
             response = _try_stream_with_model(model, full_messages_adj, cfg)
+            last_usage = (0, 0)
             for chunk in response:
                 if abort_check and abort_check():
                     return
@@ -496,11 +523,12 @@ def chat_stream(
                     if delta.content:
                         yield ("text", delta.content)
                 if hasattr(chunk, "usage") and chunk.usage:
-                    _add_tokens(
+                    prompt_delta, completion_delta, last_usage = _usage_delta(
                         chunk.usage.prompt_tokens or 0,
                         chunk.usage.completion_tokens or 0,
-                        model.name,
+                        last_usage,
                     )
+                    _add_tokens(prompt_delta, completion_delta, model.name)
                     _broadcast_tokens()
             return
 
@@ -556,6 +584,7 @@ def chat_stream_single_model(
     try:
         emit_think = _should_emit_think(model_cfg, cfg)
         response = _try_stream_with_model(model_cfg, full_messages, cfg)
+        last_usage = (0, 0)
         for chunk in response:
             if abort_check and abort_check():
                 return
@@ -567,13 +596,12 @@ def chat_stream_single_model(
                 if delta.content:
                     yield ("text", delta.content)
             if hasattr(chunk, "usage") and chunk.usage:
-                prompt_tokens = chunk.usage.prompt_tokens or 0
-                completion_tokens = chunk.usage.completion_tokens or 0
-                _add_tokens(
-                    prompt_tokens,
-                    completion_tokens,
-                    model_name,
+                prompt_tokens, completion_tokens, last_usage = _usage_delta(
+                    chunk.usage.prompt_tokens or 0,
+                    chunk.usage.completion_tokens or 0,
+                    last_usage,
                 )
+                _add_tokens(prompt_tokens, completion_tokens, model_name)
                 if usage_callback:
                     usage_callback(prompt_tokens, completion_tokens, model_name)
                 _broadcast_tokens()

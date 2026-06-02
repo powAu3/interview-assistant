@@ -78,6 +78,7 @@ class ConfigUpdate(BaseModel):
     assist_asr_interrupt_running: Optional[bool] = None
     assist_high_churn_short_answer: Optional[bool] = None
     screen_capture_region: Optional[str] = None
+    screen_capture_max_long_edge: Optional[int] = None
     multi_screen_capture_idle_sec: Optional[float] = None
     written_exam_mode: Optional[bool] = None
     written_exam_think: Optional[bool] = None

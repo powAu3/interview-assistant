@@ -223,4 +223,4 @@ def _asr_fast_confirm_sec(cfg) -> float:
 
 
 def asr_interrupt_running(cfg) -> bool:
-    return bool(getattr(cfg, "assist_asr_interrupt_running", False))
+    return bool(getattr(cfg, "assist_asr_interrupt_running", True))

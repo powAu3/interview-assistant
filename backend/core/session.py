@@ -196,7 +196,9 @@ class Session:
     ) -> list[dict]:
         turn_count = self.CONVERSATION_TURNS_FOR_LLM if turns is None else max(0, int(turns))
         n = turn_count * 2
-        recent = self.conversation_history[-n:] if len(self.conversation_history) > n else self.conversation_history
+        recent = [] if n == 0 else (
+            self.conversation_history[-n:] if len(self.conversation_history) > n else self.conversation_history
+        )
         out: list[dict] = []
         stripped_images = 0
         raw_text_chars = 0

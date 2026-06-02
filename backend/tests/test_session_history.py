@@ -67,3 +67,19 @@ def test_get_conversation_messages_for_llm_supports_lightweight_profile():
     assert session.last_llm_history_stats["profile"] == "asr_light"
     assert session.last_llm_history_stats["history_messages"] == 2
     assert session.last_llm_history_stats["trimmed_text_chars"] <= 350
+
+
+def test_get_conversation_messages_for_llm_zero_turns_returns_no_history():
+    session = Session()
+    session.add_user_message("上一题")
+    session.add_assistant_message("上一题答案")
+
+    messages = session.get_conversation_messages_for_llm(
+        turns=0,
+        include_summary=False,
+        total_char_budget=0,
+        profile="none",
+    )
+
+    assert messages == []
+    assert session.last_llm_history_stats["history_messages"] == 0

@@ -102,5 +102,5 @@ def capture_primary_left_half_data_url() -> str:
     from core.config import get_config
     cfg = get_config()
     region = getattr(cfg, "screen_capture_region", None) or "left_half"
-    max_long_edge = getattr(cfg, "screen_capture_max_long_edge", 1600) or 1600
+    max_long_edge = getattr(cfg, "screen_capture_max_long_edge", 1600)
     return capture_primary_region_data_url(region, max_long_edge=max_long_edge)

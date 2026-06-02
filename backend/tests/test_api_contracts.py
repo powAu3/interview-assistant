@@ -69,10 +69,10 @@ def test_api_ask_from_server_screens_submits_multi_image_task(monkeypatch: pytes
     assert manual is True
     assert source == "server_screen_multi"
     assert meta["image_count"] == 2
-    assert cancel_calls == []
+    assert cancel_calls == [False]
 
 
-def test_api_ask_from_server_screen_does_not_cancel_existing_generation(monkeypatch: pytest.MonkeyPatch):
+def test_api_ask_from_server_screen_cancels_existing_generation(monkeypatch: pytest.MonkeyPatch):
     submitted = []
     cancel_calls = []
 
@@ -88,4 +88,4 @@ def test_api_ask_from_server_screen_does_not_cancel_existing_generation(monkeypa
     assert len(submitted) == 1
     assert submitted[0][1] == "data:image/jpeg;base64,a"
     assert submitted[0][3] == "server_screen_left"
-    assert cancel_calls == []
+    assert cancel_calls == [False]

@@ -12,6 +12,8 @@ from services.llm.streaming import (
     _detect_think_style,
     _build_think_params,
     _EFFORT_BUDGET,
+    _completion_token_kwargs,
+    _usage_delta,
     _THINK_DISABLED_BASE_PARAMS,
     _THINK_DISABLED_LOCAL_PARAMS,
 )
@@ -66,19 +68,19 @@ class TestBuildThinkParams:
 
     def test_off_gpt(self):
         r = _build_think_params(_m("o1"), _c("off"))
-        assert r == {"reasoning_effort": "off", "think_mode": False}
+        assert r == {}
 
     def test_off_claude(self):
         r = _build_think_params(_m("claude-3"), _c("off"))
-        assert r == _THINK_DISABLED_BASE_PARAMS
+        assert r == {}
 
     def test_off_generic(self):
         r = _build_think_params(_m("deepseek-r1"), _c("off"))
-        assert r == _THINK_DISABLED_BASE_PARAMS
+        assert r == {}
 
     def test_think_mode_false_wins_even_when_effort_is_high(self):
         r = _build_think_params(_m("glm-5.1"), S(think_mode=False, think_effort="high"))
-        assert r == {**_THINK_DISABLED_BASE_PARAMS, "reasoning_effort": "off"}
+        assert r == _THINK_DISABLED_BASE_PARAMS
 
     def test_off_local_runtime_includes_chat_template_disable(self):
         model = _m("glm-5.1")
@@ -95,13 +97,31 @@ class TestBuildThinkParams:
     def test_claude_budget(self, effort):
         r = _build_think_params(_m("claude-3"), _c(effort))
         assert r["thinking"]["type"] == "enabled"
-        assert r["thinking"]["budget_tokens"] == _EFFORT_BUDGET[effort]
+        assert r["thinking"]["budget_tokens"] == min(_EFFORT_BUDGET[effort], 3072)
         assert r["think_mode"] is True
 
     @pytest.mark.parametrize("effort", ["low", "medium", "high"])
     def test_generic_enabled(self, effort):
         r = _build_think_params(_m("deepseek-r1"), _c(effort))
         assert r == {"thinking": {"type": "enabled"}, "think_mode": True}
+
+
+def test_o_series_uses_max_completion_tokens():
+    assert _completion_token_kwargs(_m("o3-mini"), 16) == {"max_completion_tokens": 16}
+
+
+def test_generic_uses_max_tokens():
+    assert _completion_token_kwargs(_m("deepseek-chat"), 16) == {"max_tokens": 16}
+
+
+def test_usage_delta_handles_cumulative_stream_usage():
+    first_prompt, first_completion, previous = _usage_delta(100, 3, (0, 0))
+    second_prompt, second_completion, previous = _usage_delta(100, 5, previous)
+    third_prompt, third_completion, _previous = _usage_delta(100, 5, previous)
+
+    assert (first_prompt, first_completion) == (100, 3)
+    assert (second_prompt, second_completion) == (0, 2)
+    assert (third_prompt, third_completion) == (0, 0)
 
 
 def test_single_model_suppresses_reasoning_when_think_mode_is_false(monkeypatch):

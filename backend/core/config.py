@@ -120,7 +120,7 @@ class AppConfig(BaseModel):
     # 实时辅助：候选问句组从第一条有效追问开始的最长等待时间
     assist_asr_group_max_wait_sec: float = 1.2
     # 实时辅助：确认新问句组后是否中断仍在生成的旧 ASR 回答
-    assist_asr_interrupt_running: bool = False
+    assist_asr_interrupt_running: bool = True
     # 实时辅助：高 churn 场景下自动切短答，优先跟住最新问题
     assist_high_churn_short_answer: bool = False
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏

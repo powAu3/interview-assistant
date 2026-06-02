@@ -400,6 +400,26 @@ def test_update_config_accepts_valid_enum(monkeypatch):
     assert seen["d"]["practice_audience"] == "social"
 
 
+def test_update_config_accepts_screen_capture_max_long_edge_zero(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_update_config(d):
+        seen["d"] = dict(d)
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    body = _Body(screen_capture_max_long_edge=0)
+
+    result = _run(common_router.api_update_config(body))
+
+    assert result == {"ok": True}
+    assert seen["d"]["screen_capture_max_long_edge"] == 0
+
+
 def test_update_config_rejects_legacy_iflytek_provider(monkeypatch):
     update_called = False
 
