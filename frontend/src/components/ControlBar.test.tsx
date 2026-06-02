@@ -130,7 +130,7 @@ describe('ControlBar', () => {
     } as any)
   })
 
-  it('blocks sending a pasted screenshot when the active model has no vision support', async () => {
+  it('blocks pasted screenshots when no enabled model supports vision', async () => {
     render(<ControlBar />)
 
     const input = screen.getByPlaceholderText('输入问题，Enter 发送…')
@@ -149,7 +149,42 @@ describe('ControlBar', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送问题' }))
 
     expect(apiMock.ask).not.toHaveBeenCalled()
-    expect(screen.getByText(/当前模型「TextOnly」不支持图片识别/)).toBeInTheDocument()
+    expect(screen.getByText('请先在设置中启用至少一个带 👁 的识图模型，再粘贴截图')).toBeInTheDocument()
+  })
+
+  it('allows pasted screenshots to fall back to an enabled vision model', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        models: [
+          { name: 'TextOnly', supports_think: false, supports_vision: false, enabled: true },
+          { name: 'VisionBackup', supports_think: false, supports_vision: true, enabled: true },
+        ],
+      },
+      modelHealth: { 0: 'ok', 1: 'ok' },
+    } as any)
+
+    render(<ControlBar />)
+
+    const input = screen.getByPlaceholderText('输入问题，Enter 发送…')
+    const file = new File(['fake'], 'shot.png', { type: 'image/png' })
+    fireEvent.paste(input, {
+      clipboardData: {
+        items: [
+          {
+            type: 'image/png',
+            getAsFile: () => file,
+          },
+        ],
+      },
+    })
+
+    expect(screen.getByText(/自动使用「VisionBackup」/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '发送问题' }))
+
+    await waitFor(() => {
+      expect(apiMock.ask).toHaveBeenCalledWith('', 'data:image/png;base64,xxx')
+    })
   })
 
   it('hides noisy software audio devices by default with a show all escape hatch', () => {

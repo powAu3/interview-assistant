@@ -38,6 +38,10 @@ export {
   saveQuickPrompts,
 } from './control-bar/quickPrompts'
 
+function getEnabledVisionModels(config: { models?: Array<{ name?: string; supports_vision?: boolean; enabled?: boolean }> } | null | undefined) {
+  return (config?.models ?? []).filter((model) => model.enabled !== false && model.supports_vision)
+}
+
 export default function ControlBar() {
   // 精确订阅字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
   const {
@@ -111,6 +115,8 @@ export default function ControlBar() {
   const noEnabledModels = (config?.models?.length ?? 0) > 0 && enabledModelEntries.length === 0
   const allModelsUnavailable = enabledModelEntries.length > 0 &&
     enabledModelEntries.every(({ index }) => modelHealth[index] === 'error')
+  const enabledVisionModels = useMemo(() => getEnabledVisionModels(config), [config])
+  const hasEnabledVisionModel = enabledVisionModels.length > 0
   const answerModelUnavailable = noEnabledModels || allModelsUnavailable
   const showColdStartHint =
     !isExamMode &&
@@ -158,6 +164,11 @@ export default function ControlBar() {
   const candidateCaptureEnabled = config?.candidate_asr_enabled ?? false
   const activeModel = config?.models?.[config.active_model]
   const activeModelSupportsVision = activeModel?.supports_vision ?? false
+  const pastedImageVisionHint = activeModelSupportsVision
+    ? null
+    : hasEnabledVisionModel
+      ? `当前优先模型不支持图片，将自动使用「${enabledVisionModels[0]?.name ?? '识图模型'}」`
+      : '没有已启用的识图模型，请先在设置中开启带 👁 的模型'
 
   useEffect(() => {
     if (devices.length === 0) {
@@ -222,9 +233,8 @@ export default function ControlBar() {
         const file = items[i].getAsFile()
         if (!file) continue
         const store = useInterviewStore.getState()
-        const activeModel = store.config?.models?.[store.config?.active_model ?? 0]
-        if (activeModel && !activeModel.supports_vision) {
-          setError(`当前模型「${activeModel.name}」不支持图片识别，请先切换到带 👁 标记的模型再粘贴截图`)
+        if ((store.config?.models?.length ?? 0) > 0 && getEnabledVisionModels(store.config).length === 0) {
+          setError('请先在设置中启用至少一个带 👁 的识图模型，再粘贴截图')
           return
         }
         const reader = new FileReader()
@@ -317,8 +327,8 @@ export default function ControlBar() {
       setError('所有启用模型不可用，请先检查模型连接')
       return
     }
-    if (pastedImage && !activeModelSupportsVision) {
-      setError(`当前模型「${activeModel?.name ?? '未命名模型'}」不支持图片识别，请切换到带 👁 标记的模型后再发送截图`)
+    if (pastedImage && !hasEnabledVisionModel) {
+      setError('请先在设置中启用至少一个带 👁 的识图模型')
       return
     }
     try {
@@ -326,7 +336,7 @@ export default function ControlBar() {
       setManualQuestion('')
       setPastedImage(null)
     } catch (e: unknown) { setError(getErrorMessage(e, '提交问题失败')) }
-  }, [manualQuestion, pastedImage, noEnabledModels, allModelsUnavailable, activeModelSupportsVision, activeModel?.name])
+  }, [manualQuestion, pastedImage, noEnabledModels, allModelsUnavailable, hasEnabledVisionModel])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (isComposingRef.current) return
@@ -485,8 +495,10 @@ export default function ControlBar() {
             <img src={pastedImage} alt="screenshot" className="h-12 max-w-[200px] rounded object-contain border border-bg-hover" />
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-text-muted">已粘贴截图</span>
-              {!activeModelSupportsVision && (
-                <span className="text-[10px] text-accent-amber">当前模型不支持图片，请切换到带 👁 标记的模型后再发送</span>
+              {pastedImageVisionHint && (
+                <span className={`text-[10px] ${hasEnabledVisionModel ? 'text-accent-amber' : 'text-accent-red'}`}>
+                  {pastedImageVisionHint}
+                </span>
               )}
             </div>
             <button onClick={() => setPastedImage(null)} className="text-text-muted hover:text-accent-red ml-auto">
@@ -672,14 +684,14 @@ export default function ControlBar() {
         </div>
         <button
           onClick={handleAsk}
-          disabled={answerModelUnavailable || (pastedImage && !activeModelSupportsVision) || (!manualQuestion.trim() && !pastedImage)}
+          disabled={answerModelUnavailable || (pastedImage && !hasEnabledVisionModel) || (!manualQuestion.trim() && !pastedImage)}
           title={
             noEnabledModels
               ? '请先在设置中启用至少一个模型'
               : allModelsUnavailable
               ? '所有启用模型不可用，请先检查模型连接'
-              : pastedImage && !activeModelSupportsVision
-              ? '当前模型不支持图片，请切换到带 👁 标记的模型'
+              : pastedImage && !hasEnabledVisionModel
+              ? '请先在设置中启用至少一个带 👁 的识图模型'
               : manualQuestion.trim() || pastedImage
               ? '发送问题 (Enter)'
               : '请先输入问题或粘贴截图'
