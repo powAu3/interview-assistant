@@ -37,6 +37,9 @@ class TestDetectThinkStyle:
     def test_gpt_o4(self):
         assert _detect_think_style(_m("o4-mini")) == "gpt"
 
+    def test_gpt_5(self):
+        assert _detect_think_style(_m("gpt-5.1")) == "gpt"
+
     def test_claude(self):
         assert _detect_think_style(_m("claude-3.5-sonnet")) == "claude"
 
@@ -108,6 +111,10 @@ class TestBuildThinkParams:
 
 def test_o_series_uses_max_completion_tokens():
     assert _completion_token_kwargs(_m("o3-mini"), 16) == {"max_completion_tokens": 16}
+
+
+def test_gpt_5_uses_max_completion_tokens():
+    assert _completion_token_kwargs(_m("gpt-5.1"), 16) == {"max_completion_tokens": 16}
 
 
 def test_generic_uses_max_tokens():

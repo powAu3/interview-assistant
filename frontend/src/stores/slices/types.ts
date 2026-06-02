@@ -95,6 +95,8 @@ export interface AppConfig {
   assist_high_churn_short_answer?: boolean
   /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
   screen_capture_region?: string
+  /** 截图送入识图模型前的最长边限制；0=不缩放 */
+  screen_capture_max_long_edge?: number
   /** 多图截图判题：最后一次截图后等待多少秒再提交 */
   multi_screen_capture_idle_sec?: number
   /** 笔试模式：截屏后选择题直接出答案，编程题直接出代码 */

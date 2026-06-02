@@ -115,7 +115,7 @@ export default function InterviewOverlay() {
 
   useEffect(() => {
     answerAutoFollowRef.current = true
-  }, [displayedQaKey])
+  }, [displayedQaKey, overlayMode, activeFocusTab])
 
   useLayoutEffect(() => {
     if (!isStreaming) return

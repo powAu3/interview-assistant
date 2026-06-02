@@ -111,6 +111,42 @@ describe('InterviewOverlay', () => {
     expect(scroller.scrollTop).toBe(120)
   })
 
+  it('resumes auto-follow after switching focus tabs during streaming', () => {
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '## 解题思路\n先说思路。\n\n## 代码解决方案\n正在写代码。',
+        status: 'streaming',
+      }],
+      streamingIds: ['qa-1'],
+    })
+    const { rerender } = render(<InterviewOverlay />)
+    const scroller = document.querySelector('.ov-focus-content') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    scroller.scrollTop = 120
+    fireEvent.scroll(scroller)
+
+    fireEvent.click(screen.getAllByText('解题思路')[0])
+
+    act(() => {
+      useInterviewStore.setState({
+        qaPairs: [{
+          ...qa,
+          answer: '## 解题思路\n先说思路。\n\n## 代码解决方案\n正在写代码。\n继续生成。',
+          status: 'streaming',
+        }],
+        streamingIds: ['qa-1'],
+      })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(scroller.scrollTop).toBe(1000)
+  })
+
   it('formats markdown in the regular overlay modes', () => {
     useInterviewStore.setState({
       qaPairs: [{

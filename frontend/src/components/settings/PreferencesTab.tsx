@@ -409,6 +409,27 @@ export default function PreferencesTab() {
 
         {config && hasScreenCapture && (
           <Field
+            label={`截图最长边: ${config.screen_capture_max_long_edge ?? 1600}px`}
+            hint="送入识图模型前缩放截图，降低带宽和 token；0 表示不缩放"
+          >
+            <input
+              type="number"
+              min={0}
+              max={4000}
+              step={100}
+              value={config.screen_capture_max_long_edge ?? 1600}
+              onChange={(e) => {
+                const raw = Number(e.target.value)
+                const v = Number.isFinite(raw) ? Math.max(0, Math.min(4000, raw)) : 1600
+                updateConfigAndRefresh({ screen_capture_max_long_edge: v }).catch(() => {})
+              }}
+              className="input-field w-full max-w-[120px]"
+            />
+          </Field>
+        )}
+
+        {config && hasScreenCapture && (
+          <Field
             label={`多图截图等待: ${config.multi_screen_capture_idle_sec ?? 10} 秒`}
             hint="多图截图判题快捷键最后一次按下后，等待这段时间无新截图就提交整批图片 (1-60)"
           >

@@ -335,7 +335,7 @@ def _detect_think_style(model_cfg) -> str:
         'generic' – generic OpenAI-compatible (use thinking.type)
     """
     name = (model_cfg.model or "").lower()
-    if name.startswith("o1") or name.startswith("o3") or name.startswith("o4"):
+    if name.startswith("gpt-5") or name.startswith("o1") or name.startswith("o3") or name.startswith("o4"):
         return "gpt"
     if "claude" in name or "sonnet" in name or "haiku" in name or "opus" in name:
         return "claude"
