@@ -65,6 +65,23 @@ def _normalize_task_images(image: Any) -> list[str]:
     return []
 
 
+def _image_payload_chars(images: list[str]) -> int:
+    return sum(len(img or "") for img in images)
+
+
+def _message_text_chars(messages: list[dict]) -> int:
+    total = 0
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    total += len(str(part.get("text") or ""))
+    return total
+
+
 def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
     enabled = bool(getattr(cfg, "candidate_asr_enabled", False)) and bool(
         getattr(cfg, "candidate_context_enabled", True)
@@ -75,6 +92,48 @@ def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
         max(100, min(4000, int(getattr(cfg, "candidate_context_max_chars", 900) or 900))),
         max(1, min(100, int(getattr(cfg, "candidate_context_min_chars", 6) or 6))),
     )
+
+
+def _history_context_options(prompt_mode: PromptMode, written_exam: bool) -> dict[str, Any]:
+    if written_exam:
+        return {
+            "profile": "written_none",
+            "turns": 0,
+            "max_chars_per_message": 0,
+            "include_summary": False,
+            "total_char_budget": 0,
+        }
+    if prompt_mode == PROMPT_MODE_ASR_REALTIME:
+        return {
+            "profile": "asr_light",
+            "turns": 2,
+            "max_chars_per_message": 700,
+            "include_summary": False,
+            "total_char_budget": 1800,
+        }
+    if prompt_mode == PROMPT_MODE_SERVER_SCREEN:
+        return {
+            "profile": "screen_light",
+            "turns": 1,
+            "max_chars_per_message": 700,
+            "include_summary": False,
+            "total_char_budget": 900,
+        }
+    if prompt_mode == PROMPT_MODE_MANUAL_TEXT:
+        return {
+            "profile": "manual_balanced",
+            "turns": 3,
+            "max_chars_per_message": 900,
+            "include_summary": True,
+            "total_char_budget": 2600,
+        }
+    return {
+        "profile": "default",
+        "turns": None,
+        "max_chars_per_message": None,
+        "include_summary": True,
+        "total_char_budget": None,
+    }
 
 
 def _max_tokens_for_prompt(prompt_mode: PromptMode, cfg) -> int:
@@ -104,9 +163,9 @@ def prompt_mode_for_task(
     manual_input: bool,
     written_exam: bool = False,
 ) -> PromptMode:
+    if written_exam:
+        return PROMPT_MODE_WRITTEN_EXAM
     if (source or "").startswith("server_screen_"):
-        if written_exam:
-            return PROMPT_MODE_WRITTEN_EXAM
         return PROMPT_MODE_SERVER_SCREEN
     if manual_input:
         return PROMPT_MODE_MANUAL_TEXT
@@ -180,12 +239,19 @@ def process_question_parallel(
 
     with conversation_lock:
         session_ref = get_session()
-        base_messages = list(session_ref.get_conversation_messages_for_llm())
+        if written_exam:
+            base_messages = []
+            history_stats = {"messages": 0, "history_messages": 0, "stripped_images": 0}
+        else:
+            history_options = _history_context_options(prompt_mode, written_exam)
+            base_messages = list(session_ref.get_conversation_messages_for_llm(**history_options))
+            history_stats = dict(getattr(session_ref, "last_llm_history_stats", {}) or {})
         last_qa = session_ref.get_last_qa()
         candidate_context_enabled, candidate_wait_ms, candidate_max_chars, candidate_min_chars = _candidate_context_settings(cfg)
         candidate_source_ok = _supports_candidate_context_source(source, meta)
         should_use_candidate_context = bool(
-            not images
+            not written_exam
+            and not images
             and last_qa
             and candidate_source_ok
             and candidate_context_enabled
@@ -206,10 +272,12 @@ def process_question_parallel(
             )
     if len(actual_spoken_answer.strip()) < candidate_min_chars:
         actual_spoken_answer = ""
+    candidate_context_chars = len(actual_spoken_answer[:candidate_max_chars]) if actual_spoken_answer else 0
 
     is_followup = False
     if (
-        not images
+        not written_exam
+        and not images
         and last_qa
         and _supports_candidate_context_source(source, meta)
         and classify_followup(question_text, last_qa.question, actual_spoken_answer or last_qa.answer[:500])
@@ -225,25 +293,26 @@ def process_question_parallel(
             )
         else:
             actual_block = (
-                f"候选人真实口述回答（最高优先级）：{actual_spoken_answer[:candidate_max_chars]}\n"
+                f"候选人麦克风转写（辅助参考，可能有识别误差）：{actual_spoken_answer[:candidate_max_chars]}\n"
                 if actual_spoken_answer
-                else "候选人真实口述回答：未启用或未捕获到；本轮按旧逻辑仅参考助手建议答案。\n"
+                else "候选人麦克风转写：未启用或未捕获到；本轮按旧逻辑仅参考助手建议答案。\n"
             )
             user_for_llm = (
                 f"[追问上下文] 上一个问题：{last_qa.question}\n"
                 f"{actual_block}"
-                f"助手上一轮建议答案（仅作低优先级参考，不代表候选人照读）：{prev_answer_summary}\n"
-                "追问回答规则：如果真实口述与助手建议冲突，必须以真实口述为准；"
-                "不要补造真实口述里没有出现的项目细节、数据或决策。\n\n"
+                f"助手上一轮建议答案（参考候选人可能听到过的答题方向，不代表候选人照读）：{prev_answer_summary}\n"
+                "追问回答规则：以当前面试官追问和会议音频识别出的题意为主；"
+                "候选人麦克风转写用于理解上一轮回答大意，但不要当作逐字稿。"
+                "如果转写内容明显识别错、与当前追问冲突或不自然，请降权使用，不要强行套入。\n\n"
                 f"现在面试官追问：{question_text}"
             )
     elif should_use_candidate_context and last_qa and actual_spoken_answer:
         user_for_llm = (
-            f"[候选人真实口述背景] 上一个问题：{last_qa.question}\n"
-            f"候选人上一轮真实口述（背景信息）：{actual_spoken_answer[:candidate_max_chars]}\n"
-            "使用规则：这段真实口述可帮助延续候选人的项目经历、技术选型和事实细节；"
-            "如果当前问题与上一轮无关，请忽略它，不要强行关联。"
-            "不得假设候选人照读了助手上一轮建议答案。\n\n"
+            f"[候选人回答辅助背景] 上一个问题：{last_qa.question}\n"
+            f"候选人上一轮麦克风转写（可能有识别误差）：{actual_spoken_answer[:candidate_max_chars]}\n"
+            "使用规则：这段转写可帮助延续候选人上一轮回答的大意、项目线索和技术关键词；"
+            "以当前面试官问题为主，如果当前问题与上一轮无关，或转写明显不准，请忽略或弱化它。"
+            "不得假设候选人照读了助手上一轮建议答案，也不要把转写当成逐字事实。\n\n"
             f"现在面试官问题：{question_text}"
         )
 
@@ -251,6 +320,27 @@ def process_question_parallel(
         session_ref.close_candidate_answer_window()
 
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
+    deps.logger.info(
+        "LLM_INPUT_STATS source=%s prompt_mode=%s written_exam=%s image_count=%d "
+        "image_payload_chars=%d history_used=%s history_profile=%s history_messages=%d "
+        "historical_images_stripped=%d history_text_raw_chars=%d "
+        "history_text_trimmed_chars=%d candidate_context_chars=%d "
+        "message_count=%d text_chars=%d",
+        source,
+        prompt_mode,
+        written_exam,
+        len(images),
+        _image_payload_chars(images),
+        bool(base_messages),
+        str(history_stats.get("profile", "default")),
+        int(history_stats.get("history_messages", 0) or 0),
+        int(history_stats.get("stripped_images", 0) or 0),
+        int(history_stats.get("raw_text_chars", 0) or 0),
+        int(history_stats.get("trimmed_text_chars", 0) or 0),
+        candidate_context_chars,
+        len(messages_for_llm),
+        _message_text_chars(messages_for_llm),
+    )
 
     if len(images) > 1:
         display_question = f"{question_text} [📷 多图 x{len(images)}]"
@@ -391,10 +481,8 @@ def process_question_parallel(
         try:
             with conversation_lock:
                 if images:
-                    content: list = [{"type": "text", "text": question_text}]
-                    for data_url in images:
-                        content.append({"type": "image_url", "image_url": {"url": data_url}})
-                    session.add_user_message(content)
+                    suffix = f" [图片已省略 x{len(images)}]"
+                    session.add_user_message(question_text + suffix)
                 else:
                     session.add_user_message(question_text)
                 session.add_assistant_message(full_answer)

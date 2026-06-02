@@ -565,7 +565,7 @@ def build_system_prompt(
     cfg = get_config()
     if mode is None:
         mode = PROMPT_MODE_MANUAL_TEXT if manual_input else PROMPT_MODE_ASR_REALTIME
-    resume_section = _resume_reference_section(cfg.resume_text)
+    resume_section = "" if mode == PROMPT_MODE_WRITTEN_EXAM else _resume_reference_section(cfg.resume_text)
     kb_section = _kb_reference_section(
         kb_hits or [],
         excerpt_chars=int(getattr(cfg, "kb_prompt_excerpt_chars", 300) or 300),

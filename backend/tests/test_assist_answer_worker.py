@@ -241,7 +241,7 @@ def test_process_question_parallel_sanitizes_streamed_answer_chunks(
     assert done["answer"] == "用 AOF 和 RDB。"
 
 
-def test_followup_prompt_prefers_candidate_spoken_answer(monkeypatch: pytest.MonkeyPatch):
+def test_followup_prompt_uses_candidate_spoken_answer_as_auxiliary_context(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     seen: dict[str, str] = {}
     session = get_session()
@@ -264,7 +264,7 @@ def test_followup_prompt_prefers_candidate_spoken_answer(monkeypatch: pytest.Mon
 
     def fake_stream(_model_cfg, messages, **_kwargs):
         seen["user"] = messages[-1]["content"]
-        yield ("text", "围绕真实口述追问。")
+        yield ("text", "围绕当前追问回答。")
 
     monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
 
@@ -277,10 +277,12 @@ def test_followup_prompt_prefers_candidate_spoken_answer(monkeypatch: pytest.Mon
     )
 
     prompt = seen["user"]
-    assert "候选人真实口述回答（最高优先级）" in prompt
+    assert "候选人麦克风转写（辅助参考，可能有识别误差）" in prompt
+    assert "以当前面试官追问和会议音频识别出的题意为主" in prompt
+    assert "不要当作逐字稿" in prompt
     assert "风控规则引擎" in prompt
     assert "误杀率下降了三成" in prompt
-    assert "助手上一轮建议答案（仅作低优先级参考" in prompt
+    assert "助手上一轮建议答案（参考候选人可能听到过的答题方向" in prompt
     assert "通用缓存项目" in prompt
 
 
@@ -326,7 +328,8 @@ def test_realtime_asr_source_uses_candidate_context_and_opens_next_window(monkey
         deps=_deps(broadcasts=broadcasts),
     )
 
-    assert "候选人真实口述回答（最高优先级）" in seen["user"]
+    assert "候选人麦克风转写（辅助参考，可能有识别误差）" in seen["user"]
+    assert "以当前面试官追问和会议音频识别出的题意为主" in seen["user"]
     assert "风控规则引擎" in seen["user"]
     answer_start = next(event for event in broadcasts if event["type"] == "answer_start")
     assert session.current_candidate_qa_id == answer_start["id"]
@@ -369,9 +372,11 @@ def test_non_followup_prompt_can_include_candidate_spoken_background(monkeypatch
     )
 
     prompt = seen["user"]
-    assert "[候选人真实口述背景]" in prompt
+    assert "[候选人回答辅助背景]" in prompt
+    assert "候选人上一轮麦克风转写（可能有识别误差）" in prompt
     assert "风控规则引擎" in prompt
-    assert "如果当前问题与上一轮无关，请忽略它" in prompt
+    assert "以当前面试官问题为主" in prompt
+    assert "不要把转写当成逐字事实" in prompt
     assert "现在面试官问题：MySQL 索引为什么用 B+ 树？" in prompt
 
 
@@ -412,7 +417,7 @@ def test_followup_prompt_uses_legacy_context_when_candidate_context_disabled(mon
 
     prompt = seen["user"]
     assert "你上次回答的要点：助手建议答案：缓存项目。" in prompt
-    assert "候选人真实口述回答" not in prompt
+    assert "候选人麦克风转写" not in prompt
     assert "风控规则引擎" not in prompt
 
 
@@ -454,7 +459,7 @@ def test_followup_prompt_uses_legacy_context_when_candidate_asr_disabled(monkeyp
 
     prompt = seen["user"]
     assert "你上次回答的要点：助手建议答案：缓存项目。" in prompt
-    assert "候选人真实口述回答" not in prompt
+    assert "候选人麦克风转写" not in prompt
     assert "风控规则引擎" not in prompt
 
 
@@ -597,3 +602,76 @@ def test_process_question_parallel_sends_multiple_images_to_vision_model(
     ]
     done = next(event for event in broadcasts if event["type"] == "answer_done")
     assert "多图 x2" in done["question"]
+    assert "image_url" not in str(get_session().conversation_history)
+    assert get_session().conversation_history[0]["content"] == "多图题面 [图片已省略 x2]"
+
+
+def test_written_exam_request_does_not_include_history(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured = {}
+    session = get_session()
+    session.add_user_message("上一道笔试题")
+    session.add_assistant_message("上一题答案")
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        captured["override_think_mode"] = _kwargs.get("override_think_mode")
+        yield ("text", "当前题答案")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "当前笔试题",
+            ["data:image/png;base64,current"],
+            True,
+            "server_screen_left",
+            {"origin": "server_screen", "image_count": 1},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert len(captured["messages"]) == 1
+    assert captured["messages"][0]["role"] == "user"
+    assert captured["messages"][0]["content"][0] == {"type": "text", "text": "当前笔试题"}
+    assert captured["messages"][0]["content"][1]["image_url"]["url"] == "data:image/png;base64,current"
+    assert "上一道笔试题" not in str(captured["messages"])
+
+
+def test_written_exam_manual_input_uses_exam_mode_and_no_history(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured = {}
+    session = get_session()
+    session.add_user_message("上一道题")
+    session.add_assistant_message("上一题答案")
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["prompt_mode"] = kwargs["mode"]
+        return "system"
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        yield ("text", "填空答案")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("手动输入的笔试题", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["prompt_mode"] == answer_worker.PROMPT_MODE_WRITTEN_EXAM
+    assert captured["messages"] == [{"role": "user", "content": "手动输入的笔试题"}]

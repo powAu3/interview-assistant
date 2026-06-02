@@ -68,6 +68,16 @@ def test_no_resume_rule_when_resume_missing(reset_resume):
     assert "简历使用规则" not in p
 
 
+def test_written_exam_prompt_never_includes_resume(reset_resume):
+    cfg = reset_resume
+    cfg.resume_text = "项目A: 后端重构，Kafka, Redis；2022 字节实习。"
+    p = build_system_prompt(mode="written_exam")
+    assert "项目A" not in p
+    assert "Kafka" not in p
+    assert "简历使用规则" not in p
+    assert "<resume_context>" not in p
+
+
 # ---- 4.3 first-sentence hard constraint ---------------------------------
 
 def test_first_sentence_hard_constraint_in_asr():

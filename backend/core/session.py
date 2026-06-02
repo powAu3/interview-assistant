@@ -37,6 +37,7 @@ class Session:
     candidate_asr_busy: bool = False
     candidate_asr_active_qa_id: str = ""
     candidate_asr_activity_at: float = 0.0
+    last_llm_history_stats: dict = field(default_factory=dict)
     is_recording: bool = False
     is_paused: bool = False
     last_device_id: int = 0
@@ -151,7 +152,8 @@ class Session:
         return text
 
     def add_user_message(self, content: Union[str, list]):
-        self.conversation_history.append({"role": "user", "content": content})
+        cleaned, _ = self._strip_images_from_content(content)
+        self.conversation_history.append({"role": "user", "content": cleaned})
         self._trim_history()
         self._maybe_compact()
 
@@ -183,11 +185,28 @@ class Session:
     def get_conversation_messages(self) -> list[dict]:
         return list(self.conversation_history)
 
-    def get_conversation_messages_for_llm(self) -> list[dict]:
-        n = self.CONVERSATION_TURNS_FOR_LLM * 2
+    def get_conversation_messages_for_llm(
+        self,
+        *,
+        turns: Optional[int] = None,
+        max_chars_per_message: Optional[int] = None,
+        include_summary: bool = True,
+        total_char_budget: Optional[int] = None,
+        profile: str = "default",
+    ) -> list[dict]:
+        turn_count = self.CONVERSATION_TURNS_FOR_LLM if turns is None else max(0, int(turns))
+        n = turn_count * 2
         recent = self.conversation_history[-n:] if len(self.conversation_history) > n else self.conversation_history
         out: list[dict] = []
-        if self.system_summary:
+        stripped_images = 0
+        raw_text_chars = 0
+        trimmed_text_chars = 0
+        max_chars = (
+            self.MAX_CHARS_PER_MESSAGE
+            if max_chars_per_message is None
+            else max(120, int(max_chars_per_message))
+        )
+        if include_summary and self.system_summary:
             out.append({
                 "role": "system",
                 "content": (
@@ -195,42 +214,75 @@ class Session:
                     "不要复读它):\n" + self.system_summary
                 ),
             })
-        screen_count = sum(
-            1 for msg in recent
-            if isinstance(msg.get("content"), list)
-        )
-        screen_limit = self.SCREEN_TURNS_FOR_LLM * 2
-        if screen_count > screen_limit:
-            screen_seen = 0
-            filtered: list[dict] = []
-            for msg in reversed(recent):
-                if isinstance(msg.get("content"), list):
-                    screen_seen += 1
-                    if screen_seen > screen_limit:
-                        text_parts = [
-                            p.get("text", "") for p in msg["content"]
-                            if isinstance(p, dict) and p.get("type") == "text"
-                        ]
-                        summary_text = " ".join(text_parts).strip()
-                        if summary_text:
-                            filtered.append({"role": msg["role"], "content": f"[之前截图问题: {summary_text[:200]}]"})
-                        else:
-                            filtered.append({"role": msg["role"], "content": "[之前截图问题(已省略图片)]"})
-                        continue
-                filtered.append(msg)
-            recent = list(reversed(filtered))
         for msg in recent:
-            content = msg.get("content")
-            if isinstance(content, list):
-                out.append(msg)
-                continue
-            if isinstance(content, str) and len(content) > self.MAX_CHARS_PER_MESSAGE:
-                content = content[-self.MAX_CHARS_PER_MESSAGE:].strip()
+            content, msg_stripped = self._strip_images_from_content(msg.get("content"))
+            stripped_images += msg_stripped
+            if isinstance(content, str):
+                raw_text_chars += len(content)
+            if isinstance(content, str) and len(content) > max_chars:
+                content = content[-max_chars:].strip()
                 content = "…" + content
-                out.append({"role": msg["role"], "content": content})
-            else:
-                out.append(dict(msg))
+            if isinstance(content, str):
+                trimmed_text_chars += len(content)
+            out.append({"role": msg["role"], "content": content})
+        if total_char_budget and total_char_budget > 0:
+            budget = int(total_char_budget)
+            kept: list[dict] = []
+            used = 0
+            for msg in reversed(out):
+                content = msg.get("content")
+                msg_len = len(content) if isinstance(content, str) else 0
+                if msg_len and used + msg_len > budget:
+                    remaining = max(0, budget - used)
+                    if remaining >= 160:
+                        kept.append({"role": msg["role"], "content": "…" + content[-remaining:].strip()})
+                    continue
+                kept.append(msg)
+                used += msg_len
+            out = list(reversed(kept))
+            trimmed_text_chars = min(trimmed_text_chars, budget)
+        self.last_llm_history_stats = {
+            "messages": len(out),
+            "history_messages": len(recent),
+            "stripped_images": stripped_images,
+            "profile": profile,
+            "raw_text_chars": raw_text_chars,
+            "trimmed_text_chars": trimmed_text_chars,
+            "max_chars_per_message": max_chars,
+            "total_char_budget": int(total_char_budget or 0),
+        }
         return out
+
+    def _strip_images_from_content(self, content: Union[str, list, None]) -> tuple[Union[str, list], int]:
+        if not isinstance(content, list):
+            return content or "", 0
+        text_parts: list[str] = []
+        stripped_images = 0
+        other_parts: list[dict] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            part_type = part.get("type")
+            if part_type == "image_url":
+                stripped_images += 1
+                continue
+            if part_type == "text":
+                text = str(part.get("text") or "").strip()
+                if text:
+                    text_parts.append(text)
+                continue
+            other_parts.append(part)
+        if stripped_images:
+            summary_text = " ".join(text_parts).strip()
+            if not summary_text:
+                summary_text = "[历史截图问题]"
+            suffix = f" [图片已省略 x{stripped_images}]"
+            return summary_text + suffix, stripped_images
+        if text_parts and not other_parts:
+            return " ".join(text_parts).strip(), 0
+        if text_parts and other_parts:
+            return [{"type": "text", "text": " ".join(text_parts).strip()}, *other_parts], 0
+        return other_parts or "", 0
 
     def get_last_qa(self) -> Optional['QAPair']:
         return self.qa_pairs[-1] if self.qa_pairs else None
@@ -278,6 +330,7 @@ class Session:
         self.created_at = time.time()
         self.system_summary = ""
         self._compaction_running = False
+        self.last_llm_history_stats = {}
 
     def snapshot(self) -> dict:
         return {
