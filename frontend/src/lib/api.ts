@@ -289,6 +289,18 @@ export const api = {
     latency?: Record<string, number>
   }>('/api/models/health'),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
+  probeModelCapabilities: (index: number) =>
+    request<{
+      ok: boolean
+      detail?: string
+      latency_ms?: number
+      supports_vision: boolean
+      supports_think: boolean
+      think_style: string
+      think_params: Record<string, unknown>
+      vision_detail?: string
+      think_detail?: string
+    }>('/api/models/probe/' + index, { method: 'POST' }),
   sttTest: () => request<{ ok: boolean; detail?: string; text?: string }>('/api/stt/test', { method: 'POST' }),
 
   // Knowledge

@@ -237,6 +237,151 @@ def test_model_health_probe_rejects_reasoning_leak(monkeypatch):
     assert events[-1]["status"] == "error"
 
 
+def test_model_capability_probe_detects_vision_and_gpt_think_params(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://api.openai.com/v1",
+                        "api_key": "sk-test",
+                        "model": "o3-mini",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["ok"] is True
+    assert result["supports_vision"] is True
+    assert result["supports_think"] is True
+    assert result["think_style"] == "gpt_reasoning_effort"
+    assert result["think_params"] == {"reasoning_effort": "low"}
+    assert seen_payloads[1]["messages"][0]["content"][1]["type"] == "image_url"
+    assert seen_payloads[2]["reasoning_effort"] == "low"
+    assert "think_mode" not in seen_payloads[2]
+
+
+def test_model_capability_probe_keeps_generic_model_think_off_without_signal(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://example.test/v1",
+                        "api_key": "sk-test",
+                        "model": "gpt-4o-mini",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["ok"] is True
+    assert result["supports_vision"] is True
+    assert result["supports_think"] is False
+    assert result["think_params"] == {}
+    assert len(seen_payloads) == 2
+
+
+def test_model_capability_probe_detects_deepseek_reasoner_generic_thinking(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://api.deepseek.com/v1",
+                        "api_key": "sk-test",
+                        "model": "deepseek-reasoner",
+                        "supports_think": False,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class BasicResponse:
+        status_code = 200
+
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            if self.payload.get("thinking"):
+                return {"choices": [{"message": {"content": "2", "reasoning_content": "short reasoning"}}]}
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post_without_basic_reasoning(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return BasicResponse(json)
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post_without_basic_reasoning)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["ok"] is True
+    assert result["supports_think"] is True
+    assert result["think_style"] == "generic_thinking"
+    assert result["think_params"] == {"thinking": {"type": "enabled"}, "think_mode": True}
+
+
 def test_resume_optimize_is_submitted_to_low_priority_lane(monkeypatch):
     resume_router = importlib.import_module("api.resume.router")
     submitted: list[tuple[object, tuple[object, ...]]] = []

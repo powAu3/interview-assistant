@@ -39,6 +39,18 @@ interface ModelRow {
   model: ModelFullInfo
 }
 
+type ModelProbeResult = {
+  ok: boolean
+  detail?: string
+  latency_ms?: number
+  supports_vision: boolean
+  supports_think: boolean
+  think_style: string
+  think_params: Record<string, unknown>
+  vision_detail?: string
+  think_detail?: string
+}
+
 function toModelRow(model: ModelFullInfo, index: number): ModelRow {
   return {
     id: `${index}:${model.name}:${model.model}:${model.api_base_url}`,
@@ -59,6 +71,7 @@ export default function ModelsTab() {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
   const [testingIdx, setTestingIdx] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, 'ok' | 'error' | 'checking'>>({})
+  const [probeResults, setProbeResults] = useState<Record<number, ModelProbeResult>>({})
   const [maxP, setMaxP] = useState(2)
   const [healthChecking, setHealthChecking] = useState(false)
   const [dragFrom, setDragFrom] = useState<number | null>(null)
@@ -92,6 +105,7 @@ export default function ModelsTab() {
       const { models: full } = await api.getModelsFull()
       setModelRows(full.map(toModelRow))
       setTestResults({})
+      setProbeResults({})
       if (full.length === 0) setExpandedIdx(0)
     } catch {
       useInterviewStore.getState().setToastMessage('加载模型列表失败')
@@ -143,8 +157,8 @@ export default function ModelsTab() {
     setExpandedIdx(null)
   }
 
-  const buildModelPayload = () =>
-    modelRows.map(({ model: m }) => ({
+  const buildModelPayload = (rows = modelRows) =>
+    rows.map(({ model: m }) => ({
       name: m.name.trim(),
       api_base_url: m.api_base_url.trim() || 'https://api.openai.com/v1',
       api_key: m.api_key,
@@ -160,7 +174,7 @@ export default function ModelsTab() {
     return nextActiveIndex >= 0 ? nextActiveIndex : 0
   }
 
-  const handleSaveModels = async () => {
+  const handleSaveModels = async (quiet = false) => {
     const invalid = modelRows.find((row) => !row.model.name.trim())
     if (invalid) {
       useInterviewStore.getState().setToastMessage('模型名称不能为空')
@@ -173,7 +187,9 @@ export default function ModelsTab() {
         active_model: resolveActiveIndex(),
         max_parallel_answers: maxP,
       })
-      useInterviewStore.getState().setToastMessage('模型队列已保存')
+      if (!quiet) {
+        useInterviewStore.getState().setToastMessage('模型队列已保存')
+      }
       await loadModels()
       return true
     } catch (e: any) {
@@ -192,25 +208,48 @@ export default function ModelsTab() {
     setTestingIdx(idx)
     setTestResults((prev) => ({ ...prev, [idx]: 'checking' }))
     try {
-      const saved = await handleSaveModels()
+      const saved = await handleSaveModels(true)
       if (!saved) {
         setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
         return
       }
-      await api.checkSingleModelHealth(idx)
-      const deadline = Date.now() + 20000
-      while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 2000))
-        const { health, detail, latency } = await api.getModelsHealth()
-        const st = health[String(idx)]
-        if (st === 'ok' || st === 'error') {
-          setTestResults((prev) => ({ ...prev, [idx]: st as 'ok' | 'error' }))
-          useInterviewStore.getState().setModelHealth(idx, st as 'ok' | 'error', detail?.[String(idx)], latency?.[String(idx)])
-          break
-        }
+      const result = await api.probeModelCapabilities(idx)
+      setProbeResults((prev) => ({ ...prev, [idx]: result }))
+      const status = result.ok ? 'ok' : 'error'
+      setTestResults((prev) => ({ ...prev, [idx]: status }))
+      useInterviewStore.getState().setModelHealth(idx, status, result.detail, result.latency_ms)
+      const originalIndex = modelRows[idx]?.originalIndex
+      if (originalIndex !== undefined && originalIndex !== idx) {
+        useInterviewStore.getState().setModelHealth(originalIndex, status, result.detail, result.latency_ms)
+      }
+      if (result.ok) {
+        const nextRows = modelRows.map((row, i) =>
+          i === idx
+            ? {
+                ...row,
+                model: {
+                  ...row.model,
+                  supports_vision: result.supports_vision,
+                  supports_think: result.supports_think,
+                },
+              }
+            : row,
+        )
+        setModelRows(nextRows)
+        await updateConfigAndRefresh({
+          models: buildModelPayload(nextRows),
+          active_model: resolveActiveIndex(),
+          max_parallel_answers: maxP,
+        })
+        const visionLabel = result.supports_vision ? '识图支持' : '识图未检测到'
+        const thinkLabel = result.supports_think ? `Think ${result.think_style || '支持'}` : 'Think 未检测到'
+        useInterviewStore.getState().setToastMessage(`连接可用，已自动更新：${visionLabel} · ${thinkLabel}`)
+      } else {
+        useInterviewStore.getState().setToastMessage(result.detail ? `连接失败：${result.detail}` : '连接失败')
       }
     } catch {
       setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
+      useInterviewStore.getState().setToastMessage('检测失败')
     } finally {
       setTestingIdx(null)
     }
@@ -219,7 +258,7 @@ export default function ModelsTab() {
   const runHealthCheck = async () => {
     setHealthChecking(true)
     try {
-      const saved = await handleSaveModels()
+      const saved = await handleSaveModels(true)
       if (!saved) return
       const models = useInterviewStore.getState().config?.models ?? []
       const enabledIndexes = models
@@ -392,6 +431,10 @@ export default function ModelsTab() {
               const st = on ? (tr ?? modelHealth[row.originalIndex]) : undefined
               const keyLabel = keyHasValue ? '已填写' : '未配置'
               const healthTitle = healthDetail ? `模型连接详情：${healthDetail}` : undefined
+              const probe = probeResults[idx]
+              const probeTitle = probe
+                ? `识图：${probe.vision_detail || (probe.supports_vision ? '支持' : '未检测到')}\nThink：${probe.think_detail || (probe.supports_think ? '支持' : '未检测到')}\n参数：${JSON.stringify(probe.think_params ?? {})}`
+                : undefined
 
               return (
                 <div
@@ -533,6 +576,25 @@ export default function ModelsTab() {
                             <span className="text-xs text-text-secondary">支持识图</span>
                           </label>
                         </div>
+                        {probe && (
+                          <div
+                            className="flex flex-wrap items-center gap-2 rounded-lg border border-bg-hover/60 bg-bg-tertiary/40 px-3 py-2 text-[11px] text-text-muted"
+                            title={probeTitle}
+                          >
+                            <span className="text-text-secondary">自动探测</span>
+                            <span className={probe.supports_vision ? 'text-sky-300' : 'text-text-muted'}>
+                              识图 {probe.supports_vision ? '支持' : '未检测到'}
+                            </span>
+                            <span className={probe.supports_think ? 'text-emerald-300' : 'text-text-muted'}>
+                              Think {probe.supports_think ? (probe.think_style || '支持') : '未检测到'}
+                            </span>
+                            {probe.supports_think && (
+                              <span className="max-w-full truncate font-mono text-[10px] text-text-muted">
+                                {JSON.stringify(probe.think_params)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                           <div className="flex items-center gap-1">
                             <button

@@ -94,7 +94,7 @@ class TestBuildThinkParams:
     @pytest.mark.parametrize("effort", ["low", "medium", "high"])
     def test_gpt_effort(self, effort):
         r = _build_think_params(_m("o3-mini"), _c(effort))
-        assert r == {"reasoning_effort": effort, "think_mode": True}
+        assert r == {"reasoning_effort": effort}
 
     @pytest.mark.parametrize("effort", ["low", "medium", "high"])
     def test_claude_budget(self, effort):

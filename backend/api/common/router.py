@@ -22,6 +22,7 @@ from api.common.config_payload import build_config_payload
 from api.common.model_health import (
     get_model_health,
     get_model_health_snapshot,
+    probe_single_model,
     start_all_model_checks,
     start_single_model_check,
 )
@@ -468,6 +469,18 @@ async def api_check_single_model_health(index: int):
     if not start_single_model_check(index):
         raise HTTPException(429, "后台低优先级队列繁忙，请稍后重试")
     return {"ok": True}
+
+
+@router.post("/models/probe/{index}")
+async def api_probe_single_model(index: int):
+    """Check connectivity and synchronously probe model capabilities."""
+    cfg = get_config()
+    if index < 0 or index >= len(cfg.models):
+        raise HTTPException(400, f"模型 index {index} 超出范围")
+    try:
+        return await run_in_threadpool(probe_single_model, index)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @router.post("/stt/test")

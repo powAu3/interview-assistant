@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
   getConfig: vi.fn(),
   checkSingleModelHealth: vi.fn(),
   checkModelsHealth: vi.fn(),
+  probeModelCapabilities: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/lib/api', () => ({
 
 describe('ModelsTab state sync', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     apiMock.getModelsFull.mockResolvedValue({
       models: [
         {
@@ -54,6 +56,16 @@ describe('ModelsTab state sync', () => {
     })
     apiMock.checkSingleModelHealth.mockResolvedValue({ ok: true })
     apiMock.checkModelsHealth.mockResolvedValue({ ok: true })
+    apiMock.probeModelCapabilities.mockResolvedValue({
+      ok: true,
+      latency_ms: 123,
+      supports_vision: false,
+      supports_think: false,
+      think_style: '',
+      think_params: {},
+      vision_detail: '未检测到',
+      think_detail: '未检测到',
+    })
 
     useInterviewStore.setState({
       config: {
@@ -126,5 +138,38 @@ describe('ModelsTab state sync', () => {
 
     expect(await screen.findByText('不可用')).toBeInTheDocument()
     expect(screen.getByTitle('模型连接详情：401 unauthorized')).toBeInTheDocument()
+  })
+
+  it('auto-checks probed vision and think capabilities when testing a model', async () => {
+    apiMock.probeModelCapabilities.mockResolvedValue({
+      ok: true,
+      latency_ms: 98,
+      supports_vision: true,
+      supports_think: true,
+      think_style: 'gpt_reasoning_effort',
+      think_params: { reasoning_effort: 'low' },
+      vision_detail: '识图请求成功',
+      think_detail: 'Think 参数已接受',
+    })
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('Main Model'))
+    fireEvent.click(screen.getByText('测试连接'))
+
+    await waitFor(() => {
+      expect(apiMock.probeModelCapabilities).toHaveBeenCalledWith(0)
+    })
+    await waitFor(() => {
+      expect(screen.getByText('自动探测')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Think gpt_reasoning_effort')).toBeInTheDocument()
+    expect(screen.getByText('识图 支持')).toBeInTheDocument()
+    const updateCalls = apiMock.updateConfig.mock.calls
+    const lastPayload = updateCalls[updateCalls.length - 1][0]
+    expect(lastPayload.models[0].supports_vision).toBe(true)
+    expect(lastPayload.models[0].supports_think).toBe(true)
   })
 })

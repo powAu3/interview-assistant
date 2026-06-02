@@ -352,7 +352,6 @@ def _build_think_params(model_cfg, cfg) -> dict:
     if style == "gpt":
         return {
             "reasoning_effort": effort,
-            "think_mode": True,
         }
     if style == "claude":
         budget = _claude_thinking_budget(effort, getattr(cfg, "max_tokens", 4096))
