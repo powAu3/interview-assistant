@@ -63,6 +63,54 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-shell--nobg')).toBeInTheDocument()
   })
 
+  it('keeps following streamed prompt overlay content while the user is near the bottom', () => {
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    useInterviewStore.setState({
+      qaPairs: [{ ...qa, answer: '正在生成第一段。', status: 'streaming' }],
+      streamingIds: ['qa-1'],
+    })
+    const { rerender } = render(<InterviewOverlay />)
+    const scroller = document.querySelector('.ov-answer') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    scroller.scrollTop = 790
+    fireEvent.scroll(scroller)
+
+    act(() => {
+      useInterviewStore.setState({
+        qaPairs: [{ ...qa, answer: '正在生成第一段。\n继续生成第二段。', status: 'streaming' }],
+        streamingIds: ['qa-1'],
+      })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(scroller.scrollTop).toBe(1000)
+  })
+
+  it('pauses prompt overlay auto-follow when the user scrolls up during streaming', () => {
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    useInterviewStore.setState({
+      qaPairs: [{ ...qa, answer: '正在生成第一段。', status: 'streaming' }],
+      streamingIds: ['qa-1'],
+    })
+    const { rerender } = render(<InterviewOverlay />)
+    const scroller = document.querySelector('.ov-answer') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    scroller.scrollTop = 120
+    fireEvent.scroll(scroller)
+
+    act(() => {
+      useInterviewStore.setState({
+        qaPairs: [{ ...qa, answer: '正在生成第一段。\n继续生成第二段。', status: 'streaming' }],
+        streamingIds: ['qa-1'],
+      })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(scroller.scrollTop).toBe(120)
+  })
+
   it('formats markdown in the regular overlay modes', () => {
     useInterviewStore.setState({
       qaPairs: [{

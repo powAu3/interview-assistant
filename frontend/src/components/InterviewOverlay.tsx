@@ -106,12 +106,24 @@ export default function InterviewOverlay() {
   }, [answerText, maxLines])
 
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
+  const answerAutoFollowRef = useRef(true)
+  const updateAnswerAutoFollow = useCallback(() => {
+    const el = answerScrollRef.current
+    if (!el) return
+    answerAutoFollowRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 28
+  }, [])
+
+  useEffect(() => {
+    answerAutoFollowRef.current = true
+  }, [displayedQaKey])
+
   useLayoutEffect(() => {
     if (!isStreaming) return
     const el = answerScrollRef.current
     if (!el) return
+    if (!answerAutoFollowRef.current) return
     el.scrollTop = el.scrollHeight
-  }, [answerText, isStreaming])
+  }, [answerText, activeFocusTab, isStreaming])
 
   const refreshShortcuts = useCallback(() => {
     window.electronAPI?.getShortcuts?.()
@@ -384,6 +396,7 @@ export default function InterviewOverlay() {
             ref={answerScrollRef}
             className="ov-focus-content"
             style={{ fontSize: `${answerFontSize}px`, color: FOCUS_TEXT_COLOR }}
+            onScroll={updateAnswerAutoFollow}
           >
             {hasContent ? (
               <div className="ov-focus-active-pane" key={`${displayedQaKey}:${activeSection.key}`}>
@@ -418,6 +431,7 @@ export default function InterviewOverlay() {
           className="ov-content ov-answer"
           style={{ fontSize: `${answerFontSize}px` }}
           onMouseDown={suppressMouseSelection}
+          onScroll={updateAnswerAutoFollow}
         >
           {renderedAnswer}
         </div>
