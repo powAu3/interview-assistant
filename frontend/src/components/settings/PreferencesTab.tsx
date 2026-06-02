@@ -17,7 +17,7 @@ import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
-import { forceExamOverlayPrompt } from '@/lib/examOverlay'
+import { prepareExamOverlayPrompt } from '@/lib/examOverlay'
 import { getShortcutDisplay } from '@/lib/shortcuts'
 import { Section, Field, matchSettingsSearch, useSettingsSearch } from './shared'
 import NetworkQRCode from './NetworkQRCode'
@@ -271,7 +271,7 @@ export default function PreferencesTab() {
                 const next = !(config?.written_exam_mode ?? false)
                 updateConfigAndRefresh({ written_exam_mode: next })
                   .then(() => {
-                    if (next) forceExamOverlayPrompt()
+                    if (next) prepareExamOverlayPrompt()
                   })
                   .catch(() => {})
               }}
@@ -440,7 +440,7 @@ export default function PreferencesTab() {
               onChange={async (v) => {
                 try {
                   await updateConfigAndRefresh({ written_exam_mode: v })
-                  if (v) forceExamOverlayPrompt()
+                  if (v) prepareExamOverlayPrompt()
                 } catch {}
               }}
               label={config?.written_exam_mode ? '已开启' : '已关闭'}

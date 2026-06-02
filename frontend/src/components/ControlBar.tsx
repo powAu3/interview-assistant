@@ -18,7 +18,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api, getErrorMessage } from '@/lib/api'
-import { forceExamOverlayPrompt } from '@/lib/examOverlay'
+import { showExamOverlayPrompt } from '@/lib/examOverlay'
 import { ResumeMountInline } from '@/components/resume/ResumeMount'
 import { AudioDevicePicker } from './control-bar/AudioDevicePicker'
 import { QuickPromptsRow } from './control-bar/QuickPromptsRow'
@@ -258,7 +258,7 @@ export default function ControlBar() {
         !isExamMode && candidateCaptureEnabled ? selectedCandidateMic : null,
       )
       if (isExamMode) {
-        forceExamOverlayPrompt()
+        showExamOverlayPrompt()
         return
       }
       const s = useUiPrefsStore.getState()

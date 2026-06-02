@@ -1,10 +1,13 @@
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
-export function forceExamOverlayPrompt() {
+export function prepareExamOverlayPrompt() {
   const prefs = useUiPrefsStore.getState()
   prefs.setInterviewOverlayEnabled(true)
   prefs.setInterviewOverlayMode('prompt')
+}
 
+export function showExamOverlayPrompt() {
+  prepareExamOverlayPrompt()
   const next = useUiPrefsStore.getState()
   window.electronAPI?.syncOverlayWindow?.({
     enabled: true,
