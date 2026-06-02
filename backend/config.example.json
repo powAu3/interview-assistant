@@ -67,6 +67,7 @@
   "assist_asr_interrupt_running": false,
   "assist_high_churn_short_answer": false,
   "screen_capture_region": "left_half",
+  "screen_capture_max_long_edge": 1600,
   "multi_screen_capture_idle_sec": 10.0,
   "written_exam_mode": false,
   "written_exam_think": false,

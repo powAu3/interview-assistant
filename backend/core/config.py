@@ -125,6 +125,8 @@ class AppConfig(BaseModel):
     assist_high_churn_short_answer: bool = False
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
     screen_capture_region: str = "left_half"
+    # 截图送入识图模型前的最长边限制；0=不缩放。默认 1600 兼顾题面可读性与 token/带宽。
+    screen_capture_max_long_edge: int = 1600
     # 多图截图判题：最后一次截图后等待多少秒再提交整批图片
     multi_screen_capture_idle_sec: float = 10.0
     # 笔试模式：截屏后选择题直接输出答案，编程题直接输出代码，不做分析
@@ -201,6 +203,7 @@ class AppConfig(BaseModel):
                 self.candidate_whisper_language = ""
         if not self.models:
             self.models = [_default_model_config()]
+        self.screen_capture_max_long_edge = max(0, min(4000, int(self.screen_capture_max_long_edge or 0)))
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
         if not getattr(self.models[self.active_model], "enabled", True):
             for i, model in enumerate(self.models):
