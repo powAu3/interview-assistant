@@ -375,6 +375,7 @@ function startPythonBackend() {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env },
+    windowsHide: true,
   });
 
   pythonProcess.stdout.on('data', (d) => process.stdout.write(`[py] ${d}`));

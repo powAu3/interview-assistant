@@ -18,6 +18,7 @@ FRONTEND_DIST = os.path.join(FRONTEND_DIR, "dist")
 DESKTOP_DIR = os.path.join(ROOT, "desktop")
 
 REQUIREMENTS = os.path.join(BACKEND_DIR, "requirements.txt")
+HIDE_CONSOLE_ENV = "IA_HIDE_CONSOLE"
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +36,14 @@ def _set_utf8_console():
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+
+def _hidden_process_kwargs() -> dict:
+    if platform.system() != "Windows":
+        return {}
+    if os.environ.get(HIDE_CONSOLE_ENV, "").strip().lower() not in ("1", "true", "yes"):
+        return {}
+    return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
 
 
 def get_local_ip() -> str:
@@ -190,11 +199,11 @@ def build_frontend(force: bool = False):
     print("[...] 构建前端...")
     if not os.path.isdir(os.path.join(FRONTEND_DIR, "node_modules")):
         print("  安装前端 npm 依赖...")
-        r = subprocess.run([npm, "install"], cwd=FRONTEND_DIR)
+    r = subprocess.run([npm, "install"], cwd=FRONTEND_DIR, **_hidden_process_kwargs())
         if r.returncode != 0:
             print("[ERROR] npm install 失败")
             return False
-    r = subprocess.run([npm, "run", "build"], cwd=FRONTEND_DIR)
+    r = subprocess.run([npm, "run", "build"], cwd=FRONTEND_DIR, **_hidden_process_kwargs())
     if r.returncode != 0:
         print("[ERROR] 前端构建失败")
         return False
@@ -213,7 +222,7 @@ def ensure_electron():
         return False
 
     print("[...] 安装 Electron 依赖...")
-    r = subprocess.run([npm, "install"], cwd=DESKTOP_DIR)
+    r = subprocess.run([npm, "install"], cwd=DESKTOP_DIR, **_hidden_process_kwargs())
     return r.returncode == 0
 
 
@@ -293,7 +302,7 @@ def start_server(host: str, port: int):
     ]
     if os.environ.get("IA_ACCESS_LOG", "1").strip().lower() in ("0", "false", "no"):
         uv_args.append("--no-access-log")
-    r = subprocess.run(uv_args, cwd=BACKEND_DIR)
+    r = subprocess.run(uv_args, cwd=BACKEND_DIR, **_hidden_process_kwargs())
     sys.exit(r.returncode)
 
 
@@ -329,7 +338,7 @@ def run_desktop_mode(port: int):
     _print_access_info(port)
 
     env = {**os.environ, "PORT": str(port)}
-    proc = subprocess.run([npx, "electron", "."], cwd=DESKTOP_DIR, env=env)
+    proc = subprocess.run([npx, "electron", "."], cwd=DESKTOP_DIR, env=env, **_hidden_process_kwargs())
     sys.exit(proc.returncode)
 
 

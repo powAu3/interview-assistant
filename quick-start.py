@@ -23,6 +23,7 @@ BACKEND_DIR = os.path.join(ROOT, "backend")
 FRONTEND_DIR = os.path.join(ROOT, "frontend")
 DESKTOP_DIR = os.path.join(ROOT, "desktop")
 REQUIREMENTS = os.path.join(BACKEND_DIR, "requirements.txt")
+HIDE_CONSOLE_ENV = "IA_HIDE_CONSOLE"
 
 
 def _find_npm() -> str | None:
@@ -78,12 +79,40 @@ def build_start_command(extra_args: list[str]) -> list[str]:
     ]
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _hidden_creationflags() -> int:
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
+
+def launch_start_command(extra_args: list[str], *, foreground: bool = False) -> int:
+    cmd = build_start_command(extra_args)
+    if _is_windows() and not foreground:
+        env = {**os.environ, HIDE_CONSOLE_ENV: "1"}
+        subprocess.Popen(
+            cmd,
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            creationflags=_hidden_creationflags(),
+        )
+        print("[OK] 桌面应用正在后台启动，命令行窗口可以关闭。")
+        return 0
+
+    return subprocess.call(cmd, cwd=ROOT)
+
+
 def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
         description="面试助手一键启动器：先安装依赖，再启动桌面模式。未知参数会继续传给 start.py。",
     )
     parser.add_argument("--skip-install", action="store_true", help="跳过 install 步骤，直接启动")
     parser.add_argument("--install-only", action="store_true", help="只安装依赖，不启动应用")
+    parser.add_argument("--foreground", action="store_true", help="Windows 下也保留命令行窗口并显示启动日志")
     return parser.parse_known_args(argv)
 
 
@@ -97,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.install_only:
         return 0
 
-    return subprocess.call(build_start_command(start_args))
+    return launch_start_command(start_args, foreground=args.foreground)
 
 
 if __name__ == "__main__":
