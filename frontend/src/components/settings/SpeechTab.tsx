@@ -17,6 +17,7 @@ import { updateConfigAndRefresh } from '@/lib/configSync'
 import { normalizePracticeTtsText, playBase64Audio, speakWithBrowserTts } from '@/lib/practiceTts'
 import { Section, Field, GradientCard, StatusBadge, useSettingsSearch } from './shared'
 import SttGuideCard from './SttGuideCard'
+import BetaBadge from '@/components/kb/BetaBadge'
 
 export default function SpeechTab() {
   const config = useInterviewStore((s) => s.config)
@@ -414,7 +415,16 @@ export default function SpeechTab() {
         </div>
       </GradientCard>
 
-      <Section title="可选辅助 ASR（我的麦克风）" icon={<Mic className="w-3.5 h-3.5" />} keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本">
+      <Section
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            可选辅助 ASR（我的麦克风）
+            <BetaBadge title="候选人麦克风 ASR — Beta" className="scale-90 origin-left" />
+          </span>
+        }
+        icon={<Mic className="w-3.5 h-3.5" />}
+        keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本 beta"
+      >
         <GradientCard className="p-4 space-y-4 border-emerald-400/30">
           <div className="flex items-start justify-between gap-3">
             <div>

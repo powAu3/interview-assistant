@@ -530,10 +530,10 @@ export default function ControlBar() {
       )}
 
       {/* 主控制行 */}
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
         {!isExamMode && (
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-none">
-            <div className="flex min-w-[220px] flex-col gap-1">
+          <div className="grid w-full min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1">
               <span className="text-[10px] font-medium text-text-muted leading-none">会议音频 · 听面试官</span>
               <AudioDevicePicker
                 devices={devices}
@@ -555,7 +555,7 @@ export default function ControlBar() {
               />
             </div>
             {candidateCaptureEnabled ? (
-              <div className="flex min-w-[220px] flex-col gap-1">
+              <div className="flex min-w-0 flex-col gap-1">
                 <span className="text-[10px] font-medium text-text-muted leading-none">
                   我的麦克风 · 记录我的回答
                   {candidateSttLoading && <Loader2 className="w-3 h-3 animate-spin inline ml-1 text-accent-blue" />}
@@ -581,7 +581,7 @@ export default function ControlBar() {
                 />
               </div>
             ) : (
-              <div className="flex min-w-[220px] items-center gap-1.5 py-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5 py-1">
                 <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
                 <span className="text-xs text-text-muted">我的麦克风未开启，</span>
                 <span className="text-xs text-accent-blue cursor-pointer hover:underline" onClick={() => useInterviewStore.getState().toggleSettings()}>去设置开启</span>
@@ -590,6 +590,7 @@ export default function ControlBar() {
           </div>
         )}
 
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
         {isRecording ? (
           <>
             {isPaused ? (
@@ -631,7 +632,7 @@ export default function ControlBar() {
           </button>
         )}
 
-        <ResumeMountInline />
+        {!isExamMode && <ResumeMountInline />}
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}
@@ -661,6 +662,7 @@ export default function ControlBar() {
             <span className="ml-0.5 text-[10px] tabular-nums hidden md:inline">({qaPairs.length})</span>
           )}
         </button>
+        </div>
       </div>
 
       {/* 快捷提示词 */}

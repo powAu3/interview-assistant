@@ -226,6 +226,25 @@ describe('ControlBar', () => {
     expect(useUiPrefsStore.getState().interviewOverlayMode).toBe('prompt')
   })
 
+  it('hides the resume mount in written exam mode', () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        written_exam_mode: true,
+      },
+    } as any)
+
+    render(<ControlBar />)
+
+    expect(screen.queryByTestId('resume-mount-inline')).not.toBeInTheDocument()
+  })
+
+  it('keeps the resume mount available in interview mode', () => {
+    render(<ControlBar />)
+
+    expect(screen.getByTestId('resume-mount-inline')).toBeInTheDocument()
+  })
+
   it('hides noisy software audio devices by default with a show all escape hatch', () => {
     useInterviewStore.setState({
       devices: [

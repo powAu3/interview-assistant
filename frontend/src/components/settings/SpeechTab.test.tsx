@@ -42,7 +42,7 @@ describe('SpeechTab', () => {
         generic_stt_api_key: '',
         generic_stt_model: '',
         generic_stt_custom_headers: '',
-        candidate_asr_enabled: true,
+        candidate_asr_enabled: false,
         candidate_stt_provider: 'whisper',
         candidate_whisper_model: '',
         candidate_whisper_language: '',
@@ -95,7 +95,9 @@ describe('SpeechTab', () => {
     expect(screen.getByText('实时辅助语音链路')).toBeInTheDocument()
     expect(screen.getByText('主链路 ASR（面试官 / 会议音频）')).toBeInTheDocument()
     expect(screen.getByText('可选辅助 ASR（我的麦克风）')).toBeInTheDocument()
+    expect(screen.getByTitle('候选人麦克风 ASR — Beta')).toBeInTheDocument()
     expect(screen.getByText('读取我的麦克风')).toBeInTheDocument()
+    expect(screen.getByText('不读取')).toBeInTheDocument()
     expect(screen.getAllByText(/不会触发自动答题/).length).toBeGreaterThan(0)
     expect(screen.getByText('麦克风兼容模式')).toBeInTheDocument()
     expect(screen.getByText('共享兼容优先')).toBeInTheDocument()
