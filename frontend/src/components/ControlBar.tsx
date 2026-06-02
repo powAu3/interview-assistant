@@ -18,6 +18,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api, getErrorMessage } from '@/lib/api'
+import { forceExamOverlayPrompt } from '@/lib/examOverlay'
 import { ResumeMountInline } from '@/components/resume/ResumeMount'
 import { AudioDevicePicker } from './control-bar/AudioDevicePicker'
 import { QuickPromptsRow } from './control-bar/QuickPromptsRow'
@@ -256,6 +257,10 @@ export default function ControlBar() {
         isExamMode ? null : selectedDevice,
         !isExamMode && candidateCaptureEnabled ? selectedCandidateMic : null,
       )
+      if (isExamMode) {
+        forceExamOverlayPrompt()
+        return
+      }
       const s = useUiPrefsStore.getState()
       if (s.interviewOverlayEnabled && window.electronAPI?.syncOverlayWindow) {
         window.electronAPI.syncOverlayWindow({

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ControlBar from './ControlBar'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 
 const apiMock = vi.hoisted(() => ({
@@ -44,7 +45,11 @@ class MockFileReader {
 describe('ControlBar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     vi.stubGlobal('FileReader', MockFileReader as any)
+    ;(window as any).electronAPI = {
+      syncOverlayWindow: vi.fn().mockResolvedValue(undefined),
+    }
     apiMock.ask.mockResolvedValue({ ok: true })
     apiMock.getDevices.mockResolvedValue({ devices: [], platform: null })
     apiMock.start.mockResolvedValue({ ok: true })
@@ -128,6 +133,17 @@ describe('ControlBar', () => {
       lastWSError: null,
       toastMessage: null,
     } as any)
+    useUiPrefsStore.setState({
+      interviewOverlayEnabled: false,
+      interviewOverlayMode: 'glass',
+      interviewOverlayShowBg: true,
+      interviewOverlayOpacity: 0.88,
+      interviewOverlayFontSize: 14,
+      interviewOverlayFontColor: '#e2e8f0',
+      interviewOverlayFocusWidthPct: 96,
+      interviewOverlayFocusHeightPct: 90,
+      interviewOverlayMaxLines: 0,
+    })
   })
 
   it('blocks pasted screenshots when no enabled model supports vision', async () => {
@@ -185,6 +201,29 @@ describe('ControlBar', () => {
     await waitFor(() => {
       expect(apiMock.ask).toHaveBeenCalledWith('', 'data:image/png;base64,xxx')
     })
+  })
+
+  it('forces the prompt overlay on when starting written exam mode', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        written_exam_mode: true,
+      },
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: /开始笔试/ }))
+
+    await waitFor(() => expect(apiMock.start).toHaveBeenCalledWith(null, null))
+    expect(window.electronAPI?.syncOverlayWindow).toHaveBeenCalledWith(expect.objectContaining({
+      enabled: true,
+      visible: true,
+      mode: 'prompt',
+      showBg: false,
+    }))
+    expect(useUiPrefsStore.getState().interviewOverlayEnabled).toBe(true)
+    expect(useUiPrefsStore.getState().interviewOverlayMode).toBe('prompt')
   })
 
   it('hides noisy software audio devices by default with a show all escape hatch', () => {

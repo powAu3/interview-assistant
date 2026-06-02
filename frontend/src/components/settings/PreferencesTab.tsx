@@ -17,6 +17,7 @@ import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
+import { forceExamOverlayPrompt } from '@/lib/examOverlay'
 import { getShortcutDisplay } from '@/lib/shortcuts'
 import { Section, Field, matchSettingsSearch, useSettingsSearch } from './shared'
 import NetworkQRCode from './NetworkQRCode'
@@ -266,7 +267,14 @@ export default function PreferencesTab() {
           {config && hasScreenCapture && (
             <button
               type="button"
-              onClick={() => updateConfigAndRefresh({ written_exam_mode: !(config?.written_exam_mode ?? false) }).catch(() => {})}
+              onClick={() => {
+                const next = !(config?.written_exam_mode ?? false)
+                updateConfigAndRefresh({ written_exam_mode: next })
+                  .then(() => {
+                    if (next) forceExamOverlayPrompt()
+                  })
+                  .catch(() => {})
+              }}
               className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
                 config?.written_exam_mode ? 'border-accent-blue bg-accent-blue/10' : 'border-bg-hover bg-bg-tertiary/25 hover:border-bg-hover'
               }`}
@@ -432,6 +440,7 @@ export default function PreferencesTab() {
               onChange={async (v) => {
                 try {
                   await updateConfigAndRefresh({ written_exam_mode: v })
+                  if (v) forceExamOverlayPrompt()
                 } catch {}
               }}
               label={config?.written_exam_mode ? '已开启' : '已关闭'}
