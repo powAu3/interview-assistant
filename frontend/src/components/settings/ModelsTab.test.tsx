@@ -22,6 +22,7 @@ vi.mock('@/lib/api', () => ({
 describe('ModelsTab state sync', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Element.prototype.scrollIntoView = vi.fn()
     apiMock.getModelsFull.mockResolvedValue({
       models: [
         {
@@ -148,6 +149,9 @@ describe('ModelsTab state sync', () => {
     await screen.findByText('保存模型队列')
     fireEvent.click(screen.getByText('添加'))
     const nameInputs = screen.getAllByPlaceholderText('如：GPT-4o、DeepSeek-V3')
+    await waitFor(() => {
+      expect(nameInputs[nameInputs.length - 1]).toHaveFocus()
+    })
     fireEvent.change(nameInputs[nameInputs.length - 1], { target: { value: 'Backup Model' } })
     fireEvent.click(screen.getByText('保存模型队列'))
 
@@ -161,6 +165,30 @@ describe('ModelsTab state sync', () => {
       .find((input) => (input as HTMLInputElement).value === 'Backup Model')
     expect(savedNameInput?.closest('[aria-hidden="true"]')).toBeInTheDocument()
     expect(screen.getByText('Backup Model')).toBeInTheDocument()
+  })
+
+  it('shows probe failure detail inside the expanded model card', async () => {
+    apiMock.probeModelCapabilities.mockResolvedValue({
+      ok: false,
+      detail: 'HTTP 401 unauthorized',
+      latency_ms: 0,
+      supports_vision: false,
+      supports_think: false,
+      think_style: '',
+      think_params: {},
+      think_disabled_params: {},
+      vision_detail: '',
+      think_detail: '',
+      think_disabled_detail: '',
+    })
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('Main Model'))
+    fireEvent.click(screen.getByText('测试连接'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('测试失败：HTTP 401 unauthorized')
   })
 
   it('auto-checks probed vision and think capabilities when testing a model', async () => {

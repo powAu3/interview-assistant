@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Save,
   Plus,
@@ -79,6 +79,9 @@ export default function ModelsTab() {
   const [maxP, setMaxP] = useState(2)
   const [healthChecking, setHealthChecking] = useState(false)
   const [dragFrom, setDragFrom] = useState<number | null>(null)
+  const rowRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const nameInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const pendingFocusIdx = useRef<number | null>(null)
 
   const [llmForm, setLlmForm] = useState({
     temperature: 0.5,
@@ -134,6 +137,17 @@ export default function ModelsTab() {
     void syncHealthFromServer()
   }, [config, syncHealthFromServer])
 
+  useEffect(() => {
+    const idx = expandedIdx
+    if (idx === null || pendingFocusIdx.current !== idx) return
+    const timer = window.setTimeout(() => {
+      rowRefs.current[idx]?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+      nameInputRefs.current[idx]?.focus()
+      pendingFocusIdx.current = null
+    }, 60)
+    return () => window.clearTimeout(timer)
+  }, [expandedIdx, modelRows.length])
+
   const updateModel = (idx: number, patch: Partial<ModelFullInfo>) => {
     setModelRows((prev) =>
       prev.map((row, i) => (i === idx ? { ...row, model: { ...row.model, ...patch } } : row)),
@@ -141,6 +155,8 @@ export default function ModelsTab() {
   }
 
   const addModel = () => {
+    const nextIdx = modelRows.length
+    pendingFocusIdx.current = nextIdx
     setModelRows((prev) => [
       ...prev,
       {
@@ -149,7 +165,7 @@ export default function ModelsTab() {
         model: { ...EMPTY_MODEL },
       },
     ])
-    setExpandedIdx(modelRows.length)
+    setExpandedIdx(nextIdx)
   }
 
   const removeModel = (idx: number) => {
@@ -180,7 +196,7 @@ export default function ModelsTab() {
     return nextActiveIndex >= 0 ? nextActiveIndex : 0
   }
 
-  const handleSaveModels = async (quiet = false) => {
+  const handleSaveModels = async (quiet = false, collapse = true) => {
     const invalid = modelRows.find((row) => !row.model.name.trim())
     if (invalid) {
       useInterviewStore.getState().setToastMessage('模型名称不能为空')
@@ -203,7 +219,7 @@ export default function ModelsTab() {
         max_parallel_answers: maxP,
       })
       setModelRows(savedRows)
-      setExpandedIdx(null)
+      if (collapse) setExpandedIdx(null)
       setProbeResults({})
       if (!quiet) {
         useInterviewStore.getState().setToastMessage('模型队列已保存')
@@ -225,9 +241,11 @@ export default function ModelsTab() {
     setTestingIdx(idx)
     setTestResults((prev) => ({ ...prev, [idx]: 'checking' }))
     try {
-      const saved = await handleSaveModels(true)
+      const saved = await handleSaveModels(true, false)
       if (!saved) {
         setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
+        useInterviewStore.getState().setModelHealth(idx, 'error', '请先修复模型配置保存失败的问题')
+        setExpandedIdx(idx)
         return
       }
       const result = await api.probeModelCapabilities(idx)
@@ -264,11 +282,15 @@ export default function ModelsTab() {
         const thinkLabel = result.supports_think ? `Think ${result.think_style || '支持'}` : 'Think 未检测到'
         useInterviewStore.getState().setToastMessage(`连接可用，已自动更新：${visionLabel} · ${thinkLabel}`)
       } else {
+        setExpandedIdx(idx)
         useInterviewStore.getState().setToastMessage(result.detail ? `连接失败：${result.detail}` : '连接失败')
       }
-    } catch {
+    } catch (e: any) {
+      const detail = e?.message ?? '检测失败'
       setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
-      useInterviewStore.getState().setToastMessage('检测失败')
+      useInterviewStore.getState().setModelHealth(idx, 'error', detail)
+      setExpandedIdx(idx)
+      useInterviewStore.getState().setToastMessage(detail)
     } finally {
       setTestingIdx(null)
     }
@@ -448,9 +470,10 @@ export default function ModelsTab() {
               const healthDetail = modelHealthDetail[row.originalIndex]?.trim()
               const on = m.enabled !== false
               const st = on ? (tr ?? modelHealth[row.originalIndex]) : undefined
+              const probe = probeResults[idx]
+              const testFailureDetail = st === 'error' ? (probe?.detail || healthDetail || '').trim() : ''
               const keyLabel = keyHasValue ? '已填写' : '未配置'
               const healthTitle = healthDetail ? `模型连接详情：${healthDetail}` : undefined
-              const probe = probeResults[idx]
               const probeTitle = probe
                 ? `识图：${probe.vision_detail || (probe.supports_vision ? '支持' : '未检测到')}\nThink 开启：${probe.think_detail || (probe.supports_think ? '支持' : '未检测到')}\nThink 关闭：${probe.think_disabled_detail || '未检测'}\n开启参数：${JSON.stringify(probe.think_params ?? {})}\n关闭参数：${JSON.stringify(probe.think_disabled_params ?? {})}`
                 : undefined
@@ -458,6 +481,9 @@ export default function ModelsTab() {
               return (
                 <div
                   key={row.id}
+                  ref={(node) => {
+                    rowRefs.current[idx] = node
+                  }}
                   onDragOver={onDragOver}
                   onDrop={(e) => onDrop(e, idx)}
                   className={`rounded-xl border transition-all duration-150 ${
@@ -543,6 +569,9 @@ export default function ModelsTab() {
                         <div className="grid sm:grid-cols-2 gap-3">
                           <Field label="模型名称 *">
                             <input
+                              ref={(node) => {
+                                nameInputRefs.current[idx] = node
+                              }}
                               type="text"
                               value={m.name}
                               onChange={(e) => updateModel(idx, { name: e.target.value })}
@@ -598,6 +627,14 @@ export default function ModelsTab() {
                             <span className="text-xs text-text-secondary">支持识图</span>
                           </label>
                         </div>
+                        {testFailureDetail && (
+                          <div
+                            role="alert"
+                            className="rounded-lg border border-accent-red/25 bg-accent-red/10 px-3 py-2 text-xs leading-relaxed text-accent-red"
+                          >
+                            测试失败：{testFailureDetail}
+                          </div>
+                        )}
                         {probe && (
                           <div
                             className="flex flex-wrap items-center gap-2 rounded-lg border border-bg-hover/60 bg-bg-tertiary/40 px-3 py-2 text-[11px] text-text-muted"
