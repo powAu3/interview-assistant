@@ -298,8 +298,10 @@ export const api = {
       supports_think: boolean
       think_style: string
       think_params: Record<string, unknown>
+      think_disabled_params: Record<string, unknown>
       vision_detail?: string
       think_detail?: string
+      think_disabled_detail?: string
     }>('/api/models/probe/' + index, { method: 'POST' }),
   sttTest: () => request<{ ok: boolean; detail?: string; text?: string }>('/api/stt/test', { method: 'POST' }),
 

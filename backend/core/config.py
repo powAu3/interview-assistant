@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 import json
 import os
 
@@ -24,6 +24,8 @@ class ModelConfig(BaseModel):
     supports_think: bool = False
     supports_vision: bool = False
     enabled: bool = True
+    think_enabled_params: dict[str, Any] = Field(default_factory=dict)
+    think_disabled_params: dict[str, Any] = Field(default_factory=dict)
 
 
 def _default_model_config() -> ModelConfig:

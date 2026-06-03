@@ -1,10 +1,17 @@
+import json
 from typing import Optional
 
 import requests
 
 from core.config import get_config
 from core.resource_lanes import submit_low_priority_background
-from services.llm.streaming import _build_think_params, _completion_token_kwargs, _detect_think_style, _is_doubao_model
+from services.llm.streaming import (
+    _build_think_params,
+    _completion_token_kwargs,
+    _detect_think_style,
+    _disabled_think_params_for_model,
+    _is_doubao_model,
+)
 
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
@@ -161,7 +168,7 @@ def _post_chat(model, payload: dict, timeout: int = 12) -> tuple[dict, int]:
     return body, latency_ms
 
 
-def _probe_basic(model) -> tuple[bool, str, int]:
+def _probe_basic(model, *, reject_reasoning: bool = True) -> tuple[bool, str, int]:
     payload = _chat_payload(
         model,
         [{"role": "user", "content": "只回复 OK 两个字母，用于连接测试。"}],
@@ -173,7 +180,7 @@ def _probe_basic(model) -> tuple[bool, str, int]:
     )
     body, latency_ms = _post_chat(model, payload, timeout=12)
     text, reasoning = _extract_health_probe_text_and_reasoning(body)
-    if reasoning and not _is_doubao_model(model):
+    if reject_reasoning and reasoning and not _is_doubao_model(model):
         raise RuntimeError("关闭思考后仍返回 reasoning，已暂不参与答题")
     if not text:
         raise RuntimeError("连接成功但模型未返回正文")
@@ -237,6 +244,56 @@ def _think_probe_candidates(model) -> list[tuple[str, dict]]:
     return unique
 
 
+def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
+    if _is_doubao_model(model):
+        return [("no_params", {})]
+    style = _detect_think_style(model)
+    ordered = [
+        ("no_params", {}),
+        ("model_default_disable", _disabled_think_params_for_model(model, style)),
+        ("generic_thinking_disabled", {"thinking": {"type": "disabled"}, "think_mode": False, "enable_thinking": False}),
+        (
+            "local_enable_thinking_false",
+            {
+                "enable_thinking": False,
+                "chat_template_kwargs": {"enable_thinking": False},
+                "think_mode": False,
+            },
+        ),
+    ]
+    seen: set[str] = set()
+    unique: list[tuple[str, dict]] = []
+    for name, params in ordered:
+        key = json.dumps(params, sort_keys=True, ensure_ascii=False) if params else "{}"
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((name, params))
+    return unique
+
+
+def _probe_disable_think(model) -> tuple[dict, str]:
+    messages = [{"role": "user", "content": "只回复 OK 两个字母，用于关闭思考参数测试。"}]
+    last_detail = ""
+    for style, params in _disable_think_probe_candidates(model):
+        payload = _chat_payload(model, messages, 16, params)
+        try:
+            body, _latency_ms = _post_chat(model, payload, timeout=12)
+            text, reasoning = _extract_health_probe_text_and_reasoning(body)
+            if text and not reasoning:
+                if params:
+                    return params, f"关闭 Think 参数已确认：{style}"
+                return {}, "关闭 Think 无需额外参数"
+            if reasoning:
+                last_detail = f"{style} 仍返回 reasoning"
+        except Exception as e:
+            detail = str(e)[:160]
+            last_detail = detail
+            if _is_expected_param_error(detail):
+                continue
+    return {}, last_detail or "未检测到可靠关闭 Think 参数"
+
+
 def _probe_think(model) -> tuple[bool, str, dict, str]:
     if not _is_strong_reasoning_model(model):
         return False, "", {}, "模型名未显示为推理模型，未自动开启 Think"
@@ -267,8 +324,10 @@ def _probe_result(
     supports_think: bool = False,
     think_style: str = "",
     think_params: Optional[dict] = None,
+    think_disabled_params: Optional[dict] = None,
     vision_detail: str = "",
     think_detail: str = "",
+    think_disabled_detail: str = "",
 ) -> dict:
     return {
         "ok": ok,
@@ -278,8 +337,10 @@ def _probe_result(
         "supports_think": supports_think,
         "think_style": think_style,
         "think_params": think_params or {},
+        "think_disabled_params": think_disabled_params or {},
         "vision_detail": vision_detail,
         "think_detail": think_detail,
+        "think_disabled_detail": think_disabled_detail,
     }
 
 
@@ -299,7 +360,7 @@ def probe_single_model(index: int) -> dict:
         _model_health_latency[index] = 0
         return _probe_result(False, detail="未配置 API Key")
     try:
-        _ok, _detail, latency_ms = _probe_basic(model)
+        _ok, _detail, latency_ms = _probe_basic(model, reject_reasoning=False)
         _model_health[index] = "ok"
         _model_health_detail[index] = ""
         _model_health_latency[index] = latency_ms
@@ -310,6 +371,7 @@ def probe_single_model(index: int) -> dict:
         _model_health_latency[index] = 0
         return _probe_result(False, detail=detail)
     supports_vision, vision_detail = _probe_vision(model)
+    think_disabled_params, think_disabled_detail = _probe_disable_think(model)
     supports_think, think_style, think_params, think_detail = _probe_think(model)
     return _probe_result(
         True,
@@ -319,8 +381,10 @@ def probe_single_model(index: int) -> dict:
         supports_think=supports_think,
         think_style=think_style,
         think_params=think_params,
+        think_disabled_params=think_disabled_params,
         vision_detail=vision_detail,
         think_detail=think_detail,
+        think_disabled_detail=think_disabled_detail,
     )
 
 

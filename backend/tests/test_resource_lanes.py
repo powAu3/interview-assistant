@@ -281,9 +281,10 @@ def test_model_capability_probe_detects_vision_and_gpt_think_params(monkeypatch)
     assert result["supports_think"] is True
     assert result["think_style"] == "gpt_reasoning_effort"
     assert result["think_params"] == {"reasoning_effort": "low"}
+    assert result["think_disabled_params"] == {}
     assert seen_payloads[1]["messages"][0]["content"][1]["type"] == "image_url"
-    assert seen_payloads[2]["reasoning_effort"] == "low"
-    assert "think_mode" not in seen_payloads[2]
+    assert seen_payloads[3]["reasoning_effort"] == "low"
+    assert "think_mode" not in seen_payloads[3]
 
 
 def test_model_capability_probe_keeps_generic_model_think_off_without_signal(monkeypatch):
@@ -329,7 +330,10 @@ def test_model_capability_probe_keeps_generic_model_think_off_without_signal(mon
     assert result["supports_vision"] is True
     assert result["supports_think"] is False
     assert result["think_params"] == {}
-    assert len(seen_payloads) == 2
+    assert result["think_disabled_params"] == {}
+    assert len(seen_payloads) == 3
+    assert "thinking" not in seen_payloads[2]
+    assert "think_mode" not in seen_payloads[2]
 
 
 def test_model_capability_probe_detects_deepseek_reasoner_generic_thinking(monkeypatch):

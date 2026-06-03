@@ -92,6 +92,18 @@ class TestBuildThinkParams:
         r = _build_think_params(model, _c(effort))
         assert r == {}
 
+    def test_saved_disabled_params_win_even_without_think_support(self):
+        model = _m("auto-reasoner", supports_think=False)
+        model.think_disabled_params = {"thinking": {"type": "disabled"}}
+        r = _build_think_params(model, _c("off"))
+        assert r == {"thinking": {"type": "disabled"}}
+
+    def test_saved_enabled_params_win_over_detected_style(self):
+        model = _m("o3-mini", supports_think=True)
+        model.think_enabled_params = {"reasoning_effort": "low"}
+        r = _build_think_params(model, _c("high"))
+        assert r == {"reasoning_effort": "low"}
+
     def test_off_local_runtime_includes_chat_template_disable(self):
         model = _m("glm-5.1")
         model.api_base_url = "http://127.0.0.1:30000/v1"

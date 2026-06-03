@@ -30,6 +30,8 @@ const EMPTY_MODEL: ModelFullInfo = {
   supports_think: false,
   supports_vision: false,
   enabled: true,
+  think_enabled_params: {},
+  think_disabled_params: {},
   has_key: false,
 }
 
@@ -47,8 +49,10 @@ type ModelProbeResult = {
   supports_think: boolean
   think_style: string
   think_params: Record<string, unknown>
+  think_disabled_params: Record<string, unknown>
   vision_detail?: string
   think_detail?: string
+  think_disabled_detail?: string
 }
 
 function toModelRow(model: ModelFullInfo, index: number): ModelRow {
@@ -166,6 +170,8 @@ export default function ModelsTab() {
       supports_think: m.supports_think,
       supports_vision: m.supports_vision,
       enabled: m.enabled,
+      think_enabled_params: m.think_enabled_params ?? {},
+      think_disabled_params: m.think_disabled_params ?? {},
     }))
 
   const resolveActiveIndex = () => {
@@ -242,6 +248,8 @@ export default function ModelsTab() {
                   ...row.model,
                   supports_vision: result.supports_vision,
                   supports_think: result.supports_think,
+                  think_enabled_params: result.think_params ?? {},
+                  think_disabled_params: result.think_disabled_params ?? {},
                 },
               }
             : row,
@@ -444,7 +452,7 @@ export default function ModelsTab() {
               const healthTitle = healthDetail ? `模型连接详情：${healthDetail}` : undefined
               const probe = probeResults[idx]
               const probeTitle = probe
-                ? `识图：${probe.vision_detail || (probe.supports_vision ? '支持' : '未检测到')}\nThink：${probe.think_detail || (probe.supports_think ? '支持' : '未检测到')}\n参数：${JSON.stringify(probe.think_params ?? {})}`
+                ? `识图：${probe.vision_detail || (probe.supports_vision ? '支持' : '未检测到')}\nThink 开启：${probe.think_detail || (probe.supports_think ? '支持' : '未检测到')}\nThink 关闭：${probe.think_disabled_detail || '未检测'}\n开启参数：${JSON.stringify(probe.think_params ?? {})}\n关闭参数：${JSON.stringify(probe.think_disabled_params ?? {})}`
                 : undefined
 
               return (
@@ -604,9 +612,12 @@ export default function ModelsTab() {
                             </span>
                             {probe.supports_think && (
                               <span className="max-w-full truncate font-mono text-[10px] text-text-muted">
-                                {JSON.stringify(probe.think_params)}
+                                开 {JSON.stringify(probe.think_params)}
                               </span>
                             )}
+                            <span className="max-w-full truncate font-mono text-[10px] text-text-muted">
+                              关 {JSON.stringify(probe.think_disabled_params ?? {})}
+                            </span>
                           </div>
                         )}
                         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">

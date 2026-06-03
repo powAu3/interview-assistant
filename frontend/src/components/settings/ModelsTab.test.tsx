@@ -63,8 +63,10 @@ describe('ModelsTab state sync', () => {
       supports_think: false,
       think_style: '',
       think_params: {},
+      think_disabled_params: {},
       vision_detail: '未检测到',
       think_detail: '未检测到',
+      think_disabled_detail: '关闭 Think 无需额外参数',
     })
 
     useInterviewStore.setState({
@@ -169,8 +171,10 @@ describe('ModelsTab state sync', () => {
       supports_think: true,
       think_style: 'gpt_reasoning_effort',
       think_params: { reasoning_effort: 'low' },
+      think_disabled_params: {},
       vision_detail: '识图请求成功',
       think_detail: 'Think 参数已接受',
+      think_disabled_detail: '关闭 Think 无需额外参数',
     })
 
     render(<ModelsTab />)

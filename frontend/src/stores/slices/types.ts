@@ -12,6 +12,8 @@ export interface ModelInfo {
   supports_think: boolean
   supports_vision: boolean
   enabled?: boolean
+  think_enabled_params?: Record<string, unknown>
+  think_disabled_params?: Record<string, unknown>
 }
 
 export interface ModelFullInfo {
@@ -22,6 +24,8 @@ export interface ModelFullInfo {
   supports_think: boolean
   supports_vision: boolean
   enabled: boolean
+  think_enabled_params?: Record<string, unknown>
+  think_disabled_params?: Record<string, unknown>
   has_key: boolean
 }
 

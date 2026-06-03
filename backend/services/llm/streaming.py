@@ -308,6 +308,11 @@ def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
     return {}
 
 
+def _model_dict_param(model_cfg, name: str) -> dict:
+    value = getattr(model_cfg, name, None) or {}
+    return dict(value) if isinstance(value, dict) else {}
+
+
 def _completion_token_kwargs(model_cfg, max_tokens: int) -> dict:
     token_limit = max(1, int(max_tokens or 1))
     if _detect_think_style(model_cfg) == "gpt":
@@ -351,14 +356,20 @@ def _detect_think_style(model_cfg) -> str:
 
 
 def _build_think_params(model_cfg, cfg) -> dict:
+    effort = cfg.think_effort
+    style = _detect_think_style(model_cfg)
+    if not getattr(cfg, "think_mode", False) or effort == "off":
+        saved_disabled = _model_dict_param(model_cfg, "think_disabled_params")
+        if saved_disabled:
+            return saved_disabled
+        return _disabled_think_params_for_model(model_cfg, style)
+    saved_enabled = _model_dict_param(model_cfg, "think_enabled_params")
+    if saved_enabled:
+        return saved_enabled
     if not model_cfg.supports_think:
         return {}
     if _is_doubao_model(model_cfg):
         return {}
-    effort = cfg.think_effort
-    style = _detect_think_style(model_cfg)
-    if not getattr(cfg, "think_mode", False) or effort == "off":
-        return _disabled_think_params_for_model(model_cfg, style)
     if style == "gpt":
         return {
             "reasoning_effort": effort,

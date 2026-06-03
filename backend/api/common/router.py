@@ -137,6 +137,8 @@ async def api_get_models_full():
                 "supports_think": mdl.supports_think,
                 "supports_vision": mdl.supports_vision,
                 "enabled": getattr(mdl, "enabled", True),
+                "think_enabled_params": getattr(mdl, "think_enabled_params", {}) or {},
+                "think_disabled_params": getattr(mdl, "think_disabled_params", {}) or {},
                 "has_key": bool(mdl.api_key and mdl.api_key not in ("", "sk-your-api-key-here")),
             }
             for mdl in cfg.models
