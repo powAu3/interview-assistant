@@ -4,7 +4,7 @@ import requests
 
 from core.config import get_config
 from core.resource_lanes import submit_low_priority_background
-from services.llm.streaming import _build_think_params, _completion_token_kwargs, _detect_think_style
+from services.llm.streaming import _build_think_params, _completion_token_kwargs, _detect_think_style, _is_doubao_model
 
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
@@ -21,6 +21,8 @@ def _model_label(model_cfg) -> str:
 
 
 def _is_strong_reasoning_model(model_cfg) -> bool:
+    if _is_doubao_model(model_cfg):
+        return False
     label = _model_label(model_cfg)
     markers = (
         "gpt-5",
@@ -171,7 +173,7 @@ def _probe_basic(model) -> tuple[bool, str, int]:
     )
     body, latency_ms = _post_chat(model, payload, timeout=12)
     text, reasoning = _extract_health_probe_text_and_reasoning(body)
-    if reasoning:
+    if reasoning and not _is_doubao_model(model):
         raise RuntimeError("关闭思考后仍返回 reasoning，已暂不参与答题")
     if not text:
         raise RuntimeError("连接成功但模型未返回正文")

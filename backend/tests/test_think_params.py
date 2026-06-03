@@ -85,6 +85,13 @@ class TestBuildThinkParams:
         r = _build_think_params(_m("glm-5.1"), S(think_mode=False, think_effort="high"))
         assert r == _THINK_DISABLED_BASE_PARAMS
 
+    @pytest.mark.parametrize("effort", ["off", "low", "high"])
+    def test_doubao_never_receives_thinking_params(self, effort):
+        model = _m("Doubao-Seed-2.0-pro")
+        model.api_base_url = "https://ark.cn-beijing.volces.com/api/v3"
+        r = _build_think_params(model, _c(effort))
+        assert r == {}
+
     def test_off_local_runtime_includes_chat_template_disable(self):
         model = _m("glm-5.1")
         model.api_base_url = "http://127.0.0.1:30000/v1"

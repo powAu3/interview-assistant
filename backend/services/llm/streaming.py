@@ -290,9 +290,17 @@ _THINK_DISABLED_LOCAL_PARAMS = {
 }
 
 
+def _is_doubao_model(model_cfg) -> bool:
+    base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
+    model_name = (getattr(model_cfg, "model", "") or "").lower()
+    return "doubao" in model_name or "volces" in base_url or "ark" in base_url
+
+
 def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
     base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
     model_name = (getattr(model_cfg, "model", "") or "").lower()
+    if _is_doubao_model(model_cfg):
+        return {}
     if "localhost" in base_url or "127.0.0.1" in base_url or "sglang" in base_url:
         return dict(_THINK_DISABLED_LOCAL_PARAMS)
     if "glm" in model_name or "bigmodel" in base_url:
@@ -344,6 +352,8 @@ def _detect_think_style(model_cfg) -> str:
 
 def _build_think_params(model_cfg, cfg) -> dict:
     if not model_cfg.supports_think:
+        return {}
+    if _is_doubao_model(model_cfg):
         return {}
     effort = cfg.think_effort
     style = _detect_think_style(model_cfg)
