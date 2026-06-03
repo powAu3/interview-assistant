@@ -46,11 +46,23 @@ def test_resource_lane_rejects_when_running_and_queue_capacity_is_full():
 def test_model_health_checks_are_submitted_to_low_priority_lane(monkeypatch):
     model_health = importlib.import_module("api.common.model_health")
     submitted: list[tuple[object, tuple[object, ...]]] = []
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type("Model", (), {"enabled": False})(),
+                type("Model", (), {"enabled": False})(),
+                type("Model", (), {"enabled": True})(),
+            ]
+        },
+    )()
 
     def fake_submit(fn, *args):
         submitted.append((fn, args))
         return True
 
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
     monkeypatch.setattr(
         model_health,
         "submit_low_priority_background",
