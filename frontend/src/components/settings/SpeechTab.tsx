@@ -425,7 +425,7 @@ export default function SpeechTab() {
         icon={<Mic className="w-3.5 h-3.5" />}
         keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本 beta"
       >
-        <GradientCard className="p-4 space-y-4 border-emerald-400/30">
+        <GradientCard className="p-4 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-text-primary">我的回答上下文（麦克风）</h3>
@@ -433,37 +433,33 @@ export default function SpeechTab() {
                 只用于记录你真实说出口的回答，给下一轮追问做上下文；不会触发自动答题。
               </p>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-label="我的回答上下文（麦克风）"
-              aria-checked={form.candidate_asr_enabled}
-              onClick={() => {
-                const enabled = !form.candidate_asr_enabled
-                setForm({
-                  ...form,
-                  candidate_asr_enabled: enabled,
-                })
-              }}
-              className={`inline-flex h-9 shrink-0 items-center gap-2 self-start rounded-full border px-2.5 text-xs font-medium transition-colors ${
-                form.candidate_asr_enabled
-                  ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
-                  : 'border-bg-hover bg-bg-tertiary/60 text-text-muted hover:bg-bg-hover/60'
-              }`}
-            >
-              <span
-                className={`relative h-5 w-9 rounded-full transition-colors ${
+            <div className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-bg-hover bg-bg-tertiary/45 px-2.5 py-2">
+              <span className={`text-xs font-medium ${form.candidate_asr_enabled ? 'text-emerald-400' : 'text-text-muted'}`}>
+                {form.candidate_asr_enabled ? '已开启' : '已关闭'}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-label="我的回答上下文（麦克风）"
+                aria-checked={form.candidate_asr_enabled}
+                onClick={() => {
+                  const enabled = !form.candidate_asr_enabled
+                  setForm({
+                    ...form,
+                    candidate_asr_enabled: enabled,
+                  })
+                }}
+                className={`relative h-6 w-11 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-blue/30 ${
                   form.candidate_asr_enabled ? 'bg-emerald-500/80' : 'bg-bg-hover'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                    form.candidate_asr_enabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    form.candidate_asr_enabled ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
-              </span>
-              <span className="whitespace-nowrap">{form.candidate_asr_enabled ? '已开启' : '已关闭'}</span>
-            </button>
+              </button>
+            </div>
           </div>
           {!form.candidate_asr_enabled && (
             <div className="rounded-lg border border-bg-hover bg-bg-tertiary/40 px-3 py-2 text-xs text-text-muted">
