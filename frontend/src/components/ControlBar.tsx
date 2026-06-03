@@ -530,10 +530,10 @@ export default function ControlBar() {
       )}
 
       {/* 主控制行 */}
-      <div className="grid gap-2 rounded-lg border border-bg-hover/70 bg-bg-secondary/75 p-2 shadow-sm xl:grid-cols-[minmax(0,46rem)_auto] xl:items-stretch xl:justify-between">
+      <div className="grid gap-2 rounded-lg border border-bg-hover/70 bg-bg-secondary/75 p-2 shadow-sm lg:grid-cols-[minmax(0,38rem)_auto] lg:items-stretch">
         {!isExamMode && (
-          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:max-w-[46rem]">
-            <div className="flex min-w-0 flex-col gap-1 xl:max-w-[23rem]">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-[38rem]">
+            <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
               <span className="text-[10px] font-medium text-text-muted leading-none">会议音频 · 听面试官</span>
               <AudioDevicePicker
                 devices={devices}
@@ -555,7 +555,7 @@ export default function ControlBar() {
               />
             </div>
             {candidateCaptureEnabled ? (
-              <div className="flex min-w-0 flex-col gap-1 xl:max-w-[23rem]">
+              <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
                 <span className="text-[10px] font-medium text-text-muted leading-none">
                   我的麦克风 · 记录我的回答
                   {candidateSttLoading && <Loader2 className="w-3 h-3 animate-spin inline ml-1 text-accent-blue" />}
@@ -581,7 +581,7 @@ export default function ControlBar() {
                 />
               </div>
             ) : (
-              <div className="flex min-w-0 flex-col gap-1 xl:max-w-[23rem]">
+              <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
                 <span className="text-[10px] font-medium text-text-muted leading-none">我的麦克风 · 记录我的回答</span>
                 <div
                   role="status"
@@ -609,7 +609,7 @@ export default function ControlBar() {
           </div>
         )}
 
-        <div className="flex h-full min-h-[56px] w-full min-w-0 flex-wrap items-center gap-1.5 xl:w-auto xl:max-w-[34rem] xl:justify-end xl:border-l xl:border-bg-hover/60 xl:pl-2">
+        <div className="flex h-full min-h-[56px] w-full min-w-0 flex-wrap items-center gap-1.5 lg:w-auto lg:max-w-[34rem] lg:border-l lg:border-bg-hover/60 lg:pl-2">
         {isRecording ? (
           <>
             {isPaused ? (
