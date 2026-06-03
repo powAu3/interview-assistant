@@ -287,6 +287,54 @@ def test_model_capability_probe_detects_vision_and_gpt_think_params(monkeypatch)
     assert "think_mode" not in seen_payloads[3]
 
 
+def test_model_capability_probe_tries_doubao_thinking_by_display_name(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://ark.cn-beijing.volces.com/api/v3",
+                        "api_key": "sk-test",
+                        "name": "Doubao-Seed-2.0-pro",
+                        "model": "ep-20260313172145-4rstj",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["ok"] is True
+    assert result["supports_think"] is True
+    assert result["think_style"] == "generic_thinking"
+    assert result["think_params"] == {"thinking": {"type": "enabled"}, "think_mode": True}
+    assert result["think_disabled_params"] == {}
+    assert seen_payloads[3]["thinking"]["type"] == "enabled"
+
+
 def test_model_capability_probe_keeps_generic_model_think_off_without_signal(monkeypatch):
     model_health = importlib.import_module("api.common.model_health")
     seen_payloads: list[dict] = []

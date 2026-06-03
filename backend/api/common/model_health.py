@@ -24,14 +24,19 @@ _VISION_PROBE_IMAGE_DATA_URL = (
 
 
 def _model_label(model_cfg) -> str:
-    return f"{getattr(model_cfg, 'api_base_url', '')} {getattr(model_cfg, 'model', '')}".lower()
+    return (
+        f"{getattr(model_cfg, 'api_base_url', '')} "
+        f"{getattr(model_cfg, 'name', '')} "
+        f"{getattr(model_cfg, 'model', '')}"
+    ).lower()
 
 
 def _is_strong_reasoning_model(model_cfg) -> bool:
-    if _is_doubao_model(model_cfg):
-        return False
     label = _model_label(model_cfg)
     markers = (
+        "doubao-seed",
+        "doubao2.0",
+        "seed-2",
         "gpt-5",
         " o1",
         "/o1",
@@ -245,8 +250,6 @@ def _think_probe_candidates(model) -> list[tuple[str, dict]]:
 
 
 def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
-    if _is_doubao_model(model):
-        return [("no_params", {})]
     style = _detect_think_style(model)
     ordered = [
         ("no_params", {}),
