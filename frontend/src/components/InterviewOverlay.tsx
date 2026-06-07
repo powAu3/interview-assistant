@@ -27,6 +27,12 @@ const OVERLAY_MARKDOWN_COMPONENTS: Components = {
   a({ children }) {
     return <span>{children}</span>
   },
+  pre({ children }) {
+    return <pre className="ov-code-block">{children}</pre>
+  },
+  code({ className, children }) {
+    return <code className={className ? `ov-code ${className}` : 'ov-code'}>{children}</code>
+  },
 }
 
 export default function InterviewOverlay() {

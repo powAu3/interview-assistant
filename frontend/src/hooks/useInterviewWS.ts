@@ -1,15 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
-import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { useKbStore } from '@/stores/kbStore'
 import { buildWsUrl } from '@/lib/backendUrl'
 import { subscribeLeader } from '@/lib/wsLeader'
-
-// scope -> 仅在该 appMode 下消费;assist / 全局消息不带 scope,任何模式都可见
-const SCOPE_ALLOWED_MODES: Record<string, ReadonlySet<string>> = {
-  practice: new Set(['practice']),
-  'resume-opt': new Set(['resume-opt']),
-}
 
 // 指数退避重连步长（ms）。最后一档是稳态，不再翻倍。
 const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000]
@@ -26,15 +19,6 @@ interface WsMsg {
 
 function normalizePracticeStatus(status: unknown) {
   return status === 'interviewer_speaking' ? 'awaiting_answer' : status
-}
-
-function shouldDeliver(msg: WsMsg): boolean {
-  const scope = msg.scope
-  if (!scope) return true
-  const allowed = SCOPE_ALLOWED_MODES[scope]
-  if (!allowed) return true
-  const mode = useUiPrefsStore.getState().appMode
-  return allowed.has(mode)
 }
 
 export function useInterviewWS() {
@@ -87,7 +71,6 @@ export function useInterviewWS() {
         return
       }
       if (!data || typeof data !== 'object') return
-      if (!shouldDeliver(data)) return
       // 服务端 ping → 主动回 pong 维持心跳
       if (data.type === 'ping') {
         try {

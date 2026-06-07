@@ -1175,6 +1175,8 @@ code, pre, .font-mono {
 
 .ov-markdown {
   color: inherit;
+  max-width: 100%;
+  min-width: 0;
   white-space: normal;
 }
 
@@ -1234,9 +1236,12 @@ code, pre, .font-mono {
   color: inherit;
   font-family: 'JetBrains Mono', Consolas, monospace;
   font-size: 0.88em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ov-markdown pre {
+  max-width: 100%;
   margin: 0.48em 0 0.62em;
   padding: 0.72em 0.88em;
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -1244,7 +1249,10 @@ code, pre, .font-mono {
   background: rgba(15, 23, 42, 0.08);
   color: inherit;
   line-height: 1.45;
-  white-space: pre;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ov-markdown pre code {
@@ -1252,6 +1260,8 @@ code, pre, .font-mono {
   background: transparent;
   padding: 0;
   white-space: inherit;
+  overflow-wrap: inherit;
+  word-break: inherit;
 }
 
 .ov-markdown blockquote {

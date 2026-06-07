@@ -32,3 +32,21 @@ describe('configStore answer streaming', () => {
     expect(qa.answer).toBe('最终答案')
   })
 })
+
+describe('configStore toast queue', () => {
+  beforeEach(() => {
+    useInterviewStore.setState({ toastMessage: null, toasts: [] } as any)
+  })
+
+  it('clearing the legacy toast message does not clear stacked toasts', () => {
+    const store = useInterviewStore.getState()
+
+    store.setToastMessage('旧提示')
+    store.pushToast('新提示', 'success')
+    store.setToastMessage(null)
+
+    const state = useInterviewStore.getState()
+    expect(state.toastMessage).toBeNull()
+    expect(state.toasts.map((toast) => toast.message)).toEqual(['旧提示', '新提示'])
+  })
+})

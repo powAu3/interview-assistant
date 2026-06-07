@@ -163,6 +163,26 @@ describe('InterviewOverlay', () => {
     expect(screen.queryByText(/## 回答要点/)).not.toBeInTheDocument()
   })
 
+  it('marks overlay code blocks for soft wrapping in prompt mode', () => {
+    const longLine = `const result = ${'veryLongIdentifier'.repeat(16)}`
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: `\`\`\`ts\n${longLine}\n\`\`\``,
+      }],
+    })
+
+    render(<InterviewOverlay />)
+
+    const codeBlock = document.querySelector('.ov-code-block')
+    expect(codeBlock).toBeInTheDocument()
+    expect(codeBlock).toHaveTextContent(longLine)
+    expect(codeBlock?.querySelector('.ov-code.language-ts')).toBeInTheDocument()
+  })
+
   it('renders focus overlay mode with visual toolbar and tabs', () => {
     useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
     localStorage.setItem('ia_overlay_mode', 'focus')
