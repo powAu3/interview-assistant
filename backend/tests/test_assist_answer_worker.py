@@ -48,7 +48,7 @@ def _deps(
     *,
     broadcasts: list[dict],
     skipped: list[int] | None = None,
-    knowledge: list[tuple[str, str]] | None = None,
+    knowledge: list[tuple[str, str, str, str]] | None = None,
     abort_check=lambda: False,
     flush_commit=None,
     mark_seq_skipped=None,
@@ -62,8 +62,8 @@ def _deps(
         apply_fn()
         return None
 
-    def _submit_knowledge_record(question, answer):
-        knowledge.append((question, answer))
+    def _submit_knowledge_record(question, answer, qa_id="", candidate_answer=""):
+        knowledge.append((question, answer, qa_id, candidate_answer))
         return True
 
     return answer_worker.AnswerWorkerDeps(
@@ -92,7 +92,7 @@ def reset_worker_state(monkeypatch: pytest.MonkeyPatch):
 
 def test_process_question_parallel_streams_and_commits_answer(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
-    knowledge: list[tuple[str, str]] = []
+    knowledge: list[tuple[str, str, str, str]] = []
 
     def fake_stream(*_args, **_kwargs):
         yield ("think", "先判断场景")
@@ -119,13 +119,51 @@ def test_process_question_parallel_streams_and_commits_answer(monkeypatch: pytes
     assert broadcasts[0]["model_name"] == "模型一"
     assert broadcasts[3]["answer"] == "用 AOF 和 RDB 组合。"
     assert broadcasts[3]["think"] == "先判断场景"
-    assert knowledge == [("Redis 怎么持久化？", "用 AOF 和 RDB 组合。")]
+    assert knowledge == [("Redis 怎么持久化？", "用 AOF 和 RDB 组合。", broadcasts[0]["id"], "")]
 
     session = get_session()
     assert len(session.qa_pairs) == 1
     assert session.qa_pairs[0].question == "Redis 怎么持久化？"
     assert session.qa_pairs[0].answer == "用 AOF 和 RDB 组合。"
     assert session.qa_pairs[0].model_name == "模型一"
+
+
+def test_process_question_parallel_submits_candidate_answer_to_knowledge(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    knowledge: list[tuple[str, str, str, str]] = []
+    seen_qa_id: dict[str, str] = {}
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "助手参考答案：缓存项目。")
+
+    def flush_commit(_seq, apply_fn):
+        answer_start = next(event for event in broadcasts if event["type"] == "answer_start")
+        seen_qa_id["id"] = answer_start["id"]
+        get_session().add_candidate_transcription(
+            "我实际讲的是风控规则引擎。",
+            qa_id=answer_start["id"],
+            provider="whisper",
+        )
+        apply_fn()
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("讲讲你做过的项目", None, False, "asr", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts, knowledge=knowledge, flush_commit=flush_commit),
+    )
+
+    assert knowledge == [
+        (
+            "讲讲你做过的项目",
+            "助手参考答案：缓存项目。",
+            seen_qa_id["id"],
+            "我实际讲的是风控规则引擎。",
+        )
+    ]
 
 
 def test_process_question_parallel_logs_token_delta_and_uses_configured_max_tokens(monkeypatch: pytest.MonkeyPatch):

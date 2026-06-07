@@ -97,7 +97,7 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
     monkeypatch.setattr(pipeline, "get_model_health", lambda _idx: None)
     monkeypatch.setattr(pipeline.threading, "Thread", _DeferredThread)
-    monkeypatch.setattr(pipeline, "_submit_knowledge_record", lambda _q, _a: True)
+    monkeypatch.setattr(pipeline, "_submit_knowledge_record", lambda _q, _a, *_rest: True)
     monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kwargs: "system")
     monkeypatch.setattr(
         answer_worker,

@@ -30,7 +30,7 @@ class AnswerWorkerDeps:
     is_session_current: Callable[[int], bool]
     flush_commit: Callable[[int, Callable[[], None]], None]
     mark_seq_skipped: Callable[[int], None]
-    submit_knowledge_record: Callable[[str, str], bool]
+    submit_knowledge_record: Callable[[str, str, str, str], bool]
     broadcast: Callable[[dict], None]
     logger: Any
     error_logger: Any
@@ -530,7 +530,13 @@ def process_question_parallel(
                     "by_model": stats.get("by_model", {}),
                 }
             )
-            if not deps.submit_knowledge_record(question_text, full_answer):
+            candidate_answer_for_record = ""
+            with conversation_lock:
+                candidate_answer_for_record = session.get_candidate_answer_for_qa(
+                    qa_id,
+                    max_chars=2400,
+                )
+            if not deps.submit_knowledge_record(question_text, full_answer, qa_id, candidate_answer_for_record):
                 deps.error_logger.warning(
                     "KNOWLEDGE_ENQUEUE_DROP id=%s question=%r",
                     qa_id,

@@ -82,7 +82,7 @@ class Session:
         self.current_candidate_transcription = cleaned
         segment_key = (segment_id or "").strip()
         if segment_key:
-            for idx, seg in enumerate(self.candidate_answer_segments):
+            for _idx, seg in enumerate(self.candidate_answer_segments):
                 if seg.segment_id == segment_key:
                     seg.text = cleaned
                     seg.timestamp = time.time()

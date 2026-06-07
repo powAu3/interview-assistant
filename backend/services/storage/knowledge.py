@@ -22,20 +22,34 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db():
     with _db_lock:
         conn = _get_conn()
         conn.execute("""
             CREATE TABLE IF NOT EXISTS question_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                qa_id TEXT,
                 session_type TEXT,
                 question TEXT,
                 answer TEXT,
+                candidate_answer TEXT,
                 score REAL,
                 tags TEXT,
                 created_at REAL
             )
         """)
+        _ensure_column(conn, "question_records", "qa_id", "TEXT")
+        _ensure_column(conn, "question_records", "candidate_answer", "TEXT")
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_question_records_qa_id ON question_records(qa_id)")
+        except Exception:
+            pass
         conn.commit()
         conn.close()
 
@@ -50,16 +64,31 @@ def _session_type_where(session_types: Optional[tuple[str, ...]]) -> tuple[str, 
     return f" WHERE session_type IN ({placeholders})", list(session_types)
 
 
-def extract_tags(question: str, answer: str = "") -> list[str]:
+def _analysis_answer_text(answer: str = "", candidate_answer: str = "") -> str:
+    candidate_clean = (candidate_answer or "").strip()
+    answer_clean = (answer or "").strip()
+    if candidate_clean:
+        return (
+            "候选人实际口述：\n"
+            f"{candidate_clean}\n\n"
+            "助手参考答案：\n"
+            f"{answer_clean or '(无助手答案)'}"
+        )
+    return answer_clean
+
+
+def extract_tags(question: str, answer: str = "", candidate_answer: str = "") -> list[str]:
     """Use LLM to extract 3-5 knowledge tags from a Q&A pair."""
     cfg = get_config()
     m = cfg.get_active_model()
+    answer_for_tags = _analysis_answer_text(answer, candidate_answer)
     try:
         client = get_client()
         prompt = f"""从以下面试问答中提取 3-5 个知识点标签（技术关键词），直接返回 JSON 数组，不要其他内容。
+如果存在“候选人实际口述”，优先依据候选人实际回答暴露出的知识点和能力点；助手参考答案只作为题目语境补充。
 
 问题：{question[:300]}
-回答：{answer[:500] if answer else '(无回答)'}
+回答：{answer_for_tags[:800] if answer_for_tags else '(无回答)'}
 
 示例输出：["Redis", "缓存穿透", "布隆过滤器"]"""
 
@@ -85,17 +114,74 @@ def save_record(
     answer: str,
     score: Optional[float] = None,
     tags: Optional[list[str]] = None,
+    candidate_answer: str = "",
+    qa_id: str = "",
 ):
     if tags is None:
-        tags = extract_tags(question, answer)
+        tags = extract_tags(question, answer, candidate_answer)
     with _db_lock:
         conn = _get_conn()
         conn.execute(
-            "INSERT INTO question_records (session_type, question, answer, score, tags, created_at) VALUES (?,?,?,?,?,?)",
-            (session_type, question, answer, score, json.dumps(tags, ensure_ascii=False), time.time()),
+            "INSERT INTO question_records (qa_id, session_type, question, answer, candidate_answer, score, tags, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (
+                qa_id or "",
+                session_type,
+                question,
+                answer,
+                candidate_answer or "",
+                score,
+                json.dumps(tags, ensure_ascii=False),
+                time.time(),
+            ),
         )
         conn.commit()
         conn.close()
+
+
+def update_candidate_answer_for_qa(
+    qa_id: str,
+    candidate_answer: str,
+    *,
+    refresh_tags: bool = True,
+) -> bool:
+    qa_key = (qa_id or "").strip()
+    answer_text = (candidate_answer or "").strip()
+    if not qa_key or not answer_text:
+        return False
+    with _db_lock:
+        conn = _get_conn()
+        row = conn.execute(
+            "SELECT id, question, answer FROM question_records WHERE qa_id = ? ORDER BY created_at DESC LIMIT 1",
+            (qa_key,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return False
+
+    tags_json = None
+    if refresh_tags:
+        try:
+            tags = extract_tags(row["question"] or "", row["answer"] or "", answer_text)
+            if tags:
+                tags_json = json.dumps(tags, ensure_ascii=False)
+        except Exception:
+            tags_json = None
+
+    with _db_lock:
+        conn = _get_conn()
+        if tags_json is not None:
+            conn.execute(
+                "UPDATE question_records SET candidate_answer = ?, tags = ? WHERE id = ?",
+                (answer_text, tags_json, row["id"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE question_records SET candidate_answer = ? WHERE id = ?",
+                (answer_text, row["id"]),
+            )
+        conn.commit()
+        conn.close()
+        return True
 
 
 def get_summary(session_types: Optional[tuple[str, ...]] = None) -> list[dict]:
@@ -173,9 +259,11 @@ def get_history(
             tags = []
         records.append({
             "id": row["id"],
+            "qa_id": row["qa_id"] if "qa_id" in row.keys() else "",
             "session_type": row["session_type"],
             "question": row["question"],
             "answer": row["answer"],
+            "candidate_answer": row["candidate_answer"] if "candidate_answer" in row.keys() else "",
             "score": row["score"],
             "tags": tags,
             "created_at": row["created_at"],

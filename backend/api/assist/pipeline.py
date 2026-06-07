@@ -239,12 +239,27 @@ def shutdown_background_workers():
     _knowledge_worker.stop()
 
 
-def _submit_knowledge_record(question: str, answer: str) -> bool:
+def _submit_knowledge_record(
+    question: str,
+    answer: str,
+    qa_id: str = "",
+    candidate_answer: str = "",
+) -> bool:
     worker = _knowledge_worker
     if worker is None:
-        _save_knowledge_record(question, answer)
+        _save_knowledge_record("save", question, answer, qa_id, candidate_answer)
         return True
-    return worker.submit(question, answer)
+    return worker.submit("save", question, answer, qa_id, candidate_answer)
+
+
+def _submit_candidate_knowledge_update(qa_id: str, candidate_answer: str) -> bool:
+    if not (qa_id or "").strip() or not (candidate_answer or "").strip():
+        return False
+    worker = _knowledge_worker
+    if worker is None:
+        _save_knowledge_record("candidate_update", qa_id, candidate_answer)
+        return True
+    return worker.submit("candidate_update", qa_id, candidate_answer)
 
 
 # ---------------------------------------------------------------------------
@@ -872,6 +887,11 @@ def _publish_candidate_transcription(
         )
     if segment is None:
         return
+    if segment.is_final and segment.qa_id:
+        with conversation_lock:
+            candidate_answer = session.get_candidate_answer_for_qa(segment.qa_id, max_chars=2400)
+        if candidate_answer:
+            _submit_candidate_knowledge_update(segment.qa_id, candidate_answer)
     _ilog.info(
         "CANDIDATE_ASR_PUBLISH segment=%s qa_id=%s final=%s provider=%s chars=%d",
         segment.segment_id,
@@ -1162,9 +1182,20 @@ def _process_question_parallel(
     )
 
 
-def _save_knowledge_record(question: str, answer: str):
+def _save_knowledge_record(action: str, *args: object):
     try:
-        from services.storage.knowledge import save_record
-        save_record("assist", question, answer)
+        from services.storage.knowledge import save_record, update_candidate_answer_for_qa
+
+        if action == "candidate_update":
+            qa_id = str(args[0] if len(args) > 0 else "")
+            candidate_answer = str(args[1] if len(args) > 1 else "")
+            update_candidate_answer_for_qa(qa_id, candidate_answer)
+            return
+
+        question = str(args[0] if len(args) > 0 else "")
+        answer = str(args[1] if len(args) > 1 else "")
+        qa_id = str(args[2] if len(args) > 2 else "")
+        candidate_answer = str(args[3] if len(args) > 3 else "")
+        save_record("assist", question, answer, qa_id=qa_id, candidate_answer=candidate_answer)
     except Exception as exc:
         _elog.warning("_save_knowledge_record failed: %s", exc)
