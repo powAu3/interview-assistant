@@ -15,6 +15,8 @@ from core.auth import (
     init_auth,
     is_auth_disabled,
     is_loopback_host,
+    loopback_bypass_allowed,
+    origin_allows_loopback_bypass,
     verify_token,
 )
 from core.config import get_config
@@ -122,15 +124,14 @@ def _preload_stt():
 
 app = FastAPI(title="学习助手", lifespan=lifespan)
 
-# CORS: 显式允许 localhost / 私网地址,而非泛 ``*``。
+# CORS: 默认只允许后端自身的 loopback origin。局域网扫码页面与桌面端均为同源访问,
+# 不需要跨源；如确需单独前端直连后端，可通过 IA_CORS_REGEX 显式放宽。
 # 「allow_credentials=True」与「allow_origins=['*']」并存会被浏览器拒绝。
+_DEFAULT_CORS_PORT = env_int("PORT", 18080, minimum=1)
 _DEFAULT_ORIGIN_REGEX = (
-    r"^https?://("
-    r"localhost|127\.0\.0\.1|\[::1\]|"
-    r"10\.(\d{1,3}\.){2}\d{1,3}|"
-    r"192\.168(\.\d{1,3}){2}|"
-    r"172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}"
-    r")(:\d{1,5})?$"
+    rf"^https?://("
+    rf"localhost|127\.0\.0\.1|\[::1\]"
+    rf"):{_DEFAULT_CORS_PORT}$"
 )
 _ALLOW_ORIGIN_REGEX = (
     os.environ.get("IA_CORS_REGEX") or _DEFAULT_ORIGIN_REGEX
@@ -184,6 +185,15 @@ def _request_needs_auth(path: str) -> bool:
     return False
 
 
+def _origin_allows_loopback_bypass(request: Request) -> bool:
+    return origin_allows_loopback_bypass(
+        request.headers.get("origin"),
+        request.url.hostname,
+        request.url.scheme,
+        request.url.port,
+    )
+
+
 @app.middleware("http")
 async def lan_auth_middleware(request: Request, call_next):
     if is_auth_disabled():
@@ -192,7 +202,13 @@ async def lan_auth_middleware(request: Request, call_next):
     if not _request_needs_auth(path):
         return await call_next(request)
     client_host = request.client.host if request.client else None
-    if is_loopback_host(client_host):
+    if loopback_bypass_allowed(
+        client_host,
+        request.headers.get("origin"),
+        request.url.hostname,
+        request.url.scheme,
+        request.url.port,
+    ):
         return await call_next(request)
     token = extract_token_from_headers(request.headers.get("authorization"))
     if not token:

@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 import importlib
 import sys
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -24,6 +25,29 @@ def test_is_path_within_dir_rejects_same_prefix_sibling(tmp_path: Path):
     sibling_dir.mkdir()
 
     assert main_mod._is_path_within_dir(safe_dir, sibling_dir / "index.html") is False
+
+
+def _request_with_origin(origin: str | None, host: str = "127.0.0.1", port: int = 18080):
+    return SimpleNamespace(
+        headers=({"origin": origin} if origin else {}),
+        url=SimpleNamespace(scheme="http", hostname=host, port=port),
+    )
+
+
+def test_loopback_bypass_allows_non_browser_requests():
+    assert main_mod._origin_allows_loopback_bypass(_request_with_origin(None)) is True
+
+
+def test_loopback_bypass_rejects_cross_origin_browser_requests():
+    req = _request_with_origin("http://localhost:5173")
+
+    assert main_mod._origin_allows_loopback_bypass(req) is False
+
+
+def test_loopback_bypass_allows_same_port_loopback_origin():
+    req = _request_with_origin("http://localhost:18080")
+
+    assert main_mod._origin_allows_loopback_bypass(req) is True
 
 
 def test_api_start_rejects_non_integer_device_id():

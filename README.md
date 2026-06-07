@@ -211,6 +211,11 @@ cd frontend && npm test
 python -m pytest backend/tests -q
 ```
 
+开发模式提示：默认开启 LAN 鉴权，`npm run dev` 的 Vite 代理会带上
+`http://localhost:5173` Origin，后端会按跨端口请求处理。若只在本机开发，
+可以临时设置 `IA_AUTH_DISABLE=1` 启动后端；或先通过正式 `start.py` 同源页面
+获取带 token 的访问地址。
+
 ## README 素材更新
 
 ```bash

@@ -93,6 +93,41 @@ def test_api_session_uses_snapshot_shape():
     assert payload['qa_pairs'][0]['model_name'] == 'demo'
 
 
+class _AuthFakeWS:
+    client = SimpleNamespace(host="127.0.0.1")
+
+    def __init__(
+        self,
+        *,
+        origin: str | None,
+        token: str = "",
+        host: str = "127.0.0.1",
+        port: int = 18080,
+    ):
+        self.headers = {"origin": origin} if origin else {}
+        self.query_params = {"token": token} if token else {}
+        self.url = SimpleNamespace(scheme="ws", hostname=host, port=port)
+
+
+def test_websocket_loopback_rejects_cross_origin_without_token():
+    ws = _AuthFakeWS(origin="http://localhost:5173")
+
+    assert ws_mod._ws_authorized(ws) is False
+
+
+def test_websocket_loopback_allows_same_origin_without_token():
+    ws = _AuthFakeWS(origin="http://localhost:18080")
+
+    assert ws_mod._ws_authorized(ws) is True
+
+
+def test_websocket_loopback_cross_origin_allows_valid_token(monkeypatch: pytest.MonkeyPatch):
+    ws = _AuthFakeWS(origin="http://localhost:5173", token="valid-token")
+    monkeypatch.setattr(ws_mod, "verify_token", lambda token: token == "valid-token")
+
+    assert ws_mod._ws_authorized(ws) is True
+
+
 def test_websocket_init_uses_session_snapshot(monkeypatch: pytest.MonkeyPatch):
     session = session_mod.reset_session()
     session.is_recording = True

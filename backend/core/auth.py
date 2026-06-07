@@ -14,6 +14,7 @@ import ipaddress
 import os
 import secrets
 from typing import Optional
+from urllib.parse import urlparse
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
@@ -64,6 +65,49 @@ def is_loopback_host(host: Optional[str]) -> bool:
         return ipaddress.ip_address(h).is_loopback
     except ValueError:
         return False
+
+
+def _default_port_for_scheme(scheme: Optional[str]) -> int:
+    return 443 if (scheme or "").lower() in ("https", "wss") else 80
+
+
+def origin_allows_loopback_bypass(
+    origin: Optional[str],
+    request_host: Optional[str],
+    request_scheme: str = "http",
+    request_port: Optional[int] = None,
+) -> bool:
+    """Loopback auth bypass is only safe for non-browser or same-origin requests."""
+    if not origin:
+        return True
+    try:
+        parsed = urlparse(origin)
+        origin_port = parsed.port or _default_port_for_scheme(parsed.scheme)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    if not is_loopback_host(parsed.hostname):
+        return False
+    if not is_loopback_host(request_host):
+        return False
+    effective_request_port = request_port or _default_port_for_scheme(request_scheme)
+    return origin_port == effective_request_port
+
+
+def loopback_bypass_allowed(
+    client_host: Optional[str],
+    origin: Optional[str],
+    request_host: Optional[str],
+    request_scheme: str = "http",
+    request_port: Optional[int] = None,
+) -> bool:
+    return is_loopback_host(client_host) and origin_allows_loopback_bypass(
+        origin,
+        request_host,
+        request_scheme,
+        request_port,
+    )
 
 
 def verify_token(candidate: Optional[str]) -> bool:
