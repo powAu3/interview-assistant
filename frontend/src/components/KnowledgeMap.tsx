@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
-import { RefreshCw, Trash2, ChevronDown, ChevronUp, Target, TrendingUp, TrendingDown, Minus, Sparkles, Mic, BookOpen, Loader2 } from 'lucide-react'
+import { RefreshCw, Trash2, ChevronDown, ChevronUp, Target, TrendingUp, TrendingDown, Minus, Sparkles, Mic, BookOpen, Loader2, AlertCircle } from 'lucide-react'
 import {
   ASSIST_MERGE_GAP_SEC,
   mergeHistoryByTimeGap,
@@ -113,6 +113,12 @@ function TrendIcon({ trend }: { trend: string }) {
   return <Minus className="w-3 h-3 text-text-muted" />
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  return fallback
+}
+
 export default function KnowledgeMap() {
   const [tags, setTags] = useState<TagSummary[]>([])
   /** 接口返回的原始行（分页累积），合并仅用于展示 */
@@ -122,6 +128,7 @@ export default function KnowledgeMap() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [firstLoaded, setFirstLoaded] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [genLoading, setGenLoading] = useState(false)
   const [inputMonitorStatus, setInputMonitorStatus] = useState<InputMonitorStatus | null>(null)
   const [inputMonitorError, setInputMonitorError] = useState<string | null>(null)
@@ -155,6 +162,7 @@ export default function KnowledgeMap() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const [sumRes, histRes] = await Promise.all([
         api.knowledgeSummary(),
@@ -164,7 +172,11 @@ export default function KnowledgeMap() {
       setRawHistory(histRes.records || [])
       setHistoryTotal(histRes.total || 0)
       setHistoryPage(1)
-    } catch {}
+    } catch (e) {
+      const message = getErrorMessage(e, '加载能力分析失败')
+      setLoadError(message)
+      useInterviewStore.getState().setToastMessage(message)
+    }
     setLoading(false)
     setFirstLoaded(true)
   }, [])
@@ -193,43 +205,72 @@ export default function KnowledgeMap() {
 
   const loadMoreHistory = async () => {
     const next = historyPage + 1
+    setLoadError(null)
     try {
       const res = await api.knowledgeHistory(next, 20)
       setRawHistory((prev) => [...prev, ...(res.records || [])])
       setHistoryPage(next)
-    } catch {}
+    } catch (e) {
+      const message = getErrorMessage(e, '加载更多历史失败')
+      setLoadError(message)
+      useInterviewStore.getState().setToastMessage(message)
+    }
   }
 
   const handleReset = async () => {
     if (!confirm('确定要清空所有知识记录吗？清空后不可恢复。')) return
-    await api.knowledgeReset()
-    loadData()
+    try {
+      await api.knowledgeReset()
+      loadData()
+    } catch (e) {
+      const message = getErrorMessage(e, '清空能力记录失败')
+      setLoadError(message)
+      useInterviewStore.getState().setToastMessage(message)
+    }
   }
 
   const handleGenerateReview = async () => {
     setGenLoading(true)
     try {
-      const weakTags = tags
+      const scoredWeakTags = tags
         .filter(t => t.avg_score !== null)
         .sort((a, b) => (a.avg_score ?? 10) - (b.avg_score ?? 10))
         .slice(0, 3)
         .map(t => t.tag)
+      const fallbackFrequentTags = tags
+        .filter(t => t.avg_score === null)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3)
+        .map(t => t.tag)
+      const reviewTags = scoredWeakTags.length > 0 ? scoredWeakTags : fallbackFrequentTags
 
-      if (weakTags.length === 0) {
-        useInterviewStore.getState().setToastMessage('暂无薄弱知识点，多做几道题再来')
+      if (reviewTags.length === 0) {
+        useInterviewStore.getState().setToastMessage('暂无可复习知识点，多做几道题再来')
         setGenLoading(false)
         return
       }
 
-      const text = `请针对以下薄弱知识点出 3 道面试题：${weakTags.join('、')}`
+      const text = scoredWeakTags.length > 0
+        ? `请针对以下薄弱知识点出 3 道面试题：${reviewTags.join('、')}`
+        : `请针对以下高频但尚未评分的知识点出 3 道面试题，并给出评分要点：${reviewTags.join('、')}`
       await api.ask(text)
-    } catch {}
+    } catch (e) {
+      useInterviewStore.getState().setToastMessage(getErrorMessage(e, '生成复习题失败'))
+    }
     setGenLoading(false)
   }
 
   const weakTags = tags
     .filter(t => t.avg_score !== null)
     .sort((a, b) => (a.avg_score ?? 10) - (b.avg_score ?? 10))
+  const unscoredTags = tags
+    .filter(t => t.avg_score === null)
+    .sort((a, b) => b.count - a.count)
+  const scoredRecordCount = rawHistory.filter((rec) => rec.score !== null && !Number.isNaN(rec.score)).length
+  const spokenRecordCount = rawHistory.filter((rec) => rec.candidate_answer?.trim()).length
+  const loadedRecordCount = rawHistory.length
+  const scoreCoveragePct = loadedRecordCount > 0 ? Math.round((scoredRecordCount / loadedRecordCount) * 100) : 0
+  const spokenCoveragePct = loadedRecordCount > 0 ? Math.round((spokenRecordCount / loadedRecordCount) * 100) : 0
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -249,6 +290,35 @@ export default function KnowledgeMap() {
           </button>
         </div>
       </div>
+
+      {(tags.length > 0 || rawHistory.length > 0) && (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border border-bg-tertiary bg-bg-secondary px-3 py-2">
+            <p className="text-[10px] text-text-muted">画像样本</p>
+            <p className="mt-1 text-sm font-semibold text-text-primary">
+              {historyTotal || rawHistory.length}
+              <span className="ml-1 text-[10px] font-normal text-text-muted">条问答</span>
+            </p>
+            <p className="mt-0.5 text-[10px] text-text-muted">实时辅助 + 模拟练习共同沉淀</p>
+          </div>
+          <div className="rounded-xl border border-bg-tertiary bg-bg-secondary px-3 py-2">
+            <p className="text-[10px] text-text-muted">当前加载口述覆盖</p>
+            <p className="mt-1 text-sm font-semibold text-text-primary">
+              {spokenCoveragePct}%
+              <span className="ml-1 text-[10px] font-normal text-text-muted">当前页样本</span>
+            </p>
+            <p className="mt-0.5 text-[10px] text-text-muted">{spokenRecordCount}/{loadedRecordCount || 0} 条含候选人真实回答</p>
+          </div>
+          <div className="rounded-xl border border-bg-tertiary bg-bg-secondary px-3 py-2">
+            <p className="text-[10px] text-text-muted">当前加载评分覆盖</p>
+            <p className="mt-1 text-sm font-semibold text-text-primary">
+              {scoreCoveragePct}%
+              <span className="ml-1 text-[10px] font-normal text-text-muted">当前页样本</span>
+            </p>
+            <p className="mt-0.5 text-[10px] text-text-muted">{scoredRecordCount}/{loadedRecordCount || 0} 条可进入雷达图</p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-bg-secondary rounded-xl p-3 border border-bg-tertiary space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -289,16 +359,55 @@ export default function KnowledgeMap() {
               {latestCandidateTranscript || '还没有从“我的麦克风”采集到回答'}
             </p>
             <p className="text-[10px] text-text-muted truncate">
-              能力分析会结合已入库问答；实时口述先进入追问上下文，结束记录后沉淀为画像样本。
+              能力分析会结合已入库问答和候选人实际回答；未开启口述时按旧问答画像。
             </p>
           </div>
         </div>
       </div>
 
+      {loadError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-red/30 bg-accent-red/10 px-3 py-2 text-xs text-accent-red">
+          <span className="flex min-w-0 items-center gap-2">
+            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="min-w-0 break-words">能力分析数据读取失败：{loadError}</span>
+          </span>
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded-md border border-accent-red/30 px-2 py-1 font-medium hover:bg-accent-red/10 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            重试
+          </button>
+        </div>
+      )}
+
       {!firstLoaded && loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-text-muted gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-accent-blue/70" />
           <p className="text-xs">正在加载能力分析数据…</p>
+        </div>
+      ) : loadError && tags.length === 0 && rawHistory.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-4 max-w-md mx-auto text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-accent-red/25 bg-accent-red/10">
+            <AlertCircle className="h-7 w-7 text-accent-red/80" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold text-text-primary">能力数据暂时读不到</p>
+            <p className="text-xs leading-relaxed text-text-muted">
+              请检查后端连接、鉴权或本地数据库状态；修复后点击重试即可重新加载。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-accent-blue px-3 py-2 text-xs font-medium text-white shadow-sm shadow-accent-blue/20 hover:brightness-110 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            重试加载
+          </button>
         </div>
       ) : tags.length === 0 && rawHistory.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-5 max-w-md mx-auto text-center">
@@ -359,22 +468,40 @@ export default function KnowledgeMap() {
               </button>
             </div>
             <div className="space-y-2">
-              {weakTags.slice(0, 10).map((t, i) => (
-                <div key={t.tag} className="flex items-center gap-3 text-xs">
-                  <span className="w-4 text-text-muted text-right">{i + 1}</span>
-                  <span className="flex-1 text-text-primary truncate">{t.tag}</span>
-                  <div className="w-20 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${((t.avg_score ?? 0) / 10) * 100}%`,
-                        backgroundColor: (t.avg_score ?? 0) >= 7 ? '#22c55e' : (t.avg_score ?? 0) >= 4 ? '#f59e0b' : '#ef4444'
-                      }} />
+              {weakTags.length > 0 ? (
+                weakTags.slice(0, 10).map((t, i) => (
+                  <div key={t.tag} className="flex items-center gap-3 text-xs">
+                    <span className="w-4 text-text-muted text-right">{i + 1}</span>
+                    <span className="flex-1 text-text-primary truncate">{t.tag}</span>
+                    <div className="w-20 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${((t.avg_score ?? 0) / 10) * 100}%`,
+                          backgroundColor: (t.avg_score ?? 0) >= 7 ? '#22c55e' : (t.avg_score ?? 0) >= 4 ? '#f59e0b' : '#ef4444'
+                        }} />
+                    </div>
+                    <span className="w-8 text-right text-text-muted">{t.avg_score?.toFixed(1)}</span>
+                    <TrendIcon trend={t.trend} />
+                    <span className="w-8 text-right text-text-muted">{t.count}次</span>
                   </div>
-                  <span className="w-8 text-right text-text-muted">{t.avg_score?.toFixed(1)}</span>
-                  <TrendIcon trend={t.trend} />
-                  <span className="w-8 text-right text-text-muted">{t.count}次</span>
+                ))
+              ) : (
+                <div className="rounded-lg border border-bg-hover/60 bg-bg-tertiary/30 px-3 py-3">
+                  <p className="text-xs font-medium text-text-secondary">还没有评分样本</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-text-muted">
+                    实时辅助记录会先沉淀为知识点；完成模拟练习后会补充分数。现在也可以按高频知识点生成练习题。
+                  </p>
+                  {unscoredTags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {unscoredTags.slice(0, 6).map((tag) => (
+                        <span key={tag.tag} className="rounded bg-bg-primary/70 px-1.5 py-0.5 text-[10px] text-text-secondary">
+                          {tag.tag} · {tag.count}次
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -402,6 +529,11 @@ export default function KnowledgeMap() {
                         ×{rec.mergedCount}
                       </span>
                     )}
+                    {rec.candidate_answer?.trim() && (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-accent-blue/10 text-accent-blue shrink-0" title="这条画像包含候选人实际口述">
+                        含口述
+                      </span>
+                    )}
                     <span className="flex-1 text-xs text-text-primary truncate">{rec.question}</span>
                     {rec.score !== null && <span className="text-[10px] text-accent-amber">{rec.score}/10</span>}
                     <span className="text-[10px] text-text-muted">
@@ -415,8 +547,16 @@ export default function KnowledgeMap() {
                         <p className="text-[10px] text-text-muted mb-1">问题（合并展示）</p>
                         <p className="text-xs text-text-primary whitespace-pre-wrap leading-relaxed">{rec.question || '(无)'}</p>
                       </div>
+                      {rec.candidate_answer?.trim() && (
+                        <div>
+                          <p className="text-[10px] text-text-muted mb-1">候选人实际回答{rec.mergedCount != null && rec.mergedCount > 1 ? '（多段按顺序拼接）' : ''}</p>
+                          <p className="text-xs text-text-primary whitespace-pre-wrap leading-relaxed max-h-[min(50vh,18rem)] overflow-y-auto">
+                            {rec.candidate_answer}
+                          </p>
+                        </div>
+                      )}
                       <div>
-                        <p className="text-[10px] text-text-muted mb-1">回答{rec.mergedCount != null && rec.mergedCount > 1 ? '（多段按顺序拼接）' : ''}</p>
+                        <p className="text-[10px] text-text-muted mb-1">助手参考答案{rec.mergedCount != null && rec.mergedCount > 1 ? '（多段按顺序拼接）' : ''}</p>
                         <p className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[min(50vh,24rem)] overflow-y-auto">
                           {rec.answer?.trim() ? rec.answer : '(无回答)'}
                         </p>

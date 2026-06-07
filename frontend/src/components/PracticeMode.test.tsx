@@ -387,6 +387,41 @@ describe('PracticeMode', () => {
     })
   })
 
+  it('uses the stop-recording response as a final transcript fallback', async () => {
+    apiMock.practiceRecord.mockResolvedValue({ ok: true, text: '最后补上的转写' })
+    useInterviewStore.setState({
+      practiceStatus: 'awaiting_answer',
+      practiceRecording: true,
+      practiceAnswerDraft: '前半段回答',
+      practiceSession: createPracticeSession(),
+    } as any)
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }))
+
+    await waitFor(() => {
+      expect(apiMock.practiceRecord).toHaveBeenCalledWith('stop')
+      expect(useInterviewStore.getState().practiceAnswerDraft).toBe('前半段回答 最后补上的转写')
+    })
+  })
+
+  it('does not duplicate text when the stop-recording response repeats websocket transcript', async () => {
+    apiMock.practiceRecord.mockResolvedValue({ ok: true, text: '前半段回答' })
+    useInterviewStore.setState({
+      practiceStatus: 'awaiting_answer',
+      practiceRecording: true,
+      practiceAnswerDraft: '前半段回答',
+      practiceSession: createPracticeSession(),
+    } as any)
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }))
+
+    await waitFor(() => {
+      expect(useInterviewStore.getState().practiceAnswerDraft).toBe('前半段回答')
+    })
+  })
+
   it('uses a one-shot watchdog refresh when submit websocket hydration does not arrive', async () => {
     apiMock.practiceSubmit.mockResolvedValue({ ok: true })
     apiMock.practiceStatus.mockResolvedValue(

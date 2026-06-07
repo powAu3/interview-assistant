@@ -5,6 +5,7 @@ export interface HistoryRecord {
   session_type: string
   question: string
   answer: string
+  candidate_answer?: string
   score: number | null
   tags: string[]
   created_at: number
@@ -55,6 +56,7 @@ export function mergeHistoryByTimeGap(records: HistoryRecord[]): DisplayHistoryR
         return needSpace ? `${acc} ${q}` : `${acc}${q}`
       }, '') || g[g.length - 1].question
     const answers = g.map((r) => (r.answer || '').trim()).filter(Boolean)
+    const candidateAnswers = g.map((r) => (r.candidate_answer || '').trim()).filter(Boolean)
     const tagSet = new Set<string>()
     g.forEach((r) => r.tags?.forEach((t) => tagSet.add(t)))
     const scores = g.map((r) => r.score).filter((s): s is number => s != null && !Number.isNaN(s))
@@ -65,6 +67,7 @@ export function mergeHistoryByTimeGap(records: HistoryRecord[]): DisplayHistoryR
       session_type: g[0].session_type,
       question: qJoined,
       answer: answers.join('\n\n———\n\n'),
+      candidate_answer: candidateAnswers.join('\n\n———\n\n'),
       score: avgScore,
       tags: [...tagSet],
       created_at: g[g.length - 1].created_at,
