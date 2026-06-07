@@ -288,6 +288,8 @@ export const api = {
     detail?: Record<string, string>
     latency?: Record<string, number>
   }>('/api/models/health'),
+  listRemoteModels: (payload: { api_base_url: string; api_key: string }) =>
+    request<{ models: { id: string; owned_by?: string | null }[] }>('/api/models/list', { method: 'POST', body: JSON.stringify(payload) }),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
   probeModelCapabilities: (index: number) =>
     request<{
@@ -340,7 +342,7 @@ export const api = {
   practiceFinish: () => request('/api/practice/finish', { method: 'POST' }),
   practiceReset: () => request('/api/practice/reset', { method: 'POST' }),
   practiceRecord: (action: 'start' | 'stop', device_id?: number) =>
-    request('/api/practice/record', { method: 'POST', body: JSON.stringify({ action, device_id }) }),
+    request<{ ok: boolean; text?: string }>('/api/practice/record', { method: 'POST', body: JSON.stringify({ action, device_id }) }),
   practiceStatus: () => request('/api/practice/status'),
 
   // Job tracker (desktop / local SQLite)

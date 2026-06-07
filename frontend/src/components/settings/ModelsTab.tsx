@@ -20,7 +20,15 @@ import {
 import { useInterviewStore, type ModelFullInfo } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
-import { Field, GradientCard, StatusBadge } from './shared'
+import {
+  Field,
+  GradientCard,
+  SaveStateBadge,
+  StatusBadge,
+  useDirtySnapshot,
+  useSettingsDirtyRegistration,
+  type SaveState,
+} from './shared'
 
 const EMPTY_MODEL: ModelFullInfo = {
   name: '',
@@ -55,12 +63,97 @@ type ModelProbeResult = {
   think_disabled_detail?: string
 }
 
+type RemoteModelListState = {
+  loading: boolean
+  models: RemoteModel[]
+  error: string | null
+  loaded: boolean
+  requestKey?: string
+}
+
+type RemoteModel = {
+  id: string
+  owned_by?: string | null
+}
+
+const EMPTY_REMOTE_MODEL_LIST: RemoteModelListState = {
+  loading: false,
+  models: [],
+  error: null,
+  loaded: false,
+}
+
 function toModelRow(model: ModelFullInfo, index: number): ModelRow {
   return {
     id: `${index}:${model.name}:${model.model}:${model.api_base_url}`,
     originalIndex: index,
     model,
   }
+}
+
+function buildModelPayloadFromRows(rows: ModelRow[]) {
+  return rows.map(({ model: m }) => ({
+    name: m.name.trim(),
+    api_base_url: m.api_base_url.trim() || 'https://api.openai.com/v1',
+    api_key: m.api_key,
+    model: m.model.trim() || 'gpt-4o-mini',
+    supports_think: m.supports_think,
+    supports_vision: m.supports_vision,
+    enabled: m.enabled,
+    think_enabled_params: m.think_enabled_params ?? {},
+    think_disabled_params: m.think_disabled_params ?? {},
+  }))
+}
+
+function resolveActiveIndexForRows(rows: ModelRow[], activeOriginalIndex = 0) {
+  const nextActiveIndex = rows.findIndex((row) => row.originalIndex === activeOriginalIndex)
+  return nextActiveIndex >= 0 ? nextActiveIndex : 0
+}
+
+function buildQueueSnapshot(rows: ModelRow[], maxParallel: number, activeOriginalIndex = 0) {
+  return {
+    models: buildModelPayloadFromRows(rows),
+    active_model: resolveActiveIndexForRows(rows, activeOriginalIndex),
+    max_parallel_answers: maxParallel,
+  }
+}
+
+function groupRemoteModels(models: RemoteModel[]) {
+  const groups = new Map<string, RemoteModel[]>()
+  models.forEach((model) => {
+    const owner = model.owned_by?.trim() || '其他'
+    groups.set(owner, [...(groups.get(owner) ?? []), model])
+  })
+  return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b))
+}
+
+function remoteModelRequestKey(model: ModelFullInfo) {
+  return `${(model.api_base_url || '').trim()}\n${model.api_key || ''}`
+}
+
+function formatRemoteModelError(error: unknown): string {
+  const raw = error instanceof Error && error.message
+    ? error.message
+    : typeof error === 'string' && error.trim()
+      ? error
+      : '获取模型列表失败'
+  const lower = raw.toLowerCase()
+  if (lower.includes('request blocked') || lower.includes('blocked') || raw.includes('请求被阻止')) {
+    return `请求被上游拦截：${raw}`
+  }
+  if (raw.includes('401') || raw.includes('403') || lower.includes('invalid token') || lower.includes('unauthorized')) {
+    return `认证失败：请检查 API Key。${raw}`
+  }
+  if (raw.includes('HTTP 404') || raw.includes('HTTP 405') || lower.includes('all candidates failed') || raw.includes('未找到可用')) {
+    return `模型列表接口不可用：当前 Base URL 推导出的 /models 地址不可用，可手动填写 Model ID。${raw}`
+  }
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return `获取模型列表超时：${raw}`
+  }
+  if (lower.includes('parse') || raw.includes('不是 JSON')) {
+    return `模型列表响应格式不兼容：${raw}`
+  }
+  return raw
 }
 
 export default function ModelsTab() {
@@ -76,12 +169,15 @@ export default function ModelsTab() {
   const [testingIdx, setTestingIdx] = useState<number | null>(null)
   const [testResults, setTestResults] = useState<Record<number, 'ok' | 'error' | 'checking'>>({})
   const [probeResults, setProbeResults] = useState<Record<number, ModelProbeResult>>({})
+  const [remoteModelLists, setRemoteModelLists] = useState<Record<string, RemoteModelListState>>({})
   const [maxP, setMaxP] = useState(2)
   const [healthChecking, setHealthChecking] = useState(false)
   const [dragFrom, setDragFrom] = useState<number | null>(null)
   const rowRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const nameInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const pendingFocusIdx = useRef<number | null>(null)
+  const modelRowsRef = useRef<ModelRow[]>([])
+  const remoteModelRequestVersions = useRef<Record<string, number>>({})
 
   const [llmForm, setLlmForm] = useState({
     temperature: 0.5,
@@ -90,6 +186,26 @@ export default function ModelsTab() {
     think_effort: 'off',
   })
   const [llmSaving, setLlmSaving] = useState(false)
+  const [queueSaveState, setQueueSaveState] = useState<SaveState>('idle')
+  const [queueSaveError, setQueueSaveError] = useState<string | null>(null)
+  const [llmSaveState, setLlmSaveState] = useState<SaveState>('idle')
+  const [llmSaveError, setLlmSaveError] = useState<string | null>(null)
+  const queueSnapshot = buildQueueSnapshot(modelRows, maxP, config?.active_model ?? 0)
+  const {
+    dirty: queueDirty,
+    markSaved: markQueueSaved,
+    resetBaseline: resetQueueBaseline,
+  } = useDirtySnapshot(queueSnapshot)
+  const {
+    dirty: llmDirty,
+    markSaved: markLlmSaved,
+    resetBaseline: resetLlmBaseline,
+  } = useDirtySnapshot(llmForm)
+  useSettingsDirtyRegistration('models', queueDirty || llmDirty)
+
+  useEffect(() => {
+    modelRowsRef.current = modelRows
+  }, [modelRows])
 
   const syncHealthFromServer = useCallback(async () => {
     try {
@@ -110,7 +226,12 @@ export default function ModelsTab() {
     setLoading(true)
     try {
       const { models: full } = await api.getModelsFull()
-      setModelRows(full.map(toModelRow))
+      const rows = full.map(toModelRow)
+      const currentConfig = useInterviewStore.getState().config
+      const nextMaxP = Math.min(8, Math.max(1, currentConfig?.max_parallel_answers ?? 2))
+      setModelRows(rows)
+      setMaxP(nextMaxP)
+      resetQueueBaseline(buildQueueSnapshot(rows, nextMaxP, currentConfig?.active_model ?? 0))
       setTestResults({})
       setProbeResults({})
       if (full.length === 0) setExpandedIdx(0)
@@ -119,7 +240,7 @@ export default function ModelsTab() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [resetQueueBaseline])
 
   useEffect(() => {
     void loadModels()
@@ -127,15 +248,31 @@ export default function ModelsTab() {
 
   useEffect(() => {
     if (!config?.models?.length) return
-    setMaxP(Math.min(8, Math.max(1, config.max_parallel_answers ?? 2)))
-    setLlmForm({
+    const nextLlmForm = {
       temperature: config.temperature,
       max_tokens: config.max_tokens,
       think_mode: config.think_mode ?? false,
       think_effort: config.think_effort ?? 'off',
-    })
+    }
+    const nextMaxP = Math.min(8, Math.max(1, config.max_parallel_answers ?? 2))
+    if (!queueDirty) {
+      setMaxP(nextMaxP)
+      resetQueueBaseline(buildQueueSnapshot(modelRows, nextMaxP, config.active_model ?? 0))
+    }
+    if (!llmDirty) {
+      setLlmForm(nextLlmForm)
+      resetLlmBaseline(nextLlmForm)
+    }
     void syncHealthFromServer()
-  }, [config, syncHealthFromServer])
+  }, [
+    config,
+    llmDirty,
+    modelRows,
+    queueDirty,
+    resetLlmBaseline,
+    resetQueueBaseline,
+    syncHealthFromServer,
+  ])
 
   useEffect(() => {
     const idx = expandedIdx
@@ -148,10 +285,113 @@ export default function ModelsTab() {
     return () => window.clearTimeout(timer)
   }, [expandedIdx, modelRows.length])
 
+  const clearRemoteModelList = (rowId: string) => {
+    remoteModelRequestVersions.current[rowId] = (remoteModelRequestVersions.current[rowId] ?? 0) + 1
+    setRemoteModelLists((prev) => {
+      if (!(rowId in prev)) return prev
+      const next = { ...prev }
+      delete next[rowId]
+      return next
+    })
+  }
+
+  const clearModelProbeState = (idx: number) => {
+    setTestResults((prev) => {
+      if (!(idx in prev)) return prev
+      const next = { ...prev }
+      delete next[idx]
+      return next
+    })
+    setProbeResults((prev) => {
+      if (!(idx in prev)) return prev
+      const next = { ...prev }
+      delete next[idx]
+      return next
+    })
+  }
+
   const updateModel = (idx: number, patch: Partial<ModelFullInfo>) => {
+    const rowId = modelRows[idx]?.id
+    if (rowId && ('api_base_url' in patch || 'api_key' in patch)) {
+      clearRemoteModelList(rowId)
+    }
+    if ('model' in patch) {
+      clearModelProbeState(idx)
+    }
     setModelRows((prev) =>
       prev.map((row, i) => (i === idx ? { ...row, model: { ...row.model, ...patch } } : row)),
     )
+  }
+
+  const handleFetchRemoteModels = async (idx: number) => {
+    const row = modelRows[idx]
+    if (!row) return
+    const rowId = row.id
+    const requestKey = remoteModelRequestKey(row.model)
+    const requestVersion = (remoteModelRequestVersions.current[rowId] ?? 0) + 1
+    remoteModelRequestVersions.current[rowId] = requestVersion
+    const requestStillCurrent = () => {
+      const currentRow = modelRowsRef.current[idx]
+      return !!currentRow
+        && currentRow.id === rowId
+        && remoteModelRequestVersions.current[rowId] === requestVersion
+        && remoteModelRequestKey(currentRow.model) === requestKey
+    }
+    setRemoteModelLists((prev) => ({
+      ...prev,
+      [rowId]: { ...(prev[rowId] ?? EMPTY_REMOTE_MODEL_LIST), loading: true, error: null, loaded: false, requestKey },
+    }))
+    try {
+      const result = await api.listRemoteModels({
+        api_base_url: row.model.api_base_url,
+        api_key: row.model.api_key,
+      })
+      setRemoteModelLists((prev) => {
+        const currentRow = modelRowsRef.current[idx]
+        if (!currentRow || currentRow.id !== rowId || remoteModelRequestKey(currentRow.model) !== requestKey) {
+          return prev
+        }
+        return {
+          ...prev,
+          [rowId]: {
+            loading: false,
+            models: result.models ?? [],
+            error: null,
+            loaded: true,
+            requestKey,
+          },
+        }
+      })
+      if (!result.models?.length && requestStillCurrent()) {
+        useInterviewStore.getState().setToastMessage('接口未返回可选模型')
+      }
+    } catch (e: any) {
+      const message = formatRemoteModelError(e)
+      setRemoteModelLists((prev) => {
+        const currentRow = modelRowsRef.current[idx]
+        if (!currentRow || currentRow.id !== rowId || remoteModelRequestKey(currentRow.model) !== requestKey) {
+          return prev
+        }
+        return {
+          ...prev,
+          [rowId]: {
+            loading: false,
+            models: [],
+            error: message,
+            loaded: true,
+            requestKey,
+          },
+        }
+      })
+      if (requestStillCurrent()) {
+        useInterviewStore.getState().setToastMessage(message)
+      }
+    }
+  }
+
+  const handleSelectRemoteModel = (idx: number, modelId: string) => {
+    if (!modelId) return
+    updateModel(idx, { model: modelId, name: modelId })
   }
 
   const addModel = () => {
@@ -174,21 +414,11 @@ export default function ModelsTab() {
       return
     }
     setModelRows((prev) => prev.filter((_, i) => i !== idx))
+    if (modelRows[idx]) clearRemoteModelList(modelRows[idx].id)
     setExpandedIdx(null)
   }
 
-  const buildModelPayload = (rows = modelRows) =>
-    rows.map(({ model: m }) => ({
-      name: m.name.trim(),
-      api_base_url: m.api_base_url.trim() || 'https://api.openai.com/v1',
-      api_key: m.api_key,
-      model: m.model.trim() || 'gpt-4o-mini',
-      supports_think: m.supports_think,
-      supports_vision: m.supports_vision,
-      enabled: m.enabled,
-      think_enabled_params: m.think_enabled_params ?? {},
-      think_disabled_params: m.think_disabled_params ?? {},
-    }))
+  const buildModelPayload = (rows = modelRows) => buildModelPayloadFromRows(rows)
 
   const resolveActiveIndex = () => {
     const activeOriginalIndex = config?.active_model ?? 0
@@ -200,10 +430,15 @@ export default function ModelsTab() {
     const invalid = modelRows.find((row) => !row.model.name.trim())
     if (invalid) {
       useInterviewStore.getState().setToastMessage('模型名称不能为空')
-      return false
+      setQueueSaveState('error')
+      setQueueSaveError('模型名称不能为空')
+      return { ok: false as const }
     }
     setSaving(true)
+    setQueueSaveState('saving')
+    setQueueSaveError(null)
     try {
+      const savedActiveIndex = resolveActiveIndex()
       const savedRows = modelRows.map((row, index) => ({
         ...row,
         id: `${index}:${row.model.name}:${row.model.model}:${row.model.api_base_url}`,
@@ -215,19 +450,28 @@ export default function ModelsTab() {
       }))
       await updateConfigAndRefresh({
         models: buildModelPayload(savedRows),
-        active_model: resolveActiveIndex(),
+        active_model: savedActiveIndex,
         max_parallel_answers: maxP,
       })
       setModelRows(savedRows)
+      markQueueSaved(buildQueueSnapshot(savedRows, maxP, savedActiveIndex))
+      setQueueSaveState('saved')
       if (collapse) setExpandedIdx(null)
       setProbeResults({})
       if (!quiet) {
         useInterviewStore.getState().setToastMessage('模型队列已保存')
       }
-      return true
+      return {
+        ok: true as const,
+        rows: savedRows,
+        activeModelIndex: savedActiveIndex,
+      }
     } catch (e: any) {
-      useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
-      return false
+      const message = e?.message ?? '保存失败'
+      setQueueSaveError(message)
+      setQueueSaveState('error')
+      useInterviewStore.getState().setToastMessage(message)
+      return { ok: false as const }
     } finally {
       setSaving(false)
     }
@@ -241,24 +485,22 @@ export default function ModelsTab() {
     setTestingIdx(idx)
     setTestResults((prev) => ({ ...prev, [idx]: 'checking' }))
     try {
-      const saved = await handleSaveModels(true, false)
-      if (!saved) {
+      const saveResult = await handleSaveModels(true, false)
+      if (!saveResult.ok) {
         setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
         useInterviewStore.getState().setModelHealth(idx, 'error', '请先修复模型配置保存失败的问题')
         setExpandedIdx(idx)
         return
       }
+      const baseRows = saveResult.rows
+      const activeModelIndex = saveResult.activeModelIndex
       const result = await api.probeModelCapabilities(idx)
       setProbeResults((prev) => ({ ...prev, [idx]: result }))
       const status = result.ok ? 'ok' : 'error'
       setTestResults((prev) => ({ ...prev, [idx]: status }))
       useInterviewStore.getState().setModelHealth(idx, status, result.detail, result.latency_ms)
-      const originalIndex = modelRows[idx]?.originalIndex
-      if (originalIndex !== undefined && originalIndex !== idx) {
-        useInterviewStore.getState().setModelHealth(originalIndex, status, result.detail, result.latency_ms)
-      }
       if (result.ok) {
-        const nextRows = modelRows.map((row, i) =>
+        const nextRows = baseRows.map((row, i) =>
           i === idx
             ? {
                 ...row,
@@ -275,9 +517,11 @@ export default function ModelsTab() {
         setModelRows(nextRows)
         await updateConfigAndRefresh({
           models: buildModelPayload(nextRows),
-          active_model: resolveActiveIndex(),
+          active_model: activeModelIndex,
           max_parallel_answers: maxP,
         })
+        markQueueSaved(buildQueueSnapshot(nextRows, maxP, activeModelIndex))
+        setQueueSaveState('saved')
         const visionLabel = result.supports_vision ? '识图支持' : '识图未检测到'
         const thinkLabel = result.supports_think ? `Think ${result.think_style || '支持'}` : 'Think 未检测到'
         useInterviewStore.getState().setToastMessage(`连接可用，已自动更新：${visionLabel} · ${thinkLabel}`)
@@ -299,8 +543,8 @@ export default function ModelsTab() {
   const runHealthCheck = async () => {
     setHealthChecking(true)
     try {
-      const saved = await handleSaveModels(true)
-      if (!saved) return
+      const saveResult = await handleSaveModels(true)
+      if (!saveResult.ok) return
       const models = useInterviewStore.getState().config?.models ?? []
       const enabledIndexes = models
         .map((model, index) => ({ model, index }))
@@ -375,11 +619,18 @@ export default function ModelsTab() {
 
   const handleSaveLlm = async () => {
     setLlmSaving(true)
+    setLlmSaveState('saving')
+    setLlmSaveError(null)
     try {
       await updateConfigAndRefresh(llmForm)
+      markLlmSaved(llmForm)
+      setLlmSaveState('saved')
       useInterviewStore.getState().setToastMessage('LLM 参数已保存')
     } catch (e: any) {
-      useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
+      const message = e?.message ?? '保存失败'
+      setLlmSaveError(message)
+      setLlmSaveState('error')
+      useInterviewStore.getState().setToastMessage(message)
     } finally {
       setLlmSaving(false)
     }
@@ -392,6 +643,20 @@ export default function ModelsTab() {
   const enabledCount = modelRows.filter((row) => row.model.enabled !== false).length
   const parallelMax = Math.max(1, Math.min(8, Math.max(enabledCount, modelRows.length)))
   const parallelOptions = Array.from({ length: parallelMax }, (_, i) => i + 1)
+  const effectiveQueueSaveState: SaveState = queueSaveState === 'saving' || queueSaveState === 'error'
+    ? queueSaveState
+    : queueDirty
+      ? 'dirty'
+      : queueSaveState === 'saved'
+        ? 'saved'
+        : 'idle'
+  const effectiveLlmSaveState: SaveState = llmSaveState === 'saving' || llmSaveState === 'error'
+    ? llmSaveState
+    : llmDirty
+      ? 'dirty'
+      : llmSaveState === 'saved'
+        ? 'saved'
+        : 'idle'
 
   return (
     <div className="p-5 space-y-5 pb-8">
@@ -408,6 +673,7 @@ export default function ModelsTab() {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              <SaveStateBadge mode="explicit" state={effectiveQueueSaveState} error={queueSaveError} />
               <button
                 type="button"
                 onClick={runHealthCheck}
@@ -477,6 +743,19 @@ export default function ModelsTab() {
               const probeTitle = probe
                 ? `识图：${probe.vision_detail || (probe.supports_vision ? '支持' : '未检测到')}\nThink 开启：${probe.think_detail || (probe.supports_think ? '支持' : '未检测到')}\nThink 关闭：${probe.think_disabled_detail || '未检测'}\n开启参数：${JSON.stringify(probe.think_params ?? {})}\n关闭参数：${JSON.stringify(probe.think_disabled_params ?? {})}`
                 : undefined
+              const remoteList = remoteModelLists[row.id] ?? EMPTY_REMOTE_MODEL_LIST
+              const remoteModelGroups = groupRemoteModels(remoteList.models)
+              const thinkDisabledParams = probe?.think_disabled_params ?? {}
+              const hasThinkDisabledParams = Object.keys(thinkDisabledParams).length > 0
+              const thinkDisableConfirmed = hasThinkDisabledParams || Boolean(probe?.think_disabled_detail?.includes('无需额外参数'))
+              const needsThinkDisableProbe = probe?.supports_think && !thinkDisableConfirmed
+              const thinkDisabledLabel = hasThinkDisabledParams
+                ? `关 ${JSON.stringify(thinkDisabledParams)}`
+                : needsThinkDisableProbe
+                  ? '关 未确认'
+                  : probe?.think_disabled_detail?.includes('无需额外参数')
+                    ? '关 无需额外参数'
+                    : `关 ${JSON.stringify(thinkDisabledParams)}`
 
               return (
                 <div
@@ -607,6 +886,49 @@ export default function ModelsTab() {
                             className="input-field"
                           />
                         </Field>
+                        <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/30 px-3 py-3 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleFetchRemoteModels(idx)}
+                              disabled={remoteList.loading}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-accent-blue/30 bg-accent-blue/15 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/25 disabled:opacity-60"
+                            >
+                              {remoteList.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                              {remoteList.loading ? '获取中…' : '获取模型'}
+                            </button>
+                            <span className="text-[10px] leading-relaxed text-text-muted">
+                              从当前 Base URL 和 API Key 读取可选模型，不会自动保存配置。
+                            </span>
+                          </div>
+                          {remoteList.models.length > 0 && (
+                            <select
+                              value=""
+                              onChange={(event) => handleSelectRemoteModel(idx, event.target.value)}
+                              className="input-field"
+                              aria-label="选择远端模型"
+                            >
+                              <option value="">选择模型</option>
+                              {remoteModelGroups.map(([owner, models]) => (
+                                <optgroup key={owner} label={owner}>
+                                  {models.map((model) => (
+                                    <option key={model.id} value={model.id}>
+                                      {model.id}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ))}
+                            </select>
+                          )}
+                          {remoteList.loaded && remoteList.models.length === 0 && !remoteList.error && (
+                            <p className="text-[11px] text-text-muted">接口未返回可选模型，仍可手动填写 Model ID。</p>
+                          )}
+                          {remoteList.error && (
+                            <p role="alert" className="text-[11px] leading-relaxed text-accent-red">
+                              {remoteList.error}
+                            </p>
+                          )}
+                        </div>
                         <div className="flex flex-wrap items-center gap-4 pt-1">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
@@ -652,9 +974,20 @@ export default function ModelsTab() {
                                 开 {JSON.stringify(probe.think_params)}
                               </span>
                             )}
-                            <span className="max-w-full truncate font-mono text-[10px] text-text-muted">
-                              关 {JSON.stringify(probe.think_disabled_params ?? {})}
+                            <span className={`max-w-full truncate font-mono text-[10px] ${needsThinkDisableProbe ? 'text-amber-300' : 'text-text-muted'}`}>
+                              {thinkDisabledLabel}
                             </span>
+                            {needsThinkDisableProbe && (
+                              <button
+                                type="button"
+                                onClick={() => handleTestModel(idx)}
+                                disabled={testingIdx !== null || !on}
+                                className="rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 hover:bg-amber-400/15 disabled:opacity-50"
+                                title="重新保存配置并探测 Think 关闭参数"
+                              >
+                                重新探测
+                              </button>
+                            )}
                           </div>
                         )}
                         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -679,6 +1012,9 @@ export default function ModelsTab() {
                             </button>
                           </div>
                           <div className="flex items-center gap-2">
+                            <span className="max-w-[180px] text-[10px] leading-relaxed text-text-muted">
+                              测试会先保存当前模型配置
+                            </span>
                             <button
                               type="button"
                               onClick={() => handleTestModel(idx)}
@@ -687,7 +1023,7 @@ export default function ModelsTab() {
                               title={on ? '测试该模型连接' : '请先启用该模型'}
                             >
                               {testingIdx === idx ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                              {testingIdx === idx ? '测试中…' : '测试连接'}
+                              {testingIdx === idx ? '测试中…' : '保存并测试'}
                             </button>
                             <button
                               type="button"
@@ -725,10 +1061,13 @@ export default function ModelsTab() {
       </GradientCard>
 
       <GradientCard className="p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4 text-accent-blue" />
-          生成参数
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-accent-blue" />
+            生成参数
+          </h3>
+          <SaveStateBadge mode="explicit" state={effectiveLlmSaveState} error={llmSaveError} />
+        </div>
         <label className="flex items-center justify-between gap-3 cursor-pointer rounded-xl border border-bg-hover bg-bg-tertiary/30 px-3 py-3">
           <div>
             <span className="text-xs font-medium text-text-primary">Think（全局）</span>

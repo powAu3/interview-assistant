@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import SpeechTab from './SpeechTab'
+import { updateConfigAndRefresh } from '@/lib/configSync'
 import { useInterviewStore } from '@/stores/configStore'
 
 const apiMock = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ vi.mock('@/lib/practiceTts', () => ({
 
 describe('SpeechTab', () => {
   beforeEach(() => {
+    vi.mocked(updateConfigAndRefresh).mockClear()
     apiMock.sttTest.mockResolvedValue({ ok: true, text: 'demo' })
     apiMock.practiceTts.mockResolvedValue({ audio_base64: '', content_type: 'audio/mpeg', speaker: 'demo' })
 
@@ -107,5 +109,57 @@ describe('SpeechTab', () => {
     expect(screen.getByText('边听边写')).toBeInTheDocument()
     expect(screen.getByText('兜底等最后一句 (ms)')).toBeInTheDocument()
     expect(screen.getByDisplayValue('200')).toBeInTheDocument()
+  })
+
+  it('marks speech settings dirty and clears after saving', async () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+      },
+    }) as any)
+    render(<SpeechTab />)
+
+    fireEvent.change(screen.getByDisplayValue('base'), { target: { value: 'tiny' } })
+
+    expect(screen.getAllByText('有未保存更改').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('保存语音配置'))
+
+    await waitFor(() => {
+      expect(updateConfigAndRefresh).toHaveBeenCalled()
+    })
+    expect(await screen.findAllByText('已保存')).not.toHaveLength(0)
+  })
+
+  it('keeps unsaved speech edits when config refreshes from another section', () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+      },
+    }) as any)
+    render(<SpeechTab />)
+
+    fireEvent.change(screen.getByDisplayValue('base'), { target: { value: 'tiny' } })
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        max_parallel_answers: 3,
+      },
+    }) as any)
+
+    expect(screen.getByDisplayValue('tiny')).toBeInTheDocument()
+    expect(screen.getAllByText('有未保存更改').length).toBeGreaterThan(0)
+  })
+
+  it('saves before testing the main STT connection', async () => {
+    render(<SpeechTab />)
+
+    fireEvent.click(screen.getByText('保存并测试'))
+
+    await waitFor(() => {
+      expect(updateConfigAndRefresh).toHaveBeenCalled()
+      expect(apiMock.sttTest).toHaveBeenCalled()
+    })
   })
 })

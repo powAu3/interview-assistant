@@ -15,7 +15,17 @@ import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import { normalizePracticeTtsText, playBase64Audio, speakWithBrowserTts } from '@/lib/practiceTts'
-import { Section, Field, GradientCard, StatusBadge, useSettingsSearch } from './shared'
+import {
+  Section,
+  Field,
+  GradientCard,
+  SaveStateBadge,
+  StatusBadge,
+  useDirtySnapshot,
+  useSettingsDirtyRegistration,
+  useSettingsSearch,
+  type SaveState,
+} from './shared'
 import SttGuideCard from './SttGuideCard'
 import BetaBadge from '@/components/kb/BetaBadge'
 
@@ -66,14 +76,18 @@ export default function SpeechTab() {
     auto_detect: true,
   })
   const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [sttTesting, setSttTesting] = useState(false)
   const [sttTestResult, setSttTestResult] = useState<{ ok: boolean; detail?: string; text?: string } | null>(null)
   const [ttsPreviewing, setTtsPreviewing] = useState(false)
   const [ttsPreviewText, setTtsPreviewText] = useState('欢迎来到模拟面试，现在请你用九十秒介绍一下自己。')
+  const { dirty, markSaved, resetBaseline } = useDirtySnapshot(form)
+  useSettingsDirtyRegistration('speech', dirty)
 
   useEffect(() => {
     if (config) {
-      setForm({
+      const nextForm = {
         stt_provider: config.stt_provider ?? 'whisper',
         whisper_model: config.whisper_model,
         whisper_language: config.whisper_language ?? 'auto',
@@ -115,21 +129,33 @@ export default function SpeechTab() {
         assist_transcription_merge_max_sec: config.assist_transcription_merge_max_sec ?? 12.0,
         assist_high_churn_short_answer: config.assist_high_churn_short_answer ?? false,
         auto_detect: config.auto_detect,
-      })
+      }
+      if (dirty) return
+      setForm(nextForm)
+      resetBaseline(nextForm)
       setSttTestResult(null)
     }
-  }, [config])
+  }, [config, dirty, resetBaseline])
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveState('saving')
+    setSaveError(null)
     try {
       await updateConfigAndRefresh({
         ...form,
         candidate_remote_stt_enabled: form.candidate_stt_provider !== 'whisper',
       })
+      markSaved(form)
+      setSaveState('saved')
       useInterviewStore.getState().setToastMessage('语音配置已保存')
+      return true
     } catch (e: any) {
-      useInterviewStore.getState().setToastMessage(e.message ?? '保存失败')
+      const message = e?.message ?? '保存失败'
+      setSaveError(message)
+      setSaveState('error')
+      useInterviewStore.getState().setToastMessage(message)
+      return false
     } finally {
       setSaving(false)
     }
@@ -139,7 +165,11 @@ export default function SpeechTab() {
     setSttTesting(true)
     setSttTestResult(null)
     try {
-      await handleSave()
+      const saved = await handleSave()
+      if (!saved) {
+        setSttTestResult({ ok: false, detail: '当前语音配置保存失败，请先修复后再测试。' })
+        return
+      }
       const result = await api.sttTest()
       setSttTestResult(result)
       useInterviewStore.getState().setToastMessage(result.ok ? 'STT 连接成功' : `STT 测试失败: ${result.detail}`)
@@ -232,9 +262,26 @@ export default function SpeechTab() {
   const candidateContextActive = form.candidate_asr_enabled && form.candidate_context_enabled
   const searchQuery = useSettingsSearch()
   const inSearch = searchQuery.trim().length > 0
+  const effectiveSaveState: SaveState = saveState === 'saving' || saveState === 'error'
+    ? saveState
+    : dirty
+      ? 'dirty'
+      : saveState === 'saved'
+        ? 'saved'
+      : 'idle'
 
   return (
     <div className="p-5 space-y-5 pb-8" data-in-search={inSearch ? '1' : undefined}>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bg-hover/60 bg-bg-primary/35 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-text-primary">语音链路</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
+            STT、TTS、麦克风和断句参数需要保存后才会影响运行链路。
+          </p>
+        </div>
+        <SaveStateBadge mode="explicit" state={effectiveSaveState} error={saveError} />
+      </div>
+
       <Section title="实时辅助语音链路" icon={<Mic className="w-3.5 h-3.5" />} keywords="实时辅助 双路 asr 面试官 候选人 麦克风 追问">
         <GradientCard className="p-4 border-accent-blue/25">
           <div className="grid gap-3 md:grid-cols-2">
@@ -397,8 +444,9 @@ export default function SpeechTab() {
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
           >
             {sttTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            {sttTesting ? '测试中…' : '测试连接'}
+            {sttTesting ? '测试中…' : '保存并测试'}
           </button>
+          <span className="text-[10px] leading-relaxed text-text-muted">会先保存当前语音配置，再测试主链路 ASR。</span>
           {sttTestResult && (
             <div className="flex flex-col gap-1 min-w-0">
               <StatusBadge
@@ -860,6 +908,9 @@ export default function SpeechTab() {
         <Save className="w-4 h-4" />
         {saving ? '保存中…' : '保存语音配置'}
       </button>
+      <div className="flex justify-center">
+        <SaveStateBadge mode="explicit" state={effectiveSaveState} error={saveError} />
+      </div>
     </div>
   )
 }
