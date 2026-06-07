@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ValidationError
@@ -113,6 +114,119 @@ class ConfigUpdate(BaseModel):
     kb_top_k: Optional[int] = None
     kb_deadline_ms: Optional[int] = None
     kb_asr_deadline_ms: Optional[int] = None
+
+
+class ModelListRequest(BaseModel):
+    api_base_url: str
+    api_key: str
+
+
+_MODEL_LIST_KNOWN_COMPAT_SUFFIXES = (
+    "/api/claudecode",
+    "/api/anthropic",
+    "/apps/anthropic",
+    "/api/coding",
+    "/claudecode",
+    "/anthropic",
+    "/step_plan",
+    "/coding",
+    "/claude",
+)
+
+
+def _ends_with_version_segment(url: str) -> bool:
+    last = url.rsplit("/", 1)[-1]
+    return len(last) > 1 and last.startswith("v") and last[1:].isdigit()
+
+
+def _strip_known_model_list_compat_suffix(base_url: str) -> str:
+    for suffix in _MODEL_LIST_KNOWN_COMPAT_SUFFIXES:
+        if base_url.endswith(suffix):
+            return base_url[: -len(suffix)].rstrip("/")
+    return ""
+
+
+def _model_list_url_candidates(api_base_url: str) -> list[str]:
+    base = (api_base_url or "").strip().rstrip("/")
+    if not base:
+        return []
+    candidates: list[str] = []
+    if _ends_with_version_segment(base):
+        candidates.append(f"{base}/models")
+        if not base.endswith("/v1"):
+            candidates.append(f"{base}/v1/models")
+    else:
+        candidates.append(f"{base}/v1/models")
+
+    stripped = _strip_known_model_list_compat_suffix(base)
+    if stripped and "://" in stripped:
+        candidates.append(f"{stripped}/v1/models")
+        candidates.append(f"{stripped}/models")
+
+    unique: list[str] = []
+    for url in candidates:
+        if url not in unique:
+            unique.append(url)
+    return unique
+
+
+def _model_list_error_body(response: requests.Response) -> str:
+    try:
+        text = response.text
+    except Exception:
+        text = ""
+    return text[:512] + ("..." if len(text) > 512 else "")
+
+
+def _extract_remote_models(body: object) -> list[dict[str, str | None]]:
+    if isinstance(body, dict):
+        data = body.get("data", body.get("models", []))
+    else:
+        data = body
+    models_by_id: dict[str, dict[str, str | None]] = {}
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                model_id = item.get("id")
+                owned_by = item.get("owned_by", item.get("ownedBy"))
+            else:
+                model_id = getattr(item, "id", None)
+                owned_by = getattr(item, "owned_by", getattr(item, "ownedBy", None))
+            if not isinstance(model_id, str) or not model_id.strip():
+                continue
+            clean_id = model_id.strip()
+            clean_owner = owned_by.strip() if isinstance(owned_by, str) and owned_by.strip() else None
+            current = models_by_id.get(clean_id)
+            if current is None:
+                models_by_id[clean_id] = {"id": clean_id, "owned_by": clean_owner}
+            elif not current.get("owned_by") and clean_owner:
+                current["owned_by"] = clean_owner
+    return sorted(models_by_id.values(), key=lambda model: model["id"].lower())
+
+
+def _list_remote_models(api_base_url: str, api_key: str) -> dict:
+    candidates = _model_list_url_candidates(api_base_url)
+    if not candidates:
+        raise RuntimeError("API Base URL 不能为空")
+    last_not_found = ""
+    for url in candidates:
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+        if response.status_code in (404, 405):
+            last_not_found = f"HTTP {response.status_code}: {_model_list_error_body(response)}"
+            continue
+        if response.status_code >= 400:
+            raise RuntimeError(f"HTTP {response.status_code}: {_model_list_error_body(response)}")
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise RuntimeError(f"模型列表响应不是 JSON: {exc}") from exc
+        return {"models": _extract_remote_models(body)}
+    raise RuntimeError(last_not_found or "未找到可用的模型列表接口")
+
 
 
 @router.get("/config")
@@ -460,6 +574,20 @@ async def api_check_models_health():
 @router.get("/models/health")
 async def api_get_models_health():
     return get_model_health_snapshot()
+
+
+@router.post("/models/list")
+async def api_list_remote_models(body: ModelListRequest):
+    api_base_url = (body.api_base_url or "").strip()
+    api_key = (body.api_key or "").strip()
+    if not api_base_url:
+        raise HTTPException(400, "API Base URL 不能为空")
+    if not api_key or api_key == "sk-your-api-key-here":
+        raise HTTPException(400, "API Key 不能为空")
+    try:
+        return await run_in_threadpool(_list_remote_models, api_base_url, api_key)
+    except Exception as e:
+        raise HTTPException(502, f"获取模型列表失败: {e}") from e
 
 
 @router.post("/models/health/{index}")

@@ -536,6 +536,132 @@ def test_update_config_rejects_all_disabled_models(monkeypatch):
     assert update_called is False
 
 
+def test_model_list_rejects_missing_connection_fields():
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_list_remote_models(common_router.ModelListRequest(api_base_url="", api_key="sk-test")))
+    assert exc.value.status_code == 400
+    assert "API Base URL" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_list_remote_models(common_router.ModelListRequest(api_base_url="https://api.example.com/v1", api_key="")))
+    assert exc.value.status_code == 400
+    assert "API Key" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_list_remote_models(common_router.ModelListRequest(api_base_url="https://api.example.com/v1", api_key="sk-your-api-key-here")))
+    assert exc.value.status_code == 400
+    assert "API Key" in exc.value.detail
+
+
+def test_model_list_returns_sorted_model_ids(monkeypatch):
+    captured = {}
+
+    class _FakeResponse:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {
+                "data": [
+                    {"id": "z-model", "owned_by": "openai"},
+                    {"id": "gpt-4o-mini"},
+                    {"id": "Alpha"},
+                    {"id": "gpt-4o-mini", "owned_by": "openai"},
+                ]
+            }
+
+    def fake_get(url, headers=None, timeout=None):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router.requests, "get", fake_get)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    result = _run(common_router.api_list_remote_models(common_router.ModelListRequest(
+        api_base_url=" https://api.example.com/v1 ",
+        api_key=" sk-test ",
+    )))
+
+    assert captured == {
+        "url": "https://api.example.com/v1/models",
+        "headers": {"Authorization": "Bearer sk-test"},
+        "timeout": 15,
+    }
+    assert result == {
+        "models": [
+            {"id": "Alpha", "owned_by": None},
+            {"id": "gpt-4o-mini", "owned_by": "openai"},
+            {"id": "z-model", "owned_by": "openai"},
+        ]
+    }
+
+
+def test_model_list_falls_back_from_compat_suffix(monkeypatch):
+    seen_urls: list[str] = []
+
+    class _FakeResponse:
+        def __init__(self, status_code: int, body: object):
+            self.status_code = status_code
+            self._body = body
+            self.text = str(body)
+
+        def json(self):
+            return self._body
+
+    def fake_get(url, headers=None, timeout=None):
+        seen_urls.append(url)
+        if url.endswith("/anthropic/v1/models"):
+            return _FakeResponse(404, "not found")
+        return _FakeResponse(200, {"data": [{"id": "fallback-model", "owned_by": "provider"}]})
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router.requests, "get", fake_get)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    result = _run(common_router.api_list_remote_models(common_router.ModelListRequest(
+        api_base_url="https://api.example.com/anthropic",
+        api_key="sk-test",
+    )))
+
+    assert seen_urls == [
+        "https://api.example.com/anthropic/v1/models",
+        "https://api.example.com/v1/models",
+    ]
+    assert result == {"models": [{"id": "fallback-model", "owned_by": "provider"}]}
+
+
+def test_model_list_surfaces_provider_failure(monkeypatch):
+    class _FakeResponse:
+        status_code = 403
+        text = "request blocked"
+
+    def fake_get(url, headers=None, timeout=None):
+        return _FakeResponse()
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router.requests, "get", fake_get)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+
+    with pytest.raises(HTTPException) as exc:
+        _run(common_router.api_list_remote_models(common_router.ModelListRequest(
+            api_base_url="https://api.example.com/v1",
+            api_key="sk-test",
+        )))
+
+    assert exc.value.status_code == 502
+    assert "HTTP 403" in exc.value.detail
+    assert "request blocked" in exc.value.detail
+
+
 # ---------- Written exam mode: /api/start without device_id ------------------
 
 

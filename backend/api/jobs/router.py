@@ -1,4 +1,5 @@
 from typing import Any, Optional
+import sqlite3
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -144,7 +145,12 @@ async def api_list_offers():
 @router.post("/job-tracker/offers")
 async def api_create_offer(body: OfferCreate):
     data = body.model_dump(exclude_none=True)
-    return jt.create_or_update_offer(data)
+    if not jt.get_application(data["application_id"]):
+        raise HTTPException(404, "Application not found")
+    try:
+        return jt.create_or_update_offer(data)
+    except sqlite3.IntegrityError as e:
+        raise HTTPException(400, "Invalid application_id") from e
 
 
 @router.patch("/job-tracker/offers/{offer_id}")
