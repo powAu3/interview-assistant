@@ -79,14 +79,20 @@ class TestBuildThinkParams:
 
     def test_off_generic(self):
         r = _build_think_params(_m("deepseek-r1"), _c("off"))
-        assert r == {}
+        assert r == _THINK_DISABLED_BASE_PARAMS
 
     def test_think_mode_false_wins_even_when_effort_is_high(self):
         r = _build_think_params(_m("glm-5.1"), S(think_mode=False, think_effort="high"))
         assert r == _THINK_DISABLED_BASE_PARAMS
 
-    @pytest.mark.parametrize("effort", ["off", "low", "high"])
-    def test_doubao_never_receives_thinking_params(self, effort):
+    def test_doubao_receives_disable_params_when_off(self):
+        model = _m("Doubao-Seed-2.0-pro")
+        model.api_base_url = "https://ark.cn-beijing.volces.com/api/v3"
+        r = _build_think_params(model, _c("off"))
+        assert r == _THINK_DISABLED_BASE_PARAMS
+
+    @pytest.mark.parametrize("effort", ["low", "high"])
+    def test_doubao_keeps_enabled_thinking_params_empty_by_default(self, effort):
         model = _m("Doubao-Seed-2.0-pro")
         model.api_base_url = "https://ark.cn-beijing.volces.com/api/v3"
         r = _build_think_params(model, _c(effort))
@@ -175,3 +181,118 @@ def test_single_model_suppresses_reasoning_when_think_mode_is_false(monkeypatch)
     ))
 
     assert chunks == [("text", "最终答案")]
+
+
+def test_single_model_override_true_promotes_off_effort(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(streaming, "get_config", lambda: S(
+        think_mode=False,
+        think_effort="off",
+    ))
+    monkeypatch.setattr(streaming, "_broadcast_tokens", lambda: None)
+
+    def fake_stream(_model_cfg, _messages, cfg):
+        captured["think_mode"] = cfg.think_mode
+        captured["think_effort"] = cfg.think_effort
+        yield S(
+            choices=[S(delta=S(reasoning_content="已开启的思考", reasoning=None, content=None))],
+            usage=None,
+        )
+        yield S(
+            choices=[S(delta=S(reasoning_content=None, reasoning=None, content="最终答案"))],
+            usage=None,
+        )
+
+    monkeypatch.setattr(streaming, "_try_stream_with_model", fake_stream)
+
+    chunks = list(streaming.chat_stream_single_model(
+        S(name="GLM", model="glm-5.1", supports_think=True, supports_vision=False),
+        [{"role": "user", "content": "题目"}],
+        override_think_mode=True,
+    ))
+
+    assert captured == {"think_mode": True, "think_effort": "high"}
+    assert chunks == [("think", "已开启的思考"), ("text", "最终答案")]
+
+
+def test_single_model_override_false_forces_off_effort(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(streaming, "get_config", lambda: S(
+        think_mode=True,
+        think_effort="high",
+    ))
+    monkeypatch.setattr(streaming, "_broadcast_tokens", lambda: None)
+
+    def fake_stream(_model_cfg, _messages, cfg):
+        captured["think_mode"] = cfg.think_mode
+        captured["think_effort"] = cfg.think_effort
+        yield S(
+            choices=[S(delta=S(reasoning_content="不应显示的思考", reasoning=None, content=None))],
+            usage=None,
+        )
+        yield S(
+            choices=[S(delta=S(reasoning_content=None, reasoning=None, content="最终答案"))],
+            usage=None,
+        )
+
+    monkeypatch.setattr(streaming, "_try_stream_with_model", fake_stream)
+
+    chunks = list(streaming.chat_stream_single_model(
+        S(name="GLM", model="glm-5.1", supports_think=True, supports_vision=False),
+        [{"role": "user", "content": "题目"}],
+        override_think_mode=False,
+    ))
+
+    assert captured == {"think_mode": False, "think_effort": "off"}
+    assert chunks == [("text", "最终答案")]
+
+
+def test_closed_generic_reasoning_model_sends_disable_params_to_sdk(monkeypatch):
+    captured = {}
+
+    class _Completions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return iter(())
+
+    client = S(chat=S(completions=_Completions()))
+    model = S(name="DeepSeek", model="deepseek-reasoner", supports_think=False, supports_vision=False)
+    cfg = S(think_mode=False, think_effort="off", max_tokens=16, temperature=0.2)
+
+    monkeypatch.setattr(streaming, "get_client_for_model", lambda _model: client)
+
+    list(streaming._try_stream_with_model(model, [{"role": "user", "content": "题目"}], cfg))
+
+    assert captured["extra_body"] == _THINK_DISABLED_BASE_PARAMS
+
+
+def test_http_fallback_merges_disable_params(monkeypatch):
+    captured = {}
+
+    class FakeStreamResponse:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def iter_lines(self, decode_unicode=False):
+            yield b"data: [DONE]"
+
+    def fake_post(_url, headers=None, json=None, stream=False, timeout=None):
+        captured["json"] = json
+        captured["stream"] = stream
+        return FakeStreamResponse()
+
+    monkeypatch.setattr(streaming.requests, "post", fake_post)
+    model = S(api_base_url="https://example.test/v1", api_key="k", model="deepseek-reasoner")
+    cfg = S(max_tokens=16, temperature=0.2)
+
+    list(streaming._stream_via_http(model, [{"role": "user", "content": "题目"}], cfg, _THINK_DISABLED_BASE_PARAMS))
+
+    assert captured["stream"] is True
+    assert captured["json"]["thinking"] == {"type": "disabled"}
+    assert captured["json"]["think_mode"] is False
+    assert captured["json"]["enable_thinking"] is False

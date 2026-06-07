@@ -290,20 +290,46 @@ _THINK_DISABLED_LOCAL_PARAMS = {
 }
 
 
+_GENERIC_REASONING_MARKERS = (
+    "reasoning",
+    "reasoner",
+    "thinking",
+    "deepseek-r1",
+    "deepseek-reasoner",
+    "qwq",
+    "qwen3",
+    "glm-4.5",
+    "glm-z1",
+    "glm-5",
+    "gemini-2.5",
+    "gemini-3",
+    "grok-4",
+)
+
+
 def _is_doubao_model(model_cfg) -> bool:
     base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
     model_name = (getattr(model_cfg, "model", "") or "").lower()
     return "doubao" in model_name or "volces" in base_url or "ark" in base_url
 
 
+def _is_generic_reasoning_model(model_cfg) -> bool:
+    label = (
+        f"{getattr(model_cfg, 'api_base_url', '')} "
+        f"{getattr(model_cfg, 'name', '')} "
+        f"{getattr(model_cfg, 'model', '')}"
+    ).lower()
+    return any(marker in label for marker in _GENERIC_REASONING_MARKERS)
+
+
 def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
     base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
     model_name = (getattr(model_cfg, "model", "") or "").lower()
     if _is_doubao_model(model_cfg):
-        return {}
+        return dict(_THINK_DISABLED_BASE_PARAMS)
     if "localhost" in base_url or "127.0.0.1" in base_url or "sglang" in base_url:
         return dict(_THINK_DISABLED_LOCAL_PARAMS)
-    if "glm" in model_name or "bigmodel" in base_url:
+    if "glm" in model_name or "bigmodel" in base_url or (style == "generic" and _is_generic_reasoning_model(model_cfg)):
         return dict(_THINK_DISABLED_BASE_PARAMS)
     return {}
 
@@ -311,6 +337,14 @@ def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
 def _model_dict_param(model_cfg, name: str) -> dict:
     value = getattr(model_cfg, name, None) or {}
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _copy_config_with_updates(cfg, updates: dict):
+    if hasattr(cfg, "model_copy"):
+        return cfg.model_copy(update=updates)
+    data = dict(getattr(cfg, "__dict__", {}) or {})
+    data.update(updates)
+    return SimpleNamespace(**data)
 
 
 def _completion_token_kwargs(model_cfg, max_tokens: int) -> dict:
@@ -592,9 +626,14 @@ def chat_stream_single_model(
     """仅使用指定模型流式输出，不做跨模型降级（供并行答题）。"""
     cfg = get_config()
     if override_think_mode is not None:
-        cfg = cfg.model_copy(update={"think_mode": override_think_mode})
+        updates = {"think_mode": override_think_mode}
+        if override_think_mode and getattr(cfg, "think_effort", "off") == "off":
+            updates["think_effort"] = "high"
+        elif not override_think_mode:
+            updates["think_effort"] = "off"
+        cfg = _copy_config_with_updates(cfg, updates)
     if override_max_tokens is not None:
-        cfg = cfg.model_copy(update={"max_tokens": max(1, int(override_max_tokens))})
+        cfg = _copy_config_with_updates(cfg, {"max_tokens": max(1, int(override_max_tokens))})
     clean_messages = _sanitize_messages(messages, model_cfg.supports_vision)
     full_messages: list = []
     if system_prompt:

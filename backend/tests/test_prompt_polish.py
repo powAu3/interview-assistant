@@ -113,8 +113,40 @@ def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
     assert "结论先行" in p
     assert "专注面板输出协议" in p
     assert "## 标题" in p
-    assert "普通题 360-700 字" in p
-    assert "复杂排障/设计题 700-1100 字" in p
+    assert "普通场景题 360-650 字" in p
+    assert "复杂排障/设计题 650-1000 字" in p
+
+
+def test_asr_prompt_keeps_concept_comparison_from_forced_project_story():
+    p = _asr_prompt(high_churn=False)
+    assert "概念对比题" in p
+    assert "rules 和 skills" in p
+    assert "不要为了显得丰富而硬凑项目经历" in p
+    assert "只有明确问“你的项目/你做过/简历里的 X”" in p
+
+
+def test_asr_prompt_uses_density_by_question_type_not_fixed_long_answer():
+    p = _asr_prompt(high_churn=False)
+    assert "概念/优缺点/区别题 220-420 字" in p
+    assert "普通场景题 360-650 字" in p
+    assert "复杂排障/设计题 650-1000 字" in p
+    assert "不为凑字数扩展" in p
+    assert "普通题 360-700 字" not in p
+
+
+def test_asr_prompt_contains_recent_asr_term_repairs():
+    p = _asr_prompt(high_churn=False)
+    assert "健身测试→兼容性测试" in p
+    assert "is 登录→iOS 登录" in p
+    assert "街舞综合框架→接口自动化/自动化测试框架" in p
+    assert "scale→skills" in p
+
+
+def test_followup_prompt_inherits_context_for_fragments():
+    p = _asr_prompt(high_churn=False)
+    assert "优先继承上一轮的业务场景和技术对象" in p
+    assert "题干续句" in p
+    assert "安卓能登录但 iOS 不行" in p
 
 
 def test_asr_high_churn_keeps_oral_short_answer_shape():

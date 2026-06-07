@@ -10,7 +10,6 @@ from services.llm.streaming import (
     _completion_token_kwargs,
     _detect_think_style,
     _disabled_think_params_for_model,
-    _is_doubao_model,
 )
 
 _model_health: dict[int, str] = {}
@@ -114,7 +113,26 @@ def _extract_health_probe_text_and_reasoning(body: object) -> tuple[str, str]:
         or delta.get("reasoning")
         or ""
     )
+    if not reasoning and _has_reasoning_tokens(body):
+        reasoning = "reasoning_tokens"
     return text.strip(), str(reasoning or "").strip()
+
+
+def _has_reasoning_tokens(value: object) -> bool:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key == "reasoning_tokens":
+                try:
+                    if int(nested or 0) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    if nested:
+                        return True
+            elif isinstance(nested, (dict, list)) and _has_reasoning_tokens(nested):
+                return True
+    elif isinstance(value, list):
+        return any(_has_reasoning_tokens(item) for item in value)
+    return False
 
 
 def get_model_health(index: int) -> Optional[str]:
@@ -185,7 +203,7 @@ def _probe_basic(model, *, reject_reasoning: bool = True) -> tuple[bool, str, in
     )
     body, latency_ms = _post_chat(model, payload, timeout=12)
     text, reasoning = _extract_health_probe_text_and_reasoning(body)
-    if reject_reasoning and reasoning and not _is_doubao_model(model):
+    if reject_reasoning and reasoning:
         raise RuntimeError("关闭思考后仍返回 reasoning，已暂不参与答题")
     if not text:
         raise RuntimeError("连接成功但模型未返回正文")
@@ -251,8 +269,12 @@ def _think_probe_candidates(model) -> list[tuple[str, dict]]:
 
 def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
     style = _detect_think_style(model)
+    requires_explicit_disable = _is_strong_reasoning_model(model)
+    saved_disabled = getattr(model, "think_disabled_params", None) or {}
+    if not isinstance(saved_disabled, dict):
+        saved_disabled = {}
     ordered = [
-        ("no_params", {}),
+        ("saved_disabled", saved_disabled),
         ("model_default_disable", _disabled_think_params_for_model(model, style)),
         ("generic_thinking_disabled", {"thinking": {"type": "disabled"}, "think_mode": False, "enable_thinking": False}),
         (
@@ -264,9 +286,13 @@ def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
             },
         ),
     ]
+    if not _is_strong_reasoning_model(model):
+        ordered.append(("no_params", {}))
     seen: set[str] = set()
     unique: list[tuple[str, dict]] = []
     for name, params in ordered:
+        if requires_explicit_disable and not params:
+            continue
         key = json.dumps(params, sort_keys=True, ensure_ascii=False) if params else "{}"
         if key in seen:
             continue
@@ -278,6 +304,7 @@ def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
 def _probe_disable_think(model) -> tuple[dict, str]:
     messages = [{"role": "user", "content": "只回复 OK 两个字母，用于关闭思考参数测试。"}]
     last_detail = ""
+    requires_explicit_disable = _is_strong_reasoning_model(model)
     for style, params in _disable_think_probe_candidates(model):
         payload = _chat_payload(model, messages, 16, params)
         try:
@@ -286,6 +313,9 @@ def _probe_disable_think(model) -> tuple[dict, str]:
             if text and not reasoning:
                 if params:
                     return params, f"关闭 Think 参数已确认：{style}"
+                if requires_explicit_disable:
+                    last_detail = "强推理模型未验证到显式关闭 Think 参数"
+                    continue
                 return {}, "关闭 Think 无需额外参数"
             if reasoning:
                 last_detail = f"{style} 仍返回 reasoning"
@@ -294,7 +324,7 @@ def _probe_disable_think(model) -> tuple[dict, str]:
             last_detail = detail
             if _is_expected_param_error(detail):
                 continue
-    return {}, last_detail or "未检测到可靠关闭 Think 参数"
+    return {}, last_detail or "未检测到可靠的显式关闭 Think 参数"
 
 
 def _probe_think(model) -> tuple[bool, str, dict, str]:

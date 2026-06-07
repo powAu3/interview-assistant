@@ -33,3 +33,15 @@ def test_classify_asr_question_candidate_ignores_interview_ending_boilerplate():
     kind, cleaned = classify_asr_question_candidate("时间差不多了咱们今天的面试就先。", 2)
     assert kind == "ignore"
     assert cleaned == "时间差不多了咱们今天的面试就先"
+
+
+def test_classify_asr_question_candidate_keeps_problem_statement():
+    kind, cleaned = classify_asr_question_candidate("题目就是找出不重复的最长子串。", 2)
+    assert kind == "candidate"
+    assert "最长子串" in cleaned
+
+
+def test_classify_asr_question_candidate_keeps_concept_comparison():
+    kind, cleaned = classify_asr_question_candidate("rules 跟 skills 有什么区别呢？", 2)
+    assert kind == "promote"
+    assert "skills" in cleaned

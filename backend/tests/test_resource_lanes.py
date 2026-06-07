@@ -249,6 +249,59 @@ def test_model_health_probe_rejects_reasoning_leak(monkeypatch):
     assert events[-1]["status"] == "error"
 
 
+def test_model_health_probe_rejects_doubao_reasoning_tokens(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    ws = importlib.import_module("api.realtime.ws")
+    events: list[dict] = []
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://ark.cn-beijing.volces.com/api/v3",
+                        "api_key": "sk-test",
+                        "model": "ep-test",
+                        "supports_think": False,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "choices": [{"message": {"content": "OK"}}],
+                "usage": {"completion_tokens_details": {"reasoning_tokens": 5}},
+            }
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+    monkeypatch.setattr(ws, "broadcast", events.append)
+
+    model_health._check_single_model(0)
+
+    assert seen_payloads[0]["thinking"] == {"type": "disabled"}
+    assert seen_payloads[0]["think_mode"] is False
+    assert seen_payloads[0]["enable_thinking"] is False
+    assert model_health.get_model_health(0) == "error"
+    assert "reasoning" in model_health.get_model_health_snapshot()["detail"][0]
+    assert events[-1]["status"] == "error"
+
+
 def test_model_capability_probe_detects_vision_and_gpt_think_params(monkeypatch):
     model_health = importlib.import_module("api.common.model_health")
     seen_payloads: list[dict] = []
@@ -293,10 +346,176 @@ def test_model_capability_probe_detects_vision_and_gpt_think_params(monkeypatch)
     assert result["supports_think"] is True
     assert result["think_style"] == "gpt_reasoning_effort"
     assert result["think_params"] == {"reasoning_effort": "low"}
-    assert result["think_disabled_params"] == {}
+    assert result["think_disabled_params"] == {"thinking": {"type": "disabled"}, "think_mode": False, "enable_thinking": False}
     assert seen_payloads[1]["messages"][0]["content"][1]["type"] == "image_url"
+    assert seen_payloads[2]["thinking"]["type"] == "disabled"
     assert seen_payloads[3]["reasoning_effort"] == "low"
     assert "think_mode" not in seen_payloads[3]
+
+
+def test_model_capability_probe_does_not_treat_no_params_as_strong_model_disable(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://api.openai.com/v1",
+                        "api_key": "sk-test",
+                        "model": "o3-mini",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+            self.status_code = 400 if (
+                "thinking" in payload
+                or "enable_thinking" in payload
+                or "chat_template_kwargs" in payload
+            ) else 200
+
+        def json(self):
+            if self.status_code >= 400:
+                return {"error": "unsupported extra parameter"}
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse(json)
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["ok"] is True
+    assert result["supports_think"] is True
+    assert result["think_disabled_params"] == {}
+    assert "无需额外参数" not in result["think_disabled_detail"]
+    disable_probe_payloads = [
+        payload
+        for payload in seen_payloads
+        if payload.get("messages", [{}])[0].get("content") == "只回复 OK 两个字母，用于关闭思考参数测试。"
+    ]
+    assert disable_probe_payloads
+    assert all(
+        "thinking" in payload or "enable_thinking" in payload or "chat_template_kwargs" in payload
+        for payload in disable_probe_payloads
+    )
+
+
+def test_model_capability_probe_rejects_disable_when_reasoning_tokens_remain(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://api.deepseek.com/v1",
+                        "api_key": "sk-test",
+                        "model": "deepseek-reasoner",
+                        "supports_think": True,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            if self.payload.get("thinking", {}).get("type") == "disabled":
+                return {
+                    "choices": [{"message": {"content": "OK"}}],
+                    "usage": {"completion_tokens_details": {"reasoning_tokens": 3}},
+                }
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse(json)
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["ok"] is True
+    assert result["think_disabled_params"] == {
+        "enable_thinking": False,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "think_mode": False,
+    }
+    assert seen_payloads[2]["thinking"]["type"] == "disabled"
+    assert seen_payloads[3]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_model_capability_probe_prefers_saved_disable_params(monkeypatch):
+    model_health = importlib.import_module("api.common.model_health")
+    seen_payloads: list[dict] = []
+    saved_disabled = {"custom_disable": True}
+
+    cfg = type(
+        "Cfg",
+        (),
+        {
+            "models": [
+                type(
+                    "Model",
+                    (),
+                    {
+                        "enabled": True,
+                        "api_base_url": "https://api.openai.com/v1",
+                        "api_key": "sk-test",
+                        "model": "o3-mini",
+                        "supports_think": True,
+                        "think_disabled_params": saved_disabled,
+                    },
+                )()
+            ]
+        },
+    )()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "OK"}}]}
+
+    def fake_post(_url, headers=None, json=None, timeout=None):
+        seen_payloads.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(model_health, "get_config", lambda: cfg)
+    monkeypatch.setattr(model_health.requests, "post", fake_post)
+
+    result = model_health.probe_single_model(0)
+
+    assert result["think_disabled_params"] == saved_disabled
+    assert seen_payloads[2]["custom_disable"] is True
 
 
 def test_model_capability_probe_tries_doubao_thinking_by_display_name(monkeypatch):
@@ -343,7 +562,8 @@ def test_model_capability_probe_tries_doubao_thinking_by_display_name(monkeypatc
     assert result["supports_think"] is True
     assert result["think_style"] == "generic_thinking"
     assert result["think_params"] == {"thinking": {"type": "enabled"}, "think_mode": True}
-    assert result["think_disabled_params"] == {}
+    assert result["think_disabled_params"] == {"thinking": {"type": "disabled"}, "think_mode": False, "enable_thinking": False}
+    assert seen_payloads[2]["thinking"]["type"] == "disabled"
     assert seen_payloads[3]["thinking"]["type"] == "enabled"
 
 
@@ -427,7 +647,7 @@ def test_model_capability_probe_detects_deepseek_reasoner_generic_thinking(monke
             self.payload = payload
 
         def json(self):
-            if self.payload.get("thinking"):
+            if self.payload.get("thinking", {}).get("type") == "enabled":
                 return {"choices": [{"message": {"content": "2", "reasoning_content": "short reasoning"}}]}
             return {"choices": [{"message": {"content": "OK"}}]}
 
@@ -444,6 +664,7 @@ def test_model_capability_probe_detects_deepseek_reasoner_generic_thinking(monke
     assert result["supports_think"] is True
     assert result["think_style"] == "generic_thinking"
     assert result["think_params"] == {"thinking": {"type": "enabled"}, "think_mode": True}
+    assert result["think_disabled_params"] == {"thinking": {"type": "disabled"}, "think_mode": False, "enable_thinking": False}
 
 
 def test_resume_optimize_is_submitted_to_low_priority_lane(monkeypatch):
