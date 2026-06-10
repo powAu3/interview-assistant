@@ -188,6 +188,19 @@ def process_question_parallel(
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
     written_exam_think = bool(getattr(cfg, "written_exam_think", False))
     prompt_mode = prompt_mode_for_task(source, manual_input, written_exam=written_exam)
+    exam_preflight_id = str(meta.get("exam_preflight_id") or "") if meta.get("exam_preflight") else ""
+
+    def _broadcast(data: dict) -> None:
+        if exam_preflight_id:
+            data = {**data, "exam_preflight_id": exam_preflight_id}
+        deps.broadcast(data)
+        if exam_preflight_id:
+            try:
+                from .exam_test import record_exam_preflight_answer_event
+
+                record_exam_preflight_answer_event(data)
+            except Exception as exc:  # noqa: BLE001
+                deps.error_logger.warning("exam preflight event record failed: %s", exc)
 
     kb_hits: list = []
     kb_latency_ms = 0
@@ -355,7 +368,7 @@ def process_question_parallel(
         is_followup,
         question_text[:120],
     )
-    deps.broadcast(
+    _broadcast(
         {
             "type": "answer_start",
             "id": qa_id,
@@ -424,7 +437,7 @@ def process_question_parallel(
                 if prompt_mode == PROMPT_MODE_WRITTEN_EXAM:
                     if not exam_think_notified:
                         exam_think_notified = True
-                        deps.broadcast(
+                        _broadcast(
                             {
                                 "type": "answer_think_chunk",
                                 "id": qa_id,
@@ -432,7 +445,7 @@ def process_question_parallel(
                             }
                         )
                 else:
-                    deps.broadcast(
+                    _broadcast(
                         {
                             "type": "answer_think_chunk",
                             "id": qa_id,
@@ -443,7 +456,7 @@ def process_question_parallel(
                 raw_full_answer += chunk_text
                 clean_chunk = stream_sanitizer.push(chunk_text)
                 if clean_chunk:
-                    deps.broadcast(
+                    _broadcast(
                         {"type": "answer_chunk", "id": qa_id, "chunk": clean_chunk}
                     )
     except Exception as exc:
@@ -452,8 +465,8 @@ def process_question_parallel(
         raw_full_answer += err
         tail = stream_sanitizer.finish()
         if tail:
-            deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
-        deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
+            _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
+        _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
 
     gen_elapsed = (time.monotonic() - gen_start) * 1000
     first_token_ms = (
@@ -462,13 +475,13 @@ def process_question_parallel(
 
     if deps.abort_check():
         deps.logger.info("ANSWER_CANCEL id=%s after=%.0fms", qa_id, gen_elapsed)
-        deps.broadcast({"type": "answer_cancelled", "id": qa_id})
+        _broadcast({"type": "answer_cancelled", "id": qa_id})
         deps.mark_seq_skipped(seq)
         return
 
     tail = stream_sanitizer.finish()
     if tail:
-        deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
+        _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
 
     full_answer = postprocess_answer_for_mode(raw_full_answer, prompt_mode)
 
@@ -476,6 +489,38 @@ def process_question_parallel(
         if not deps.is_session_current(sess_v):
             return
         session = get_session()
+        if exam_preflight_id:
+            stats = get_token_stats()
+            deps.logger.info(
+                "EXAM_PREFLIGHT_ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms answer_len=%d",
+                qa_id,
+                model_cfg.name,
+                first_token_ms,
+                gen_elapsed,
+                len(full_answer),
+            )
+            _broadcast(
+                {
+                    "type": "answer_done",
+                    "id": qa_id,
+                    "question": display_question,
+                    "answer": full_answer,
+                    "think": full_think,
+                    "model_name": model_cfg.name,
+                    "first_token_ms": int(first_token_ms),
+                    "total_ms": int(gen_elapsed),
+                }
+            )
+            deps.broadcast(
+                {
+                    "type": "token_update",
+                    "prompt": stats["prompt"],
+                    "completion": stats["completion"],
+                    "total": stats["total"],
+                    "by_model": stats.get("by_model", {}),
+                }
+            )
+            return
         pre_user_len = len(session.conversation_history)
         pre_qa_len = len(session.qa_pairs)
         try:
@@ -509,7 +554,7 @@ def process_question_parallel(
                 stats["prompt"],
                 stats["completion"],
             )
-            deps.broadcast(
+            _broadcast(
                 {
                     "type": "answer_done",
                     "id": qa_id,
@@ -568,6 +613,6 @@ def process_question_parallel(
                 "_commit failed for id=%s seq=%d: %s",
                 qa_id, seq, exc, exc_info=True,
             )
-            deps.broadcast({"type": "answer_error", "id": qa_id, "message": "答案保存失败"})
+            _broadcast({"type": "answer_error", "id": qa_id, "message": "答案保存失败"})
 
     deps.flush_commit(seq, _commit)

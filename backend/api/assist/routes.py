@@ -240,6 +240,21 @@ async def api_preflight_status():
     return get_preflight_status()
 
 
+@router.post("/exam-preflight/run")
+async def api_exam_preflight_run():
+    from .exam_test import start_exam_preflight
+    ok = start_exam_preflight()
+    if not ok:
+        raise HTTPException(409, "笔试链路检测已在运行中")
+    return {"ok": True}
+
+
+@router.get("/exam-preflight/status")
+async def api_exam_preflight_status():
+    from .exam_test import get_exam_preflight_status
+    return get_exam_preflight_status()
+
+
 @router.post("/audio-test/output")
 async def api_audio_test_output():
     session = get_session()

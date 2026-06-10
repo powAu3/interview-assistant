@@ -713,3 +713,93 @@ def test_written_exam_manual_input_uses_exam_mode_and_no_history(monkeypatch: py
 
     assert captured["prompt_mode"] == answer_worker.PROMPT_MODE_WRITTEN_EXAM
     assert captured["messages"] == [{"role": "user", "content": "手动输入的笔试题"}]
+
+
+def test_written_exam_code_question_chain_is_isolated(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured = {}
+    session = get_session()
+    session.add_user_message("上一道选择题")
+    session.add_assistant_message("A. Redis")
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["prompt_mode"] = kwargs["mode"]
+        return "system"
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        yield ("text", "```python\n# 哈希表一次遍历 O(n)\ndef two_sum(nums, target):\n    return []\n```")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    question = "代码题：给定整数数组 nums 和目标值 target，返回两数之和的下标。"
+    answer_worker.process_question_parallel(
+        (question, None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["prompt_mode"] == answer_worker.PROMPT_MODE_WRITTEN_EXAM
+    assert captured["messages"] == [{"role": "user", "content": question}]
+    assert "上一道选择题" not in str(captured["messages"])
+
+    start = next(event for event in broadcasts if event["type"] == "answer_start")
+    done = next(event for event in broadcasts if event["type"] == "answer_done")
+    assert start["question"] == question
+    assert start["source"] == "manual_text"
+    assert done["question"] == question
+    assert "def two_sum" in done["answer"]
+
+
+def test_exam_preflight_worker_events_do_not_pollute_session(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    knowledge: list[tuple[str, str, str, str]] = []
+    recorded: list[dict] = []
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    cfg.models[0].supports_vision = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **kwargs):
+        assert kwargs["override_think_mode"] is False
+        assert messages[0]["content"][1]["image_url"]["url"] == "data:image/png;base64,fake"
+        yield ("text", "```python\ndef two_sum(nums, target):\n    return []\n```")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+    import api.assist.exam_test as exam_test
+
+    monkeypatch.setattr(exam_test, "record_exam_preflight_answer_event", recorded.append)
+
+    answer_worker.process_question_parallel(
+        (
+            "固定截图题",
+            "data:image/png;base64,fake",
+            True,
+            "server_screen_exam_preflight",
+            {
+                "origin": "server_screen",
+                "image_count": 1,
+                "exam_preflight": True,
+                "exam_preflight_id": "preflight-1",
+            },
+        ),
+        seq=9,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts, knowledge=knowledge),
+    )
+
+    event_types = [event["type"] for event in broadcasts]
+    assert event_types == ["answer_start", "answer_chunk", "answer_done", "token_update"]
+    assert all(event.get("exam_preflight_id") == "preflight-1" for event in broadcasts[:3])
+    assert [event["type"] for event in recorded] == ["answer_start", "answer_chunk", "answer_done"]
+    assert knowledge == []
+    session = get_session()
+    assert session.qa_pairs == []
+    assert session.conversation_history == []

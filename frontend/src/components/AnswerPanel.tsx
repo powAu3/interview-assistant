@@ -6,6 +6,7 @@ import KbReferenceBanner from '@/components/kb/KbReferenceBanner'
 import type { ColorSchemeId } from '@/lib/colorScheme'
 
 const SoundTest = lazy(() => import('./SoundTest'))
+const WrittenExamTest = lazy(() => import('./WrittenExamTest'))
 const AnswerMarkdownContent = lazy(() => import('./AnswerMarkdownContent'))
 
 function VisionVerifyBadge({ verdict, reason }: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }) {
@@ -383,6 +384,11 @@ export default function AnswerPanel() {
         {isIdle && !isExamMode && (
           <Suspense fallback={<div className="text-xs text-text-muted">加载链路检测中…</div>}>
             <SoundTest />
+          </Suspense>
+        )}
+        {isIdle && isExamMode && (
+          <Suspense fallback={<div className="text-xs text-text-muted">加载链路检测中…</div>}>
+            <WrittenExamTest />
           </Suspense>
         )}
       </div>

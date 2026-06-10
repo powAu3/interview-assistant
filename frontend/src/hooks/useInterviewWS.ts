@@ -143,18 +143,22 @@ export function useInterviewWS() {
         s.clearSession()
         break
       case 'answer_start':
+        if (msg.exam_preflight_id) return
         s.startAnswer(msg.id as string, msg.question as string, {
           source: msg.source as string,
           modelName: msg.model_name as string,
         })
         break
       case 'answer_think_chunk':
+        if (msg.exam_preflight_id) return
         s.appendThinkChunk(msg.id as string, msg.chunk as string)
         break
       case 'answer_chunk':
+        if (msg.exam_preflight_id) return
         s.appendAnswerChunk(msg.id as string, msg.chunk as string)
         break
       case 'answer_done':
+        if (msg.exam_preflight_id) return
         s.finalizeAnswer(
           msg.id as string,
           msg.question as string,
@@ -166,9 +170,11 @@ export function useInterviewWS() {
         )
         break
       case 'answer_cancelled':
+        if (msg.exam_preflight_id) return
         s.cancelAnswer(msg.id as string)
         break
       case 'answer_error':
+        if (msg.exam_preflight_id) return
         s.errorAnswer(msg.id as string, (msg.message as string) || '答案保存失败')
         s.pushToast(`答案保存失败: ${(msg.message as string) || '未知原因'}`, 'error')
         break
