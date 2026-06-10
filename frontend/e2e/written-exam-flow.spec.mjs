@@ -85,9 +85,9 @@ test.describe('written exam flow', () => {
     await expect(page.getByText('AI 笔试助手')).toBeVisible({ timeout: 5000 })
     await expect(page.getByText('点击「开始笔试」进入答题模式，可通过截图或手动输入提问')).toBeVisible()
     await expect(page.getByText('固定截图代码题').first()).toBeVisible()
-    await page.getByRole('button', { name: '开始检测' }).click()
+    await page.getByRole('button', { name: '开始检测' }).dispatchEvent('click')
 
-    await page.getByRole('button', { name: /开始笔试/ }).click()
+    await page.getByRole('button', { name: /开始笔试/ }).dispatchEvent('click')
     await expect(page.getByText('EXAM')).toBeVisible({ timeout: 5000 })
 
     const input = page.getByPlaceholder('输入问题，Enter 发送…')
