@@ -238,6 +238,9 @@ export const api = {
   preflightRun: (scenario_id: string, device_id?: number | null) =>
     request('/api/preflight/run', { method: 'POST', body: JSON.stringify({ scenario_id, device_id: device_id ?? undefined }) }),
   preflightStatus: () => request('/api/preflight/status'),
+  examPreflightRun: () =>
+    request('/api/exam-preflight/run', { method: 'POST', body: '{}' }),
+  examPreflightStatus: () => request('/api/exam-preflight/status'),
   audioOutputTest: () =>
     request<{ ok: boolean; elapsed_sec: number }>('/api/audio-test/output', { method: 'POST', body: '{}' }),
   audioInputTest: (device_id: number, duration_sec = 1.2) =>
@@ -288,7 +291,7 @@ export const api = {
     detail?: Record<string, string>
     latency?: Record<string, number>
   }>('/api/models/health'),
-  listRemoteModels: (payload: { api_base_url: string; api_key: string }) =>
+  listRemoteModels: (payload: { api_base_url: string; api_key: string; model_index?: number }) =>
     request<{ models: { id: string; owned_by?: string | null }[] }>('/api/models/list', { method: 'POST', body: JSON.stringify(payload) }),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
   probeModelCapabilities: (index: number) =>

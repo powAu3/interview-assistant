@@ -165,11 +165,29 @@ def test_resume_upload_passes_under_limit(monkeypatch):
 
 
 class _FakeModel:
-    def __init__(self, name: str):
+    def __init__(self, name: str, api_key: str = ""):
         self.name = name
+        self.api_key = api_key
+        self.api_base_url = "https://api.openai.com/v1"
+        self.model = "gpt-4o-mini"
+        self.supports_think = False
+        self.supports_vision = False
+        self.enabled = True
+        self.think_enabled_params = {}
+        self.think_disabled_params = {}
 
     def model_dump(self) -> dict:
-        return {"name": self.name}
+        return {
+            "name": self.name,
+            "api_base_url": self.api_base_url,
+            "api_key": self.api_key,
+            "model": self.model,
+            "supports_think": self.supports_think,
+            "supports_vision": self.supports_vision,
+            "enabled": self.enabled,
+            "think_enabled_params": self.think_enabled_params,
+            "think_disabled_params": self.think_disabled_params,
+        }
 
     def model_copy(self, update: dict):
         clone = _FakeModel(self.name)
@@ -536,6 +554,111 @@ def test_update_config_rejects_all_disabled_models(monkeypatch):
     assert update_called is False
 
 
+def test_models_full_does_not_return_plain_api_key(monkeypatch):
+    monkeypatch.setattr(
+        common_router,
+        "get_config",
+        lambda: _FakeCfg(models=[_FakeModel("main", api_key="sk-secret")], active=0),
+    )
+
+    result = _run(common_router.api_get_models_full())
+
+    assert result["models"][0]["api_key"] == ""
+    assert result["models"][0]["has_key"] is True
+
+
+def test_update_config_keep_existing_api_key_placeholder(monkeypatch):
+    captured: dict[str, dict] = {}
+
+    def fake_update_config(d):
+        captured["d"] = dict(d)
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr(
+        common_router,
+        "get_config",
+        lambda: _FakeCfg(models=[_FakeModel("old", api_key="sk-existing")], active=0),
+    )
+
+    body = _Body(
+        models=[
+            {
+                "name": "main",
+                "api_base_url": "https://api.openai.com/v1",
+                "api_key": common_router._MODEL_API_KEY_KEEP,
+                "model": "gpt-4o-mini",
+                "supports_think": False,
+                "supports_vision": False,
+                "enabled": True,
+            }
+        ]
+    )
+
+    result = _run(common_router.api_update_config(body))
+
+    assert result == {"ok": True}
+    assert captured["d"]["models"][0].api_key == "sk-existing"
+
+
+def test_update_config_keep_existing_api_key_uses_original_index_after_reorder(monkeypatch):
+    captured: dict[str, dict] = {}
+
+    def fake_update_config(d):
+        captured["d"] = dict(d)
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr(
+        common_router,
+        "get_config",
+        lambda: _FakeCfg(
+            models=[
+                _FakeModel("first", api_key="sk-first"),
+                _FakeModel("second", api_key="sk-second"),
+            ],
+            active=0,
+        ),
+    )
+
+    body = _Body(
+        models=[
+            {
+                "name": "second",
+                "api_base_url": "https://api.openai.com/v1",
+                "api_key": common_router._MODEL_API_KEY_KEEP,
+                "model_original_index": 1,
+                "model": "gpt-4o-mini",
+                "supports_think": False,
+                "supports_vision": False,
+                "enabled": True,
+            },
+            {
+                "name": "first",
+                "api_base_url": "https://api.openai.com/v1",
+                "api_key": common_router._MODEL_API_KEY_KEEP,
+                "model_original_index": 0,
+                "model": "gpt-4o-mini",
+                "supports_think": False,
+                "supports_vision": False,
+                "enabled": True,
+            },
+        ]
+    )
+
+    result = _run(common_router.api_update_config(body))
+
+    assert result == {"ok": True}
+    assert [model.name for model in captured["d"]["models"]] == ["second", "first"]
+    assert [model.api_key for model in captured["d"]["models"]] == ["sk-second", "sk-first"]
+
+
 def test_model_list_rejects_missing_connection_fields():
     with pytest.raises(HTTPException) as exc:
         _run(common_router.api_list_remote_models(common_router.ModelListRequest(api_base_url="", api_key="sk-test")))
@@ -599,6 +722,41 @@ def test_model_list_returns_sorted_model_ids(monkeypatch):
             {"id": "z-model", "owned_by": "openai"},
         ]
     }
+
+
+def test_model_list_keep_placeholder_uses_saved_api_key(monkeypatch):
+    captured = {}
+
+    class _FakeResponse:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"data": [{"id": "gpt-4o-mini"}]}
+
+    def fake_get(url, headers=None, timeout=None):
+        captured["headers"] = headers
+        return _FakeResponse()
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router.requests, "get", fake_get)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr(
+        common_router,
+        "get_config",
+        lambda: _FakeCfg(models=[_FakeModel("main", api_key="sk-existing")], active=0),
+    )
+
+    result = _run(common_router.api_list_remote_models(common_router.ModelListRequest(
+        api_base_url="https://api.example.com/v1",
+        api_key=common_router._MODEL_API_KEY_KEEP,
+        model_index=0,
+    )))
+
+    assert captured["headers"] == {"Authorization": "Bearer sk-existing"}
+    assert result == {"models": [{"id": "gpt-4o-mini", "owned_by": None}]}
 
 
 def test_model_list_falls_back_from_compat_suffix(monkeypatch):

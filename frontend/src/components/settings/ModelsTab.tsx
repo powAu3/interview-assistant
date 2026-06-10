@@ -16,6 +16,7 @@ import {
   Sparkles,
   BrainCircuit,
   SlidersHorizontal,
+  X,
 } from 'lucide-react'
 import { useInterviewStore, type ModelFullInfo } from '@/stores/configStore'
 import { api } from '@/lib/api'
@@ -83,6 +84,8 @@ const EMPTY_REMOTE_MODEL_LIST: RemoteModelListState = {
   loaded: false,
 }
 
+const KEEP_EXISTING_API_KEY = '__IA_KEEP_EXISTING_API_KEY__'
+
 function toModelRow(model: ModelFullInfo, index: number): ModelRow {
   return {
     id: `${index}:${model.name}:${model.model}:${model.api_base_url}`,
@@ -92,10 +95,11 @@ function toModelRow(model: ModelFullInfo, index: number): ModelRow {
 }
 
 function buildModelPayloadFromRows(rows: ModelRow[]) {
-  return rows.map(({ model: m }) => ({
+  return rows.map(({ model: m, originalIndex }) => ({
     name: m.name.trim(),
     api_base_url: m.api_base_url.trim() || 'https://api.openai.com/v1',
-    api_key: m.api_key,
+    api_key: m.api_key.trim() ? m.api_key : m.has_key ? KEEP_EXISTING_API_KEY : '',
+    model_original_index: originalIndex,
     model: m.model.trim() || 'gpt-4o-mini',
     supports_think: m.supports_think,
     supports_vision: m.supports_vision,
@@ -129,6 +133,15 @@ function groupRemoteModels(models: RemoteModel[]) {
 
 function remoteModelRequestKey(model: ModelFullInfo) {
   return `${(model.api_base_url || '').trim()}\n${model.api_key || ''}`
+}
+
+function apiKeyPayloadValue(model: ModelFullInfo) {
+  return model.api_key.trim() ? model.api_key : model.has_key ? KEEP_EXISTING_API_KEY : ''
+}
+
+function apiKeyPlaceholder(model: ModelFullInfo) {
+  if (model.has_key && !model.api_key.trim()) return '已保存，留空则保留现有 API Key'
+  return '填入你的 API Key'
 }
 
 function formatRemoteModelError(error: unknown): string {
@@ -344,7 +357,8 @@ export default function ModelsTab() {
     try {
       const result = await api.listRemoteModels({
         api_base_url: row.model.api_base_url,
-        api_key: row.model.api_key,
+        api_key: apiKeyPayloadValue(row.model),
+        model_index: row.originalIndex,
       })
       setRemoteModelLists((prev) => {
         const currentRow = modelRowsRef.current[idx]
@@ -439,17 +453,21 @@ export default function ModelsTab() {
     setQueueSaveError(null)
     try {
       const savedActiveIndex = resolveActiveIndex()
-      const savedRows = modelRows.map((row, index) => ({
+      const rowsToSave = modelRows.map((row, index) => ({
         ...row,
         id: `${index}:${row.model.name}:${row.model.model}:${row.model.api_base_url}`,
-        originalIndex: index,
         model: {
           ...row.model,
           has_key: row.model.has_key || row.model.api_key.trim().length > 0,
         },
       }))
+      const savedRows = rowsToSave.map((row, index) => ({
+        ...row,
+        originalIndex: index,
+        model: { ...row.model, api_key: '' },
+      }))
       await updateConfigAndRefresh({
-        models: buildModelPayload(savedRows),
+        models: buildModelPayload(rowsToSave),
         active_model: savedActiveIndex,
         max_parallel_answers: maxP,
       })
@@ -878,13 +896,26 @@ export default function ModelsTab() {
                           />
                         </Field>
                         <Field label="API Key">
-                          <input
-                            type="text"
-                            value={m.api_key}
-                            onChange={(e) => updateModel(idx, { api_key: e.target.value })}
-                            placeholder="填入你的 API Key"
-                            className="input-field"
-                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={m.api_key}
+                              onChange={(e) => updateModel(idx, { api_key: e.target.value, has_key: m.has_key })}
+                              placeholder={apiKeyPlaceholder(m)}
+                              className="input-field min-w-0 flex-1"
+                            />
+                            {m.has_key && (
+                              <button
+                                type="button"
+                                onClick={() => updateModel(idx, { api_key: '', has_key: false })}
+                                className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-accent-red/25 bg-accent-red/10 text-accent-red transition-colors hover:bg-accent-red/15"
+                                title="清空已保存的 API Key"
+                                aria-label="清空已保存的 API Key"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </Field>
                         <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/30 px-3 py-3 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">

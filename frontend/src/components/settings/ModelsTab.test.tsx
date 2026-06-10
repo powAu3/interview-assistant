@@ -142,6 +142,85 @@ describe('ModelsTab state sync', () => {
     expect(screen.getByText('有未保存更改')).toBeInTheDocument()
   })
 
+  it('keeps an existing saved API key when the key field is left blank', async () => {
+    apiMock.getModelsFull.mockResolvedValueOnce({
+      models: [
+        {
+          name: 'Main Model',
+          api_base_url: 'https://api.openai.com/v1',
+          api_key: '',
+          model: 'gpt-4o-mini',
+          supports_think: false,
+          supports_vision: false,
+          enabled: true,
+          has_key: true,
+        },
+      ],
+    })
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('Main Model'))
+    expect(screen.getByPlaceholderText('已保存，留空则保留现有 API Key')).toHaveValue('')
+    fireEvent.click(screen.getByText('保存模型队列'))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalled()
+    })
+    const payload = apiMock.updateConfig.mock.calls[0][0]
+    expect(payload.models[0].api_key).toBe('__IA_KEEP_EXISTING_API_KEY__')
+  })
+
+  it('keeps saved API keys tied to the original model when rows are reordered', async () => {
+    apiMock.getModelsFull.mockResolvedValueOnce({
+      models: [
+        {
+          name: 'First Model',
+          api_base_url: 'https://api.openai.com/v1',
+          api_key: '',
+          model: 'gpt-4o-mini',
+          supports_think: false,
+          supports_vision: false,
+          enabled: true,
+          has_key: true,
+        },
+        {
+          name: 'Second Model',
+          api_base_url: 'https://api.openai.com/v1',
+          api_key: '',
+          model: 'gpt-4o',
+          supports_think: false,
+          supports_vision: false,
+          enabled: true,
+          has_key: true,
+        },
+      ],
+    })
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('Second Model'))
+    fireEvent.click(screen.getAllByTitle('置顶')[1])
+    fireEvent.click(screen.getByText('保存模型队列'))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalled()
+    })
+    const payload = apiMock.updateConfig.mock.calls[0][0]
+    expect(payload.models[0]).toEqual(expect.objectContaining({
+      name: 'Second Model',
+      api_key: '__IA_KEEP_EXISTING_API_KEY__',
+      model_original_index: 1,
+    }))
+    expect(payload.models[1]).toEqual(expect.objectContaining({
+      name: 'First Model',
+      api_key: '__IA_KEEP_EXISTING_API_KEY__',
+      model_original_index: 0,
+    }))
+  })
+
   it('fetches remote models and fills name plus model id from the dropdown', async () => {
     apiMock.listRemoteModels.mockResolvedValueOnce({
       models: [
@@ -164,6 +243,7 @@ describe('ModelsTab state sync', () => {
     expect(apiMock.listRemoteModels).toHaveBeenCalledWith({
       api_base_url: 'https://api.openai.com/v1',
       api_key: 'sk-test',
+      model_index: 0,
     })
 
     fireEvent.change(select, { target: { value: 'gpt-4o-mini' } })
@@ -229,6 +309,7 @@ describe('ModelsTab state sync', () => {
       expect(apiMock.listRemoteModels).toHaveBeenCalledWith({
         api_base_url: 'https://api.openai.com/v1',
         api_key: 'sk-old',
+        model_index: 0,
       })
     })
 

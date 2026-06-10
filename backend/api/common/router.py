@@ -116,9 +116,13 @@ class ConfigUpdate(BaseModel):
     kb_asr_deadline_ms: Optional[int] = None
 
 
+_MODEL_API_KEY_KEEP = "__IA_KEEP_EXISTING_API_KEY__"
+
+
 class ModelListRequest(BaseModel):
     api_base_url: str
     api_key: str
+    model_index: Optional[int] = None
 
 
 _MODEL_LIST_KNOWN_COMPAT_SUFFIXES = (
@@ -239,14 +243,14 @@ _LEGACY_STT_PROVIDER_MAP = {"iflytek": "generic"}
 
 @router.get("/config/models-full")
 async def api_get_models_full():
-    """Return all model fields for local frontend editing."""
+    """Return model fields for local frontend editing without echoing secrets."""
     cfg = get_config()
     return {
         "models": [
             {
                 "name": mdl.name,
                 "api_base_url": mdl.api_base_url,
-                "api_key": mdl.api_key,
+                "api_key": "",
                 "model": mdl.model,
                 "supports_think": mdl.supports_think,
                 "supports_vision": mdl.supports_vision,
@@ -268,9 +272,19 @@ async def api_update_config(body: ConfigUpdate):
     try:
         if "models" in d:
             raw_models = []
-            for x in d["models"]:
+            current_models = list(get_config().models)
+            for idx, x in enumerate(d["models"]):
                 if not isinstance(x, dict):
                     continue
+                if x.get("api_key") == _MODEL_API_KEY_KEEP:
+                    source_idx = x.get("model_original_index", idx)
+                    try:
+                        source_idx = int(source_idx)
+                    except (TypeError, ValueError):
+                        source_idx = idx
+                    existing = current_models[source_idx].api_key if 0 <= source_idx < len(current_models) else ""
+                    x = {**x, "api_key": existing}
+                x.pop("model_original_index", None)
                 raw_models.append(ModelConfig(**x))
             d["models"] = raw_models
             if not d["models"]:
@@ -580,6 +594,10 @@ async def api_get_models_health():
 async def api_list_remote_models(body: ModelListRequest):
     api_base_url = (body.api_base_url or "").strip()
     api_key = (body.api_key or "").strip()
+    if api_key == _MODEL_API_KEY_KEEP and body.model_index is not None:
+        cfg = get_config()
+        idx = int(body.model_index)
+        api_key = cfg.models[idx].api_key if 0 <= idx < len(cfg.models) else ""
     if not api_base_url:
         raise HTTPException(400, "API Base URL 不能为空")
     if not api_key or api_key == "sk-your-api-key-here":
