@@ -84,6 +84,7 @@ export function PracticeActiveSessionView(props: PracticeActiveSessionViewProps)
             </div>
             <VirtualInterviewer
               data-testid="practice-interviewer-preview"
+              className="practice-active-interviewer"
               persona={props.activePersona.key}
               state={props.interviewerState}
               signal={props.currentTurn?.interviewer_signal}

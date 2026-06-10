@@ -48,11 +48,11 @@ describe('VirtualInterviewer', () => {
     )
   })
 
-  it('reserves a Rocketbox Three stage instead of the rejected Live2D avatar', () => {
+  it('uses the synthetic human portrait renderer instead of WebGL', () => {
     render(
       <VirtualInterviewer
         persona="calm_pressing"
-        state="idle"
+        state="speaking"
         speechSignal={{
           active: true,
           energy: 0.68,
@@ -64,14 +64,14 @@ describe('VirtualInterviewer', () => {
     )
 
     const avatar = screen.getByTestId('virtual-interviewer')
-    expect(avatar).toHaveAttribute('data-renderer', 'rocketbox-three')
+    expect(avatar).toHaveAttribute('data-renderer', 'human-portrait')
     expect(avatar).toHaveAttribute('data-speech-active', 'true')
-    expect(screen.getByTestId('virtual-interviewer-three-stage')).toBeInTheDocument()
-    expect(screen.queryByTestId('virtual-interviewer-portrait')).not.toBeInTheDocument()
+    expect(screen.getByTestId('virtual-interviewer-human-portrait')).toBeInTheDocument()
+    expect(screen.queryByTestId('virtual-interviewer-three-stage')).not.toBeInTheDocument()
     expect(screen.queryByTestId('virtual-interviewer-live2d-stage')).not.toBeInTheDocument()
   })
 
-  it('uses the Rocketbox poster for compact persona cards', () => {
+  it('keeps speech energy scoped to the speaking state', () => {
     render(
       <VirtualInterviewer
         persona="pressure_bigtech"
@@ -89,10 +89,10 @@ describe('VirtualInterviewer', () => {
 
     expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute(
       'data-renderer',
-      'rocketbox-poster',
+      'human-portrait',
     )
-    expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute('data-speech-active', 'true')
-    expect(screen.getByTestId('virtual-interviewer-rocketbox-poster')).toBeInTheDocument()
+    expect(screen.getByTestId('virtual-interviewer')).toHaveAttribute('data-speech-active', 'false')
+    expect(screen.getByTestId('virtual-interviewer-human-portrait')).toBeInTheDocument()
     expect(screen.queryByTestId('virtual-interviewer-rig-preview')).not.toBeInTheDocument()
   })
 })

@@ -19,6 +19,8 @@ interface UsePracticeTurnPlaybackArgs {
   canSpeakAnswer: boolean
   config?: {
     practice_tts_provider?: string
+    edge_tts_voice_female?: string
+    edge_tts_voice_male?: string
     practice_tts_speaker_female?: string
     practice_tts_speaker_male?: string
   } | null
@@ -157,11 +159,17 @@ export function usePracticeTurnPlayback(args: UsePracticeTurnPlaybackArgs) {
     const run = async () => {
       const runArgs = latestArgs()
       const provider = runArgs.config?.practice_tts_provider ?? 'edge_tts'
+      const maleSpeaker = provider === 'edge_tts'
+        ? runArgs.config?.edge_tts_voice_male
+        : runArgs.config?.practice_tts_speaker_male
+      const femaleSpeaker = provider === 'edge_tts'
+        ? runArgs.config?.edge_tts_voice_female
+        : runArgs.config?.practice_tts_speaker_female
       const preferredSpeaker =
         runArgs.voiceGender === 'male'
-          ? runArgs.config?.practice_tts_speaker_male
+          ? maleSpeaker
           : runArgs.voiceGender === 'female'
-            ? runArgs.config?.practice_tts_speaker_female
+            ? femaleSpeaker
             : undefined
       const promptText = currentTurn.prompt_script || currentTurn.question || ''
       let ok = false

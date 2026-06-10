@@ -216,7 +216,7 @@ export default function PracticeMode() {
     setPracticeTtsSpeaking,
     startRecording,
     sttLoaded,
-    voiceGender: persistentState.voiceGender,
+    voiceGender: voiceCatalog.effectiveVoiceGender,
   })
 
   const handleReset = async () => {

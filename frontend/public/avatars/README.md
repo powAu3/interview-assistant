@@ -1,4 +1,16 @@
-# Rocketbox Interviewer Avatar
+# Interviewer Avatar Assets
+
+Primary renderer: synthetic human portrait assets under `generated/`.
+
+Those portraits must be fictional/non-identifiable generated people. Do not use
+real-person photos, celebrity/public-figure likenesses, or identity-preserving
+references. See `frontend/scripts/README-avatar-generation.md` for the img2
+prompt and review workflow.
+
+If generated portraits are missing during development, the UI falls back to the
+legacy Rocketbox poster below.
+
+## Legacy Rocketbox fallback
 
 Default model: `rocketbox-interviewer.glb`
 

@@ -9,6 +9,7 @@ import {
   resolveVirtualInterviewerPersona,
   VIRTUAL_INTERVIEWER_PERSONA_OPTIONS as INTERVIEWER_STYLE_OPTIONS,
 } from '@/components/practice/virtualInterviewerPersona'
+import { resolveHumanInterviewerAsset } from '@/components/practice/humanInterviewerAssets'
 
 export type BrowserVoice = PracticeVoiceLike & {
   source?: string
@@ -35,12 +36,21 @@ export function usePracticeVoiceCatalog(args: UsePracticeVoiceCatalogArgs) {
     ? args.selectedVoiceURI.replace(/^say:/, '')
     : ''
 
+  const selectedPersona = resolveVirtualInterviewerPersona({ style: args.interviewerStyle })
+  const activePersona = resolveVirtualInterviewerPersona({
+    tone: args.practiceSession?.interviewer_persona?.tone,
+    style: args.practiceSession?.context?.interviewer_style ?? args.interviewerStyle,
+  })
+  const activeAsset = resolveHumanInterviewerAsset(activePersona.key)
+  const effectiveVoiceGender: PracticeVoiceGender =
+    args.voiceGender === 'auto' ? activeAsset.voiceGender : args.voiceGender
+
   const autoPreferredLocalVoice = useMemo(
     () => pickPreferredVoice(voices, {
-      preferredGender: args.voiceGender,
+      preferredGender: effectiveVoiceGender,
       selectedVoiceURI: args.selectedVoiceURI,
     }) ?? null,
-    [args.selectedVoiceURI, args.voiceGender, voices],
+    [args.selectedVoiceURI, effectiveVoiceGender, voices],
   )
 
   const resolvedDesktopVoiceName =
@@ -48,12 +58,6 @@ export function usePracticeVoiceCatalog(args: UsePracticeVoiceCatalogArgs) {
     || (autoPreferredLocalVoice?.voiceURI.startsWith('say:')
       ? autoPreferredLocalVoice.voiceURI.replace(/^say:/, '')
       : '')
-
-  const selectedPersona = resolveVirtualInterviewerPersona({ style: args.interviewerStyle })
-  const activePersona = resolveVirtualInterviewerPersona({
-    tone: args.practiceSession?.interviewer_persona?.tone,
-    style: args.practiceSession?.context?.interviewer_style ?? args.interviewerStyle,
-  })
 
   useEffect(() => {
     const synthesis = typeof window !== 'undefined' ? window.speechSynthesis : undefined
@@ -101,6 +105,7 @@ export function usePracticeVoiceCatalog(args: UsePracticeVoiceCatalogArgs) {
     useEdgeTts,
     autoPreferredLocalVoice,
     resolvedDesktopVoiceName,
+    effectiveVoiceGender,
     selectedPersona,
     activePersona,
     interviewerStyleOptions: INTERVIEWER_STYLE_OPTIONS,
