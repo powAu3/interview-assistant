@@ -8,9 +8,33 @@
 import { test, expect } from '@playwright/test'
 import { installMocks, COMMON_WS_BOOTSTRAP } from './fixtures/setup.mjs'
 import {
+  SAMPLE_CONFIG,
+  SAMPLE_DEVICES,
+  SAMPLE_OPTIONS,
   SAMPLE_PRACTICE_CODING_SESSION,
   SAMPLE_PRACTICE_SPEAKING_SESSION,
 } from './fixtures/sample-data.mjs'
+
+async function seedPracticeSession(page, session) {
+  await page.evaluate(
+    async ({ config, devices, options, session }) => {
+      const { useInterviewStore } = await import('/src/stores/configStore.ts')
+      const store = useInterviewStore.getState()
+      store.setConfig(config)
+      store.setDevices(devices.devices, devices.platform)
+      store.setOptions(options)
+      store.setSttStatus(true, false, 'whisper')
+      store.setPracticeSession(session)
+      store.setPracticeStatus(session.status)
+    },
+    {
+      config: SAMPLE_CONFIG,
+      devices: SAMPLE_DEVICES,
+      options: SAMPLE_OPTIONS,
+      session,
+    },
+  )
+}
 
 test.describe('app shell', () => {
   test.beforeEach(async ({ context }) => {
@@ -136,7 +160,12 @@ test.describe('practice mode booth', () => {
     })
 
     await page.goto('/')
-    await expect(page.getByTestId('practice-interviewer-preview')).toBeVisible()
+    await seedPracticeSession(page, SAMPLE_PRACTICE_SPEAKING_SESSION)
+    const preview = page.getByTestId('practice-interviewer-preview')
+    await expect(preview).toBeVisible()
+    await expect(preview).toHaveAttribute('data-renderer', 'human-portrait')
+    await expect(preview).toHaveAttribute('data-persona', 'calm_pressing')
+    await expect(preview).toHaveAttribute('data-state', /speaking|listening/)
     await expect(page.getByText(/状态 · (播报中|倾听中)/)).toBeVisible()
     await expect(page.getByText(/当前来源：/)).toBeVisible()
   })
@@ -161,8 +190,11 @@ test.describe('practice mode booth', () => {
     })
 
     await page.goto('/')
+    await seedPracticeSession(page, SAMPLE_PRACTICE_CODING_SESSION)
     await expect(page.getByText('题面模式').first()).toBeVisible()
-    await expect(page.getByTestId('practice-interviewer-preview')).toHaveAttribute('data-state', 'listening')
+    const preview = page.getByTestId('practice-interviewer-preview')
+    await expect(preview).toHaveAttribute('data-renderer', 'human-portrait')
+    await expect(preview).toHaveAttribute('data-state', 'listening')
   })
 })
 

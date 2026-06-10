@@ -1,5 +1,14 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const LOOPBACK_NO_PROXY = ['127.0.0.1', 'localhost', '::1']
+const existingNoProxy = process.env.NO_PROXY || process.env.no_proxy || ''
+const nextNoProxy = Array.from(new Set([
+  ...existingNoProxy.split(',').map((item) => item.trim()).filter(Boolean),
+  ...LOOPBACK_NO_PROXY,
+])).join(',')
+process.env.NO_PROXY = nextNoProxy
+process.env.no_proxy = nextNoProxy
+
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 4173)
 const BASE_URL = `http://127.0.0.1:${PORT}`
 

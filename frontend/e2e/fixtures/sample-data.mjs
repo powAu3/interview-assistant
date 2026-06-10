@@ -67,6 +67,14 @@ export const SAMPLE_CONFIG = {
   assist_transcription_merge_gap_sec: 6,
   assist_transcription_merge_max_sec: 16,
   screen_capture_region: 'left_half',
+  written_exam_mode: false,
+  written_exam_think: false,
+}
+
+export const SAMPLE_WRITTEN_EXAM_CONFIG = {
+  ...SAMPLE_CONFIG,
+  written_exam_mode: true,
+  written_exam_think: false,
 }
 
 export const SAMPLE_OPTIONS = {
@@ -382,6 +390,14 @@ export function resolveApiPayload(pathname, method) {
     }
   }
   if (pathname === '/api/preflight/run') return { ok: true }
+  if (pathname === '/api/exam-preflight/run') return { ok: true }
+  if (pathname === '/api/exam-preflight/status') {
+    return {
+      running: false,
+      question: '代码题：给定整数数组 nums 和目标值 target，返回两数之和的下标。',
+      steps: {},
+    }
+  }
   if (pathname === '/api/models/health' && method === 'GET') {
     return { health: { 0: 'ok', 1: 'ok', 2: 'error' } }
   }
