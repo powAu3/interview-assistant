@@ -1,11 +1,12 @@
 """LAN 访问鉴权模块。
 
 设计目标:
-1. 默认安全:启动时生成一次性 Bearer token,非环回(loopback)请求需带 token。
-2. 不影响本地开发:127.0.0.1 / ::1 / localhost 直接放行,无需 token。
-3. 可关闭(临时调试):设置环境变量 ``IA_AUTH_DISABLE=1`` 完全跳过鉴权。
-4. token 来源优先级:``IA_AUTH_TOKEN`` 环境变量 > 自动生成。
-5. token 通过 ``Authorization: Bearer`` HTTP 头或 ``?token=`` 查询参数传递。
+1. 默认本地无感:未显式开启时完全跳过鉴权,避免影响 localhost / Vite 开发流。
+2. 局域网模式安全:设置 ``IA_AUTH_ENABLE=1`` 后生成 Bearer token,非环回(loopback)请求需带 token。
+3. 本地仍放行:鉴权开启时 127.0.0.1 / ::1 / localhost 直接放行,无需 token。
+4. 可关闭(临时调试):设置环境变量 ``IA_AUTH_DISABLE=1`` 强制跳过鉴权。
+5. token 来源优先级:``IA_AUTH_TOKEN`` 环境变量 > 自动生成。设置 ``IA_AUTH_TOKEN`` 也会隐式开启鉴权。
+6. token 通过 ``Authorization: Bearer`` HTTP 头或 ``?token=`` 查询参数传递。
    WebSocket 仅支持查询参数。
 """
 from __future__ import annotations
@@ -20,6 +21,10 @@ _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 _token: Optional[str] = None
 _initialized = False
+
+
+def _env_truthy(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _resolve_token() -> str:
@@ -45,7 +50,11 @@ def get_token() -> str:
 
 
 def is_auth_disabled() -> bool:
-    return (os.environ.get("IA_AUTH_DISABLE") or "").strip() in ("1", "true", "yes", "on")
+    if _env_truthy("IA_AUTH_DISABLE"):
+        return True
+    if _env_truthy("IA_AUTH_ENABLE"):
+        return False
+    return not bool((os.environ.get("IA_AUTH_TOKEN") or "").strip())
 
 
 def is_loopback_host(host: Optional[str]) -> bool:
@@ -79,6 +88,8 @@ def origin_allows_loopback_bypass(
 ) -> bool:
     """Loopback auth bypass is only safe for non-browser or same-origin requests."""
     if not origin:
+        # CLI/local service calls usually do not send Origin. Allow them only after
+        # client_host has already been proven loopback by loopback_bypass_allowed().
         return True
     try:
         parsed = urlparse(origin)

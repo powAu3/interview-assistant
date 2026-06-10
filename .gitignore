@@ -79,6 +79,7 @@ temp/
 /docs/superpowers/**
 docs/screenshots/review/
 frontend/output/
+output/
 
 # Playwright
 frontend/playwright-report/

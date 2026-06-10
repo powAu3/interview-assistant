@@ -344,6 +344,7 @@ def run_desktop_mode(port: int):
 
 def run_network_mode(port: int):
     """Network mode: LAN accessible via browser (no Electron needed)."""
+    os.environ.setdefault("IA_AUTH_ENABLE", "1")
     print("  纯浏览器模式（无 Electron）")
     print()
     _print_access_info(port)

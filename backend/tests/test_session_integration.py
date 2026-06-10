@@ -109,19 +109,34 @@ class _AuthFakeWS:
         self.url = SimpleNamespace(scheme="ws", hostname=host, port=port)
 
 
-def test_websocket_loopback_rejects_cross_origin_without_token():
+def test_websocket_allows_local_requests_when_auth_is_not_enabled(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("IA_AUTH_ENABLE", raising=False)
+    monkeypatch.delenv("IA_AUTH_DISABLE", raising=False)
+    monkeypatch.delenv("IA_AUTH_TOKEN", raising=False)
+    ws = _AuthFakeWS(origin="http://localhost:5173")
+
+    assert ws_mod._ws_authorized(ws) is True
+
+
+def test_websocket_loopback_rejects_cross_origin_without_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("IA_AUTH_ENABLE", "1")
+    monkeypatch.delenv("IA_AUTH_DISABLE", raising=False)
     ws = _AuthFakeWS(origin="http://localhost:5173")
 
     assert ws_mod._ws_authorized(ws) is False
 
 
-def test_websocket_loopback_allows_same_origin_without_token():
+def test_websocket_loopback_allows_same_origin_without_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("IA_AUTH_ENABLE", "1")
+    monkeypatch.delenv("IA_AUTH_DISABLE", raising=False)
     ws = _AuthFakeWS(origin="http://localhost:18080")
 
     assert ws_mod._ws_authorized(ws) is True
 
 
 def test_websocket_loopback_cross_origin_allows_valid_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("IA_AUTH_ENABLE", "1")
+    monkeypatch.delenv("IA_AUTH_DISABLE", raising=False)
     ws = _AuthFakeWS(origin="http://localhost:5173", token="valid-token")
     monkeypatch.setattr(ws_mod, "verify_token", lambda token: token == "valid-token")
 

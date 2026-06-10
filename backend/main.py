@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
 
     token = init_auth()
     if is_auth_disabled():
-        _log.warning("AUTH DISABLED via IA_AUTH_DISABLE env (LAN access is open)")
+        _log.info("AUTH disabled (set IA_AUTH_ENABLE=1 or IA_AUTH_TOKEN to protect LAN access)")
     else:
         _log.info(
             "AUTH ready (loopback bypass; LAN clients must include token; len=%d)",
