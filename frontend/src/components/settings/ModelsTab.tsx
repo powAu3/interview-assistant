@@ -1112,7 +1112,7 @@ export default function ModelsTab() {
             aria-checked={llmForm.think_mode}
             onClick={() => {
               const next = !llmForm.think_mode
-              setLlmForm({ ...llmForm, think_mode: next, think_effort: next ? 'high' : 'off' })
+              setLlmForm({ ...llmForm, think_mode: next, think_effort: next ? 'xhigh' : 'off' })
             }}
             className={`relative h-7 w-11 rounded-full flex-shrink-0 transition-colors ${llmForm.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}
           >

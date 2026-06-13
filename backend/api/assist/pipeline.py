@@ -1,6 +1,7 @@
 """Interview assist pipeline: ASR buffering, task dispatch, parallel answer workers."""
 
 import gc
+import queue
 import time
 import threading
 from difflib import SequenceMatcher
@@ -64,11 +65,17 @@ _candidate_flush_event = threading.Event()
 _candidate_whisper_preload_lock = threading.Lock()
 _candidate_whisper_preload_inflight: set[tuple[str, str]] = set()
 
+# H4: 添加独立 flush 线程，避免阻塞音频采集主循环
+_flush_thread: Optional[threading.Thread] = None
+_flush_queue: queue.Queue = queue.Queue(maxsize=10)
+_flush_stop_event = threading.Event()
+
 _answer_generation = 0
 _gen_lock = threading.Lock()
 
 _pending: list[tuple[TaskPayload, int, int]] = []
 _dispatch_lock = threading.Lock()
+_asr_state_lock = threading.RLock()
 _in_flight_tasks: dict[int, tuple[int, TaskPayload]] = {}
 _task_session_version = 0
 _latest_asr_turn_id = 0
@@ -99,14 +106,24 @@ _asr_state = AssistAsrStateMachine(
 # ASR merge / question grouping
 # ---------------------------------------------------------------------------
 
-def _reset_asr_merge_buffer():
+def _reset_asr_merge_buffer_locked():
     _asr_state.reset_merge_buffer()
     _sync_asr_state_to_compat_globals()
 
 
-def _reset_pending_asr_group():
+def _reset_asr_merge_buffer():
+    with _asr_state_lock:
+        _reset_asr_merge_buffer_locked()
+
+
+def _reset_pending_asr_group_locked():
     _asr_state.reset_pending_group()
     _sync_asr_state_to_compat_globals()
+
+
+def _reset_pending_asr_group():
+    with _asr_state_lock:
+        _reset_pending_asr_group_locked()
 
 
 def _sync_compat_globals_to_asr_state():
@@ -199,18 +216,21 @@ def _capture_generation() -> int:
 
 def _reset_answer_state():
     global _pending, _in_flight_tasks, _commit_buffer, _skipped_commit_seqs, _next_commit_seq, _task_session_version, _latest_asr_turn_id, _recent_asr_turn_monos
-    with _dispatch_lock:
-        _pending.clear()
-        _in_flight_tasks.clear()
-        _latest_asr_turn_id = 0
-        _recent_asr_turn_monos = []
+    with _asr_state_lock:
+        with _dispatch_lock:
+            _pending.clear()
+            _in_flight_tasks.clear()
+            _latest_asr_turn_id = 0
+            _recent_asr_turn_monos = []
+            _task_session_version += 1
+            next_commit_seq = _next_submit_seq
+        _reset_asr_merge_buffer_locked()
+        _reset_pending_asr_group_locked()
+    # commit 相关操作单独处理
     with _commit_lock:
         _commit_buffer.clear()
         _skipped_commit_seqs.clear()
-        _next_commit_seq = _next_submit_seq
-    _task_session_version += 1
-    _reset_asr_merge_buffer()
-    _reset_pending_asr_group()
+        _next_commit_seq = next_commit_seq
 
 
 def cancel_answer_work(reset_session_data: bool = False):
@@ -363,21 +383,24 @@ def submit_answer_task(task: TaskPayload) -> bool:
 # ---------------------------------------------------------------------------
 
 def _flush_asr_question_group_now(cfg, session) -> None:
-    _sync_compat_globals_to_asr_state()
-    _asr_state.flush_question_group_now(cfg, session)
-    _sync_asr_state_to_compat_globals()
+    with _asr_state_lock:
+        _sync_compat_globals_to_asr_state()
+        _asr_state.flush_question_group_now(cfg, session)
+        _sync_asr_state_to_compat_globals()
 
 
 def _try_flush_asr_question_group(cfg, session, now_mono: float, force: bool = False) -> None:
-    _sync_compat_globals_to_asr_state()
-    _asr_state.try_flush_question_group(cfg, session, now_mono, force)
-    _sync_asr_state_to_compat_globals()
+    with _asr_state_lock:
+        _sync_compat_globals_to_asr_state()
+        _asr_state.try_flush_question_group(cfg, session, now_mono, force)
+        _sync_asr_state_to_compat_globals()
 
 
 def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: float) -> None:
-    _sync_compat_globals_to_asr_state()
-    _asr_state.handle_auto_detect_asr_text(cfg, session, pub, source, now_mono)
-    _sync_asr_state_to_compat_globals()
+    with _asr_state_lock:
+        _sync_compat_globals_to_asr_state()
+        _asr_state.handle_auto_detect_asr_text(cfg, session, pub, source, now_mono)
+        _sync_asr_state_to_compat_globals()
 
 
 # ---------------------------------------------------------------------------
@@ -385,21 +408,24 @@ def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: 
 # ---------------------------------------------------------------------------
 
 def _flush_asr_merge_buffer_now(cfg, session) -> None:
-    _sync_compat_globals_to_asr_state()
-    _asr_state.flush_merge_buffer_now(cfg, session)
-    _sync_asr_state_to_compat_globals()
+    with _asr_state_lock:
+        _sync_compat_globals_to_asr_state()
+        _asr_state.flush_merge_buffer_now(cfg, session)
+        _sync_asr_state_to_compat_globals()
 
 
 def _try_flush_asr_merge_buffer(cfg, session, now_mono: float, force: bool = False) -> None:
-    _sync_compat_globals_to_asr_state()
-    _asr_state.try_flush_merge_buffer(cfg, session, now_mono, force)
-    _sync_asr_state_to_compat_globals()
+    with _asr_state_lock:
+        _sync_compat_globals_to_asr_state()
+        _asr_state.try_flush_merge_buffer(cfg, session, now_mono, force)
+        _sync_asr_state_to_compat_globals()
 
 
 def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, force_flush_tail: bool = False) -> None:
-    _sync_compat_globals_to_asr_state()
-    _asr_state.append_transcription_fragment(cfg, session, pub, now_mono, force_flush_tail)
-    _sync_asr_state_to_compat_globals()
+    with _asr_state_lock:
+        _sync_compat_globals_to_asr_state()
+        _asr_state.append_transcription_fragment(cfg, session, pub, now_mono, force_flush_tail)
+        _sync_asr_state_to_compat_globals()
 
 
 # ---------------------------------------------------------------------------
@@ -538,8 +564,9 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
 
 
 def stop_interview_loop():
-    global _interview_thread, _candidate_thread
+    global _interview_thread, _candidate_thread, _flush_thread
     _stop_event.set()
+    _flush_stop_event.set()
     _pause_event.clear()
     cancel_answer_work(reset_session_data=False)
     audio_capture.stop(owner="assist")
@@ -559,6 +586,10 @@ def stop_interview_loop():
     if _interview_thread and _interview_thread.is_alive():
         _interview_thread.join(timeout=3)
     _interview_thread = None
+    # H4: 等待 flush 线程结束
+    if _flush_thread and _flush_thread.is_alive():
+        _flush_thread.join(timeout=1)
+    _flush_thread = None
     if _candidate_thread and _candidate_thread.is_alive():
         _candidate_thread.join(timeout=3)
     _candidate_thread = None
@@ -630,6 +661,22 @@ def is_paused() -> bool:
     return _pause_event.is_set()
 
 
+# H4: 独立 flush worker 线程，避免阻塞音频采集主循环
+def _flush_worker():
+    """独立线程处理 ASR buffer flush，避免阻塞音频采集"""
+    while not _flush_stop_event.is_set():
+        try:
+            flush_signal = _flush_queue.get(timeout=0.1)
+            if flush_signal:
+                cfg, session, now = flush_signal
+                _try_flush_asr_merge_buffer(cfg, session, now, False)
+                _try_flush_asr_question_group(cfg, session, now, False)
+        except queue.Empty:
+            continue
+        except Exception as e:
+            _elog.error("flush_worker error: %s", e, exc_info=True)
+
+
 def _interview_worker():
     cfg = get_config()
     engine = get_stt_engine()
@@ -671,11 +718,22 @@ def _interview_worker():
     )
     _gc_thread.start()
 
+    # H4: 启动独立 flush 线程
+    global _flush_thread
+    _flush_thread = threading.Thread(
+        target=_flush_worker, daemon=True, name="assist-flush"
+    )
+    _flush_stop_event.clear()
+    _flush_thread.start()
+
     try:
         while not _stop_event.is_set():
             now = time.monotonic()
-            _try_flush_asr_merge_buffer(get_config(), session, now, False)
-            _try_flush_asr_question_group(get_config(), session, now, False)
+            # H4: 将 flush 逻辑移到独立线程，避免阻塞音频采集
+            try:
+                _flush_queue.put_nowait((get_config(), session, now))
+            except queue.Full:
+                pass  # 如果队列满，跳过本次 flush
 
             if _pause_event.is_set():
                 time.sleep(0.1)
@@ -759,6 +817,12 @@ def _interview_worker():
         _gc_stop.set()
         try:
             _gc_thread.join(timeout=0.5)
+        except Exception:
+            pass
+        _flush_stop_event.set()
+        try:
+            if _flush_thread and _flush_thread.is_alive():
+                _flush_thread.join(timeout=0.5)
         except Exception:
             pass
         try:

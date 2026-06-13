@@ -57,3 +57,10 @@ def test_candidate_remote_stt_can_be_enabled_explicitly():
     )
 
     assert cfg.candidate_stt_provider == "generic"
+
+
+def test_think_effort_accepts_xhigh():
+    cfg = AppConfig(think_mode=True, think_effort="xhigh")
+
+    assert cfg.think_mode is True
+    assert cfg.think_effort == "xhigh"

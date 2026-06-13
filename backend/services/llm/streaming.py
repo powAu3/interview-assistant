@@ -93,6 +93,11 @@ _client_cache: dict[tuple[str, str], OpenAI] = {}
 _client_cache_lock = threading.Lock()
 
 
+def _openai_compat_headers() -> dict[str, str]:
+    # Some OpenAI-compatible gateways block the OpenAI SDK's default User-Agent.
+    return {"User-Agent": f"python-requests/{requests.__version__}"}
+
+
 def get_client() -> OpenAI:
     cfg = get_config()
     m = cfg.get_active_model()
@@ -104,7 +109,11 @@ def get_client_for_model(model_cfg) -> OpenAI:
     with _client_cache_lock:
         client = _client_cache.get(key)
         if client is None:
-            client = OpenAI(api_key=model_cfg.api_key, base_url=model_cfg.api_base_url)
+            client = OpenAI(
+                api_key=model_cfg.api_key,
+                base_url=model_cfg.api_base_url,
+                default_headers=_openai_compat_headers(),
+            )
             _client_cache[key] = client
         return client
 
@@ -132,6 +141,7 @@ def _vision_via_http(model_cfg, messages: list[dict]) -> str:
     base = (model_cfg.api_base_url or "").rstrip("/")
     url = f"{base}/chat/completions"
     headers = {
+        **_openai_compat_headers(),
         "Authorization": f"Bearer {model_cfg.api_key}",
         "Content-Type": "application/json",
     }
@@ -276,6 +286,7 @@ _EFFORT_BUDGET = {
     "low": 1024,
     "medium": 4096,
     "high": 10240,
+    "xhigh": 16384,
 }
 
 _THINK_DISABLED_BASE_PARAMS = {
@@ -398,16 +409,16 @@ def _build_think_params(model_cfg, cfg) -> dict:
             return saved_disabled
         return _disabled_think_params_for_model(model_cfg, style)
     saved_enabled = _model_dict_param(model_cfg, "think_enabled_params")
-    if saved_enabled:
+    if saved_enabled and style != "gpt":
         return saved_enabled
     if not model_cfg.supports_think:
         return {}
     if _is_doubao_model(model_cfg):
         return {}
     if style == "gpt":
-        return {
-            "reasoning_effort": effort,
-        }
+        params = dict(saved_enabled)
+        params["reasoning_effort"] = effort
+        return params
     if style == "claude":
         budget = _claude_thinking_budget(effort, getattr(cfg, "max_tokens", 4096))
         return {
@@ -458,6 +469,7 @@ def _stream_via_http(model_cfg, full_messages, cfg, think_params):
     base = (model_cfg.api_base_url or "").rstrip("/")
     url = f"{base}/chat/completions"
     headers = {
+        **_openai_compat_headers(),
         "Authorization": f"Bearer {model_cfg.api_key}",
         "Content-Type": "application/json",
     }
@@ -628,7 +640,7 @@ def chat_stream_single_model(
     if override_think_mode is not None:
         updates = {"think_mode": override_think_mode}
         if override_think_mode and getattr(cfg, "think_effort", "off") == "off":
-            updates["think_effort"] = "high"
+            updates["think_effort"] = "xhigh"
         elif not override_think_mode:
             updates["think_effort"] = "off"
         cfg = _copy_config_with_updates(cfg, updates)

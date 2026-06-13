@@ -82,6 +82,39 @@ def _message_text_chars(messages: list[dict]) -> int:
     return total
 
 
+def _clip_text(text: str, max_chars: int) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max(0, max_chars - 1)].rstrip() + "…"
+
+
+def _written_exam_followup_context(session_ref, *, source: str, image_count: int) -> str:
+    if image_count <= 0 or not (source or "").startswith("server_screen_"):
+        return ""
+    recent_qas = [
+        qa
+        for qa in session_ref.qa_pairs[-4:]
+        if (qa.question or qa.answer)
+        and (qa.source or "").startswith("server_screen_")
+        and not (qa.source or "").endswith("exam_preflight")
+    ][-2:]
+    if not recent_qas:
+        return ""
+
+    lines = [
+        "[笔试连续截图上下文]",
+        "当前截图优先级最高: 若截图里出现新增规则、隐藏/边界条件、失败用例、编译/运行报错、预期输出和实际输出, 必须据此修正上一版答案。",
+        "不要因为上一版代码已存在就忽略当前截图; 若当前截图显示上一版未通过, 直接输出修正后的完整可提交代码。",
+        "如果当前截图明显是新题或与上一题无关, 忽略下面旧答案, 按新题作答。",
+        "最近上一版答案参考:",
+    ]
+    for idx, qa in enumerate(recent_qas, start=1):
+        lines.append(f"{idx}. 题目/截图: {_clip_text(qa.question, 260)}")
+        lines.append(f"   上一版答案: {_clip_text(qa.answer, 900)}")
+    return "\n".join(lines)
+
+
 def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
     enabled = bool(getattr(cfg, "candidate_asr_enabled", False)) and bool(
         getattr(cfg, "candidate_context_enabled", True)
@@ -255,10 +288,20 @@ def process_question_parallel(
         if written_exam:
             base_messages = []
             history_stats = {"messages": 0, "history_messages": 0, "stripped_images": 0}
+            written_followup_context = (
+                ""
+                if exam_preflight_id
+                else _written_exam_followup_context(
+                    session_ref,
+                    source=source,
+                    image_count=len(images),
+                )
+            )
         else:
             history_options = _history_context_options(prompt_mode, written_exam)
             base_messages = list(session_ref.get_conversation_messages_for_llm(**history_options))
             history_stats = dict(getattr(session_ref, "last_llm_history_stats", {}) or {})
+            written_followup_context = ""
         last_qa = session_ref.get_last_qa()
         candidate_context_enabled, candidate_wait_ms, candidate_max_chars, candidate_min_chars = _candidate_context_settings(cfg)
         candidate_source_ok = _supports_candidate_context_source(source, meta)
@@ -328,6 +371,24 @@ def process_question_parallel(
             "不得假设候选人照读了助手上一轮建议答案，也不要把转写当成逐字事实。\n\n"
             f"现在面试官问题：{question_text}"
         )
+
+    if written_followup_context:
+        if isinstance(user_for_llm, list):
+            if user_for_llm and isinstance(user_for_llm[0], dict) and user_for_llm[0].get("type") == "text":
+                user_for_llm[0] = {
+                    **user_for_llm[0],
+                    "text": f"{written_followup_context}\n\n[当前截图/题面]\n{question_text}",
+                }
+            else:
+                user_for_llm.insert(
+                    0,
+                    {
+                        "type": "text",
+                        "text": f"{written_followup_context}\n\n[当前截图/题面]\n{question_text}",
+                    },
+                )
+        else:
+            user_for_llm = f"{written_followup_context}\n\n[当前题面]\n{question_text}"
 
     with conversation_lock:
         session_ref.close_candidate_answer_window()
@@ -414,6 +475,8 @@ def process_question_parallel(
     exam_think_notified = False
     gen_start = time.monotonic()
     first_token_mono: Optional[float] = None
+    chunk_buffer: list[str] = []
+    batch_size = 5
     try:
         think_override = (
             written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM and (source or "").startswith("server_screen_")
@@ -456,13 +519,22 @@ def process_question_parallel(
                 raw_full_answer += chunk_text
                 clean_chunk = stream_sanitizer.push(chunk_text)
                 if clean_chunk:
-                    _broadcast(
-                        {"type": "answer_chunk", "id": qa_id, "chunk": clean_chunk}
-                    )
+                    chunk_buffer.append(clean_chunk)
+                    if len(chunk_buffer) >= batch_size:
+                        _broadcast(
+                            {"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)}
+                        )
+                        chunk_buffer.clear()
+        if chunk_buffer:
+            _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
+            chunk_buffer.clear()
     except Exception as exc:
         deps.error_logger.error("LLM stream error id=%s: %s", qa_id, exc, exc_info=True)
         err = f"\n\n[生成答案出错: {exc}]"
         raw_full_answer += err
+        if chunk_buffer:
+            _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
+            chunk_buffer.clear()
         tail = stream_sanitizer.finish()
         if tail:
             _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})

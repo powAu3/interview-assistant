@@ -183,6 +183,75 @@ describe('InterviewOverlay', () => {
     expect(codeBlock?.querySelector('.ov-code.language-ts')).toBeInTheDocument()
   })
 
+  it('keeps markdown code fences valid when prompt max lines trims into a block', () => {
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'prompt',
+      interviewOverlayShowBg: false,
+      interviewOverlayMaxLines: 3,
+    })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    localStorage.setItem('ia_overlay_max_lines', '3')
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '```python\nprint(1)\nprint(2)\nprint(3)\n```',
+      }],
+    })
+
+    render(<InterviewOverlay />)
+
+    const code = document.querySelector('.ov-code.language-python')
+    expect(code).toBeInTheDocument()
+    expect(code).toHaveTextContent('print(2)')
+    expect(code).toHaveTextContent('print(3)')
+    expect(code).not.toHaveTextContent('print(1)')
+    expect(screen.queryByText(/```python/)).not.toBeInTheDocument()
+  })
+
+  it('auto-sizes prompt overlay bounds for watch-only display', async () => {
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 260, height: 130 })
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
+    const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(244)
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+
+    try {
+      render(<InterviewOverlay />)
+
+      await waitFor(() => {
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 260, height: 130 })
+      })
+      expect(document.querySelector('.ov-root--prompt')).toBeInTheDocument()
+    } finally {
+      scrollHeightSpy.mockRestore()
+      scrollWidthSpy.mockRestore()
+    }
+  })
+
+  it('caps prompt overlay auto width so long content wraps', async () => {
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 520, height: 130 })
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
+    const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1200)
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+
+    try {
+      render(<InterviewOverlay />)
+
+      await waitFor(() => {
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 520, height: 130 })
+      })
+    } finally {
+      scrollHeightSpy.mockRestore()
+      scrollWidthSpy.mockRestore()
+    }
+  })
+
   it('renders focus overlay mode with visual toolbar and tabs', () => {
     useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
     localStorage.setItem('ia_overlay_mode', 'focus')

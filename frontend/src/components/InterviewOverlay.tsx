@@ -22,6 +22,7 @@ type FocusTabPane = {
 
 const FOCUS_TAB_CACHE_LIMIT = 20
 const FOCUS_TEXT_COLOR = '#263241'
+const PROMPT_OVERLAY_MAX_WIDTH = 520
 
 const OVERLAY_MARKDOWN_COMPONENTS: Components = {
   a({ children }) {
@@ -104,12 +105,7 @@ export default function InterviewOverlay() {
   const activeFocusTab = activeFocusTabsByQaId[displayedQaKey] ?? focusTabs[0]?.key ?? 'answer'
   const activeSection = focusTabs.find((tab) => tab.key === activeFocusTab) ?? focusTabs[0]
 
-  const displayLines = useMemo(() => {
-    if (!answerText) return []
-    const lines = answerText.split('\n')
-    if (maxLines > 0 && lines.length > maxLines) return lines.slice(-maxLines)
-    return lines
-  }, [answerText, maxLines])
+  const overlayAnswerSlice = useMemo(() => sliceMaxLines(answerText, maxLines), [answerText, maxLines])
 
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
   const answerAutoFollowRef = useRef(true)
@@ -130,6 +126,22 @@ export default function InterviewOverlay() {
     if (!answerAutoFollowRef.current) return
     el.scrollTop = el.scrollHeight
   }, [answerText, activeFocusTab, isStreaming])
+
+  useLayoutEffect(() => {
+    if (!enabled || overlayMode !== 'prompt') return
+    const el = answerScrollRef.current
+    if (!el) return
+    const contentEl = el.querySelector<HTMLElement>('.ov-markdown') ?? el
+    const contentWidth = Math.ceil(Math.max(
+      contentEl.scrollWidth,
+      contentEl.getBoundingClientRect().width,
+      el.scrollWidth,
+    ))
+    const contentHeight = Math.ceil(el.scrollHeight)
+    const nextWidth = Math.max(180, Math.min(PROMPT_OVERLAY_MAX_WIDTH, contentWidth + 16))
+    const nextHeight = Math.max(72, Math.min(420, contentHeight + 12))
+    window.electronAPI?.resizeOverlayWindow?.({ width: nextWidth, height: nextHeight })?.catch(() => {})
+  }, [answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text])
 
   const refreshShortcuts = useCallback(() => {
     window.electronAPI?.getShortcuts?.()
@@ -305,7 +317,6 @@ export default function InterviewOverlay() {
 
   const answerFontSize = Math.max(12, fontSize)
   const shellClass = `ov-shell ${overlayMode === 'focus' ? 'ov-shell--focus' : overlayMode === 'prompt' ? 'ov-shell--nobg' : 'ov-shell--bg'}`
-  const trimmedLines = maxLines > 0 ? displayLines : null
   const focusSurfaceAlpha = Math.max(0.1, Math.min(0.95, opacity))
   const focusShellStyle = {
     '--ov-focus-bg-alpha': String(focusSurfaceAlpha),
@@ -327,7 +338,7 @@ export default function InterviewOverlay() {
           {isReviewingHistory ? '回看' : '当前'} {displayedQaIndex + 1}/{qaPairs.length} · {displayedQa.question}
         </div>
       )}
-      <OverlayMarkdown content={trimmedLines ? trimmedLines.join('\n') : answerText} />
+      <OverlayMarkdown content={overlayAnswerSlice.text} />
       {isStreaming && <span className="ov-caret" />}
     </>
   ) : (
@@ -427,7 +438,7 @@ export default function InterviewOverlay() {
 
   return (
     <div
-      className="ov-root"
+      className={`ov-root ${overlayMode === 'prompt' ? 'ov-root--prompt' : ''}`}
     >
       <div className={shellClass} style={{ opacity, color: fontColor }}>
         <div className="ov-grip" aria-hidden />
@@ -482,9 +493,30 @@ function pruneFocusTabCache<T>(cache: Record<string, T>, retainedQaIds: Set<stri
 function sliceMaxLines(text: string, maxLines: number): { text: string; omitted: boolean } {
   if (maxLines <= 0) return { text, omitted: false }
   const lines = text.split('\n')
-  return lines.length > maxLines
-    ? { text: lines.slice(-maxLines).join('\n'), omitted: true }
-    : { text, omitted: false }
+  if (lines.length <= maxLines) return { text, omitted: false }
+  const start = Math.max(0, lines.length - maxLines)
+  const tail = lines.slice(start)
+  const openFence = getOpenMarkdownFenceAt(lines.slice(0, start))
+  if (openFence) tail.unshift(openFence)
+  return { text: tail.join('\n'), omitted: true }
+}
+
+function getOpenMarkdownFenceAt(lines: string[]) {
+  let openFence = ''
+  let openFenceMarker = ''
+  for (const line of lines) {
+    const match = line.match(/^\s{0,3}(```+|~~~+)(.*)$/)
+    if (!match) continue
+    const marker = match[1]
+    if (!openFence) {
+      openFence = `${marker}${match[2] ?? ''}`.trimEnd()
+      openFenceMarker = marker
+    } else if (marker[0] === openFenceMarker[0] && marker.length >= openFenceMarker.length) {
+      openFence = ''
+      openFenceMarker = ''
+    }
+  }
+  return openFence
 }
 
 function buildFocusTabs(answerText: string, question: string, isStreaming: boolean): FocusTabPane[] {

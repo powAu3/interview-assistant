@@ -187,6 +187,9 @@ def test_input_audio(device_id: int, duration_sec: float = 1.2) -> dict:
     }
 
 
+test_input_audio.__test__ = False
+
+
 def _input_level_pct(rms: float, peak: float) -> int:
     return max(0, min(100, int(round(max(rms * 2500, peak * 250)))))
 

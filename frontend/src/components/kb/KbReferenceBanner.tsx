@@ -20,7 +20,8 @@ const ORIGIN_TAG: Record<string, string> = {
  */
 export default function KbReferenceBanner({ qaId }: Props) {
   const payload = useKbStore((s) => (qaId ? s.hitsByQaId[qaId] : undefined))
-  const [open, setOpen] = useState(false)
+  // M1: 默认展开，让用户清楚看到引用来源
+  const [open, setOpen] = useState(true)
   const userToggled = useRef(false)
 
   // 首次有命中时自动展开 — 否则正文里的 [1][2] 角标用户找不到来源会困惑。

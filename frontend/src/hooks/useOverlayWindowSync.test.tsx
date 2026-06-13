@@ -11,6 +11,7 @@ function setupElectronAPI() {
   const showWindow = vi.fn(noopAsync)
   const getWindowState = vi.fn(() => Promise.resolve({ visible: false, alwaysOnTop: false, contentProtection: true }))
   const onOverlayState = vi.fn(() => () => {})
+  const destroyOverlay = vi.fn(() => Promise.resolve({ ok: true }))
 
   ;(window as unknown as { electronAPI: unknown }).electronAPI = {
     syncOverlayWindow,
@@ -18,9 +19,10 @@ function setupElectronAPI() {
     showWindow,
     getWindowState,
     onOverlayState,
+    destroyOverlay,
   }
 
-  return { syncOverlayWindow, hideWindow, showWindow, getWindowState, onOverlayState }
+  return { syncOverlayWindow, hideWindow, showWindow, getWindowState, onOverlayState, destroyOverlay }
 }
 
 function Harness({ isRecording, appMode }: { isRecording: boolean; appMode: string }) {
@@ -112,6 +114,22 @@ describe('useOverlayWindowSync', () => {
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
       expect.not.objectContaining({ visible: expect.anything() }),
     )
+  })
+
+  it('destroys overlay only when the hook unmounts', async () => {
+    const api = setupElectronAPI()
+    useUiPrefsStore.setState({ interviewOverlayEnabled: true })
+    const { unmount } = render(<Harness isRecording={false} appMode="assist" />)
+
+    await act(async () => {
+      useUiPrefsStore.getState().setInterviewOverlayOpacity(0.5)
+    })
+
+    expect(api.destroyOverlay).not.toHaveBeenCalled()
+
+    unmount()
+
+    expect(api.destroyOverlay).toHaveBeenCalledTimes(1)
   })
 
   it('applying Electron overlay state persists enabled and valid style prefs without dispatching local sync events', () => {

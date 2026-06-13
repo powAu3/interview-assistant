@@ -82,6 +82,7 @@ let isQuitting = false;
 let shortcuts = {};
 let _overlayDragging = false;
 let _blurTimer = null;
+let overlayAutoResizeUntil = 0;
 let overlayPositionSaveTimer = null;
 let lastOverlayState = {
   initialized: false,
@@ -186,6 +187,8 @@ function synthesizeSystemTts({ text, voiceName = '', rate = 180 }) {
 }
 
 const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
+const PROMPT_OVERLAY_MIN_SIZE = { width: 180, height: 72 };
+const PROMPT_OVERLAY_MAX_SIZE = { width: 520, heightRatio: 0.48 };
 const FOCUS_OVERLAY_MARGIN = 14;
 
 let _frontReassertTimer = null;
@@ -315,6 +318,10 @@ function getNormalOverlayBounds() {
 function applyOverlayModeBounds() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const mode = lastOverlayState?.mode || (lastOverlayState?.showBg === false ? 'prompt' : 'glass');
+  overlayWindow.setMinimumSize(
+    mode === 'prompt' ? PROMPT_OVERLAY_MIN_SIZE.width : OVERLAY_PRESET.minWidth,
+    mode === 'prompt' ? PROMPT_OVERLAY_MIN_SIZE.height : OVERLAY_PRESET.minHeight,
+  );
   const bounds = mode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds();
   overlayWindow.setBounds(bounds, false);
 }
@@ -322,6 +329,7 @@ function applyOverlayModeBounds() {
 function persistOverlayPosition() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   if (lastOverlayState?.mode === 'focus') return;
+  if (Date.now() < overlayAutoResizeUntil) return;
   const bounds = overlayWindow.getBounds();
   const saved = loadOverlayWindowState();
   saved.position = { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height };
@@ -1045,6 +1053,40 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   return { ok: true, visible: true };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
+ipcMain.handle('resize-overlay-window', (_event, payload = {}) => {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return { ok: false };
+  const mode = lastOverlayState?.mode || (lastOverlayState?.showBg === false ? 'prompt' : 'glass');
+  if (mode !== 'prompt') return { ok: true, skipped: true };
+
+  const bounds = overlayWindow.getBounds();
+  const center = {
+    x: bounds.x + Math.round(bounds.width / 2),
+    y: bounds.y + Math.round(bounds.height / 2),
+  };
+  const area = screen.getDisplayNearestPoint(center).workArea;
+  const nextWidth = Number(payload.width);
+  const nextHeight = Number(payload.height);
+  const width = Number.isFinite(nextWidth)
+    ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(PROMPT_OVERLAY_MAX_SIZE.width, area.width - 16, Math.round(nextWidth)))
+    : bounds.width;
+  const height = Number.isFinite(nextHeight)
+    ? Math.max(PROMPT_OVERLAY_MIN_SIZE.height, Math.min(Math.round(area.height * PROMPT_OVERLAY_MAX_SIZE.heightRatio), Math.round(nextHeight)))
+    : bounds.height;
+  const x = Math.max(area.x + 8, Math.min(bounds.x, area.x + area.width - width - 8));
+  const y = Math.max(area.y + 8, Math.min(bounds.y, area.y + area.height - height - 8));
+
+  overlayAutoResizeUntil = Date.now() + 500;
+  overlayWindow.setBounds({ x, y, width, height }, false);
+  return { ok: true, width, height };
+});
+// M3: 添加 destroyOverlay 接口，支持显式销毁悬浮窗
+ipcMain.handle('destroy-overlay', () => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.destroy();
+    overlayWindow = null;
+  }
+  return { ok: true };
+});
 ipcMain.handle('list-system-tts-voices', async () => listSystemTtsVoices());
 ipcMain.handle('synthesize-system-tts', async (_event, payload = {}) =>
   synthesizeSystemTts({

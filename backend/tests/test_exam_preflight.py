@@ -114,3 +114,45 @@ def test_run_exam_preflight_broadcasts_steps_and_status(monkeypatch: pytest.Monk
     assert "def two_sum" in status["steps"]["llm"]["answer"]
     assert any(event.get("type") == "exam_preflight_step" for event in events)
     assert any(event.get("step") == "done" for event in events)
+
+
+def test_run_exam_preflight_keeps_pass_status_when_worker_returns_fast(monkeypatch: pytest.MonkeyPatch):
+    cfg = SimpleNamespace(
+        active_model=0,
+        models=[SimpleNamespace(name="vision", enabled=True, supports_vision=True, api_key="sk")],
+    )
+    monkeypatch.setattr(exam_test, "broadcast", lambda data: None)
+    monkeypatch.setattr(exam_test, "get_config", lambda: cfg)
+    monkeypatch.setattr(exam_test, "build_fixed_code_question_image_data_url", lambda: "data:image/png;base64,fake")
+    monkeypatch.setattr(exam_test, "get_model_health", lambda idx: None)
+    monkeypatch.setattr(pipeline, "pick_model_index", lambda task, busy: 0)
+
+    def fake_submit(task):
+        preflight_id = task[4]["exam_preflight_id"]
+        exam_test.record_exam_preflight_answer_event({
+            "type": "answer_start",
+            "id": "qa-fast",
+            "exam_preflight_id": preflight_id,
+            "model_name": "vision",
+        })
+        exam_test.record_exam_preflight_answer_event({
+            "type": "answer_done",
+            "id": "qa-fast",
+            "exam_preflight_id": preflight_id,
+            "answer": "```python\ndef two_sum(nums, target):\n    return []\n```",
+            "model_name": "vision",
+            "first_token_ms": 50,
+            "total_ms": 120,
+        })
+        return True
+
+    monkeypatch.setattr(pipeline, "submit_answer_task", fake_submit)
+
+    exam_test._run_exam_preflight()
+
+    status = exam_test.get_exam_preflight_status()
+    assert status["running"] is False
+    assert status["qa_id"] == "qa-fast"
+    assert status["steps"]["submit"]["status"] == "pass"
+    assert status["steps"]["llm"]["status"] == "pass"
+    assert status["steps"]["done"]["status"] == "done"

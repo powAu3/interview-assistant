@@ -525,6 +525,39 @@ def test_process_question_parallel_flushes_clean_tail_before_error(
     assert "生成答案出错" in chunks[1]
 
 
+def test_process_question_parallel_flushes_batched_chunks_before_error(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    class PassthroughSanitizer:
+        def push(self, chunk: str) -> str:
+            return chunk
+
+        def finish(self) -> str:
+            return ""
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "chunk-1")
+        yield ("text", "chunk-2")
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(answer_worker, "create_answer_stream_sanitizer", lambda _mode: PassthroughSanitizer())
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("Redis 怎么持久化？", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    chunks = [event["chunk"] for event in broadcasts if event["type"] == "answer_chunk"]
+    assert chunks[0] == "chunk-1chunk-2"
+    assert "生成答案出错" in chunks[1]
+
+
 def test_process_question_parallel_broadcasts_answer_error_when_commit_fails(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -680,6 +713,97 @@ def test_written_exam_request_does_not_include_history(monkeypatch: pytest.Monke
     assert captured["messages"][0]["content"][0] == {"type": "text", "text": "当前笔试题"}
     assert captured["messages"][0]["content"][1]["image_url"]["url"] == "data:image/png;base64,current"
     assert "上一道笔试题" not in str(captured["messages"])
+
+
+def test_written_exam_screenshot_injects_recent_qa_as_revision_context(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured = {}
+    session = get_session()
+    session.add_user_message("普通历史不应进入")
+    session.add_assistant_message("普通历史答案不应进入")
+    session.add_qa(
+        "代码题：输出最短路径 [图片已省略 x1]",
+        "```python\ndef solve():\n    print(0)\n```",
+        source="server_screen_left",
+        model_name="模型一",
+    )
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        yield ("text", "```python\ndef solve():\n    print(1)\n```")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "截图显示用例没过：expected=1 actual=0",
+            ["data:image/png;base64,failcase"],
+            True,
+            "server_screen_multi",
+            {"origin": "server_screen", "image_count": 1},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    content = captured["messages"][0]["content"]
+    text = content[0]["text"]
+    assert len(captured["messages"]) == 1
+    assert "[笔试连续截图上下文]" in text
+    assert "当前截图优先级最高" in text
+    assert "失败用例" in text
+    assert "修正后的完整可提交代码" in text
+    assert "代码题：输出最短路径" in text
+    assert "print(0)" in text
+    assert "expected=1 actual=0" in text
+    assert "普通历史不应进入" not in text
+    assert content[1]["image_url"]["url"] == "data:image/png;base64,failcase"
+
+
+def test_written_exam_screenshot_ignores_non_screen_qa_revision_context(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured = {}
+    session = get_session()
+    session.add_qa(
+        "普通面试题：Redis 怎么持久化？",
+        "用 AOF 和 RDB。",
+        source="manual_text",
+        model_name="模型一",
+    )
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        yield ("text", "```python\ndef solve():\n    pass\n```")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "当前是全新的笔试截图题",
+            ["data:image/png;base64,current"],
+            True,
+            "server_screen_left",
+            {"origin": "server_screen", "image_count": 1},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    content = captured["messages"][0]["content"]
+    assert content[0]["text"] == "当前是全新的笔试截图题"
+    assert "Redis" not in str(captured["messages"])
+    assert "AOF" not in str(captured["messages"])
+    assert content[1]["image_url"]["url"] == "data:image/png;base64,current"
 
 
 def test_written_exam_manual_input_uses_exam_mode_and_no_history(monkeypatch: pytest.MonkeyPatch):

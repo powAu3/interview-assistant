@@ -159,6 +159,7 @@ def test_model_health_probe_uses_compatible_chat_payload(monkeypatch):
     assert seen["json"]["stream"] is False
     assert "think_mode" not in seen["json"]
     assert "thinking" not in seen["json"]
+    assert seen["headers"]["User-Agent"].startswith("python-requests/")
 
 
 def test_model_health_probe_uses_o_series_token_param(monkeypatch):

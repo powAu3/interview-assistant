@@ -104,11 +104,17 @@ class TestBuildThinkParams:
         r = _build_think_params(model, _c("off"))
         assert r == {"thinking": {"type": "disabled"}}
 
-    def test_saved_enabled_params_win_over_detected_style(self):
+    def test_saved_enabled_params_win_over_detected_non_gpt_style(self):
+        model = _m("deepseek-r1", supports_think=True)
+        model.think_enabled_params = {"thinking": {"type": "enabled", "budget_tokens": 2048}}
+        r = _build_think_params(model, _c("high"))
+        assert r == {"thinking": {"type": "enabled", "budget_tokens": 2048}}
+
+    def test_gpt_saved_enabled_params_keep_current_effort(self):
         model = _m("o3-mini", supports_think=True)
         model.think_enabled_params = {"reasoning_effort": "low"}
-        r = _build_think_params(model, _c("high"))
-        assert r == {"reasoning_effort": "low"}
+        r = _build_think_params(model, _c("xhigh"))
+        assert r == {"reasoning_effort": "xhigh"}
 
     def test_off_local_runtime_includes_chat_template_disable(self):
         model = _m("glm-5.1")
@@ -116,19 +122,19 @@ class TestBuildThinkParams:
         r = _build_think_params(model, _c("off"))
         assert r == _THINK_DISABLED_LOCAL_PARAMS
 
-    @pytest.mark.parametrize("effort", ["low", "medium", "high"])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh"])
     def test_gpt_effort(self, effort):
         r = _build_think_params(_m("o3-mini"), _c(effort))
         assert r == {"reasoning_effort": effort}
 
-    @pytest.mark.parametrize("effort", ["low", "medium", "high"])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh"])
     def test_claude_budget(self, effort):
         r = _build_think_params(_m("claude-3"), _c(effort))
         assert r["thinking"]["type"] == "enabled"
         assert r["thinking"]["budget_tokens"] == min(_EFFORT_BUDGET[effort], 3072)
         assert r["think_mode"] is True
 
-    @pytest.mark.parametrize("effort", ["low", "medium", "high"])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh"])
     def test_generic_enabled(self, effort):
         r = _build_think_params(_m("deepseek-r1"), _c(effort))
         assert r == {"thinking": {"type": "enabled"}, "think_mode": True}
@@ -211,7 +217,7 @@ def test_single_model_override_true_promotes_off_effort(monkeypatch):
         override_think_mode=True,
     ))
 
-    assert captured == {"think_mode": True, "think_effort": "high"}
+    assert captured == {"think_mode": True, "think_effort": "xhigh"}
     assert chunks == [("think", "已开启的思考"), ("text", "最终答案")]
 
 

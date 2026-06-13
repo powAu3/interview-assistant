@@ -527,6 +527,9 @@ class AudioCapture:
                 self._sc_thread.join(timeout=1.0)
             self._sc_thread = None
             self._owner = None
+            # H1: 清空音频队列，避免长时间录音后内存泄漏
+            with self._audio_queue.mutex:
+                self._audio_queue.queue.clear()
 
     @property
     def current_owner(self) -> Optional[str]:

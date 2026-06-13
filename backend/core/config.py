@@ -44,8 +44,8 @@ class AppConfig(BaseModel):
     temperature: float = 0.5
     max_tokens: int = 4096
     think_mode: bool = False
-    # 推理强度: off=关闭, low/medium/high 分别对应低/中/高强度推理
-    think_effort: Literal["off", "low", "medium", "high"] = "off"
+    # 推理强度: off=关闭, low/medium/high/xhigh 分别对应低/中/高/超高强度推理
+    think_effort: Literal["off", "low", "medium", "high", "xhigh"] = "off"
 
     # 语音识别：whisper=本地 faster-whisper，doubao=豆包语音识别 API
     stt_provider: str = "whisper"

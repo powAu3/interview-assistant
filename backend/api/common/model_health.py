@@ -10,6 +10,7 @@ from services.llm.streaming import (
     _completion_token_kwargs,
     _detect_think_style,
     _disabled_think_params_for_model,
+    _openai_compat_headers,
 )
 
 _model_health: dict[int, str] = {}
@@ -145,6 +146,7 @@ def get_model_health_snapshot() -> dict:
 
 def _build_headers(model) -> dict:
     return {
+        **_openai_compat_headers(),
         "Authorization": f"Bearer {model.api_key}",
         "Content-Type": "application/json",
     }

@@ -367,8 +367,8 @@ async def api_update_config(body: ConfigUpdate):
             )
         if "think_effort" in d:
             val = str(d["think_effort"]).strip().lower()
-            if val not in ("off", "low", "medium", "high"):
-                raise HTTPException(422, "think_effort 必须是 off/low/medium/high 之一")
+            if val not in ("off", "low", "medium", "high", "xhigh"):
+                raise HTTPException(422, "think_effort 必须是 off/low/medium/high/xhigh 之一")
             d["think_effort"] = val
             if val == "off" and d.get("think_mode", True) is True:
                 d["think_mode"] = False

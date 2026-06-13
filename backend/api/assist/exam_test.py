@@ -55,6 +55,31 @@ def _set_step(step: str, status: str, detail: str = "", extra: Optional[dict] = 
     broadcast(msg)
 
 
+def _set_step_unless_status(
+    step: str,
+    status: str,
+    detail: str = "",
+    extra: Optional[dict] = None,
+    *,
+    blocked_statuses: tuple[str, ...] = ("pass", "fail", "done"),
+) -> bool:
+    entry = {"status": status, "detail": detail}
+    if extra:
+        entry.update(extra)
+    with _lock:
+        steps = dict(_status.get("steps") or {})
+        current = steps.get(step) or {}
+        if current.get("status") in blocked_statuses:
+            return False
+        steps[step] = entry
+        _status["steps"] = steps
+    msg = {"type": EXAM_PREFLIGHT_EVENT_TYPE, "step": step, "status": status, "detail": detail}
+    if extra:
+        msg.update(extra)
+    broadcast(msg)
+    return True
+
+
 def get_exam_preflight_status() -> dict:
     with _lock:
         return {
@@ -284,7 +309,7 @@ def _run_exam_preflight() -> None:
         queued = submit_answer_task(task)
         if not queued:
             raise RuntimeError("没有可用的识图模型，请检查启用状态与 API Key")
-        _set_step(
+        _set_step_unless_status(
             "submit",
             "running",
             "已提交到真实截图答题 worker，等待开始流式回答…",
@@ -294,7 +319,13 @@ def _run_exam_preflight() -> None:
                 "preflight_id": preflight_id,
             },
         )
-        _set_step("llm", "running", "等待真实答题流返回首个结果…", {"preflight_id": preflight_id})
+        _set_step_unless_status(
+            "llm",
+            "running",
+            "等待真实答题流返回首个结果…",
+            {"preflight_id": preflight_id},
+            blocked_statuses=("running", "pass", "fail", "done"),
+        )
         _log.info("EXAM_PREFLIGHT_QUEUED id=%s model=%s", preflight_id, getattr(model_cfg, "name", ""))
     except Exception as exc:
         _log.error("EXAM_PREFLIGHT_ERROR: %s", exc, exc_info=True)

@@ -740,6 +740,12 @@ code, pre, .font-mono {
   font-family: 'DM Sans', 'JetBrains Mono', system-ui, sans-serif;
 }
 
+.ov-root--prompt {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 4px 6px;
+}
+
 /* ── 统一容器 ── */
 .ov-shell {
   position: relative;
@@ -775,10 +781,29 @@ code, pre, .font-mono {
   border-radius: 0;
 }
 
+.ov-root--prompt .ov-shell--nobg {
+  width: fit-content;
+  min-width: 0;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: visible;
+}
+
 .ov-shell--nobg .ov-answer {
   padding: 4px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.ov-root--prompt .ov-answer {
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: 0;
+  max-width: min(520px, calc(100vw - 12px));
+  max-height: calc(100vh - 8px);
+  padding: 2px 4px;
+  line-height: 1.5;
 }
 .ov-shell--nobg .ov-answer,
 .ov-shell--nobg .ov-standby-hint {
@@ -1279,6 +1304,47 @@ code, pre, .font-mono {
 .ov-shell--nobg .ov-markdown pre {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.16);
+}
+
+.ov-root--prompt .ov-markdown {
+  display: inline-block;
+  width: fit-content;
+  max-width: min(520px, calc(100vw - 12px));
+}
+
+.ov-root--prompt .ov-markdown h1,
+.ov-root--prompt .ov-markdown h2,
+.ov-root--prompt .ov-markdown h3 {
+  margin-top: 0.44em;
+  margin-bottom: 0.18em;
+  font-size: 0.98em;
+  line-height: 1.24;
+}
+
+.ov-root--prompt .ov-markdown p,
+.ov-root--prompt .ov-markdown ul,
+.ov-root--prompt .ov-markdown ol {
+  margin-bottom: 0.26em;
+}
+
+.ov-root--prompt .ov-markdown ul,
+.ov-root--prompt .ov-markdown ol {
+  margin-left: 1em;
+}
+
+.ov-root--prompt .ov-markdown li {
+  margin-bottom: 0.08em;
+}
+
+.ov-root--prompt .ov-markdown pre {
+  margin: 0.28em 0 0.36em;
+  padding: 0.46em 0.58em;
+  border-radius: 6px;
+  line-height: 1.36;
+}
+
+.ov-root--prompt .ov-markdown code {
+  font-size: 0.84em;
 }
 
 .ov-focus-content .ov-markdown h1,

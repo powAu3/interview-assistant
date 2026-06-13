@@ -78,6 +78,15 @@ def test_written_exam_prompt_never_includes_resume(reset_resume):
     assert "<resume_context>" not in p
 
 
+def test_written_exam_prompt_handles_incremental_screenshots_and_failures(reset_resume):
+    p = build_system_prompt(mode="written_exam")
+    assert "连续截图/失败反馈规则" in p
+    assert "当前截图优先于上一版答案" in p
+    assert "新增约束" in p
+    assert "失败用例" in p
+    assert "修正后的完整可提交代码" in p
+
+
 # ---- 4.3 first-sentence hard constraint ---------------------------------
 
 def test_first_sentence_hard_constraint_in_asr():

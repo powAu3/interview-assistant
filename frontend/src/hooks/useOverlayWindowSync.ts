@@ -54,6 +54,15 @@ export function useOverlayWindowSync(_isRecording: boolean, _appMode: string) {
   ])
 
   useEffect(() => {
+    return () => {
+      const destroyOverlay = window.electronAPI?.destroyOverlay
+      if (destroyOverlay) {
+        destroyOverlay().catch(() => {})
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!window.electronAPI?.onOverlayState) return
     const removeOverlayListener = window.electronAPI.onOverlayState((payload) => {
       if (Date.now() < overlaySyncUntilRef.current) return

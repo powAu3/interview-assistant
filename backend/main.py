@@ -30,7 +30,8 @@ from api import kb as kb_api
 setup_logging()
 _log = get_logger("app.main")
 
-_BQ_SIZE = env_int("IA_BROADCAST_QUEUE_SIZE", 500, minimum=1)
+# H5: 扩大广播队列容量，避免 LLM 流式输出被截断
+_BQ_SIZE = env_int("IA_BROADCAST_QUEUE_SIZE", 2000, minimum=1)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
