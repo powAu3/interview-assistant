@@ -27,6 +27,9 @@ interface StepState {
   question?: string
   transcript?: string
   expected_phrase?: string
+  first_token_ms?: number
+  total_ms?: number
+  model_name?: string
 }
 
 interface Scenario {
@@ -72,6 +75,23 @@ function statusColor(status: StepStatus): string {
   }
 }
 
+function formatLatency(ms?: number): string | null {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return null
+  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`
+  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeStatusSteps(value: unknown): Record<string, Partial<StepState>> {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter(([, step]) => isRecord(step)),
+  ) as Record<string, Partial<StepState>>
+}
+
 export default function SoundTest() {
   const devices = useInterviewStore((s) => s.devices)
   const config = useInterviewStore((s) => s.config)
@@ -107,21 +127,27 @@ export default function SoundTest() {
     try {
       const msg = JSON.parse(event.data)
       if (msg.type !== 'preflight_step') return
-      const { step, status, detail, answer, question, transcript, expected_phrase } = msg
+      const { step, status, detail, answer, question, transcript, expected_phrase, first_token_ms, total_ms, model_name } = msg
       if (step === 'done') {
         setDone(true)
         setRunning(false)
         void api.preflightStatus().then((status) => {
-          if (status?.captured_transcript || status?.expected_phrase) {
-            setSteps((prev) => ({
-              ...prev,
-              match: {
-                ...(prev.match ?? { status: 'idle', detail: '' }),
-                transcript: status.captured_transcript ?? prev.match?.transcript,
-                expected_phrase: status.expected_phrase ?? prev.match?.expected_phrase,
-              },
-            }))
-          }
+          const statusSteps = normalizeStatusSteps(status?.steps)
+          setSteps((prev) => ({
+            ...prev,
+            ...Object.fromEntries(
+              Object.entries(statusSteps).map(([key, value]) => [
+                key,
+                { ...(prev[key] ?? { status: 'idle', detail: '' }), ...value },
+              ]),
+            ),
+            match: {
+              ...(prev.match ?? { status: 'idle', detail: '' }),
+              ...statusSteps.match,
+              transcript: status?.captured_transcript ?? prev.match?.transcript,
+              expected_phrase: status?.expected_phrase ?? prev.match?.expected_phrase,
+            },
+          }))
         }).catch(() => {})
         return
       }
@@ -132,7 +158,7 @@ export default function SoundTest() {
       }
       setSteps((prev) => ({
         ...prev,
-        [step]: { status, detail, answer, question, transcript, expected_phrase },
+        [step]: { status, detail, answer, question, transcript, expected_phrase, first_token_ms, total_ms, model_name },
       }))
     } catch {}
   }, [])
@@ -161,12 +187,6 @@ export default function SoundTest() {
     }
   }
 
-  const handleReset = () => {
-    setSteps({})
-    setDone(false)
-    setRunning(false)
-  }
-
   const allPassed = done && STEP_META.every((s) => {
     const st = steps[s.key]
     return st && (st.status === 'pass' || st.status === 'skip')
@@ -174,6 +194,9 @@ export default function SoundTest() {
 
   const llmAnswer = steps['llm']?.answer
   const llmQuestion = steps['llm']?.question
+  const llmFirstToken = formatLatency(steps['llm']?.first_token_ms)
+  const llmTotal = formatLatency(steps['llm']?.total_ms)
+  const llmModelName = steps['llm']?.model_name
   const transcript = steps['match']?.transcript ?? steps['stt']?.transcript
   const expectedPhrase = steps['match']?.expected_phrase
   const selected = scenarios.find((s) => s.id === selectedScenario)
@@ -245,11 +268,11 @@ export default function SoundTest() {
         ) : (
           <button
             type="button"
-            onClick={done ? handleReset : undefined}
+            onClick={handleRun}
             disabled={running}
             className="flex items-center gap-1.5 px-3 py-2 btn-ghost text-xs font-medium rounded-xl disabled:opacity-50 flex-shrink-0"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
             {'\u91CD\u65B0'}
           </button>
         )}
@@ -318,14 +341,26 @@ export default function SoundTest() {
       {/* LLM answer preview */}
       {llmAnswer && (
         <div className="mt-3 rounded-xl border border-accent-green/20 bg-accent-green/5 p-3 animate-fade-up">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Monitor className="w-3 h-3 text-accent-green" />
-            <span className="text-[10px] font-semibold text-accent-green">{'UI \u5C55\u793A\u9A8C\u8BC1'}</span>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Monitor className="w-3 h-3 text-accent-green" />
+              <span className="text-[10px] font-semibold text-accent-green">{'UI \u5C55\u793A\u9A8C\u8BC1'}</span>
+            </div>
+            {(llmFirstToken || llmTotal) && (
+              <div className="flex items-center gap-1.5 text-[10px] text-text-muted whitespace-nowrap">
+                {llmFirstToken && <span>首 token {llmFirstToken}</span>}
+                {llmFirstToken && llmTotal && <span className="text-text-muted/40">/</span>}
+                {llmTotal && <span>完整 {llmTotal}</span>}
+              </div>
+            )}
           </div>
           {llmQuestion && (
             <p className="text-[11px] text-text-muted mb-1">
               <span className="text-accent-blue font-semibold">Q:</span> {llmQuestion}
             </p>
+          )}
+          {llmModelName && (
+            <p className="text-[10px] text-text-muted/80 mb-1">模型：{llmModelName}</p>
           )}
           <p className="text-xs text-text-primary leading-relaxed line-clamp-3">{llmAnswer}</p>
         </div>

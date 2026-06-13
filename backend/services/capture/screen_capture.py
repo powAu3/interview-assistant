@@ -4,15 +4,45 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
+
+from core.logger import get_logger
 
 
 class ScreenCaptureError(Exception):
     """截屏不可用（无显示器、无权限、未安装 mss 等）。"""
 
 
-def capture_primary_region_data_url(region: str = "left_half") -> str:
+_log = get_logger("capture.screen")
+
+
+def _capture_payload_to_data_url(raw: str) -> str:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return f"data:image/png;base64,{raw}"
+    data = str(payload.get("data") or "")
+    mime = str(payload.get("mime") or "image/png")
+    if not data:
+        raise ScreenCaptureError("截屏数据异常")
+    _log.info(
+        "SCREEN_CAPTURE_ENCODE mime=%s original=%sx%s encoded=%sx%s bytes_before=%s bytes_after=%s compressed=%s fallback=%s",
+        mime,
+        payload.get("original_width"),
+        payload.get("original_height"),
+        payload.get("width"),
+        payload.get("height"),
+        payload.get("original_bytes"),
+        payload.get("encoded_bytes"),
+        payload.get("compressed"),
+        payload.get("fallback") or "",
+    )
+    return f"data:{mime};base64,{data}"
+
+
+def capture_primary_region_data_url(region: str = "left_half", max_long_edge: int = 1600) -> str:
     """
     在子进程内截取主显示器指定区域，返回 data:image/png;base64,...
     region: full | left_half | right_half | top_half | bottom_half
@@ -26,9 +56,13 @@ def capture_primary_region_data_url(region: str = "left_half") -> str:
     region = (region or "left_half").strip()
     if region not in valid:
         region = "left_half"
+    try:
+        max_long_edge = max(0, min(4000, int(max_long_edge or 0)))
+    except (TypeError, ValueError):
+        max_long_edge = 1600
 
     kwargs: dict = {
-        "args": [sys.executable, worker, region],
+        "args": [sys.executable, worker, region, str(max_long_edge)],
         "capture_output": True,
         "timeout": 20,
         "stdin": subprocess.DEVNULL,
@@ -60,7 +94,7 @@ def capture_primary_region_data_url(region: str = "left_half") -> str:
     raw = (proc.stdout or b"").decode("ascii", errors="strict").strip()
     if len(raw) < 100:
         raise ScreenCaptureError("截屏数据异常")
-    return f"data:image/png;base64,{raw}"
+    return _capture_payload_to_data_url(raw)
 
 
 def capture_primary_left_half_data_url() -> str:
@@ -68,4 +102,5 @@ def capture_primary_left_half_data_url() -> str:
     from core.config import get_config
     cfg = get_config()
     region = getattr(cfg, "screen_capture_region", None) or "left_half"
-    return capture_primary_region_data_url(region)
+    max_long_edge = getattr(cfg, "screen_capture_max_long_edge", 1600)
+    return capture_primary_region_data_url(region, max_long_edge=max_long_edge)

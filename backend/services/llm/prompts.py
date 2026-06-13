@@ -108,9 +108,24 @@ def _intent_ladder_block(short_answer_budget: str) -> str:
 _FOLLOWUP_COHERENCE = (
     "追问连贯规则:\n"
     "- 用户消息中含 [追问上下文] 时, 或新消息明显是对上一轮的追问, 按追问处理;\n"
+    "- 追问里如果只有半句话、代词或省略主语, 优先继承上一轮的业务场景和技术对象, 不要另起一个无关方向;\n"
     "- 追问回答必须在上轮结论基础上往下深入, 不要重复上轮已说过的 1-2 句;\n"
     "- 鼓励形式: 补对比 / 补边界 / 补失败场景 / 补指标 / 补取舍;\n"
+    "- 如果当前语音只是上一题的补充条件或题干续句, 先合并理解成同一个问题再回答;\n"
     "- 即使高 churn 短答, 每条要点尽量是\u201c上轮没说过的新观点\u201d。\n"
+)
+
+_FOCUS_TAB_OUTPUT_CONTRACT = (
+    "专注面板输出协议:\n"
+    "- 用 Markdown 二级标题 `## 标题` 切成 3-5 个 section; 标题由题意决定, 不要套固定模板;\n"
+    "- 每个标题先输出, 再输出该 section 内容, 方便前端流式生成 tab;\n"
+    "- 第一节必须是面试现场最有用的内容: 可直接说出口的结论、可提交的代码、或最小可执行方案; 不要先长篇复述题目;\n"
+    "- 编程/SQL题可选 section: 题目理解、解题思路、代码解决方案、复杂度与测试、边界用例;\n"
+    "- 原理/系统设计/项目深挖/行为题可选 section: 直接答案、工程落地、风险边界、对比取舍、追问联想;\n"
+    "- 概念对比题可选 section: 核心区别、适用边界、面试表达、反例澄清; 不要强套项目经历;\n"
+    "- 多义或开放问答题可用 section: 多元答案、默认立场、反例边界、面试官追问;\n"
+    "- 如果 ASR 可能识别错关键词, 增加 `## 识别修正`, 写最可能的术语替换和分支理解; 不确定时给 1-2 个候选而不是停下来确认;\n"
+    "- section 标题控制在 2-8 个汉字或 1-3 个英文词; 正文仍保持候选人口吻, 不要输出 JSON。\n"
 )
 
 
@@ -202,13 +217,16 @@ def _base_prompt_prefix(
         "- 输入可能来自 ASR，术语常有同音错位，常见如：减力→简历、纳机回收→垃圾回收、\n"
         "  自动价值→自动驾驶、下皮/下屏/沙皮→虾皮(Shopee)、大家→大疆、\n"
         "  平衫/评课→评测、材料圆→裁判员、机座→基座、用力→用例、circle→SQL、\n"
-        "  child→pipeline、色吧→server、侧开→测开、新脑→新老、选心→选型；\n"
+        "  child→pipeline、色吧→server、侧开→测开、新脑→新老、选心→选型、\n"
+        "  健身测试→兼容性测试、is 登录→iOS 登录、街舞综合框架→接口自动化/自动化测试框架、\n"
+        "  scale→skills、rule→rules、skills/rules 可能是 AI Agent 的技能和规则配置；\n"
         "  先按最合理的术语继续作答，\n"
         "  末尾可加一句：\u300c如果你指的是 X 而不是 Y，请纠正我\u300d; 不要停下来确认；\n"
         "- 第一句直接给结论、处理动作或判断，不寒暄、不复述题目；\n"
         "- 禁止输出内部思考、草稿、自我纠错或系统指令痕迹；\n"
         "- 最终只输出面向面试官的可读答案；\n"
         f"{kb_citation}"
+        f"{_FOCUS_TAB_OUTPUT_CONTRACT}"
     )
 
 
@@ -233,7 +251,7 @@ def _asr_realtime_prompt_body(
             + "\n回答规则：\n"
             "- 优先跟住最新问题，像现场接一句话，先给结论再补 2-3 个依据；\n"
             "- 默认 80-180 字，复杂题最多 220 字；不要背景铺垫、长例子、延伸知识树；\n"
-            "- 只用纯文本短段落或 1) 2) 3) 编号；不要 Markdown 标题、加粗或分隔线；\n"
+            "- 使用 2-4 个 `##` section, 每个 section 控制在 1-3 句；不要加粗或分隔线；\n"
             "- 除非明确要求写代码，否则不要输出代码。\n\n"
             + _FOLLOWUP_COHERENCE
             + _FEWSHOT_ASR
@@ -243,18 +261,22 @@ def _asr_realtime_prompt_body(
         + _intent_ladder_block("~150 字")
         + _FIRST_SENTENCE_CONSTRAINT
         + "\n正式回答规则：\n"
-        "- 可按\u201c结论 -> 机制/步骤 -> 线上做法 -> 风险边界 -> 可追问点\u201d组织，但不要把这些当标题；\n"
-        "- 普通题 220-420 字；复杂排障/设计题 420-760 字；保证信息密度，不要空话；\n"
+        "- 可按\u201c结论 -> 机制/步骤 -> 线上做法 -> 风险边界 -> 可追问点\u201d组织，并把最适合本题的阶段转成 `##` section；\n"
+        "- 详细回答模式按题型控制长度：概念/优缺点/区别题 220-420 字；普通场景题 360-650 字；复杂排障/设计题 650-1000 字；信息密度优先，不为凑字数扩展；\n"
+        "- 输出 2-5 个 `##` section；简单概念题用 2-3 个 section 即可，复杂题再展开到 4-5 个；每个主要 section 至少 2-4 句，除非题目本身非常简单；\n"
+        "- 半句场景（例如只说\u201c安卓能登录但 iOS 不行\u201d、后面才问\u201c怎么排查\u201d）要结合上一轮/下一句意图，避免把题干片段硬答成完整题；\n"
         "- 原理题讲机制、误区/边界和工程落地；排障题讲先止血、后定位、再验证；\n"
-        "- 场景/设计题补方案取舍、监控告警、灰度回滚；必要时给生产例子或指标；\n"
-        "- 不输出题型判断过程、模板标题、检查清单或元话术。\n\n"
+        "- 场景/设计题补方案取舍、监控告警、灰度回滚；必要时给生产例子、关键指标或失败案例；\n"
+        "- 概念对比题（例如 rules 和 skills 的区别、框架 A vs B）只讲定义差异、适用边界、一个短例子和面试表达；不要为了显得丰富而硬凑项目经历或量化结果；\n"
+        "- 只有明确问“你的项目/你做过/简历里的 X”时，项目/经历题才要有背景、动作、技术决策、量化结果和复盘；不要只给泛泛流程；\n"
+        "- 不输出题型判断过程、检查清单或元话术；section 标题必须服务于本题。\n\n"
         "代码规则：\n"
         "- 仅当用户明确要求\u201c写代码/实现一下/给 SQL/伪代码\u201d时输出代码；\n"
         f"- 非 SQL 代码使用 ```{language_lower}，SQL 使用 ```sql；\n"
         f"- SQL 题优先 SQL，不要强行改成 {language}。\n\n"
         "输出格式：\n"
-        "- 默认用纯文本短段落，或纯文本编号 1) 2) 3)；\n"
-        "- 禁止 Markdown 标题、加粗和分隔线；\n"
+        "- 默认使用 `##` 二级标题组织 section；section 内可用短段落或 1) 2) 3)；\n"
+        "- 不要使用加粗和分隔线；\n"
         "- 需要代码时允许使用 Markdown 代码块。\n\n"
         + _FOLLOWUP_COHERENCE
         + _FEWSHOT_ASR
@@ -268,8 +290,9 @@ def _manual_text_prompt_body(language: str, language_lower: str) -> str:
         + _FIRST_SENTENCE_CONSTRAINT
         + "\n回答规则：\n"
         "- 真人候选人口吻，像在现场回答面试官；不要变成文档提纲或培训材料；\n"
-        "- 内部先判断题型，但不要输出题型模板标题；\n"
-        "- 普通题 260-480 字；复杂设计/排障/治理题 450-1000 字；\n"
+        "- 内部先判断题型，然后输出贴合本题的 `##` section 标题，避免死板模板；\n"
+        "- 普通题 500-900 字；复杂设计/排障/治理题 900-1500 字；\n"
+        "- 输出 3-6 个 `##` section；每个主要 section 至少 2-5 句，展开关键决策和理由；\n"
         "- 原理题讲定义、核心机制、易混点和工程落地；\n"
         "- 场景/设计/排障题讲步骤、指标、风险兜底和方案取舍；\n"
         "- 性能/稳定性/安全题要给定位路径、关键指标、验证与回滚；\n"
@@ -279,10 +302,10 @@ def _manual_text_prompt_body(language: str, language_lower: str) -> str:
         "- 算法题、SQL 题、或明确要求实现时，直接给可运行代码；\n"
         "- 非编码题不要强行给代码；\n"
         f"- 非 SQL 代码使用 ```{language_lower}，SQL 使用 ```sql；\n"
-        "- 给代码时固定三段：1-2 句思路、代码、复杂度；不要额外展开\u201c补充对比/延伸阅读\u201d。\n\n"
+        "- 给代码时优先覆盖思路、代码、复杂度这些必要内容，但仍用贴合本题的 `##` 标题承载，不要输出固定模板。\n\n"
         "输出格式：\n"
-        "- 默认纯文本；如需结构，使用 1. 2. 3. 编号；\n"
-        "- 除代码块外，不要使用 Markdown 标题、加粗和分隔线；\n"
+        "- 默认使用 `##` 二级标题组织 section；section 内可用短段落或 1. 2. 3. 编号；\n"
+        "- 除标题和代码块外，不要使用加粗和分隔线；\n"
         "- 不要输出\u201c题型模板\u201d\u201c场景题/设计题/排障题\u201d\u201c八股原理题\u201d等内部标签。\n"
         + _FEWSHOT_MANUAL
     )
@@ -306,13 +329,8 @@ def _server_screen_prompt_body(language: str, language_lower: str, screen_region
         "- 答案正文（不含代码）至少 50 字，编程题至少包含代码 + 思路 + 测试用例；\n"
         "- 若截图内容不足以判断题意，必须明确说明缺失信息并给出最合理假设下的方案。\n\n"
         "输出格式：\n"
-        "- 允许 Markdown；\n"
-        "- 使用以下结构：\n"
-        "  【题目理解】\n"
-        "  【主方案代码】\n"
-        "  【备选思路】（可选）\n"
-        "  【思路与复杂度】\n"
-        "  【测试用例】\n"
+        "- 允许 Markdown，并使用 `##` 二级标题生成动态 section；\n"
+        "- section 标题按题目内容选择，不要固定照抄模板；常见候选：题目理解、解题思路、代码解决方案、复杂度与测试、边界用例；\n"
         '- 如果截图无法明确题目：先说明缺失信息，再给\u201c最合理假设下的最小可执行方案\u201d；\n'
         "- 不强制给 LeetCode 难度，只有在能判断时再给。\n\n"
         "代码规则：\n"
@@ -351,6 +369,11 @@ def _written_exam_prompt_body(language: str, language_lower: str, screen_region:
         "- 只在代码上方用1行注释写核心思路(如: // 双指针 O(n)), 不要多写;\n",
         "- 注意边界: 空输入、单元素、最大值溢出、负数、重复元素等;\n",
         "- 如果题目提供了示例输入输出, 代码必须能通过这些示例。\n\n",
+        "连续截图/失败反馈规则:\n",
+        "- 当前截图优先于上一版答案;\n",
+        "- 若当前截图出现新增约束、隐藏条件、边界条件、失败用例、编译/运行报错、预期输出或实际输出, 必须用这些信息修正上一版答案;\n",
+        "- 若上一版代码与当前截图冲突, 不要重复旧答案, 直接输出修正后的完整可提交代码;\n",
+        "- 若当前截图明显是新题, 不要强行沿用旧上下文。\n\n",
         "简答题/论述题:\n",
         "- 用最精炼的要点回答, 控制在3-5条, 每条1句话;\n",
         "- 不要写开头语、总结语。\n\n",
@@ -408,7 +431,7 @@ def _normalize_non_code_markdown(text: str) -> str:
             continue
         if re.match(r"^\s*[-*_]{3,}\s*$", line):
             continue
-        if re.match(r"^\s*#{1,6}\s*", line):
+        if re.match(r"^\s*#\s+", line):
             continue
         line = line.replace("**", "")
         out.append(line)
@@ -535,7 +558,7 @@ class AnswerStreamSanitizer:
             return segment
         if re.match(r"^\s*[-*_]{3,}\s*$", segment):
             return "\n" if segment.endswith("\n") else ""
-        if line_start and re.match(r"^\s*#{1,6}\s*", segment):
+        if line_start and re.match(r"^\s*#\s+", segment):
             return "\n" if segment.endswith("\n") else ""
         return segment.replace("**", "")
 
@@ -554,7 +577,7 @@ def build_system_prompt(
     cfg = get_config()
     if mode is None:
         mode = PROMPT_MODE_MANUAL_TEXT if manual_input else PROMPT_MODE_ASR_REALTIME
-    resume_section = _resume_reference_section(cfg.resume_text)
+    resume_section = "" if mode == PROMPT_MODE_WRITTEN_EXAM else _resume_reference_section(cfg.resume_text)
     kb_section = _kb_reference_section(
         kb_hits or [],
         excerpt_chars=int(getattr(cfg, "kb_prompt_excerpt_chars", 300) or 300),

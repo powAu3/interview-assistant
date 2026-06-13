@@ -136,7 +136,11 @@ test.describe('practice mode booth', () => {
     })
 
     await page.goto('/')
-    await expect(page.getByTestId('practice-interviewer-preview')).toBeVisible()
+    const preview = page.getByTestId('practice-interviewer-preview')
+    await expect(preview).toBeVisible()
+    await expect(preview).toHaveAttribute('data-renderer', 'human-portrait')
+    await expect(preview).toHaveAttribute('data-persona', 'calm_pressing')
+    await expect(preview).toHaveAttribute('data-state', /speaking|listening/)
     await expect(page.getByText(/状态 · (播报中|倾听中)/)).toBeVisible()
     await expect(page.getByText(/当前来源：/)).toBeVisible()
   })
@@ -162,7 +166,9 @@ test.describe('practice mode booth', () => {
 
     await page.goto('/')
     await expect(page.getByText('题面模式').first()).toBeVisible()
-    await expect(page.getByTestId('practice-interviewer-preview')).toHaveAttribute('data-state', 'listening')
+    const preview = page.getByTestId('practice-interviewer-preview')
+    await expect(preview).toHaveAttribute('data-renderer', 'human-portrait')
+    await expect(preview).toHaveAttribute('data-state', 'listening')
   })
 })
 

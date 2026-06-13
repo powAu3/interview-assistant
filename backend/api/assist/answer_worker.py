@@ -30,7 +30,7 @@ class AnswerWorkerDeps:
     is_session_current: Callable[[int], bool]
     flush_commit: Callable[[int, Callable[[], None]], None]
     mark_seq_skipped: Callable[[int], None]
-    submit_knowledge_record: Callable[[str, str], bool]
+    submit_knowledge_record: Callable[[str, str, str, str], bool]
     broadcast: Callable[[dict], None]
     logger: Any
     error_logger: Any
@@ -65,14 +65,140 @@ def _normalize_task_images(image: Any) -> list[str]:
     return []
 
 
+def _image_payload_chars(images: list[str]) -> int:
+    return sum(len(img or "") for img in images)
+
+
+def _message_text_chars(messages: list[dict]) -> int:
+    total = 0
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    total += len(str(part.get("text") or ""))
+    return total
+
+
+def _clip_text(text: str, max_chars: int) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max(0, max_chars - 1)].rstrip() + "…"
+
+
+def _written_exam_followup_context(session_ref, *, source: str, image_count: int) -> str:
+    if image_count <= 0 or not (source or "").startswith("server_screen_"):
+        return ""
+    recent_qas = [
+        qa
+        for qa in session_ref.qa_pairs[-4:]
+        if (qa.question or qa.answer)
+        and (qa.source or "").startswith("server_screen_")
+        and not (qa.source or "").endswith("exam_preflight")
+    ][-2:]
+    if not recent_qas:
+        return ""
+
+    lines = [
+        "[笔试连续截图上下文]",
+        "当前截图优先级最高: 若截图里出现新增规则、隐藏/边界条件、失败用例、编译/运行报错、预期输出和实际输出, 必须据此修正上一版答案。",
+        "不要因为上一版代码已存在就忽略当前截图; 若当前截图显示上一版未通过, 直接输出修正后的完整可提交代码。",
+        "如果当前截图明显是新题或与上一题无关, 忽略下面旧答案, 按新题作答。",
+        "最近上一版答案参考:",
+    ]
+    for idx, qa in enumerate(recent_qas, start=1):
+        lines.append(f"{idx}. 题目/截图: {_clip_text(qa.question, 260)}")
+        lines.append(f"   上一版答案: {_clip_text(qa.answer, 900)}")
+    return "\n".join(lines)
+
+
+def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
+    enabled = bool(getattr(cfg, "candidate_asr_enabled", False)) and bool(
+        getattr(cfg, "candidate_context_enabled", True)
+    )
+    return (
+        enabled,
+        max(0, min(2000, int(getattr(cfg, "candidate_context_wait_ms", 200) or 0))),
+        max(100, min(4000, int(getattr(cfg, "candidate_context_max_chars", 900) or 900))),
+        max(1, min(100, int(getattr(cfg, "candidate_context_min_chars", 6) or 6))),
+    )
+
+
+def _history_context_options(prompt_mode: PromptMode, written_exam: bool) -> dict[str, Any]:
+    if written_exam:
+        return {
+            "profile": "written_none",
+            "turns": 0,
+            "max_chars_per_message": 0,
+            "include_summary": False,
+            "total_char_budget": 0,
+        }
+    if prompt_mode == PROMPT_MODE_ASR_REALTIME:
+        return {
+            "profile": "asr_light",
+            "turns": 2,
+            "max_chars_per_message": 700,
+            "include_summary": False,
+            "total_char_budget": 1800,
+        }
+    if prompt_mode == PROMPT_MODE_SERVER_SCREEN:
+        return {
+            "profile": "screen_light",
+            "turns": 1,
+            "max_chars_per_message": 700,
+            "include_summary": False,
+            "total_char_budget": 900,
+        }
+    if prompt_mode == PROMPT_MODE_MANUAL_TEXT:
+        return {
+            "profile": "manual_balanced",
+            "turns": 3,
+            "max_chars_per_message": 900,
+            "include_summary": True,
+            "total_char_budget": 2600,
+        }
+    return {
+        "profile": "default",
+        "turns": None,
+        "max_chars_per_message": None,
+        "include_summary": True,
+        "total_char_budget": None,
+    }
+
+
+def _max_tokens_for_prompt(prompt_mode: PromptMode, cfg) -> int:
+    return max(1, int(getattr(cfg, "max_tokens", 4096) or 4096))
+
+
+def _wait_for_candidate_context_if_pending(session_ref, qa_id: str, wait_ms: int) -> None:
+    if wait_ms <= 0 or not qa_id:
+        return
+    deadline = time.monotonic() + (wait_ms / 1000.0)
+    while time.monotonic() < deadline:
+        if not getattr(session_ref, "has_candidate_asr_pending_for_qa", lambda *_args, **_kwargs: False)(qa_id):
+            return
+        time.sleep(0.025)
+
+
+def _supports_candidate_context_source(source: str, meta: dict[str, Any]) -> bool:
+    if source == "manual_text":
+        return True
+    if source in ("asr", "conversation_loopback", "conversation_mic"):
+        return True
+    return meta.get("origin") == "asr"
+
+
 def prompt_mode_for_task(
     source: str,
     manual_input: bool,
     written_exam: bool = False,
 ) -> PromptMode:
+    if written_exam:
+        return PROMPT_MODE_WRITTEN_EXAM
     if (source or "").startswith("server_screen_"):
-        if written_exam:
-            return PROMPT_MODE_WRITTEN_EXAM
         return PROMPT_MODE_SERVER_SCREEN
     if manual_input:
         return PROMPT_MODE_MANUAL_TEXT
@@ -95,6 +221,19 @@ def process_question_parallel(
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
     written_exam_think = bool(getattr(cfg, "written_exam_think", False))
     prompt_mode = prompt_mode_for_task(source, manual_input, written_exam=written_exam)
+    exam_preflight_id = str(meta.get("exam_preflight_id") or "") if meta.get("exam_preflight") else ""
+
+    def _broadcast(data: dict) -> None:
+        if exam_preflight_id:
+            data = {**data, "exam_preflight_id": exam_preflight_id}
+        deps.broadcast(data)
+        if exam_preflight_id:
+            try:
+                from .exam_test import record_exam_preflight_answer_event
+
+                record_exam_preflight_answer_event(data)
+            except Exception as exc:  # noqa: BLE001
+                deps.error_logger.warning("exam preflight event record failed: %s", exc)
 
     kb_hits: list = []
     kb_latency_ms = 0
@@ -146,25 +285,136 @@ def process_question_parallel(
 
     with conversation_lock:
         session_ref = get_session()
-        base_messages = list(session_ref.get_conversation_messages_for_llm())
+        if written_exam:
+            base_messages = []
+            history_stats = {"messages": 0, "history_messages": 0, "stripped_images": 0}
+            written_followup_context = (
+                ""
+                if exam_preflight_id
+                else _written_exam_followup_context(
+                    session_ref,
+                    source=source,
+                    image_count=len(images),
+                )
+            )
+        else:
+            history_options = _history_context_options(prompt_mode, written_exam)
+            base_messages = list(session_ref.get_conversation_messages_for_llm(**history_options))
+            history_stats = dict(getattr(session_ref, "last_llm_history_stats", {}) or {})
+            written_followup_context = ""
         last_qa = session_ref.get_last_qa()
+        candidate_context_enabled, candidate_wait_ms, candidate_max_chars, candidate_min_chars = _candidate_context_settings(cfg)
+        candidate_source_ok = _supports_candidate_context_source(source, meta)
+        should_use_candidate_context = bool(
+            not written_exam
+            and not images
+            and last_qa
+            and candidate_source_ok
+            and candidate_context_enabled
+        )
+        actual_spoken_answer = (
+            session_ref.get_candidate_answer_for_qa(last_qa.id, max_chars=candidate_max_chars)
+            if last_qa
+            and should_use_candidate_context
+            else ""
+        )
+
+    if should_use_candidate_context and last_qa and not actual_spoken_answer:
+        _wait_for_candidate_context_if_pending(session_ref, last_qa.id, candidate_wait_ms)
+        with conversation_lock:
+            actual_spoken_answer = session_ref.get_candidate_answer_for_qa(
+                last_qa.id,
+                max_chars=candidate_max_chars,
+            )
+    if len(actual_spoken_answer.strip()) < candidate_min_chars:
+        actual_spoken_answer = ""
+    candidate_context_chars = len(actual_spoken_answer[:candidate_max_chars]) if actual_spoken_answer else 0
 
     is_followup = False
     if (
-        not images
+        not written_exam
+        and not images
         and last_qa
-        and source in ("asr", "manual_text")
-        and classify_followup(question_text, last_qa.question, last_qa.answer)
+        and _supports_candidate_context_source(source, meta)
+        and classify_followup(question_text, last_qa.question, actual_spoken_answer or last_qa.answer[:500])
     ):
         is_followup = True
-        prev_answer_summary = last_qa.answer[:500]
+        prev_answer_budget = max(200, min(500, candidate_max_chars // 2))
+        prev_answer_summary = last_qa.answer[:prev_answer_budget]
+        if not candidate_context_enabled:
+            user_for_llm = (
+                f"[追问上下文] 上一个问题：{last_qa.question}\n"
+                f"你上次回答的要点：{prev_answer_summary}\n\n"
+                f"现在面试官追问：{question_text}"
+            )
+        else:
+            actual_block = (
+                f"候选人麦克风转写（辅助参考，可能有识别误差）：{actual_spoken_answer[:candidate_max_chars]}\n"
+                if actual_spoken_answer
+                else "候选人麦克风转写：未启用或未捕获到；本轮按旧逻辑仅参考助手建议答案。\n"
+            )
+            user_for_llm = (
+                f"[追问上下文] 上一个问题：{last_qa.question}\n"
+                f"{actual_block}"
+                f"助手上一轮建议答案（参考候选人可能听到过的答题方向，不代表候选人照读）：{prev_answer_summary}\n"
+                "追问回答规则：以当前面试官追问和会议音频识别出的题意为主；"
+                "候选人麦克风转写用于理解上一轮回答大意，但不要当作逐字稿。"
+                "如果转写内容明显识别错、与当前追问冲突或不自然，请降权使用，不要强行套入。\n\n"
+                f"现在面试官追问：{question_text}"
+            )
+    elif should_use_candidate_context and last_qa and actual_spoken_answer:
         user_for_llm = (
-            f"[追问上下文] 上一个问题：{last_qa.question}\n"
-            f"你上次回答的要点：{prev_answer_summary}\n\n"
-            f"现在面试官追问：{question_text}"
+            f"[候选人回答辅助背景] 上一个问题：{last_qa.question}\n"
+            f"候选人上一轮麦克风转写（可能有识别误差）：{actual_spoken_answer[:candidate_max_chars]}\n"
+            "使用规则：这段转写可帮助延续候选人上一轮回答的大意、项目线索和技术关键词；"
+            "以当前面试官问题为主，如果当前问题与上一轮无关，或转写明显不准，请忽略或弱化它。"
+            "不得假设候选人照读了助手上一轮建议答案，也不要把转写当成逐字事实。\n\n"
+            f"现在面试官问题：{question_text}"
         )
 
+    if written_followup_context:
+        if isinstance(user_for_llm, list):
+            if user_for_llm and isinstance(user_for_llm[0], dict) and user_for_llm[0].get("type") == "text":
+                user_for_llm[0] = {
+                    **user_for_llm[0],
+                    "text": f"{written_followup_context}\n\n[当前截图/题面]\n{question_text}",
+                }
+            else:
+                user_for_llm.insert(
+                    0,
+                    {
+                        "type": "text",
+                        "text": f"{written_followup_context}\n\n[当前截图/题面]\n{question_text}",
+                    },
+                )
+        else:
+            user_for_llm = f"{written_followup_context}\n\n[当前题面]\n{question_text}"
+
+    with conversation_lock:
+        session_ref.close_candidate_answer_window()
+
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
+    deps.logger.info(
+        "LLM_INPUT_STATS source=%s prompt_mode=%s written_exam=%s image_count=%d "
+        "image_payload_chars=%d history_used=%s history_profile=%s history_messages=%d "
+        "historical_images_stripped=%d history_text_raw_chars=%d "
+        "history_text_trimmed_chars=%d candidate_context_chars=%d "
+        "message_count=%d text_chars=%d",
+        source,
+        prompt_mode,
+        written_exam,
+        len(images),
+        _image_payload_chars(images),
+        bool(base_messages),
+        str(history_stats.get("profile", "default")),
+        int(history_stats.get("history_messages", 0) or 0),
+        int(history_stats.get("stripped_images", 0) or 0),
+        int(history_stats.get("raw_text_chars", 0) or 0),
+        int(history_stats.get("trimmed_text_chars", 0) or 0),
+        candidate_context_chars,
+        len(messages_for_llm),
+        _message_text_chars(messages_for_llm),
+    )
 
     if len(images) > 1:
         display_question = f"{question_text} [📷 多图 x{len(images)}]"
@@ -179,7 +429,7 @@ def process_question_parallel(
         is_followup,
         question_text[:120],
     )
-    deps.broadcast(
+    _broadcast(
         {
             "type": "answer_start",
             "id": qa_id,
@@ -189,6 +439,9 @@ def process_question_parallel(
             "model_index": model_idx,
         }
     )
+    if not images and _supports_candidate_context_source(source, meta) and candidate_context_enabled:
+        with conversation_lock:
+            get_session().open_candidate_answer_window(qa_id)
 
     if kb_hits or kb_degraded:
         try:
@@ -211,9 +464,19 @@ def process_question_parallel(
     raw_full_answer = ""
     stream_sanitizer = create_answer_stream_sanitizer(prompt_mode)
     full_think = ""
+    token_prompt_delta = 0
+    token_completion_delta = 0
+
+    def _record_usage(prompt_tokens: int, completion_tokens: int, _model_name: str) -> None:
+        nonlocal token_prompt_delta, token_completion_delta
+        token_prompt_delta += int(prompt_tokens or 0)
+        token_completion_delta += int(completion_tokens or 0)
+
     exam_think_notified = False
     gen_start = time.monotonic()
     first_token_mono: Optional[float] = None
+    chunk_buffer: list[str] = []
+    batch_size = 5
     try:
         think_override = (
             written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM and (source or "").startswith("server_screen_")
@@ -225,6 +488,8 @@ def process_question_parallel(
             system_prompt=system_prompt,
             abort_check=deps.abort_check,
             override_think_mode=think_override,
+            usage_callback=_record_usage,
+            override_max_tokens=_max_tokens_for_prompt(prompt_mode, cfg),
         ):
             if deps.abort_check():
                 break
@@ -235,7 +500,7 @@ def process_question_parallel(
                 if prompt_mode == PROMPT_MODE_WRITTEN_EXAM:
                     if not exam_think_notified:
                         exam_think_notified = True
-                        deps.broadcast(
+                        _broadcast(
                             {
                                 "type": "answer_think_chunk",
                                 "id": qa_id,
@@ -243,7 +508,7 @@ def process_question_parallel(
                             }
                         )
                 else:
-                    deps.broadcast(
+                    _broadcast(
                         {
                             "type": "answer_think_chunk",
                             "id": qa_id,
@@ -254,17 +519,26 @@ def process_question_parallel(
                 raw_full_answer += chunk_text
                 clean_chunk = stream_sanitizer.push(chunk_text)
                 if clean_chunk:
-                    deps.broadcast(
-                        {"type": "answer_chunk", "id": qa_id, "chunk": clean_chunk}
-                    )
+                    chunk_buffer.append(clean_chunk)
+                    if len(chunk_buffer) >= batch_size:
+                        _broadcast(
+                            {"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)}
+                        )
+                        chunk_buffer.clear()
+        if chunk_buffer:
+            _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
+            chunk_buffer.clear()
     except Exception as exc:
         deps.error_logger.error("LLM stream error id=%s: %s", qa_id, exc, exc_info=True)
         err = f"\n\n[生成答案出错: {exc}]"
         raw_full_answer += err
+        if chunk_buffer:
+            _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
+            chunk_buffer.clear()
         tail = stream_sanitizer.finish()
         if tail:
-            deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
-        deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
+            _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
+        _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
 
     gen_elapsed = (time.monotonic() - gen_start) * 1000
     first_token_ms = (
@@ -273,13 +547,13 @@ def process_question_parallel(
 
     if deps.abort_check():
         deps.logger.info("ANSWER_CANCEL id=%s after=%.0fms", qa_id, gen_elapsed)
-        deps.broadcast({"type": "answer_cancelled", "id": qa_id})
+        _broadcast({"type": "answer_cancelled", "id": qa_id})
         deps.mark_seq_skipped(seq)
         return
 
     tail = stream_sanitizer.finish()
     if tail:
-        deps.broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
+        _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
 
     full_answer = postprocess_answer_for_mode(raw_full_answer, prompt_mode)
 
@@ -287,15 +561,45 @@ def process_question_parallel(
         if not deps.is_session_current(sess_v):
             return
         session = get_session()
+        if exam_preflight_id:
+            stats = get_token_stats()
+            deps.logger.info(
+                "EXAM_PREFLIGHT_ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms answer_len=%d",
+                qa_id,
+                model_cfg.name,
+                first_token_ms,
+                gen_elapsed,
+                len(full_answer),
+            )
+            _broadcast(
+                {
+                    "type": "answer_done",
+                    "id": qa_id,
+                    "question": display_question,
+                    "answer": full_answer,
+                    "think": full_think,
+                    "model_name": model_cfg.name,
+                    "first_token_ms": int(first_token_ms),
+                    "total_ms": int(gen_elapsed),
+                }
+            )
+            deps.broadcast(
+                {
+                    "type": "token_update",
+                    "prompt": stats["prompt"],
+                    "completion": stats["completion"],
+                    "total": stats["total"],
+                    "by_model": stats.get("by_model", {}),
+                }
+            )
+            return
         pre_user_len = len(session.conversation_history)
         pre_qa_len = len(session.qa_pairs)
         try:
             with conversation_lock:
                 if images:
-                    content: list = [{"type": "text", "text": question_text}]
-                    for data_url in images:
-                        content.append({"type": "image_url", "image_url": {"url": data_url}})
-                    session.add_user_message(content)
+                    suffix = f" [图片已省略 x{len(images)}]"
+                    session.add_user_message(question_text + suffix)
                 else:
                     session.add_user_message(question_text)
                 session.add_assistant_message(full_answer)
@@ -309,17 +613,20 @@ def process_question_parallel(
             stats = get_token_stats()
             deps.logger.info(
                 "ANSWER_DONE id=%s model=%s first_token=%.0fms total=%.0fms "
-                "answer_len=%d think_len=%d tokens_prompt=%d tokens_completion=%d",
+                "answer_len=%d think_len=%d tokens_prompt_delta=%d tokens_completion_delta=%d "
+                "tokens_prompt=%d tokens_completion=%d",
                 qa_id,
                 model_cfg.name,
                 first_token_ms,
                 gen_elapsed,
                 len(full_answer),
                 len(full_think),
+                token_prompt_delta,
+                token_completion_delta,
                 stats["prompt"],
                 stats["completion"],
             )
-            deps.broadcast(
+            _broadcast(
                 {
                     "type": "answer_done",
                     "id": qa_id,
@@ -327,6 +634,8 @@ def process_question_parallel(
                     "answer": full_answer,
                     "think": full_think,
                     "model_name": model_cfg.name,
+                    "first_token_ms": int(first_token_ms),
+                    "total_ms": int(gen_elapsed),
                 }
             )
             deps.broadcast(
@@ -338,7 +647,13 @@ def process_question_parallel(
                     "by_model": stats.get("by_model", {}),
                 }
             )
-            if not deps.submit_knowledge_record(question_text, full_answer):
+            candidate_answer_for_record = ""
+            with conversation_lock:
+                candidate_answer_for_record = session.get_candidate_answer_for_qa(
+                    qa_id,
+                    max_chars=2400,
+                )
+            if not deps.submit_knowledge_record(question_text, full_answer, qa_id, candidate_answer_for_record):
                 deps.error_logger.warning(
                     "KNOWLEDGE_ENQUEUE_DROP id=%s question=%r",
                     qa_id,
@@ -370,6 +685,6 @@ def process_question_parallel(
                 "_commit failed for id=%s seq=%d: %s",
                 qa_id, seq, exc, exc_info=True,
             )
-            deps.broadcast({"type": "answer_error", "id": qa_id, "message": "答案保存失败"})
+            _broadcast({"type": "answer_error", "id": qa_id, "message": "答案保存失败"})
 
     deps.flush_commit(seq, _commit)

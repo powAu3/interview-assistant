@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
-from core.auth import is_auth_disabled, is_loopback_host, verify_token
+from core.auth import is_auth_disabled, loopback_bypass_allowed, verify_token
 from core.logger import get_logger
 from core.session import snapshot_session
 from services.practice import get_practice
@@ -145,7 +145,14 @@ def _ws_authorized(ws: WebSocket) -> bool:
         return True
     _client = getattr(ws, "client", None)
     client_host = _client.host if _client else None
-    if is_loopback_host(client_host):
+    request_url = getattr(ws, "url", None)
+    if loopback_bypass_allowed(
+        client_host,
+        ws.headers.get("origin"),
+        getattr(request_url, "hostname", None),
+        getattr(request_url, "scheme", "ws"),
+        getattr(request_url, "port", None),
+    ):
         return True
     token = ws.query_params.get("token")
     if not token:
@@ -175,6 +182,8 @@ async def websocket_endpoint(ws: WebSocket):
             "is_paused": snapshot["is_paused"],
             "stt_loaded": engine.is_loaded,
             "transcriptions": snapshot["transcriptions"],
+            "candidate_transcriptions": snapshot.get("candidate_transcriptions", []),
+            "candidate_answer_segments": snapshot.get("candidate_answer_segments", []),
             "qa_pairs": snapshot["qa_pairs"],
             "practice_session": get_practice().to_dict(
                 reveal_feedback=get_practice().status == "finished"

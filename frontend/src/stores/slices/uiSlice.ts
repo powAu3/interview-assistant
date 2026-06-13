@@ -74,7 +74,7 @@ export const createUiSlice: StateCreator<RootState, [], [], UiSlice> = (set) => 
 
   setToastMessage: (msg) => {
     if (!msg) {
-      set({ toastMessage: null, toasts: [] })
+      set({ toastMessage: null })
       return
     }
     const level = inferToastLevel(msg)

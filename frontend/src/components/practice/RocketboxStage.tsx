@@ -11,18 +11,33 @@ import {
   rememberBaseRotations,
   tuneRocketboxMaterials,
 } from './rocketboxRig'
-import type { VirtualInterviewerState } from './virtualInterviewerState'
+import {
+  IDLE_VIRTUAL_INTERVIEWER_SPEECH_SIGNAL,
+  type VirtualInterviewerSpeechSignal,
+  type VirtualInterviewerState,
+} from './virtualInterviewerState'
 
 type RocketboxLoadStatus = 'loading' | 'ready' | 'fallback'
 
-export function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
+export function RocketboxStage({
+  state,
+  speechSignal = IDLE_VIRTUAL_INTERVIEWER_SPEECH_SIGNAL,
+}: {
+  state: VirtualInterviewerState
+  speechSignal?: VirtualInterviewerSpeechSignal
+}) {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const stateRef = useRef(state)
+  const speechSignalRef = useRef(speechSignal)
   const [status, setStatus] = useState<RocketboxLoadStatus>('loading')
 
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  useEffect(() => {
+    speechSignalRef.current = speechSignal
+  }, [speechSignal])
 
   useEffect(() => {
     const parentElement = stageRef.current
@@ -38,6 +53,7 @@ export function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
     let resizeObserver: ResizeObserver | null = null
     let loadedRoot: Three.Object3D | null = null
     let renderer: Three.WebGLRenderer | null = null
+    let animationFrame = 0
 
     setStatus('loading')
 
@@ -106,7 +122,7 @@ export function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
             const baseRotations = rememberBaseRotations(rig)
             const startedAt = performance.now()
 
-            const renderOnce = () => {
+            const renderFrame = () => {
               if (disposed) return
               const time = (performance.now() - startedAt) / 1000
               applyRigState({
@@ -114,13 +130,15 @@ export function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
                 base: baseRotations,
                 root,
                 state: stateRef.current,
+                speechSignal: speechSignalRef.current,
                 time,
               })
               renderer?.render(scene, camera)
+              animationFrame = window.requestAnimationFrame(renderFrame)
             }
 
             resize()
-            renderOnce()
+            renderFrame()
             setStatus('ready')
           },
           undefined,
@@ -139,6 +157,7 @@ export function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
 
     return () => {
       disposed = true
+      if (animationFrame) window.cancelAnimationFrame(animationFrame)
       resizeObserver?.disconnect()
       if (loadedRoot) disposeObject(loadedRoot)
       renderer?.dispose()
@@ -154,11 +173,6 @@ export function RocketboxStage({ state }: { state: VirtualInterviewerState }) {
         data-rocketbox-status={status}
         data-testid="virtual-interviewer-three-stage"
       />
-      {status === 'ready' ? (
-        <div className="virtual-interviewer__three-poster">
-          <img src={ROCKETBOX_POSTER_PATH} alt="" />
-        </div>
-      ) : null}
       {status !== 'ready' ? (
         <div className="virtual-interviewer__three-fallback">
           <img src={ROCKETBOX_POSTER_PATH} alt="" />

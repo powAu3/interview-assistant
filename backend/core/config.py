@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 import json
 import os
 
@@ -24,6 +24,8 @@ class ModelConfig(BaseModel):
     supports_think: bool = False
     supports_vision: bool = False
     enabled: bool = True
+    think_enabled_params: dict[str, Any] = Field(default_factory=dict)
+    think_disabled_params: dict[str, Any] = Field(default_factory=dict)
 
 
 def _default_model_config() -> ModelConfig:
@@ -42,8 +44,8 @@ class AppConfig(BaseModel):
     temperature: float = 0.5
     max_tokens: int = 4096
     think_mode: bool = False
-    # 推理强度: off=关闭, low/medium/high 分别对应低/中/高强度推理
-    think_effort: Literal["off", "low", "medium", "high"] = "off"
+    # 推理强度: off=关闭, low/medium/high/xhigh 分别对应低/中/高/超高强度推理
+    think_effort: Literal["off", "low", "medium", "high", "xhigh"] = "off"
 
     # 语音识别：whisper=本地 faster-whisper，doubao=豆包语音识别 API
     stt_provider: str = "whisper"
@@ -67,6 +69,21 @@ class AppConfig(BaseModel):
     generic_stt_model: str = ""
     # 自定义 HTTP header，JSON 格式如 {"X-Custom":"value"} 或每行 Key: Value
     generic_stt_custom_headers: str = ""
+    # 实时辅助候选人麦克风 ASR：默认关闭；开启后默认本地 Whisper，避免额外远程识别成本。
+    candidate_asr_enabled: bool = False
+    candidate_stt_provider: str = "whisper"
+    candidate_whisper_model: str = ""
+    candidate_whisper_language: str = ""
+    candidate_remote_stt_enabled: bool = False
+    # 候选人真实回答上下文：下一轮问题可携带，追问时强优先，非追问时作为可忽略背景。
+    candidate_context_enabled: bool = True
+    candidate_context_wait_ms: int = 200
+    candidate_context_max_chars: int = 900
+    candidate_context_min_chars: int = 6
+    candidate_streaming_asr_enabled: bool = True
+    candidate_streaming_asr_interval_ms: int = 1500
+    # 只用于“我的麦克风”：始终共享读取；开启后冲突时会尝试更保守的采样与默认输入设备。
+    candidate_mic_compatibility_mode: bool = True
     # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
     practice_tts_provider: str = "edge_tts"
     edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"
@@ -110,6 +127,8 @@ class AppConfig(BaseModel):
     assist_high_churn_short_answer: bool = False
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
     screen_capture_region: str = "left_half"
+    # 截图送入识图模型前的最长边限制；0=不缩放。默认 1600 兼顾题面可读性与 token/带宽。
+    screen_capture_max_long_edge: int = 1600
     # 多图截图判题：最后一次截图后等待多少秒再提交整批图片
     multi_screen_capture_idle_sec: float = 10.0
     # 笔试模式：截屏后选择题直接输出答案，编程题直接输出代码，不做分析
@@ -149,6 +168,24 @@ class AppConfig(BaseModel):
             logger.warning(
                 "检测到已废弃的 stt_provider=iflytek；请在设置中改为 generic 或 whisper"
             )
+        if self.candidate_stt_provider == "iflytek":
+            logger.warning(
+                "检测到已废弃的 candidate_stt_provider=iflytek；已重置为 whisper"
+            )
+            self.candidate_stt_provider = "whisper"
+        if self.candidate_stt_provider not in STT_PROVIDER_OPTIONS:
+            logger.warning(
+                "candidate_stt_provider=%r 不支持，已重置为 whisper",
+                self.candidate_stt_provider,
+            )
+            self.candidate_stt_provider = "whisper"
+        if self.candidate_stt_provider in ("doubao", "generic") and not self.candidate_remote_stt_enabled:
+            self.candidate_stt_provider = "whisper"
+        self.candidate_context_wait_ms = max(0, min(2000, int(self.candidate_context_wait_ms or 0)))
+        self.candidate_context_max_chars = max(100, min(4000, int(self.candidate_context_max_chars or 900)))
+        self.candidate_context_min_chars = max(1, min(100, int(self.candidate_context_min_chars or 6)))
+        self.candidate_streaming_asr_interval_ms = max(800, min(5000, int(self.candidate_streaming_asr_interval_ms or 1500)))
+        self.candidate_mic_compatibility_mode = bool(self.candidate_mic_compatibility_mode)
         wl = (self.whisper_language or "").strip()
         if wl and wl != "auto":
             import re as _re
@@ -157,8 +194,18 @@ class AppConfig(BaseModel):
                     "whisper_language=%r 格式不正确，已重置为 auto (应为 ISO 639-1 码如 en/zh)", wl
                 )
                 self.whisper_language = "auto"
+        cwl = (self.candidate_whisper_language or "").strip()
+        if cwl and cwl != "auto":
+            import re as _re
+            if not _re.match(r"^[a-z]{2}(-[A-Z]{2})?$", cwl):
+                logger.warning(
+                    "candidate_whisper_language=%r 格式不正确，已重置为空（沿用 whisper_language）",
+                    cwl,
+                )
+                self.candidate_whisper_language = ""
         if not self.models:
             self.models = [_default_model_config()]
+        self.screen_capture_max_long_edge = max(0, min(4000, int(self.screen_capture_max_long_edge or 0)))
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
         if not getattr(self.models[self.active_model], "enabled", True):
             for i, model in enumerate(self.models):

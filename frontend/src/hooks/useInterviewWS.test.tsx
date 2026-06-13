@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useInterviewWS } from './useInterviewWS'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 vi.mock('@/lib/backendUrl', () => ({
   buildWsUrl: vi.fn(() => 'ws://example.test/ws'),
@@ -69,6 +70,8 @@ describe('useInterviewWS', () => {
       sttActiveProvider: '',
       sttFallbackLoaded: false,
       modelHealth: {},
+      modelHealthDetail: {},
+      modelHealthLatency: {},
       tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
       resumeOptLoading: false,
       resumeOptStreaming: '',
@@ -76,6 +79,7 @@ describe('useInterviewWS', () => {
       resumeOptJobId: null,
       lastWSError: null,
     } as any)
+    useUiPrefsStore.setState({ appMode: 'assist' } as any)
   })
 
   afterEach(() => {
@@ -127,6 +131,27 @@ describe('useInterviewWS', () => {
     expect(FakeWebSocket.instances.length).toBe(2)
   })
 
+  it('warns when candidate microphone degrades safely', () => {
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({
+        type: 'candidate_asr_status',
+        loaded: false,
+        loading: false,
+        provider: 'off',
+        error: 'mic unavailable',
+        safe_degraded: true,
+      })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.candidateSttLoaded).toBe(false)
+    expect(state.toastMessage).toContain('候选人口述记录已关闭，不影响面试录音')
+  })
+
   it('ignores stale resume optimization chunks from older jobs', () => {
     render(<Harness />)
     const ws = FakeWebSocket.instances[0]
@@ -146,5 +171,24 @@ describe('useInterviewWS', () => {
     expect(state.resumeOptResult).toBe('new-final')
     expect(state.resumeOptStreaming).toBe('')
     expect(state.resumeOptLoading).toBe(false)
+  })
+
+  it('keeps scoped module state updates when another app tab is active', () => {
+    useUiPrefsStore.setState({ appMode: 'assist' } as any)
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({ type: 'resume_opt_start', scope: 'resume-opt', job_id: 'job-bg' })
+      ws.emitMessage({ type: 'resume_opt_chunk', scope: 'resume-opt', job_id: 'job-bg', chunk: '后台分析' })
+      ws.emitMessage({ type: 'resume_opt_done', scope: 'resume-opt', job_id: 'job-bg', text: '后台分析完成' })
+      ws.emitMessage({ type: 'practice_status', scope: 'practice', status: 'awaiting_answer' })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.resumeOptResult).toBe('后台分析完成')
+    expect(state.resumeOptLoading).toBe(false)
+    expect(state.practiceStatus).toBe('awaiting_answer')
   })
 })

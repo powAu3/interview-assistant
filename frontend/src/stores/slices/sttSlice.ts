@@ -7,13 +7,19 @@ export interface SttSliceState {
   sttLoading: boolean
   sttActiveProvider: string
   sttFallbackLoaded: boolean
+  candidateSttLoaded: boolean
+  candidateSttLoading: boolean
+  candidateSttProvider: string
   modelHealth: Record<number, ModelHealthStatus>
+  modelHealthDetail: Record<number, string>
+  modelHealthLatency: Record<number, number>
   tokenUsage: TokenUsage
 }
 
 export interface SttSliceActions {
   setSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
-  setModelHealth: (index: number, status: ModelHealthStatus) => void
+  setCandidateSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
+  setModelHealth: (index: number, status: ModelHealthStatus, detail?: string, latencyMs?: number) => void
   setTokenUsage: (usage: TokenUsage) => void
 }
 
@@ -24,7 +30,12 @@ export const createSttSlice: StateCreator<RootState, [], [], SttSlice> = (set) =
   sttLoading: false,
   sttActiveProvider: '',
   sttFallbackLoaded: false,
+  candidateSttLoaded: false,
+  candidateSttLoading: false,
+  candidateSttProvider: '',
   modelHealth: {},
+  modelHealthDetail: {},
+  modelHealthLatency: {},
   tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
 
   setSttStatus: (loaded, loading, provider) => set((s) => {
@@ -37,8 +48,16 @@ export const createSttSlice: StateCreator<RootState, [], [], SttSlice> = (set) =
       ...(provider != null ? { sttActiveProvider: provider } : {}),
     }
   }),
-  setModelHealth: (index, status) =>
-    set((s) => ({ modelHealth: { ...s.modelHealth, [index]: status } })),
+  setCandidateSttStatus: (loaded, loading, provider) => set((s) => ({
+    candidateSttLoaded: loaded,
+    candidateSttLoading: loading,
+    ...(provider != null ? { candidateSttProvider: provider } : {}),
+  })),
+  setModelHealth: (index, status, detail, latencyMs) => set((s) => ({
+    modelHealth: { ...s.modelHealth, [index]: status },
+    ...(detail != null ? { modelHealthDetail: { ...s.modelHealthDetail, [index]: detail } } : {}),
+    ...(latencyMs != null ? { modelHealthLatency: { ...s.modelHealthLatency, [index]: latencyMs } } : {}),
+  })),
   setTokenUsage: (usage) =>
     set({
       tokenUsage: {

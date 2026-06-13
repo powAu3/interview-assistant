@@ -213,11 +213,23 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ summary }),
     }),
-  start: (device_id?: number | null) =>
-    request('/api/start', { method: 'POST', body: JSON.stringify(device_id != null ? { device_id } : {}) }),
+  start: (device_id?: number | null, candidate_mic_device_id?: number | null) =>
+    request('/api/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(device_id != null ? { device_id } : {}),
+        ...(candidate_mic_device_id != null ? { candidate_mic_device_id } : {}),
+      }),
+    }),
   stop: () => request('/api/stop', { method: 'POST' }),
   pause: () => request('/api/pause', { method: 'POST' }),
-  resume: (device_id?: number) => request('/api/unpause', { method: 'POST', body: JSON.stringify(device_id != null ? { device_id } : {}) }),
+  resume: (device_id?: number, candidate_mic_device_id?: number | null) => request('/api/unpause', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(device_id != null ? { device_id } : {}),
+      ...(candidate_mic_device_id != null ? { candidate_mic_device_id } : {}),
+    }),
+  }),
   clear: () => request('/api/clear', { method: 'POST' }),
   ask: (text: string, image?: string) =>
     request('/api/ask', { method: 'POST', body: JSON.stringify({ text, image }) }),
@@ -226,6 +238,44 @@ export const api = {
   preflightRun: (scenario_id: string, device_id?: number | null) =>
     request('/api/preflight/run', { method: 'POST', body: JSON.stringify({ scenario_id, device_id: device_id ?? undefined }) }),
   preflightStatus: () => request('/api/preflight/status'),
+  examPreflightRun: () =>
+    request('/api/exam-preflight/run', { method: 'POST', body: '{}' }),
+  examPreflightStatus: () => request('/api/exam-preflight/status'),
+  audioOutputTest: () =>
+    request<{ ok: boolean; elapsed_sec: number }>('/api/audio-test/output', { method: 'POST', body: '{}' }),
+  audioInputTest: (device_id: number, duration_sec = 1.2) =>
+    request<{
+      ok: boolean
+      device_id: number
+      elapsed_sec: number
+      samples?: number
+      rms: number
+      peak: number
+      has_signal: boolean
+      detail: string
+    }>('/api/audio-test/input', { method: 'POST', body: JSON.stringify({ device_id, duration_sec }) }),
+  audioInputMonitorStart: (device_id: number) =>
+    request<{
+      running: boolean
+      device_id: number
+      rms: number
+      peak: number
+      level_pct: number
+      has_signal: boolean
+      error?: string | null
+    }>('/api/audio-test/input/start', { method: 'POST', body: JSON.stringify({ device_id }) }),
+  audioInputMonitorStatus: () =>
+    request<{
+      running: boolean
+      device_id: number | null
+      rms: number
+      peak: number
+      level_pct: number
+      has_signal: boolean
+      error?: string | null
+    }>('/api/audio-test/input/status'),
+  audioInputMonitorStop: () =>
+    request<{ running: boolean }>('/api/audio-test/input/stop', { method: 'POST', body: '{}' }),
   /** 服务端截取本机主屏左半幅 + VL 写码（手机端用，不经过手机截图 API） */
   askFromServerScreen: () =>
     request('/api/ask-from-server-screen', { method: 'POST', body: '{}' }),
@@ -236,8 +286,28 @@ export const api = {
   getSttStatus: () => request('/api/stt/status'),
   checkModelsHealth: () => request('/api/models/health', { method: 'POST' }),
   /** 当前各模型健康状态（检测中/可用/不可用） */
-  getModelsHealth: () => request<{ health: Record<string, string> }>('/api/models/health'),
+  getModelsHealth: () => request<{
+    health: Record<string, string>
+    detail?: Record<string, string>
+    latency?: Record<string, number>
+  }>('/api/models/health'),
+  listRemoteModels: (payload: { api_base_url: string; api_key: string; model_index?: number }) =>
+    request<{ models: { id: string; owned_by?: string | null }[] }>('/api/models/list', { method: 'POST', body: JSON.stringify(payload) }),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
+  probeModelCapabilities: (index: number) =>
+    request<{
+      ok: boolean
+      detail?: string
+      latency_ms?: number
+      supports_vision: boolean
+      supports_think: boolean
+      think_style: string
+      think_params: Record<string, unknown>
+      think_disabled_params: Record<string, unknown>
+      vision_detail?: string
+      think_detail?: string
+      think_disabled_detail?: string
+    }>('/api/models/probe/' + index, { method: 'POST' }),
   sttTest: () => request<{ ok: boolean; detail?: string; text?: string }>('/api/stt/test', { method: 'POST' }),
 
   // Knowledge
@@ -275,7 +345,7 @@ export const api = {
   practiceFinish: () => request('/api/practice/finish', { method: 'POST' }),
   practiceReset: () => request('/api/practice/reset', { method: 'POST' }),
   practiceRecord: (action: 'start' | 'stop', device_id?: number) =>
-    request('/api/practice/record', { method: 'POST', body: JSON.stringify({ action, device_id }) }),
+    request<{ ok: boolean; text?: string }>('/api/practice/record', { method: 'POST', body: JSON.stringify({ action, device_id }) }),
   practiceStatus: () => request('/api/practice/status'),
 
   // Job tracker (desktop / local SQLite)

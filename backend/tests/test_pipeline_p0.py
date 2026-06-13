@@ -52,8 +52,8 @@ class _RecordingAudioCapture:
         self.start_calls: list[tuple] = []
         self._chunk_provider = lambda: None  # 默认无音频, 走 sleep 分支
 
-    def start(self, device_id, owner=None):
-        self.start_calls.append((device_id, owner))
+    def start(self, device_id, owner=None, **kwargs):
+        self.start_calls.append((device_id, owner, kwargs))
 
     def stop(self, owner=None):
         self.stop_calls.append(owner)
@@ -74,6 +74,7 @@ def _wire_common_fakes(monkeypatch, audio_capture, session, *, gc_counter=None):
     monkeypatch.setattr(pipeline, "_reset_asr_merge_buffer", lambda: None)
     # _stop_event 是模块级单例, 确保新一轮测试干净
     pipeline._stop_event.clear()
+    pipeline._flush_stop_event.clear()
     pipeline._pause_event.clear()
 
     if gc_counter is not None:
@@ -135,6 +136,7 @@ def test_worker_crash_in_main_loop_still_calls_audio_stop(monkeypatch):
     assert audio.stop_calls == ["assist"], (
         f"worker 崩溃后 stop 应在 finally 恰好调一次; 实际 stop_calls={audio.stop_calls}"
     )
+    assert pipeline._flush_thread is None or not pipeline._flush_thread.is_alive()
 
 
 def test_worker_idempotent_stop_safe_when_outer_already_stopped(monkeypatch):
@@ -296,7 +298,7 @@ def test_start_nonblocking_with_device_in_exam_mode(monkeypatch):
 
     pipeline.start_nonblocking(device_id=1)
 
-    assert audio.start_calls == [(1, "assist")], (
+    assert audio.start_calls == [(1, "assist", {})], (
         f"传了 device_id 时应走音频路径; 实际 start_calls={audio.start_calls}"
     )
 

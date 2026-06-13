@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ValidationError
@@ -22,6 +23,7 @@ from api.common.config_payload import build_config_payload
 from api.common.model_health import (
     get_model_health,
     get_model_health_snapshot,
+    probe_single_model,
     start_all_model_checks,
     start_single_model_check,
 )
@@ -78,6 +80,7 @@ class ConfigUpdate(BaseModel):
     assist_asr_interrupt_running: Optional[bool] = None
     assist_high_churn_short_answer: Optional[bool] = None
     screen_capture_region: Optional[str] = None
+    screen_capture_max_long_edge: Optional[int] = None
     multi_screen_capture_idle_sec: Optional[float] = None
     written_exam_mode: Optional[bool] = None
     written_exam_think: Optional[bool] = None
@@ -85,6 +88,18 @@ class ConfigUpdate(BaseModel):
     generic_stt_api_key: Optional[str] = None
     generic_stt_model: Optional[str] = None
     generic_stt_custom_headers: Optional[str] = None
+    candidate_asr_enabled: Optional[bool] = None
+    candidate_stt_provider: Optional[str] = None
+    candidate_whisper_model: Optional[str] = None
+    candidate_whisper_language: Optional[str] = None
+    candidate_remote_stt_enabled: Optional[bool] = None
+    candidate_context_enabled: Optional[bool] = None
+    candidate_context_wait_ms: Optional[int] = None
+    candidate_context_max_chars: Optional[int] = None
+    candidate_context_min_chars: Optional[int] = None
+    candidate_streaming_asr_enabled: Optional[bool] = None
+    candidate_streaming_asr_interval_ms: Optional[int] = None
+    candidate_mic_compatibility_mode: Optional[bool] = None
     practice_tts_provider: Optional[str] = None
     edge_tts_voice_female: Optional[str] = None
     edge_tts_voice_male: Optional[str] = None
@@ -101,6 +116,123 @@ class ConfigUpdate(BaseModel):
     kb_asr_deadline_ms: Optional[int] = None
 
 
+_MODEL_API_KEY_KEEP = "__IA_KEEP_EXISTING_API_KEY__"
+
+
+class ModelListRequest(BaseModel):
+    api_base_url: str
+    api_key: str
+    model_index: Optional[int] = None
+
+
+_MODEL_LIST_KNOWN_COMPAT_SUFFIXES = (
+    "/api/claudecode",
+    "/api/anthropic",
+    "/apps/anthropic",
+    "/api/coding",
+    "/claudecode",
+    "/anthropic",
+    "/step_plan",
+    "/coding",
+    "/claude",
+)
+
+
+def _ends_with_version_segment(url: str) -> bool:
+    last = url.rsplit("/", 1)[-1]
+    return len(last) > 1 and last.startswith("v") and last[1:].isdigit()
+
+
+def _strip_known_model_list_compat_suffix(base_url: str) -> str:
+    for suffix in _MODEL_LIST_KNOWN_COMPAT_SUFFIXES:
+        if base_url.endswith(suffix):
+            return base_url[: -len(suffix)].rstrip("/")
+    return ""
+
+
+def _model_list_url_candidates(api_base_url: str) -> list[str]:
+    base = (api_base_url or "").strip().rstrip("/")
+    if not base:
+        return []
+    candidates: list[str] = []
+    if _ends_with_version_segment(base):
+        candidates.append(f"{base}/models")
+        if not base.endswith("/v1"):
+            candidates.append(f"{base}/v1/models")
+    else:
+        candidates.append(f"{base}/v1/models")
+
+    stripped = _strip_known_model_list_compat_suffix(base)
+    if stripped and "://" in stripped:
+        candidates.append(f"{stripped}/v1/models")
+        candidates.append(f"{stripped}/models")
+
+    unique: list[str] = []
+    for url in candidates:
+        if url not in unique:
+            unique.append(url)
+    return unique
+
+
+def _model_list_error_body(response: requests.Response) -> str:
+    try:
+        text = response.text
+    except Exception:
+        text = ""
+    return text[:512] + ("..." if len(text) > 512 else "")
+
+
+def _extract_remote_models(body: object) -> list[dict[str, str | None]]:
+    if isinstance(body, dict):
+        data = body.get("data", body.get("models", []))
+    else:
+        data = body
+    models_by_id: dict[str, dict[str, str | None]] = {}
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                model_id = item.get("id")
+                owned_by = item.get("owned_by", item.get("ownedBy"))
+            else:
+                model_id = getattr(item, "id", None)
+                owned_by = getattr(item, "owned_by", getattr(item, "ownedBy", None))
+            if not isinstance(model_id, str) or not model_id.strip():
+                continue
+            clean_id = model_id.strip()
+            clean_owner = owned_by.strip() if isinstance(owned_by, str) and owned_by.strip() else None
+            current = models_by_id.get(clean_id)
+            if current is None:
+                models_by_id[clean_id] = {"id": clean_id, "owned_by": clean_owner}
+            elif not current.get("owned_by") and clean_owner:
+                current["owned_by"] = clean_owner
+    return sorted(models_by_id.values(), key=lambda model: model["id"].lower())
+
+
+def _list_remote_models(api_base_url: str, api_key: str) -> dict:
+    candidates = _model_list_url_candidates(api_base_url)
+    if not candidates:
+        raise RuntimeError("API Base URL 不能为空")
+    last_not_found = ""
+    for url in candidates:
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+        if response.status_code in (404, 405):
+            last_not_found = f"HTTP {response.status_code}: {_model_list_error_body(response)}"
+            continue
+        if response.status_code >= 400:
+            raise RuntimeError(f"HTTP {response.status_code}: {_model_list_error_body(response)}")
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise RuntimeError(f"模型列表响应不是 JSON: {exc}") from exc
+        return {"models": _extract_remote_models(body)}
+    raise RuntimeError(last_not_found or "未找到可用的模型列表接口")
+
+
+
 @router.get("/config")
 async def api_get_config():
     return build_config_payload(get_config())
@@ -111,18 +243,20 @@ _LEGACY_STT_PROVIDER_MAP = {"iflytek": "generic"}
 
 @router.get("/config/models-full")
 async def api_get_models_full():
-    """Return all model fields for local frontend editing."""
+    """Return model fields for local frontend editing without echoing secrets."""
     cfg = get_config()
     return {
         "models": [
             {
                 "name": mdl.name,
                 "api_base_url": mdl.api_base_url,
-                "api_key": mdl.api_key,
+                "api_key": "",
                 "model": mdl.model,
                 "supports_think": mdl.supports_think,
                 "supports_vision": mdl.supports_vision,
                 "enabled": getattr(mdl, "enabled", True),
+                "think_enabled_params": getattr(mdl, "think_enabled_params", {}) or {},
+                "think_disabled_params": getattr(mdl, "think_disabled_params", {}) or {},
                 "has_key": bool(mdl.api_key and mdl.api_key not in ("", "sk-your-api-key-here")),
             }
             for mdl in cfg.models
@@ -138,9 +272,19 @@ async def api_update_config(body: ConfigUpdate):
     try:
         if "models" in d:
             raw_models = []
-            for x in d["models"]:
+            current_models = list(get_config().models)
+            for idx, x in enumerate(d["models"]):
                 if not isinstance(x, dict):
                     continue
+                if x.get("api_key") == _MODEL_API_KEY_KEEP:
+                    source_idx = x.get("model_original_index", idx)
+                    try:
+                        source_idx = int(source_idx)
+                    except (TypeError, ValueError):
+                        source_idx = idx
+                    existing = current_models[source_idx].api_key if 0 <= source_idx < len(current_models) else ""
+                    x = {**x, "api_key": existing}
+                x.pop("model_original_index", None)
                 raw_models.append(ModelConfig(**x))
             d["models"] = raw_models
             if not d["models"]:
@@ -159,6 +303,32 @@ async def api_update_config(body: ConfigUpdate):
                 422,
                 f"stt_provider 必须是 {list(STT_PROVIDER_OPTIONS)} 之一",
             )
+        if d.get("candidate_stt_provider") in _LEGACY_STT_PROVIDER_MAP:
+            raise HTTPException(
+                422,
+                f"candidate_stt_provider={d['candidate_stt_provider']} 已废弃，请改用 whisper",
+            )
+        if d.get("candidate_stt_provider") == "":
+            d.pop("candidate_stt_provider", None)
+        elif "candidate_stt_provider" in d and d["candidate_stt_provider"] not in STT_PROVIDER_OPTIONS:
+            raise HTTPException(
+                422,
+                f"candidate_stt_provider 必须是 {list(STT_PROVIDER_OPTIONS)} 之一",
+            )
+        if d.get("candidate_stt_provider") in ("doubao", "generic") and not bool(d.get("candidate_remote_stt_enabled", get_config().candidate_remote_stt_enabled)):
+            d["candidate_stt_provider"] = "whisper"
+        if "candidate_whisper_model" in d:
+            d["candidate_whisper_model"] = str(d["candidate_whisper_model"]).strip()
+        if "candidate_whisper_language" in d:
+            d["candidate_whisper_language"] = str(d["candidate_whisper_language"]).strip()
+        if "candidate_context_wait_ms" in d:
+            d["candidate_context_wait_ms"] = max(0, min(2000, int(d["candidate_context_wait_ms"])))
+        if "candidate_context_max_chars" in d:
+            d["candidate_context_max_chars"] = max(100, min(4000, int(d["candidate_context_max_chars"])))
+        if "candidate_context_min_chars" in d:
+            d["candidate_context_min_chars"] = max(1, min(100, int(d["candidate_context_min_chars"])))
+        if "candidate_streaming_asr_interval_ms" in d:
+            d["candidate_streaming_asr_interval_ms"] = max(800, min(5000, int(d["candidate_streaming_asr_interval_ms"])))
         if "max_parallel_answers" in d:
             d["max_parallel_answers"] = max(1, min(8, int(d["max_parallel_answers"])))
         if "answer_autoscroll_bottom_px" in d:
@@ -197,8 +367,8 @@ async def api_update_config(body: ConfigUpdate):
             )
         if "think_effort" in d:
             val = str(d["think_effort"]).strip().lower()
-            if val not in ("off", "low", "medium", "high"):
-                raise HTTPException(422, "think_effort 必须是 off/low/medium/high 之一")
+            if val not in ("off", "low", "medium", "high", "xhigh"):
+                raise HTTPException(422, "think_effort 必须是 off/low/medium/high/xhigh 之一")
             d["think_effort"] = val
             if val == "off" and d.get("think_mode", True) is True:
                 d["think_mode"] = False
@@ -420,6 +590,24 @@ async def api_get_models_health():
     return get_model_health_snapshot()
 
 
+@router.post("/models/list")
+async def api_list_remote_models(body: ModelListRequest):
+    api_base_url = (body.api_base_url or "").strip()
+    api_key = (body.api_key or "").strip()
+    if api_key == _MODEL_API_KEY_KEEP and body.model_index is not None:
+        cfg = get_config()
+        idx = int(body.model_index)
+        api_key = cfg.models[idx].api_key if 0 <= idx < len(cfg.models) else ""
+    if not api_base_url:
+        raise HTTPException(400, "API Base URL 不能为空")
+    if not api_key or api_key == "sk-your-api-key-here":
+        raise HTTPException(400, "API Key 不能为空")
+    try:
+        return await run_in_threadpool(_list_remote_models, api_base_url, api_key)
+    except Exception as e:
+        raise HTTPException(502, f"获取模型列表失败: {e}") from e
+
+
 @router.post("/models/health/{index}")
 async def api_check_single_model_health(index: int):
     """Check health of a single model by index (run in background thread)."""
@@ -429,6 +617,18 @@ async def api_check_single_model_health(index: int):
     if not start_single_model_check(index):
         raise HTTPException(429, "后台低优先级队列繁忙，请稍后重试")
     return {"ok": True}
+
+
+@router.post("/models/probe/{index}")
+async def api_probe_single_model(index: int):
+    """Check connectivity and synchronously probe model capabilities."""
+    cfg = get_config()
+    if index < 0 or index >= len(cfg.models):
+        raise HTTPException(400, f"模型 index {index} 超出范围")
+    try:
+        return await run_in_threadpool(probe_single_model, index)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @router.post("/stt/test")

@@ -45,7 +45,7 @@ def test_claim_next_dispatch_avoids_physical_busy_model_for_asr():
         pending,
         in_flight,
         latest_asr_turn_id=2,
-        max_parallel_slots=1,
+        max_parallel_slots=2,
         pick_model_index=pick_model,
     )
 
@@ -54,7 +54,7 @@ def test_claim_next_dispatch_avoids_physical_busy_model_for_asr():
     assert step.claim.seq == 2
     assert pending == []
     assert in_flight[2] == (0, _asr_task("最新问题", 2))
-    assert calls == [(set(), {2})]
+    assert calls == [({2}, {2})]
 
 
 def test_drain_commit_queue_skips_then_drains_in_order():

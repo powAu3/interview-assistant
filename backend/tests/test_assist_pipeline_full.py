@@ -27,6 +27,12 @@ class _DeferredThread:
     def start(self):
         self.started.append(self)
 
+    def is_alive(self):
+        return False
+
+    def join(self, timeout=None):
+        return None
+
     def run(self):
         self.target(*self.args, **self.kwargs)
 
@@ -57,7 +63,7 @@ def _cfg():
         screen_capture_region="left_half",
         kb_enabled=False,
         kb_trigger_modes=[],
-        assist_asr_interrupt_running=True,
+        assist_asr_interrupt_running=False,
     )
     cfg.get_active_model = lambda: cfg.models[cfg.active_model]
     return cfg
@@ -80,6 +86,9 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     pipeline._next_commit_seq = 0
     pipeline._next_submit_seq = 0
     pipeline._task_session_version = 0
+    pipeline._interview_thread = None
+    pipeline._candidate_thread = None
+    pipeline._candidate_whisper_preload_inflight.clear()
     pipeline._sync_compat_globals_to_asr_state()
     _DeferredThread.started = []
 
@@ -88,7 +97,7 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
     monkeypatch.setattr(pipeline, "get_model_health", lambda _idx: None)
     monkeypatch.setattr(pipeline.threading, "Thread", _DeferredThread)
-    monkeypatch.setattr(pipeline, "_submit_knowledge_record", lambda _q, _a: True)
+    monkeypatch.setattr(pipeline, "_submit_knowledge_record", lambda _q, _a, *_rest: True)
     monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kwargs: "system")
     monkeypatch.setattr(
         answer_worker,
@@ -165,14 +174,14 @@ def test_parallel_answers_commit_in_submit_order_when_workers_finish_out_of_orde
     assert pipeline._commit_buffer == {}
 
 
-def test_stale_asr_worker_is_cancelled_after_new_asr_turn(
+def test_running_asr_worker_is_not_cancelled_by_new_asr_turn_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ):
     broadcasts: list[dict] = []
     monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
 
     def fake_stream(*_args, **_kwargs):
-        yield ("text", "旧回答不应提交")
+        yield ("text", "旧回答继续提交")
 
     monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
 
@@ -192,7 +201,208 @@ def test_stale_asr_worker_is_cancelled_after_new_asr_turn(
     _DeferredThread.started[0].run()
 
     event_types = [event["type"] for event in broadcasts]
-    assert event_types == ["answer_start", "answer_cancelled"]
-    assert get_session().qa_pairs == []
+    assert event_types == ["answer_start", "answer_chunk", "answer_done", "token_update"]
+    assert [qa.answer for qa in get_session().qa_pairs] == ["旧回答继续提交"]
     assert pipeline._next_commit_seq == 1
     assert pipeline._in_flight_tasks == {}
+
+
+def test_running_asr_worker_can_still_be_cancelled_when_interrupt_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    cfg = _cfg()
+    cfg.assist_asr_interrupt_running = True
+    broadcasts: list[dict] = []
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "旧回答不应提交")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    pipeline._latest_asr_turn_id = 1
+    assert pipeline.submit_answer_task(
+        (
+            "旧 ASR 问题",
+            None,
+            False,
+            "conversation_mic",
+            {"origin": "asr", "asr_turn_id": 1},
+        )
+    )
+    assert pipeline._begin_asr_turn() == 2
+    _DeferredThread.started[0].run()
+
+    event_types = [event["type"] for event in broadcasts]
+    assert event_types == ["answer_start", "answer_cancelled"]
+    assert get_session().qa_pairs == []
+
+
+def test_candidate_whisper_preload_runs_in_background(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    calls = {"load": 0}
+
+    class _FakeWhisper:
+        @property
+        def is_loaded(self):
+            return calls["load"] > 0
+
+        def load_model(self):
+            calls["load"] += 1
+
+    def fake_get_stt_engine(**kwargs):
+        assert kwargs == {
+            "provider": "whisper",
+            "model_size": "base",
+            "language": "auto",
+        }
+        return _FakeWhisper()
+
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(pipeline, "get_stt_engine", fake_get_stt_engine)
+
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+
+    assert len(_DeferredThread.started) == 1
+    _DeferredThread.started[0].run()
+
+    assert calls["load"] == 1
+    assert broadcasts[-1] == {
+        "type": "candidate_asr_status",
+        "loaded": True,
+        "loading": False,
+        "provider": "whisper",
+    }
+
+
+def test_candidate_whisper_preload_failure_only_reports_candidate_status(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(
+        pipeline,
+        "get_stt_engine",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("candidate model bad")),
+    )
+
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+    _DeferredThread.started[0].run()
+
+    assert broadcasts[-1]["type"] == "candidate_asr_status"
+    assert broadcasts[-1]["provider"] == "whisper"
+    assert broadcasts[-1]["loaded"] is False
+    assert "candidate model bad" in broadcasts[-1]["error"]
+
+
+def test_startup_preloads_candidate_whisper_when_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_stt_provider = "whisper"
+    cfg.candidate_whisper_model = "tiny"
+    cfg.candidate_whisper_language = "zh"
+
+    calls: list[tuple[str, str, str]] = []
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(
+        pipeline,
+        "_preload_candidate_whisper_async",
+        lambda provider, model, language: calls.append((provider, model, language)),
+    )
+
+    pipeline.preload_candidate_asr_if_enabled()
+
+    assert broadcasts == [{"type": "candidate_asr_status", "loaded": False, "loading": True, "provider": "whisper"}]
+    assert calls == [("whisper", "tiny", "zh")]
+
+
+def test_startup_candidate_preload_skips_when_disabled(monkeypatch: pytest.MonkeyPatch):
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = False
+    cfg.candidate_stt_provider = "whisper"
+    calls: list[tuple[str, str, str]] = []
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(
+        pipeline,
+        "_preload_candidate_whisper_async",
+        lambda provider, model, language: calls.append((provider, model, language)),
+    )
+
+    pipeline.preload_candidate_asr_if_enabled()
+
+    assert calls == []
+
+
+def test_candidate_whisper_preload_deduplicates_inflight_model(monkeypatch: pytest.MonkeyPatch):
+    class _LoadedWhisper:
+        is_loaded = True
+
+        def load_model(self):
+            raise AssertionError("already loaded")
+
+    monkeypatch.setattr(pipeline, "get_stt_engine", lambda **_kwargs: _LoadedWhisper())
+
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+    pipeline._preload_candidate_whisper_async("whisper", "base", "auto")
+
+    assert len(_DeferredThread.started) == 1
+    assert ("base", "auto") in pipeline._candidate_whisper_preload_inflight
+    _DeferredThread.started[0].run()
+    assert pipeline._candidate_whisper_preload_inflight == set()
+
+
+def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    class _MainAudio:
+        SAMPLE_RATE = 16000
+
+        def __init__(self):
+            self.start_calls = []
+            self.stop_calls = []
+
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
+
+        def stop(self, owner=None):
+            self.stop_calls.append(owner)
+
+    class _BrokenCandidateAudio(_MainAudio):
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
+            raise RuntimeError("mic unavailable")
+
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    main_audio = _MainAudio()
+    candidate_audio = _BrokenCandidateAudio()
+    session = get_session()
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "audio_capture", main_audio)
+    monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
+    monkeypatch.setattr(pipeline, "_device_is_loopback", lambda _device_id: True)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    pipeline.start_nonblocking(10, 11)
+
+    assert session.is_recording is True
+    assert main_audio.start_calls == [(10, "assist", {})]
+    assert candidate_audio.start_calls == [(11, "assist-candidate", {"mic_compatibility_mode": True})]
+    assert len(_DeferredThread.started) == 1
+    assert _DeferredThread.started[0].target is pipeline._interview_worker
+    assert any(
+        event.get("type") == "candidate_asr_status"
+        and event.get("provider") == "off"
+        and event.get("safe_degraded") is True
+        and "mic unavailable" in event.get("error", "")
+        for event in broadcasts
+    )

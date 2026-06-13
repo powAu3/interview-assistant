@@ -211,6 +211,10 @@ cd frontend && npm test
 python -m pytest backend/tests -q
 ```
 
+开发模式提示：本地直接跑后端时默认不启用鉴权，`npm run dev` 的 Vite 代理可以直接访问
+`http://localhost:18080`。只有 `python start.py --mode network`、`IA_AUTH_ENABLE=1`
+或设置了 `IA_AUTH_TOKEN` 时，才会要求局域网请求携带 token。
+
 ## README 素材更新
 
 ```bash

@@ -90,6 +90,16 @@ function getPracticeSourceLabel(
   return 'local'
 }
 
+function mergePracticeAnswerDraft(current: string, incoming?: string) {
+  const next = incoming?.trim()
+  if (!next) return current
+  const existing = current.trim()
+  if (!existing) return next
+  if (existing.includes(next)) return current
+  if (next.includes(existing)) return next
+  return `${current} ${next}`
+}
+
 export default function PracticeMode() {
   const {
     config,
@@ -206,7 +216,7 @@ export default function PracticeMode() {
     setPracticeTtsSpeaking,
     startRecording,
     sttLoaded,
-    voiceGender: persistentState.voiceGender,
+    voiceGender: voiceCatalog.effectiveVoiceGender,
   })
 
   const handleReset = async () => {
@@ -223,7 +233,10 @@ export default function PracticeMode() {
   const handleRecordToggle = async () => {
     if (practiceRecording) {
       try {
-        await api.practiceRecord('stop')
+        const result = await api.practiceRecord('stop')
+        setPracticeAnswerDraft(
+          mergePracticeAnswerDraft(useInterviewStore.getState().practiceAnswerDraft, result?.text),
+        )
       } catch {
         /* ignore */
       }
@@ -317,6 +330,7 @@ export default function PracticeMode() {
       setPracticeCodeDraft={setPracticeCodeDraft}
       setSelectedMic={setSelectedMic}
       sttLoaded={sttLoaded}
+      speechSignal={playback.speechSignal}
       ttsSourceLabel={resolvedTtsSourceLabel}
       practiceTheme={practiceTheme}
     />

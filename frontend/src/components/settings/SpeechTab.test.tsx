@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import SpeechTab from './SpeechTab'
+import { updateConfigAndRefresh } from '@/lib/configSync'
 import { useInterviewStore } from '@/stores/configStore'
 
 const apiMock = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ vi.mock('@/lib/practiceTts', () => ({
 
 describe('SpeechTab', () => {
   beforeEach(() => {
+    vi.mocked(updateConfigAndRefresh).mockClear()
     apiMock.sttTest.mockResolvedValue({ ok: true, text: 'demo' })
     apiMock.practiceTts.mockResolvedValue({ audio_base64: '', content_type: 'audio/mpeg', speaker: 'demo' })
 
@@ -41,6 +43,19 @@ describe('SpeechTab', () => {
         generic_stt_api_base_url: '',
         generic_stt_api_key: '',
         generic_stt_model: '',
+        generic_stt_custom_headers: '',
+        candidate_asr_enabled: false,
+        candidate_stt_provider: 'whisper',
+        candidate_whisper_model: '',
+        candidate_whisper_language: '',
+        candidate_remote_stt_enabled: false,
+        candidate_context_enabled: true,
+        candidate_context_wait_ms: 200,
+        candidate_context_max_chars: 900,
+        candidate_context_min_chars: 6,
+        candidate_streaming_asr_enabled: true,
+        candidate_streaming_asr_interval_ms: 1500,
+        candidate_mic_compatibility_mode: true,
         practice_tts_provider: 'edge_tts',
         edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
         edge_tts_voice_male: 'zh-CN-YunxiNeural',
@@ -74,5 +89,77 @@ describe('SpeechTab', () => {
 
     expect(await screen.findByText(/该 provider 已不再受支持/)).toBeInTheDocument()
     expect(screen.getByText(/请切换到“通用 ASR”或“Whisper”/)).toBeInTheDocument()
+  })
+
+  it('shows candidate microphone ASR defaults as local whisper', () => {
+    render(<SpeechTab />)
+
+    expect(screen.getByText('实时辅助语音链路')).toBeInTheDocument()
+    expect(screen.getByText('主链路 ASR（面试官 / 会议音频）')).toBeInTheDocument()
+    expect(screen.getByText('可选辅助 ASR（我的回答）')).toBeInTheDocument()
+    expect(screen.getByTitle('我的麦克风 ASR — Beta')).toBeInTheDocument()
+    expect(screen.getByText('我的回答上下文（麦克风）')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: '我的回答上下文（麦克风）' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getAllByText(/不会触发自动答题/).length).toBeGreaterThan(0)
+    expect(screen.getByText('麦克风兼容模式')).toBeInTheDocument()
+    expect(screen.getByText('共享兼容优先')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Whisper（本地，免费）')).toBeInTheDocument()
+    expect(screen.getByText(/高级设置：Whisper 模型与追问上下文/)).toBeInTheDocument()
+    expect(screen.getByText(/生成下一轮答案时会携带上一轮/)).toBeInTheDocument()
+    expect(screen.getByText('边听边写')).toBeInTheDocument()
+    expect(screen.getByText('兜底等最后一句 (ms)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('200')).toBeInTheDocument()
+  })
+
+  it('marks speech settings dirty and clears after saving', async () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+      },
+    }) as any)
+    render(<SpeechTab />)
+
+    fireEvent.change(screen.getByDisplayValue('base'), { target: { value: 'tiny' } })
+
+    expect(screen.getAllByText('有未保存更改').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('保存语音配置'))
+
+    await waitFor(() => {
+      expect(updateConfigAndRefresh).toHaveBeenCalled()
+    })
+    expect(await screen.findAllByText('已保存')).not.toHaveLength(0)
+  })
+
+  it('keeps unsaved speech edits when config refreshes from another section', () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+      },
+    }) as any)
+    render(<SpeechTab />)
+
+    fireEvent.change(screen.getByDisplayValue('base'), { target: { value: 'tiny' } })
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        max_parallel_answers: 3,
+      },
+    }) as any)
+
+    expect(screen.getByDisplayValue('tiny')).toBeInTheDocument()
+    expect(screen.getAllByText('有未保存更改').length).toBeGreaterThan(0)
+  })
+
+  it('saves before testing the main STT connection', async () => {
+    render(<SpeechTab />)
+
+    fireEvent.click(screen.getByText('保存并测试'))
+
+    await waitFor(() => {
+      expect(updateConfigAndRefresh).toHaveBeenCalled()
+      expect(apiMock.sttTest).toHaveBeenCalled()
+    })
   })
 })

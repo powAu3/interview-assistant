@@ -1,15 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useInterviewStore } from '@/stores/configStore'
-import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { useKbStore } from '@/stores/kbStore'
 import { buildWsUrl } from '@/lib/backendUrl'
 import { subscribeLeader } from '@/lib/wsLeader'
-
-// scope -> 仅在该 appMode 下消费;assist / 全局消息不带 scope,任何模式都可见
-const SCOPE_ALLOWED_MODES: Record<string, ReadonlySet<string>> = {
-  practice: new Set(['practice']),
-  'resume-opt': new Set(['resume-opt']),
-}
 
 // 指数退避重连步长（ms）。最后一档是稳态，不再翻倍。
 const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000]
@@ -26,15 +19,6 @@ interface WsMsg {
 
 function normalizePracticeStatus(status: unknown) {
   return status === 'interviewer_speaking' ? 'awaiting_answer' : status
-}
-
-function shouldDeliver(msg: WsMsg): boolean {
-  const scope = msg.scope
-  if (!scope) return true
-  const allowed = SCOPE_ALLOWED_MODES[scope]
-  if (!allowed) return true
-  const mode = useUiPrefsStore.getState().appMode
-  return allowed.has(mode)
 }
 
 export function useInterviewWS() {
@@ -87,7 +71,6 @@ export function useInterviewWS() {
         return
       }
       if (!data || typeof data !== 'object') return
-      if (!shouldDeliver(data)) return
       // 服务端 ping → 主动回 pong 维持心跳
       if (data.type === 'ping') {
         try {
@@ -150,34 +133,48 @@ export function useInterviewWS() {
       case 'transcription':
         s.addTranscription(msg.text as string)
         break
+      case 'candidate_transcription':
+        s.addCandidateTranscription(msg.text as string, {
+          segmentId: msg.segment_id as string | undefined,
+          isFinal: msg.is_final as boolean | undefined,
+        })
+        break
       case 'session_cleared':
         s.clearSession()
         break
       case 'answer_start':
+        if (msg.exam_preflight_id) return
         s.startAnswer(msg.id as string, msg.question as string, {
           source: msg.source as string,
           modelName: msg.model_name as string,
         })
         break
       case 'answer_think_chunk':
+        if (msg.exam_preflight_id) return
         s.appendThinkChunk(msg.id as string, msg.chunk as string)
         break
       case 'answer_chunk':
+        if (msg.exam_preflight_id) return
         s.appendAnswerChunk(msg.id as string, msg.chunk as string)
         break
       case 'answer_done':
+        if (msg.exam_preflight_id) return
         s.finalizeAnswer(
           msg.id as string,
           msg.question as string,
           msg.answer as string,
           msg.think as string,
           msg.model_name as string,
+          msg.first_token_ms as number | undefined,
+          msg.total_ms as number | undefined,
         )
         break
       case 'answer_cancelled':
+        if (msg.exam_preflight_id) return
         s.cancelAnswer(msg.id as string)
         break
       case 'answer_error':
+        if (msg.exam_preflight_id) return
         s.errorAnswer(msg.id as string, (msg.message as string) || '答案保存失败')
         s.pushToast(`答案保存失败: ${(msg.message as string) || '未知原因'}`, 'error')
         break
@@ -190,6 +187,16 @@ export function useInterviewWS() {
         break
       case 'stt_status':
         s.setSttStatus((msg.loaded as boolean) ?? false, (msg.loading as boolean) ?? false, msg.provider as string | undefined)
+        break
+      case 'candidate_asr_status':
+        s.setCandidateSttStatus(
+          (msg.loaded as boolean) ?? false,
+          (msg.loading as boolean) ?? false,
+          msg.provider as string | undefined,
+        )
+        if (msg.error) {
+          s.pushToast(`会议软件可能独占麦克风，候选人口述记录已关闭，不影响面试录音: ${msg.error as string}`, 'warn')
+        }
         break
       // Practice mode messages
       case 'practice_status':
@@ -205,7 +212,12 @@ export function useInterviewWS() {
         s.appendPracticeAnswerDraft(msg.text as string)
         break
       case 'model_health':
-        s.setModelHealth(msg.index as number, msg.status as Parameters<typeof s.setModelHealth>[1])
+        s.setModelHealth(
+          msg.index as number,
+          msg.status as Parameters<typeof s.setModelHealth>[1],
+          msg.detail as string | undefined,
+          msg.latency_ms as number | undefined,
+        )
         break
       case 'token_update':
         s.setTokenUsage({
@@ -224,6 +236,9 @@ export function useInterviewWS() {
           to: `STT:${msg.to as string}`,
           reason: msg.reason as string,
         })
+        break
+      case 'candidate_stt_fallback':
+        s.pushToast(`候选人麦克风 ASR 已降级到 ${msg.to as string}`, 'warn')
         break
       case 'resume_opt_start':
         s.resetResumeOpt(typeof msg.job_id === 'string' ? msg.job_id : null)

@@ -27,6 +27,7 @@ class FakeWebSocket {
 describe('SoundTest', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
+    vi.clearAllMocks()
     vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
     useInterviewStore.setState({
       devices: [{ id: 1, name: 'Loopback', is_loopback: true }],
@@ -54,11 +55,93 @@ describe('SoundTest', () => {
     await act(async () => {
       ws.emit({ type: 'preflight_step', step: 'playback', status: 'pass', detail: '已播放测试音频' })
       ws.emit({ type: 'preflight_step', step: 'match', status: 'pass', detail: '识别匹配', transcript: '请介绍一下你最近做过的项目', expected_phrase: '请介绍一下你最近做过的项目' })
-      ws.emit({ type: 'done', step: 'done', status: 'done', detail: '完成' })
+      ws.emit({ type: 'preflight_step', step: 'done', status: 'done', detail: '完成' })
       await Promise.resolve()
     })
 
     await waitFor(() => expect(screen.getByText('识别匹配')).toBeInTheDocument())
     expect(screen.getAllByText('请介绍一下你最近做过的项目').length).toBeGreaterThan(0)
+  })
+
+  it('starts another preflight when clicking retry after completion', async () => {
+    render(<SoundTest />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '开始检测' }))
+
+    const ws = FakeWebSocket.instances[0]
+    await act(async () => {
+      ws.emit({ type: 'preflight_step', step: 'playback', status: 'pass', detail: '已播放测试音频' })
+      ws.emit({ type: 'preflight_step', step: 'done', status: 'done', detail: '完成' })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '重新' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: '重新' }))
+
+    expect(apiMock.preflightRun).toHaveBeenCalledTimes(2)
+    expect(apiMock.preflightRun).toHaveBeenLastCalledWith('self_intro', 1)
+  })
+
+  it('hydrates the generated llm answer from status after completion', async () => {
+    apiMock.preflightStatus.mockResolvedValueOnce({
+      expected_phrase: '请介绍一下你最近做过的项目',
+      captured_transcript: '请介绍一下你最近做过的项目',
+      match_ok: true,
+      steps: {
+        llm: {
+          status: 'pass',
+          detail: '首 token 420ms · 完整 1800ms',
+          question: '请介绍一下你最近做过的项目',
+          answer: '这是模型实时生成的自测回答，不是预设文案。',
+          first_token_ms: 420,
+          total_ms: 1800,
+          model_name: 'demo-model',
+        },
+      },
+    })
+
+    render(<SoundTest />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '开始检测' }))
+
+    const ws = FakeWebSocket.instances[0]
+    await act(async () => {
+      ws.emit({ type: 'preflight_step', step: 'done', status: 'done', detail: '完成' })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('这是模型实时生成的自测回答，不是预设文案。')).toBeInTheDocument()
+    })
+    expect(screen.getAllByText(/首 token 420ms/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/完整 1.8s/)).toBeInTheDocument()
+    expect(screen.getByText('模型：demo-model')).toBeInTheDocument()
+  })
+
+  it('ignores malformed status step payloads when hydrating after completion', async () => {
+    apiMock.preflightStatus.mockResolvedValueOnce({
+      expected_phrase: '请介绍一下你最近做过的项目',
+      captured_transcript: '请介绍一下你最近做过的项目',
+      match_ok: true,
+      steps: {
+        llm: 'bad-payload',
+        ws: null,
+      },
+    })
+
+    render(<SoundTest />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '开始检测' }))
+
+    const ws = FakeWebSocket.instances[0]
+    await act(async () => {
+      ws.emit({ type: 'preflight_step', step: 'done', status: 'done', detail: '完成' })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByText('请介绍一下你最近做过的项目').length).toBeGreaterThan(0)
+    })
   })
 })

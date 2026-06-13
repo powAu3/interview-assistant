@@ -15,6 +15,8 @@ from core.auth import (
     init_auth,
     is_auth_disabled,
     is_loopback_host,
+    loopback_bypass_allowed,
+    origin_allows_loopback_bypass,
     verify_token,
 )
 from core.config import get_config
@@ -28,7 +30,8 @@ from api import kb as kb_api
 setup_logging()
 _log = get_logger("app.main")
 
-_BQ_SIZE = env_int("IA_BROADCAST_QUEUE_SIZE", 500, minimum=1)
+# H5: 扩大广播队列容量，避免 LLM 流式输出被截断
+_BQ_SIZE = env_int("IA_BROADCAST_QUEUE_SIZE", 2000, minimum=1)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
@@ -59,7 +62,7 @@ async def lifespan(app: FastAPI):
 
     token = init_auth()
     if is_auth_disabled():
-        _log.warning("AUTH DISABLED via IA_AUTH_DISABLE env (LAN access is open)")
+        _log.info("AUTH disabled (set IA_AUTH_ENABLE=1 or IA_AUTH_TOKEN to protect LAN access)")
     else:
         _log.info(
             "AUTH ready (loopback bypass; LAN clients must include token; len=%d)",
@@ -83,6 +86,7 @@ async def lifespan(app: FastAPI):
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
     assist.init_background_workers()
     threading.Thread(target=_preload_stt, daemon=True).start()
+    assist.preload_candidate_asr_if_enabled()
     try:
         from services.storage.resume_history import restore_active_resume
         if restore_active_resume():
@@ -102,9 +106,11 @@ def _preload_stt():
         cfg = get_config()
         engine = get_stt_engine()
         _log.info("STT preload start provider=%s", cfg.stt_provider)
-        ws.broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": cfg.stt_provider})
+        is_remote = cfg.stt_provider in ("doubao", "generic")
+        if not is_remote:
+            ws.broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": cfg.stt_provider})
         engine.load_model()
-        loaded = bool(engine.is_loaded)
+        loaded = bool(engine.is_loaded) if not is_remote else True
         _log.info("STT preload done provider=%s loaded=%s", cfg.stt_provider, loaded)
         ws.broadcast({"type": "stt_status", "loaded": loaded, "loading": False, "provider": cfg.stt_provider})
     except Exception as e:
@@ -119,15 +125,14 @@ def _preload_stt():
 
 app = FastAPI(title="学习助手", lifespan=lifespan)
 
-# CORS: 显式允许 localhost / 私网地址,而非泛 ``*``。
+# CORS: 默认只允许后端自身的 loopback origin。局域网扫码页面与桌面端均为同源访问,
+# 不需要跨源；如确需单独前端直连后端，可通过 IA_CORS_REGEX 显式放宽。
 # 「allow_credentials=True」与「allow_origins=['*']」并存会被浏览器拒绝。
+_DEFAULT_CORS_PORT = env_int("PORT", 18080, minimum=1)
 _DEFAULT_ORIGIN_REGEX = (
-    r"^https?://("
-    r"localhost|127\.0\.0\.1|\[::1\]|"
-    r"10\.(\d{1,3}\.){2}\d{1,3}|"
-    r"192\.168(\.\d{1,3}){2}|"
-    r"172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}"
-    r")(:\d{1,5})?$"
+    rf"^https?://("
+    rf"localhost|127\.0\.0\.1|\[::1\]"
+    rf"):{_DEFAULT_CORS_PORT}$"
 )
 _ALLOW_ORIGIN_REGEX = (
     os.environ.get("IA_CORS_REGEX") or _DEFAULT_ORIGIN_REGEX
@@ -181,6 +186,15 @@ def _request_needs_auth(path: str) -> bool:
     return False
 
 
+def _origin_allows_loopback_bypass(request: Request) -> bool:
+    return origin_allows_loopback_bypass(
+        request.headers.get("origin"),
+        request.url.hostname,
+        request.url.scheme,
+        request.url.port,
+    )
+
+
 @app.middleware("http")
 async def lan_auth_middleware(request: Request, call_next):
     if is_auth_disabled():
@@ -189,7 +203,13 @@ async def lan_auth_middleware(request: Request, call_next):
     if not _request_needs_auth(path):
         return await call_next(request)
     client_host = request.client.host if request.client else None
-    if is_loopback_host(client_host):
+    if loopback_bypass_allowed(
+        client_host,
+        request.headers.get("origin"),
+        request.url.hostname,
+        request.url.scheme,
+        request.url.port,
+    ):
         return await call_next(request)
     token = extract_token_from_headers(request.headers.get("authorization"))
     if not token:

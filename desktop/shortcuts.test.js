@@ -27,6 +27,9 @@ test('isValidShortcutKey accepts CommandOrControl with optional Shift and Alt pl
   assert.equal(isValidShortcutKey('CommandOrControl+.'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+/'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Enter'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Escape'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Left'), true);
+  assert.equal(isValidShortcutKey('CommandOrControl+Right'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+J'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+Enter'), true);
   assert.equal(isValidShortcutKey('CommandOrControl+Shift+/'), true);
@@ -53,17 +56,27 @@ test('load and save shortcut config roundtrip', () => {
   const app = makeFakeApp(tmpDir);
   const shortcuts = createShortcutState({
     askFromServerScreen: { key: 'CommandOrControl+/' },
+    cancelAnswer: { key: 'CommandOrControl+Escape' },
     addMultiServerScreenShot: { key: 'CommandOrControl+Shift+/' },
     hardClearSession: { key: 'CommandOrControl+.' },
     toggleInterviewOverlay: { key: 'CommandOrControl+Shift+Enter' },
+    focusPrevTab: { key: 'CommandOrControl+Left' },
+    focusNextTab: { key: 'CommandOrControl+Right' },
+    overlayPrevQuestion: { key: 'CommandOrControl+Up' },
+    overlayNextQuestion: { key: 'CommandOrControl+Down' },
   });
 
   saveShortcutConfig(app, shortcuts);
   const loaded = loadShortcutConfig(app);
 
   assert.equal(loaded.askFromServerScreen.key, 'CommandOrControl+/');
+  assert.equal(loaded.cancelAnswer.key, 'CommandOrControl+Escape');
   assert.equal(loaded.addMultiServerScreenShot.key, 'CommandOrControl+Shift+/');
   assert.equal(loaded.hardClearSession.key, 'CommandOrControl+.');
   assert.equal(loaded.toggleInterviewOverlay.key, 'CommandOrControl+Shift+Enter');
+  assert.equal(loaded.focusPrevTab.key, 'CommandOrControl+Left');
+  assert.equal(loaded.focusNextTab.key, 'CommandOrControl+Right');
+  assert.equal(loaded.overlayPrevQuestion.key, 'CommandOrControl+Up');
+  assert.equal(loaded.overlayNextQuestion.key, 'CommandOrControl+Down');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
 });

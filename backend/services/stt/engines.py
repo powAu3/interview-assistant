@@ -21,12 +21,8 @@ _log = get_logger("stt.engines")
 
 try:
     import websocket
-    _WS_TIMEOUT = getattr(websocket, "WebSocketTimeoutException", TimeoutError)
-    _WS_CLOSED = getattr(websocket, "WebSocketConnectionClosedException", ConnectionError)
 except ImportError:
     websocket = None
-    _WS_TIMEOUT = TimeoutError
-    _WS_CLOSED = ConnectionError
 
 
 # ---------------------------------------------------------------------------
@@ -219,11 +215,10 @@ class DoubaoSTT:
             pad = np.zeros(CHUNK_SAMPLES, dtype=np.int16)
             chunks = [_build_ws_frame_audio(pad.tobytes(), is_last=True)]
 
-        headers = self._build_headers()
         try:
             ws = websocket.create_connection(
                 DOUBAO_ASR_WS_URL,
-                header=[f"{k}: {v}" for k, v in headers.items()],
+                header=[f"{k}: {v}" for k, v in self._build_headers().items()],
                 timeout=10,
             )
             try:

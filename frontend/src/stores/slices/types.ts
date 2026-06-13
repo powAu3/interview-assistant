@@ -12,6 +12,8 @@ export interface ModelInfo {
   supports_think: boolean
   supports_vision: boolean
   enabled?: boolean
+  think_enabled_params?: Record<string, unknown>
+  think_disabled_params?: Record<string, unknown>
 }
 
 export interface ModelFullInfo {
@@ -22,6 +24,8 @@ export interface ModelFullInfo {
   supports_think: boolean
   supports_vision: boolean
   enabled: boolean
+  think_enabled_params?: Record<string, unknown>
+  think_disabled_params?: Record<string, unknown>
   has_key: boolean
 }
 
@@ -46,6 +50,18 @@ export interface AppConfig {
   generic_stt_api_key: string
   generic_stt_model: string
   generic_stt_custom_headers: string
+  candidate_asr_enabled?: boolean
+  candidate_stt_provider?: string
+  candidate_whisper_model?: string
+  candidate_whisper_language?: string
+  candidate_remote_stt_enabled?: boolean
+  candidate_context_enabled?: boolean
+  candidate_context_wait_ms?: number
+  candidate_context_max_chars?: number
+  candidate_context_min_chars?: number
+  candidate_streaming_asr_enabled?: boolean
+  candidate_streaming_asr_interval_ms?: number
+  candidate_mic_compatibility_mode?: boolean
   practice_tts_provider?: string
   edge_tts_available?: boolean
   edge_tts_status_detail?: string
@@ -83,6 +99,8 @@ export interface AppConfig {
   assist_high_churn_short_answer?: boolean
   /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
   screen_capture_region?: string
+  /** 截图送入识图模型前的最长边限制；0=不缩放 */
+  screen_capture_max_long_edge?: number
   /** 多图截图判题：最后一次截图后等待多少秒再提交 */
   multi_screen_capture_idle_sec?: number
   /** 笔试模式：截屏后选择题直接出答案，编程题直接出代码 */
@@ -111,6 +129,8 @@ export interface QAPair {
   timestamp: number
   questionSource?: string
   modelLabel?: string
+  firstTokenMs?: number
+  totalMs?: number
   visionVerify?: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }
   status?: QAStatus
   errorMessage?: string

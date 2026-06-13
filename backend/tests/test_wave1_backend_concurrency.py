@@ -77,14 +77,14 @@ def test_broadcast_counts_and_drops_when_queue_is_full(monkeypatch):
 
 
 def test_submit_knowledge_record_uses_bounded_worker(monkeypatch):
-    submitted: list[tuple[str, str]] = []
+    submitted: list[tuple[object, ...]] = []
 
     class FakeWorker:
-        def submit(self, question: str, answer: str) -> bool:
-            submitted.append((question, answer))
+        def submit(self, *args: object) -> bool:
+            submitted.append(args)
             return True
 
     monkeypatch.setattr(assist_pipeline, "_knowledge_worker", FakeWorker(), raising=False)
 
-    assert assist_pipeline._submit_knowledge_record("说说 Redis 持久化", "先讲 RDB，再讲 AOF") is True
-    assert submitted == [("说说 Redis 持久化", "先讲 RDB，再讲 AOF")]
+    assert assist_pipeline._submit_knowledge_record("说说 Redis 持久化", "先讲 RDB，再讲 AOF", "qa-1", "我讲了 RDB") is True
+    assert submitted == [("save", "说说 Redis 持久化", "先讲 RDB，再讲 AOF", "qa-1", "我讲了 RDB")]

@@ -44,7 +44,7 @@ def _deps(broadcasts):
         is_session_current=lambda _v: True,
         flush_commit=lambda _s, fn: fn(),
         mark_seq_skipped=lambda _s: None,
-        submit_knowledge_record=lambda _q, _a: True,
+        submit_knowledge_record=lambda _q, _a, *_rest: True,
         broadcast=broadcasts.append,
         logger=_Logger(),
         error_logger=_Logger(),

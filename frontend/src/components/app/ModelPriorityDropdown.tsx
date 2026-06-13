@@ -7,6 +7,8 @@ import type { AppConfig, ModelHealthStatus } from '@/stores/configStore'
 interface ModelPriorityDropdownProps {
   config: AppConfig
   modelHealth: Record<number, ModelHealthStatus>
+  modelHealthDetail: Record<number, string>
+  modelHealthLatency: Record<number, number>
   onModelChange: (activeModel: number) => Promise<void> | void
 }
 
@@ -26,25 +28,31 @@ function healthDot(
 function healthLabel(
   config: AppConfig,
   modelHealth: Record<number, ModelHealthStatus>,
+  modelHealthDetail: Record<number, string>,
+  modelHealthLatency: Record<number, number>,
   index: number,
 ): string {
   if (config.models[index]?.enabled === false) return '已停用，请先在模型设置中启用'
   const status = modelHealth[index]
-  if (status === 'ok') return '连接正常'
+  const detail = modelHealthDetail[index]?.trim()
+  const lat = modelHealthLatency[index]
+  if (status === 'ok') return lat ? `连接正常 · ${lat}ms` : '连接正常'
   if (status === 'checking') return '正在检测连接…'
-  if (status === 'error') return '连接失败，点击下拉菜单「重新检查连接」重试'
+  if (status === 'error') return detail ? `连接失败：${detail}` : '连接失败，点击下拉菜单「重新检查连接」重试'
   return '未检测，点击下拉菜单「重新检查连接」'
 }
 
 export function ModelPriorityDropdown({
   config,
   modelHealth,
+  modelHealthDetail,
+  modelHealthLatency,
   onModelChange,
 }: ModelPriorityDropdownProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const activeModel = config.models[config.active_model]
-  const activeLabel = healthLabel(config, modelHealth, config.active_model)
+  const activeLabel = healthLabel(config, modelHealth, modelHealthDetail, modelHealthLatency, config.active_model)
 
   useEffect(() => {
     if (!open) return
@@ -88,7 +96,7 @@ export function ModelPriorityDropdown({
                   setOpen(false)
                   await onModelChange(index)
                 }}
-                title={`${model.name} · ${healthLabel(config, modelHealth, index)}`}
+                title={`${model.name} · ${healthLabel(config, modelHealth, modelHealthDetail, modelHealthLatency, index)}`}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-55 ${
                   index === config.active_model
                     ? 'text-accent-blue bg-accent-blue/5'
@@ -100,11 +108,15 @@ export function ModelPriorityDropdown({
                   {model.name}
                   {model.supports_vision ? ' 👁' : ''}
                 </span>
-                {statusLabel && (
+                {modelHealth[index] === 'ok' && modelHealthLatency[index] ? (
+                  <span className="ml-auto text-[10px] font-mono text-text-muted tabular-nums">
+                    {modelHealthLatency[index]}ms
+                  </span>
+                ) : statusLabel ? (
                   <span className={`ml-auto text-[10px] font-semibold ${disabled ? 'text-text-muted' : 'text-accent-blue'}`}>
                     {statusLabel}
                   </span>
-                )}
+                ) : null}
               </button>
             )
           })}

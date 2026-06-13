@@ -8,6 +8,10 @@ import {
 } from '@/lib/colorScheme'
 import {
   INTERVIEW_OVERLAY_STORAGE_KEYS,
+  isOverlayMode,
+  overlayModeToShowBg,
+  showBgToOverlayMode,
+  type OverlayMode,
   type OverlayStatePayload,
 } from '@/lib/interviewOverlay'
 
@@ -24,6 +28,9 @@ export const __UI_PREFS_TEST_KEYS = {
   overlayFontSize: INTERVIEW_OVERLAY_STORAGE_KEYS.fontSize,
   overlayFontColor: INTERVIEW_OVERLAY_STORAGE_KEYS.fontColor,
   overlayShowBg: INTERVIEW_OVERLAY_STORAGE_KEYS.showBg,
+  overlayMode: INTERVIEW_OVERLAY_STORAGE_KEYS.mode,
+  overlayFocusWidthPct: INTERVIEW_OVERLAY_STORAGE_KEYS.focusWidthPct,
+  overlayFocusHeightPct: INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct,
   overlayMaxLines: INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines,
 }
 
@@ -90,11 +97,40 @@ function readOverlayFontColor(): string {
 }
 
 function readOverlayShowBg(): boolean {
+  return overlayModeToShowBg(readOverlayMode())
+}
+
+function readLegacyOverlayShowBg(): boolean {
   try {
     const v = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.showBg)
     if (v === '0') return false
   } catch { /* ignore */ }
   return true
+}
+
+function readOverlayMode(): OverlayMode {
+  try {
+    const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.mode)
+    if (isOverlayMode(raw)) return raw
+  } catch { /* ignore */ }
+  return showBgToOverlayMode(readLegacyOverlayShowBg())
+}
+
+function readOverlayFocusWidthPct(): number {
+  return readOverlayPercent(INTERVIEW_OVERLAY_STORAGE_KEYS.focusWidthPct, 96, 50, 100)
+}
+
+function readOverlayFocusHeightPct(): number {
+  return readOverlayPercent(INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct, 90, 35, 100)
+}
+
+function readOverlayPercent(key: string, fallback: number, min: number, max: number): number {
+  try {
+    const raw = localStorage.getItem(key)
+    const value = raw == null ? fallback : Number(raw)
+    if (Number.isFinite(value)) return Math.max(min, Math.min(max, Math.round(value)))
+  } catch { /* ignore */ }
+  return fallback
 }
 
 function readOverlayMaxLines(): number {
@@ -128,6 +164,22 @@ function normalizeOverlayFontColor(value: unknown): string | null {
 
 function normalizeOverlayShowBg(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null
+}
+
+function normalizeOverlayMode(value: unknown): OverlayMode | null {
+  return isOverlayMode(value) ? value : null
+}
+
+function normalizeOverlayFocusWidthPct(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.max(50, Math.min(100, Math.round(next)))
+}
+
+function normalizeOverlayFocusHeightPct(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.max(35, Math.min(100, Math.round(next)))
 }
 
 function normalizeOverlayMaxLines(value: unknown): number | null {
@@ -191,6 +243,9 @@ interface UiPrefsState {
   interviewOverlayFontSize: number
   interviewOverlayFontColor: string
   interviewOverlayShowBg: boolean
+  interviewOverlayMode: OverlayMode
+  interviewOverlayFocusWidthPct: number
+  interviewOverlayFocusHeightPct: number
   interviewOverlayMaxLines: number
 
   setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
@@ -205,6 +260,9 @@ interface UiPrefsState {
   setInterviewOverlayFontSize: (size: number) => void
   setInterviewOverlayFontColor: (color: string) => void
   setInterviewOverlayShowBg: (show: boolean) => void
+  setInterviewOverlayMode: (mode: OverlayMode) => void
+  setInterviewOverlayFocusWidthPct: (pct: number) => void
+  setInterviewOverlayFocusHeightPct: (pct: number) => void
   setInterviewOverlayMaxLines: (lines: number) => void
   syncInterviewOverlayPrefs: () => void
   applyInterviewOverlayState: (payload: OverlayStatePayload, options?: { persistStyle?: boolean }) => void
@@ -231,6 +289,9 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
   interviewOverlayFontSize: readOverlayFontSize(),
   interviewOverlayFontColor: readOverlayFontColor(),
   interviewOverlayShowBg: readOverlayShowBg(),
+  interviewOverlayMode: readOverlayMode(),
+  interviewOverlayFocusWidthPct: readOverlayFocusWidthPct(),
+  interviewOverlayFocusHeightPct: readOverlayFocusHeightPct(),
   interviewOverlayMaxLines: readOverlayMaxLines(),
 
   setAnswerPanelLayout: (layout) => {
@@ -307,8 +368,27 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     set({ interviewOverlayFontColor: next })
   },
   setInterviewOverlayShowBg: (show) => {
+    const mode = showBgToOverlayMode(show)
+    persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.mode, mode)
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.showBg, show ? '1' : '0')
-    set({ interviewOverlayShowBg: show })
+    set({ interviewOverlayShowBg: show, interviewOverlayMode: mode })
+  },
+  setInterviewOverlayMode: (mode) => {
+    const next = normalizeOverlayMode(mode) ?? 'glass'
+    const showBg = overlayModeToShowBg(next)
+    persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.mode, next)
+    persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.showBg, showBg ? '1' : '0')
+    set({ interviewOverlayMode: next, interviewOverlayShowBg: showBg })
+  },
+  setInterviewOverlayFocusWidthPct: (pct) => {
+    const next = normalizeOverlayFocusWidthPct(pct) ?? 96
+    persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.focusWidthPct, String(next))
+    set({ interviewOverlayFocusWidthPct: next })
+  },
+  setInterviewOverlayFocusHeightPct: (pct) => {
+    const next = normalizeOverlayFocusHeightPct(pct) ?? 90
+    persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct, String(next))
+    set({ interviewOverlayFocusHeightPct: next })
   },
   setInterviewOverlayMaxLines: (lines) => {
     const next = normalizeOverlayMaxLines(lines) ?? 0
@@ -323,6 +403,9 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
       interviewOverlayFontSize: readOverlayFontSize(),
       interviewOverlayFontColor: readOverlayFontColor(),
       interviewOverlayShowBg: readOverlayShowBg(),
+      interviewOverlayMode: readOverlayMode(),
+      interviewOverlayFocusWidthPct: readOverlayFocusWidthPct(),
+      interviewOverlayFocusHeightPct: readOverlayFocusHeightPct(),
       interviewOverlayMaxLines: readOverlayMaxLines(),
     }),
   applyInterviewOverlayState: (payload, options = {}) => {
@@ -331,14 +414,22 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     const opacity = shouldApplyStyle ? normalizeOverlayOpacity(payload.opacity) : null
     const fontSize = shouldApplyStyle ? normalizeOverlayFontSize(payload.fontSize) : null
     const fontColor = shouldApplyStyle ? normalizeOverlayFontColor(payload.fontColor) : null
-    const showBg = shouldApplyStyle ? normalizeOverlayShowBg(payload.showBg) : null
+    const payloadMode = shouldApplyStyle ? normalizeOverlayMode(payload.mode) : null
+    const payloadShowBg = shouldApplyStyle ? normalizeOverlayShowBg(payload.showBg) : null
+    const mode = payloadMode ?? (payloadShowBg === null ? null : showBgToOverlayMode(payloadShowBg))
+    const showBg = mode === null ? null : overlayModeToShowBg(mode)
+    const focusWidthPct = shouldApplyStyle ? normalizeOverlayFocusWidthPct(payload.focusWidthPct) : null
+    const focusHeightPct = shouldApplyStyle ? normalizeOverlayFocusHeightPct(payload.focusHeightPct) : null
     const maxLines = shouldApplyStyle ? normalizeOverlayMaxLines(payload.maxLines) : null
 
     if (enabled !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.enabled, enabled ? '1' : '0')
     if (opacity !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.opacity, String(opacity))
     if (fontSize !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.fontSize, String(fontSize))
     if (fontColor !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.fontColor, fontColor)
+    if (mode !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.mode, mode)
     if (showBg !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.showBg, showBg ? '1' : '0')
+    if (focusWidthPct !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.focusWidthPct, String(focusWidthPct))
+    if (focusHeightPct !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct, String(focusHeightPct))
     if (maxLines !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines, String(maxLines))
 
     set((state) => ({
@@ -347,6 +438,9 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
       interviewOverlayFontSize: fontSize ?? state.interviewOverlayFontSize,
       interviewOverlayFontColor: fontColor ?? state.interviewOverlayFontColor,
       interviewOverlayShowBg: showBg ?? state.interviewOverlayShowBg,
+      interviewOverlayMode: mode ?? state.interviewOverlayMode,
+      interviewOverlayFocusWidthPct: focusWidthPct ?? state.interviewOverlayFocusWidthPct,
+      interviewOverlayFocusHeightPct: focusHeightPct ?? state.interviewOverlayFocusHeightPct,
       interviewOverlayMaxLines: maxLines ?? state.interviewOverlayMaxLines,
     }))
   },

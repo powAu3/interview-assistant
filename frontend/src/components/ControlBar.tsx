@@ -11,11 +11,14 @@ import {
   PlayCircle,
   Loader2,
   BookOpen,
+  Mic,
+  Volume2,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { api, getErrorMessage } from '@/lib/api'
+import { showExamOverlayPrompt } from '@/lib/examOverlay'
 import { ResumeMountInline } from '@/components/resume/ResumeMount'
 import { AudioDevicePicker } from './control-bar/AudioDevicePicker'
 import { QuickPromptsRow } from './control-bar/QuickPromptsRow'
@@ -36,6 +39,10 @@ export {
   saveQuickPrompts,
 } from './control-bar/quickPrompts'
 
+function getEnabledVisionModels(config: { models?: Array<{ name?: string; supports_vision?: boolean; enabled?: boolean }> } | null | undefined) {
+  return (config?.models ?? []).filter((model) => model.enabled !== false && model.supports_vision)
+}
+
 export default function ControlBar() {
   // 精确订阅字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
   const {
@@ -49,6 +56,7 @@ export default function ControlBar() {
     streamingIds,
     qaPairs,
     transcriptions,
+    candidateTranscriptions,
     setToastMessage,
     lastWSError,
     setLastWSError,
@@ -57,6 +65,9 @@ export default function ControlBar() {
     sttLoaded,
     sttLoading,
     sttActiveProvider,
+    candidateSttLoaded,
+    candidateSttLoading,
+    candidateSttProvider,
   } = useInterviewStore(
     useShallow((s) => ({
       isRecording: s.isRecording,
@@ -69,6 +80,7 @@ export default function ControlBar() {
       streamingIds: s.streamingIds,
       qaPairs: s.qaPairs,
       transcriptions: s.transcriptions,
+      candidateTranscriptions: s.candidateTranscriptions,
       setToastMessage: s.setToastMessage,
       lastWSError: s.lastWSError,
       setLastWSError: s.setLastWSError,
@@ -77,15 +89,23 @@ export default function ControlBar() {
       sttLoaded: s.sttLoaded ?? true,
       sttLoading: s.sttLoading ?? false,
       sttActiveProvider: s.sttActiveProvider ?? '',
+      candidateSttLoaded: s.candidateSttLoaded ?? false,
+      candidateSttLoading: s.candidateSttLoading ?? false,
+      candidateSttProvider: s.candidateSttProvider ?? '',
     })),
   )
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
+  const [selectedCandidateMic, setSelectedCandidateMic] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [cancellingAsk, setCancellingAsk] = useState(false)
   const [refreshingDevices, setRefreshingDevices] = useState(false)
+  const [testingOutput, setTestingOutput] = useState(false)
+  const [testingInput, setTestingInput] = useState(false)
+  const [inputMeterOpen, setInputMeterOpen] = useState(false)
+  const [inputLevel, setInputLevel] = useState<{ level_pct: number; rms: number; peak: number; has_signal: boolean; error?: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const enabledModelEntries = useMemo(
@@ -96,6 +116,8 @@ export default function ControlBar() {
   const noEnabledModels = (config?.models?.length ?? 0) > 0 && enabledModelEntries.length === 0
   const allModelsUnavailable = enabledModelEntries.length > 0 &&
     enabledModelEntries.every(({ index }) => modelHealth[index] === 'error')
+  const enabledVisionModels = useMemo(() => getEnabledVisionModels(config), [config])
+  const hasEnabledVisionModel = enabledVisionModels.length > 0
   const answerModelUnavailable = noEnabledModels || allModelsUnavailable
   const showColdStartHint =
     !isExamMode &&
@@ -137,9 +159,17 @@ export default function ControlBar() {
   }, [])
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
+  const selectedCandidateDevice = devices.find((d) => d.id === selectedCandidateMic) ?? null
+  const selectedCandidateIsMic = selectedCandidateDevice?.is_loopback === false
   const hasLoopback = devices.some((d) => d.is_loopback)
+  const candidateCaptureEnabled = config?.candidate_asr_enabled ?? false
   const activeModel = config?.models?.[config.active_model]
   const activeModelSupportsVision = activeModel?.supports_vision ?? false
+  const pastedImageVisionHint = activeModelSupportsVision
+    ? null
+    : hasEnabledVisionModel
+      ? `当前优先模型不支持图片，将自动使用「${enabledVisionModels[0]?.name ?? '识图模型'}」`
+      : '没有已启用的识图模型，请先在设置中开启带 👁 的模型'
 
   useEffect(() => {
     if (devices.length === 0) {
@@ -152,6 +182,49 @@ export default function ControlBar() {
     setSelectedDevice(loopback?.id ?? defaultDevices[0]?.id ?? null)
   }, [devices, visibleDevices, selectedDevice])
 
+  useEffect(() => {
+    if (devices.length === 0) {
+      if (selectedCandidateMic !== null) setSelectedCandidateMic(null)
+      return
+    }
+    if (selectedCandidateMic !== null && devices.some((d) => d.id === selectedCandidateMic && !d.is_loopback)) return
+    const mic = devices.find((d) => !d.is_loopback)
+    setSelectedCandidateMic(mic?.id ?? null)
+  }, [devices, selectedCandidateMic])
+
+  useEffect(() => {
+    setInputLevel(null)
+  }, [selectedCandidateMic])
+
+  useEffect(() => {
+    if (!inputMeterOpen) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const status = await api.audioInputMonitorStatus()
+        if (cancelled) return
+        setInputLevel({
+          level_pct: status.level_pct ?? 0,
+          rms: status.rms ?? 0,
+          peak: status.peak ?? 0,
+          has_signal: Boolean(status.has_signal),
+          error: status.error,
+        })
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setInputLevel((prev) => ({ ...(prev ?? { level_pct: 0, rms: 0, peak: 0, has_signal: false }), error: getErrorMessage(e, '读取麦克风音量失败') }))
+        }
+      }
+    }
+    void poll()
+    const timer = window.setInterval(poll, 120)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      void api.audioInputMonitorStop().catch(() => undefined)
+    }
+  }, [inputMeterOpen])
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
     if (!items) return
@@ -161,9 +234,8 @@ export default function ControlBar() {
         const file = items[i].getAsFile()
         if (!file) continue
         const store = useInterviewStore.getState()
-        const activeModel = store.config?.models?.[store.config?.active_model ?? 0]
-        if (activeModel && !activeModel.supports_vision) {
-          setError(`当前模型「${activeModel.name}」不支持图片识别，请先切换到带 👁 标记的模型再粘贴截图`)
+        if ((store.config?.models?.length ?? 0) > 0 && getEnabledVisionModels(store.config).length === 0) {
+          setError('请先在设置中启用至少一个带 👁 的识图模型，再粘贴截图')
           return
         }
         const reader = new FileReader()
@@ -181,7 +253,14 @@ export default function ControlBar() {
     if (!isExamMode && selectedDevice === null) { setError('请先选择音频设备'); return }
     setLoading(true); setError(null)
     try {
-      await api.start(isExamMode ? null : selectedDevice)
+      await api.start(
+        isExamMode ? null : selectedDevice,
+        !isExamMode && candidateCaptureEnabled ? selectedCandidateMic : null,
+      )
+      if (isExamMode) {
+        showExamOverlayPrompt()
+        return
+      }
       const s = useUiPrefsStore.getState()
       if (s.interviewOverlayEnabled && window.electronAPI?.syncOverlayWindow) {
         window.electronAPI.syncOverlayWindow({
@@ -191,13 +270,16 @@ export default function ControlBar() {
           fontSize: s.interviewOverlayFontSize,
           fontColor: s.interviewOverlayFontColor,
           showBg: s.interviewOverlayShowBg,
+          mode: s.interviewOverlayMode,
+          focusWidthPct: s.interviewOverlayFocusWidthPct,
+          focusHeightPct: s.interviewOverlayFocusHeightPct,
           maxLines: s.interviewOverlayMaxLines,
         }).catch(() => {})
       }
     }
     catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '开始失败' : '开始面试失败')) }
     finally { setLoading(false) }
-  }, [selectedDevice, isExamMode])
+  }, [selectedDevice, selectedCandidateMic, isExamMode, candidateCaptureEnabled])
   const handleStop = useCallback(async () => {
     if (isRecording && !window.confirm(isExamMode ? '结束本次笔试？当前答案会保留在页面上。' : '结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
     setLoading(true)
@@ -214,10 +296,10 @@ export default function ControlBar() {
   }, [])
   const handleResume = useCallback(async () => {
     setLoading(true)
-    try { await api.resume(selectedDevice ?? undefined) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally { setLoading(false) }
-  }, [selectedDevice])
+    try { await api.resume(selectedDevice ?? undefined, !isExamMode && candidateCaptureEnabled ? selectedCandidateMic : null) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally { setLoading(false) }
+  }, [selectedDevice, selectedCandidateMic, isExamMode, candidateCaptureEnabled])
   const handleClear = useCallback(async () => {
-    if (qaPairs.length > 0 || transcriptions.length > 0) {
+    if (qaPairs.length > 0 || transcriptions.length > 0 || candidateTranscriptions.length > 0) {
       if (!window.confirm('确定要清空当前页的转录与答案吗？清空后不可恢复。')) return
     }
     setClearing(true)
@@ -227,7 +309,7 @@ export default function ControlBar() {
       setToastMessage('已清空')
     } catch (e: unknown) { setError(getErrorMessage(e, '清空失败')) }
     finally { setClearing(false) }
-  }, [qaPairs.length, transcriptions.length, clearSession, setToastMessage])
+  }, [qaPairs.length, transcriptions.length, candidateTranscriptions.length, clearSession, setToastMessage])
 
   const handleCancelAsk = useCallback(async () => {
     setCancellingAsk(true)
@@ -250,8 +332,8 @@ export default function ControlBar() {
       setError('所有启用模型不可用，请先检查模型连接')
       return
     }
-    if (pastedImage && !activeModelSupportsVision) {
-      setError(`当前模型「${activeModel?.name ?? '未命名模型'}」不支持图片识别，请切换到带 👁 标记的模型后再发送截图`)
+    if (pastedImage && !hasEnabledVisionModel) {
+      setError('请先在设置中启用至少一个带 👁 的识图模型')
       return
     }
     try {
@@ -259,7 +341,7 @@ export default function ControlBar() {
       setManualQuestion('')
       setPastedImage(null)
     } catch (e: unknown) { setError(getErrorMessage(e, '提交问题失败')) }
-  }, [manualQuestion, pastedImage, noEnabledModels, allModelsUnavailable, activeModelSupportsVision, activeModel?.name])
+  }, [manualQuestion, pastedImage, noEnabledModels, allModelsUnavailable, hasEnabledVisionModel])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (isComposingRef.current) return
@@ -286,6 +368,58 @@ export default function ControlBar() {
       setRefreshingDevices(false)
     }
   }, [setDevices, setToastMessage])
+
+  const handleOutputTest = useCallback(async () => {
+    if (isRecording && !isPaused) {
+      setError('请先暂停或结束面试，再测试音频输出')
+      return
+    }
+    setTestingOutput(true)
+    setError(null)
+    try {
+      await api.audioOutputTest()
+      setToastMessage('已播放测试音频，请确认扬声器能听到声音')
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, '测试音频输出失败'))
+    } finally {
+      setTestingOutput(false)
+    }
+  }, [isRecording, isPaused, setToastMessage])
+
+  const handleOpenInputMeter = useCallback(async () => {
+    if (selectedCandidateMic === null) {
+      setError('请先选择麦克风')
+      return
+    }
+    if (isRecording && !isPaused) {
+      setError('请先暂停或结束面试，再测试麦克风输入')
+      return
+    }
+    setTestingInput(true)
+    setError(null)
+    setInputLevel({ level_pct: 0, rms: 0, peak: 0, has_signal: false })
+    try {
+      const status = await api.audioInputMonitorStart(selectedCandidateMic)
+      setInputLevel({
+        level_pct: status.level_pct ?? 0,
+        rms: status.rms ?? 0,
+        peak: status.peak ?? 0,
+        has_signal: Boolean(status.has_signal),
+        error: status.error,
+      })
+      setInputMeterOpen(true)
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, '测试麦克风输入失败'))
+    } finally {
+      setTestingInput(false)
+    }
+  }, [selectedCandidateMic, isRecording, isPaused])
+
+  const handleCloseInputMeter = useCallback(() => {
+    setInputMeterOpen(false)
+  }, [])
+
+  const inputLevelPct = inputLevel ? Math.max(0, Math.min(100, Math.round(inputLevel.level_pct ?? 0))) : 0
 
   return (
     <div className="control-bar px-3 md:px-5 py-2.5 flex-shrink-0 space-y-1.5">
@@ -334,6 +468,18 @@ export default function ControlBar() {
           <span>你选择的是麦克风，建议选择带 ⟳ 标记的系统音频设备</span>
         </div>
       )}
+      {!isExamMode && candidateCaptureEnabled && selectedCandidateMic === null && (
+        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>未选择“我的麦克风”：不会记录你的回答，下一题只参考助手建议答案</span>
+        </div>
+      )}
+      {!isExamMode && candidateCaptureEnabled && selectedCandidateMic !== null && !selectedCandidateIsMic && (
+        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>“我的麦克风”建议选择普通麦克风，不要选择系统音频设备</span>
+        </div>
+      )}
       {lastWSError && (
         <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
           <span>{lastWSError}</span>
@@ -354,8 +500,10 @@ export default function ControlBar() {
             <img src={pastedImage} alt="screenshot" className="h-12 max-w-[200px] rounded object-contain border border-bg-hover" />
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-text-muted">已粘贴截图</span>
-              {!activeModelSupportsVision && (
-                <span className="text-[10px] text-accent-amber">当前模型不支持图片，请切换到带 👁 标记的模型后再发送</span>
+              {pastedImageVisionHint && (
+                <span className={`text-[10px] ${hasEnabledVisionModel ? 'text-accent-amber' : 'text-accent-red'}`}>
+                  {pastedImageVisionHint}
+                </span>
               )}
             </div>
             <button onClick={() => setPastedImage(null)} className="text-text-muted hover:text-accent-red ml-auto">
@@ -374,60 +522,136 @@ export default function ControlBar() {
           </div>
         </div>
       )}
+      {!isExamMode && candidateTranscriptions.length > 0 && (
+        <div className="flex items-start gap-2 text-xs text-accent-green bg-accent-green/10 px-3 py-1.5 rounded-lg">
+          <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span className="min-w-0 break-all">我的回答上下文：{candidateTranscriptions[candidateTranscriptions.length - 1]}</span>
+        </div>
+      )}
 
       {/* 主控制行 */}
-      <div className="flex items-center gap-2">
-        {!isExamMode && <AudioDevicePicker
-          devices={devices}
-          selectedDevice={selectedDevice}
-          onSelect={setSelectedDevice}
-          onRefresh={handleRefreshDevices}
-          refreshing={refreshingDevices}
-          selectionDisabled={isRecording && !isPaused}
-        />}
+      <div className="grid gap-2 rounded-lg border border-bg-hover/70 bg-bg-secondary/75 p-2 shadow-sm lg:grid-cols-[minmax(0,38rem)_auto] lg:items-stretch">
+        {!isExamMode && (
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-[38rem]">
+            <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
+              <span className="text-[10px] font-medium text-text-muted leading-none">会议音频 · 听面试官</span>
+              <AudioDevicePicker
+                devices={devices}
+                selectedDevice={selectedDevice}
+                onSelect={setSelectedDevice}
+                onRefresh={handleRefreshDevices}
+                refreshing={refreshingDevices}
+                selectionDisabled={isRecording && !isPaused}
+                ariaLabel="选择会议音频设备"
+                placeholder="选择会议音频"
+                action={{
+                  ariaLabel: '测试音频输出',
+                  title: isRecording && !isPaused ? '录制中请先暂停' : '播放一段测试音频',
+                  icon: <Volume2 className="w-3.5 h-3.5" />,
+                  loading: testingOutput,
+                  disabled: isRecording && !isPaused,
+                  onClick: handleOutputTest,
+                }}
+              />
+            </div>
+            {candidateCaptureEnabled ? (
+              <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
+                <span className="text-[10px] font-medium text-text-muted leading-none">
+                  我的麦克风 · 记录我的回答
+                  {candidateSttLoading && <Loader2 className="w-3 h-3 animate-spin inline ml-1 text-accent-blue" />}
+                  {!candidateSttLoading && candidateSttLoaded && <span className="text-accent-green ml-1">✓</span>}
+                </span>
+                <AudioDevicePicker
+                  devices={devices.filter((device) => !device.is_loopback)}
+                  selectedDevice={selectedCandidateMic}
+                  onSelect={setSelectedCandidateMic}
+                  onRefresh={handleRefreshDevices}
+                  refreshing={refreshingDevices}
+                  selectionDisabled={isRecording && !isPaused}
+                  ariaLabel="选择我的麦克风"
+                  placeholder="选择我的麦克风"
+                  action={{
+                    ariaLabel: '测试麦克风输入',
+                    title: isRecording && !isPaused ? '录制中请先暂停' : '打开实时输入音量测试',
+                    icon: <Mic className="w-3.5 h-3.5" />,
+                    loading: testingInput,
+                    disabled: selectedCandidateMic === null || (isRecording && !isPaused),
+                    onClick: handleOpenInputMeter,
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
+                <span className="text-[10px] font-medium text-text-muted leading-none">我的麦克风 · 记录我的回答</span>
+                <div
+                  role="status"
+                  aria-label="我的回答上下文状态"
+                  className="flex h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-bg-hover bg-bg-tertiary px-3"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                    <span className="min-w-0 truncate text-xs font-medium text-text-secondary">
+                      我的回答上下文已关闭
+                      <span className="hidden lg:inline text-text-muted"> · 不影响会议音频</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="打开我的回答上下文设置"
+                    className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/10"
+                    onClick={() => useInterviewStore.getState().toggleSettings()}
+                  >
+                    设置
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
+        <div className="flex h-full min-h-[56px] w-full min-w-0 flex-wrap items-center gap-1.5 lg:w-auto lg:max-w-[34rem] lg:border-l lg:border-bg-hover/60 lg:pl-2">
         {isRecording ? (
           <>
             {isPaused ? (
               <button onClick={handleResume} disabled={loading}
-                className="flex items-center gap-1.5 px-3.5 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}>
+                className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-3.5 py-2 btn-primary text-xs font-semibold disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-green)), rgb(var(--c-accent-green) / 0.85))' }}>
                 <PlayCircle className="w-3.5 h-3.5" />
                 <span>继续</span>
               </button>
             ) : (
               <button onClick={handlePause} disabled={loading}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-white text-xs font-semibold rounded-xl transition-all duration-150 disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
+                className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-3.5 py-2 text-white text-xs font-semibold transition-all duration-150 disabled:opacity-50 flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
                 <Pause className="w-3.5 h-3.5" />
                 <span>暂停</span>
               </button>
             )}
             <button onClick={handleStop} disabled={loading}
-              className="flex items-center gap-1.5 px-3.5 py-2 btn-danger text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
+              className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-3.5 py-2 btn-danger text-xs font-semibold disabled:opacity-50 flex-shrink-0">
               <Square className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{isExamMode ? '结束' : '结束面试'}</span>
             </button>
           </>
         ) : !isExamMode && sttLoading ? (
           <button disabled
-            className="flex items-center gap-1.5 px-4 py-2 bg-bg-tertiary text-text-muted text-xs font-semibold rounded-xl cursor-not-allowed flex-shrink-0">
+            className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-4 py-2 bg-bg-tertiary text-text-muted text-xs font-semibold cursor-not-allowed flex-shrink-0">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             <span>{sttActiveProvider === 'whisper' ? '降级加载 Whisper…' : '语音加载中…'}</span>
           </button>
         ) : !isExamMode && !sttLoaded ? (
           <button onClick={handleStart} disabled={loading || selectedDevice === null}
-            className="flex items-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-xl flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
+            className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-4 py-2 text-white text-xs font-semibold flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgb(var(--c-accent-amber)), rgb(var(--c-accent-amber) / 0.85))' }}>
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>语音未就绪，开始面试</span>
           </button>
         ) : (
           <button onClick={handleStart} disabled={loading || (!isExamMode && selectedDevice === null)}
-            className="flex items-center gap-1.5 px-4 py-2 btn-primary text-xs font-semibold rounded-xl disabled:opacity-50 flex-shrink-0">
+            className="flex min-h-[38px] items-center gap-1.5 rounded-lg px-4 py-2 btn-primary text-xs font-semibold disabled:opacity-50 flex-shrink-0">
             <Play className="w-3.5 h-3.5" />
             <span>{isExamMode ? '开始笔试' : '开始面试'}</span>
           </button>
         )}
 
-        <ResumeMountInline />
+        {!isExamMode && <ResumeMountInline className="bg-bg-primary/45" />}
 
         {streamingIds.length > 0 && (
           <button onClick={handleCancelAsk} disabled={cancellingAsk}
@@ -457,6 +681,7 @@ export default function ControlBar() {
             <span className="ml-0.5 text-[10px] tabular-nums hidden md:inline">({qaPairs.length})</span>
           )}
         </button>
+        </div>
       </div>
 
       {/* 快捷提示词 */}
@@ -485,14 +710,14 @@ export default function ControlBar() {
         </div>
         <button
           onClick={handleAsk}
-          disabled={answerModelUnavailable || (pastedImage && !activeModelSupportsVision) || (!manualQuestion.trim() && !pastedImage)}
+          disabled={answerModelUnavailable || (pastedImage && !hasEnabledVisionModel) || (!manualQuestion.trim() && !pastedImage)}
           title={
             noEnabledModels
               ? '请先在设置中启用至少一个模型'
               : allModelsUnavailable
               ? '所有启用模型不可用，请先检查模型连接'
-              : pastedImage && !activeModelSupportsVision
-              ? '当前模型不支持图片，请切换到带 👁 标记的模型'
+              : pastedImage && !hasEnabledVisionModel
+              ? '请先在设置中启用至少一个带 👁 的识图模型'
               : manualQuestion.trim() || pastedImage
               ? '发送问题 (Enter)'
               : '请先输入问题或粘贴截图'
@@ -503,6 +728,73 @@ export default function ControlBar() {
           <Send className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {inputMeterOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/45 px-3 py-4 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="麦克风输入测试"
+            className="w-full max-w-sm rounded-xl border border-bg-hover bg-bg-primary p-4 shadow-2xl shadow-black/30"
+          >
+            <div className="flex items-start gap-3">
+              <div className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-accent-green/15 text-accent-green">
+                <Mic className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-text-primary">麦克风输入测试</div>
+                <div className="mt-0.5 truncate text-xs text-text-muted">
+                  {selectedCandidateDevice?.name ?? '当前麦克风'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseInputMeter}
+                aria-label="关闭麦克风输入测试"
+                className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-hover hover:text-text-primary"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className={inputLevel?.has_signal ? 'text-accent-green' : 'text-text-muted'}>
+                  {inputLevel?.error ? '监听异常' : inputLevel?.has_signal ? '检测到输入' : '请对着麦克风说话'}
+                </span>
+                <span className="font-mono text-text-secondary">{inputLevelPct}%</span>
+              </div>
+              <div className="h-4 overflow-hidden rounded-full bg-bg-hover">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-100 ${inputLevel?.has_signal ? 'bg-accent-green' : 'bg-accent-amber'}`}
+                  style={{ width: `${Math.max(3, inputLevelPct)}%` }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-[10px] text-text-muted">
+                <span>安静</span>
+                <span>正常说话</span>
+                <span>偏大</span>
+              </div>
+            </div>
+
+            {inputLevel?.error && (
+              <div className="mt-3 rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">
+                {inputLevel.error}
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleCloseInputMeter}
+                className="rounded-lg bg-bg-tertiary px-3 py-2 text-xs font-medium text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+              >
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

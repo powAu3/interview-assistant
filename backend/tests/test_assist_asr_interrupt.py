@@ -45,7 +45,7 @@ def _cfg(**overrides):
         transcription_min_sig_chars=2,
         assist_asr_confirm_window_sec=0.4,
         assist_asr_group_max_wait_sec=1.0,
-        assist_asr_interrupt_running=True,
+        assist_asr_interrupt_running=False,
         assist_high_churn_short_answer=False,
     )
     base.update(overrides)

@@ -7,6 +7,20 @@ export type VirtualInterviewerState =
   | 'idle'
   | 'debrief'
 
+export interface VirtualInterviewerSpeechSignal {
+  active: boolean
+  energy: number
+  mouthOpen: number
+  speakingElapsedMs: number
+}
+
+export const IDLE_VIRTUAL_INTERVIEWER_SPEECH_SIGNAL: VirtualInterviewerSpeechSignal = {
+  active: false,
+  energy: 0,
+  mouthOpen: 0,
+  speakingElapsedMs: 0,
+}
+
 export interface VirtualInterviewerTurnSignal {
   category?: string | null
   answer_mode?: PracticeAnswerMode | null

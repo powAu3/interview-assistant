@@ -29,6 +29,13 @@ const DEFAULT_SHORTCUTS = {
     label: '服务端截图审题',
     category: '实时辅助',
   },
+  cancelAnswer: {
+    action: 'cancelAnswer',
+    key: 'CommandOrControl+Escape',
+    defaultKey: 'CommandOrControl+Escape',
+    label: '取消生成',
+    category: '实时辅助',
+  },
   addMultiServerScreenShot: {
     action: 'addMultiServerScreenShot',
     key: 'CommandOrControl+Shift+/',
@@ -50,6 +57,34 @@ const DEFAULT_SHORTCUTS = {
     label: '移动悬浮窗到鼠标位置',
     category: '实时辅助',
   },
+  focusPrevTab: {
+    action: 'focusPrevTab',
+    key: 'CommandOrControl+Left',
+    defaultKey: 'CommandOrControl+Left',
+    label: '专注面板上一栏',
+    category: '专注面板',
+  },
+  focusNextTab: {
+    action: 'focusNextTab',
+    key: 'CommandOrControl+Right',
+    defaultKey: 'CommandOrControl+Right',
+    label: '专注面板下一栏',
+    category: '专注面板',
+  },
+  overlayPrevQuestion: {
+    action: 'overlayPrevQuestion',
+    key: 'CommandOrControl+Up',
+    defaultKey: 'CommandOrControl+Up',
+    label: '悬浮窗上一题',
+    category: '悬浮窗',
+  },
+  overlayNextQuestion: {
+    action: 'overlayNextQuestion',
+    key: 'CommandOrControl+Down',
+    defaultKey: 'CommandOrControl+Down',
+    label: '悬浮窗下一题',
+    category: '悬浮窗',
+  },
 };
 
 const SUPPORTED_KEYS = new Set([
@@ -57,6 +92,7 @@ const SUPPORTED_KEYS = new Set([
   ...'0123456789'.split(''),
   '.', '/', '\\', '-', '=', ',', ';', "'", '[', ']', '`',
   'Enter',
+  'Escape',
   'Up', 'Down', 'Left', 'Right',
 ]);
 

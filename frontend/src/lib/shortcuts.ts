@@ -2,9 +2,14 @@ export type ShortcutAction =
   | 'hideOrShowWindow'
   | 'hardClearSession'
   | 'askFromServerScreen'
+  | 'cancelAnswer'
   | 'addMultiServerScreenShot'
   | 'toggleInterviewOverlay'
   | 'moveOverlayToMouse'
+  | 'focusPrevTab'
+  | 'focusNextTab'
+  | 'overlayPrevQuestion'
+  | 'overlayNextQuestion'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
 
 export type ShortcutConfig = {
@@ -41,6 +46,14 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     category: '实时辅助',
     status: 'available',
   },
+  cancelAnswer: {
+    action: 'cancelAnswer',
+    key: 'CommandOrControl+Escape',
+    defaultKey: 'CommandOrControl+Escape',
+    label: '取消生成',
+    category: '实时辅助',
+    status: 'available',
+  },
   addMultiServerScreenShot: {
     action: 'addMultiServerScreenShot',
     key: 'CommandOrControl+Shift+/',
@@ -65,6 +78,38 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     category: '实时辅助',
     status: 'available',
   },
+  focusPrevTab: {
+    action: 'focusPrevTab',
+    key: 'CommandOrControl+Left',
+    defaultKey: 'CommandOrControl+Left',
+    label: '专注面板上一栏',
+    category: '专注面板',
+    status: 'available',
+  },
+  focusNextTab: {
+    action: 'focusNextTab',
+    key: 'CommandOrControl+Right',
+    defaultKey: 'CommandOrControl+Right',
+    label: '专注面板下一栏',
+    category: '专注面板',
+    status: 'available',
+  },
+  overlayPrevQuestion: {
+    action: 'overlayPrevQuestion',
+    key: 'CommandOrControl+Up',
+    defaultKey: 'CommandOrControl+Up',
+    label: '悬浮窗上一题',
+    category: '悬浮窗',
+    status: 'available',
+  },
+  overlayNextQuestion: {
+    action: 'overlayNextQuestion',
+    key: 'CommandOrControl+Down',
+    defaultKey: 'CommandOrControl+Down',
+    label: '悬浮窗下一题',
+    category: '悬浮窗',
+    status: 'available',
+  },
 }
 
 const supportedPhysicalKeys = new Map<string, string>([
@@ -82,6 +127,7 @@ const supportedPhysicalKeys = new Map<string, string>([
   ['BracketRight', ']'],
   ['Backquote', '`'],
   ['Enter', 'Enter'],
+  ['Escape', 'Escape'],
   ['ArrowUp', 'Up'],
   ['ArrowDown', 'Down'],
   ['ArrowLeft', 'Left'],
@@ -106,6 +152,7 @@ export function getShortcutAccelerator(event: KeyboardEvent): string | null {
 
 const KEY_DISPLAY: Record<string, string> = {
   Enter: 'Enter',
+  Escape: 'Esc',
   Up: '↑', Down: '↓', Left: '←', Right: '→',
 }
 
@@ -125,7 +172,7 @@ export function getShortcutDisplay(accelerator: string) {
 }
 
 const VALID_ACTIONS = new Set<string>(Object.keys(defaultShortcuts))
-const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+[A-Za-z0-9./\\\- =;,'`\[\]\{\}]$/
+const SUPPORTED_KEY_RE = /^CommandOrControl(\+Shift)?(\+Alt)?\+([A-Za-z0-9./\\\- =;,'`\[\]\{\}]|Enter|Escape|Up|Down|Left|Right)$/
 
 export function mergeShortcutConfigs(
   input: Record<string, Partial<ShortcutConfig> | Record<string, unknown>> | undefined,

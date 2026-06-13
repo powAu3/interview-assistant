@@ -68,6 +68,25 @@ def test_no_resume_rule_when_resume_missing(reset_resume):
     assert "简历使用规则" not in p
 
 
+def test_written_exam_prompt_never_includes_resume(reset_resume):
+    cfg = reset_resume
+    cfg.resume_text = "项目A: 后端重构，Kafka, Redis；2022 字节实习。"
+    p = build_system_prompt(mode="written_exam")
+    assert "项目A" not in p
+    assert "Kafka" not in p
+    assert "简历使用规则" not in p
+    assert "<resume_context>" not in p
+
+
+def test_written_exam_prompt_handles_incremental_screenshots_and_failures(reset_resume):
+    p = build_system_prompt(mode="written_exam")
+    assert "连续截图/失败反馈规则" in p
+    assert "当前截图优先于上一版答案" in p
+    assert "新增约束" in p
+    assert "失败用例" in p
+    assert "修正后的完整可提交代码" in p
+
+
 # ---- 4.3 first-sentence hard constraint ---------------------------------
 
 def test_first_sentence_hard_constraint_in_asr():
@@ -101,7 +120,42 @@ def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
     p = _asr_prompt(high_churn=False)
     assert "真人候选人口吻" in p
     assert "结论先行" in p
-    assert "不要把这些当标题" in p
+    assert "专注面板输出协议" in p
+    assert "## 标题" in p
+    assert "普通场景题 360-650 字" in p
+    assert "复杂排障/设计题 650-1000 字" in p
+
+
+def test_asr_prompt_keeps_concept_comparison_from_forced_project_story():
+    p = _asr_prompt(high_churn=False)
+    assert "概念对比题" in p
+    assert "rules 和 skills" in p
+    assert "不要为了显得丰富而硬凑项目经历" in p
+    assert "只有明确问“你的项目/你做过/简历里的 X”" in p
+
+
+def test_asr_prompt_uses_density_by_question_type_not_fixed_long_answer():
+    p = _asr_prompt(high_churn=False)
+    assert "概念/优缺点/区别题 220-420 字" in p
+    assert "普通场景题 360-650 字" in p
+    assert "复杂排障/设计题 650-1000 字" in p
+    assert "不为凑字数扩展" in p
+    assert "普通题 360-700 字" not in p
+
+
+def test_asr_prompt_contains_recent_asr_term_repairs():
+    p = _asr_prompt(high_churn=False)
+    assert "健身测试→兼容性测试" in p
+    assert "is 登录→iOS 登录" in p
+    assert "街舞综合框架→接口自动化/自动化测试框架" in p
+    assert "scale→skills" in p
+
+
+def test_followup_prompt_inherits_context_for_fragments():
+    p = _asr_prompt(high_churn=False)
+    assert "优先继承上一轮的业务场景和技术对象" in p
+    assert "题干续句" in p
+    assert "安卓能登录但 iOS 不行" in p
 
 
 def test_asr_high_churn_keeps_oral_short_answer_shape():
@@ -113,7 +167,12 @@ def test_asr_high_churn_keeps_oral_short_answer_shape():
 def test_manual_prompt_warns_not_to_emit_template_labels():
     p = _manual_prompt()
     assert "真人候选人口吻" in p
-    assert "不要输出题型模板标题" in p
+    assert "贴合本题的 `##` section 标题" in p
+    assert "不要输出固定模板" in p
+    assert "给代码时固定三段" not in p
+    assert "普通题 500-900 字" in p
+    assert "复杂设计/排障/治理题 900-1500 字" in p
+    assert "题型模板" in p
 
 
 def test_stream_sanitizer_removes_split_think_tags():
@@ -130,6 +189,13 @@ def test_stream_sanitizer_cleans_manual_markdown_and_meta_preface():
     assert "#" not in out
     assert "回答" not in out
     assert "**" not in out
+    assert "核心是先止血。" in out
+
+
+def test_stream_sanitizer_keeps_focus_tab_headings_for_manual_text():
+    s = create_answer_stream_sanitizer("manual_text")
+    out = s.push("## 多元答案\n核心是先止血。") + s.finish()
+    assert "## 多元答案" in out
     assert "核心是先止血。" in out
 
 

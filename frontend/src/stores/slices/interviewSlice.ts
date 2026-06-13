@@ -6,6 +6,7 @@ const CHUNK_THROTTLE_MS = 50
 
 const _chunkBuffer: Map<string, { answer: string; think: string }> = new Map()
 let _chunkFlushTimer: ReturnType<typeof setTimeout> | null = null
+let _candidateSegmentIds: Array<string | null> = []
 
 function _scheduleChunkFlush(set: (fn: (s: RootState) => Partial<RootState>) => void) {
   if (_chunkFlushTimer !== null) return
@@ -35,6 +36,7 @@ export interface InterviewSliceState {
   audioLevel: number
   isTranscribing: boolean
   transcriptions: string[]
+  candidateTranscriptions: string[]
   qaPairs: QAPair[]
   streamingIds: string[]
   currentStreamingId: string | null
@@ -46,6 +48,7 @@ export interface InterviewSliceActions {
   setAudioLevel: (v: number) => void
   setTranscribing: (v: boolean) => void
   addTranscription: (text: string) => void
+  addCandidateTranscription: (text: string, meta?: { segmentId?: string; isFinal?: boolean }) => void
   startAnswer: (
     id: string,
     question: string,
@@ -59,6 +62,8 @@ export interface InterviewSliceActions {
     answer: string,
     thinkContent?: string,
     modelName?: string,
+    firstTokenMs?: number,
+    totalMs?: number,
   ) => void
   cancelAnswer: (id: string) => void
   errorAnswer: (id: string, message: string) => void
@@ -75,6 +80,7 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
   audioLevel: 0,
   isTranscribing: false,
   transcriptions: [],
+  candidateTranscriptions: [],
   qaPairs: [],
   streamingIds: [],
   currentStreamingId: null,
@@ -84,6 +90,22 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
   setAudioLevel: (v) => set({ audioLevel: v }),
   setTranscribing: (v) => set({ isTranscribing: v }),
   addTranscription: (text) => set((s) => ({ transcriptions: [...s.transcriptions, text] })),
+  addCandidateTranscription: (text, meta) => set((s) => {
+    const segmentId = meta?.segmentId || null
+    if (segmentId) {
+      const existingIndex = _candidateSegmentIds.lastIndexOf(segmentId)
+      if (existingIndex >= 0 && existingIndex < s.candidateTranscriptions.length) {
+        const next = [...s.candidateTranscriptions]
+        next[existingIndex] = text
+        return { candidateTranscriptions: next }
+      }
+    }
+    if (s.candidateTranscriptions[s.candidateTranscriptions.length - 1] === text) {
+      return { candidateTranscriptions: s.candidateTranscriptions }
+    }
+    _candidateSegmentIds = [..._candidateSegmentIds, segmentId]
+    return { candidateTranscriptions: [...s.candidateTranscriptions, text] }
+  }),
 
   startAnswer: (id, question, meta) =>
     set((s) => ({
@@ -119,7 +141,7 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
     _scheduleChunkFlush(set)
   },
 
-  finalizeAnswer: (id, question, answer, thinkContent, modelName) => {
+  finalizeAnswer: (id, question, answer, thinkContent, modelName, firstTokenMs, totalMs) => {
     _chunkBuffer.delete(id)
     set((s) => {
       const next = s.streamingIds.filter((x) => x !== id)
@@ -135,6 +157,8 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
                 thinkContent: thinkContent ?? qa.thinkContent,
                 isThinking: false,
                 modelLabel: modelName ?? qa.modelLabel,
+                firstTokenMs: firstTokenMs ?? qa.firstTokenMs,
+                totalMs: totalMs ?? qa.totalMs,
                 status: 'done' as QAStatus,
               }
             : qa,
@@ -182,12 +206,26 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
 
   setInitData: (data) => {
     _chunkBuffer.clear()
+    const candidateSegments = Array.isArray(data.candidate_answer_segments)
+      ? data.candidate_answer_segments
+      : []
+    const restoredCandidateTranscriptions = candidateSegments.length > 0
+      ? candidateSegments
+          .map((segment: any) => String(segment?.text ?? '').trim())
+          .filter(Boolean)
+      : data.candidate_transcriptions ?? []
+    _candidateSegmentIds = candidateSegments.length > 0
+      ? candidateSegments
+          .map((segment: any) => (segment?.segment_id ? String(segment.segment_id) : null))
+          .filter((_segmentId: string | null, index: number) => Boolean(restoredCandidateTranscriptions[index]))
+      : restoredCandidateTranscriptions.map(() => null)
     if (_chunkFlushTimer !== null) {
       clearTimeout(_chunkFlushTimer)
       _chunkFlushTimer = null
     }
     set({
       transcriptions: data.transcriptions ?? [],
+      candidateTranscriptions: restoredCandidateTranscriptions,
       qaPairs: (data.qa_pairs ?? []).map(
         (qa: Partial<QAPair> & { id: string; question: string; answer: string }) => ({
           ...qa,
@@ -204,21 +242,29 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
       isRecording: data.is_recording ?? false,
       isPaused: data.is_paused ?? false,
       sttLoaded: data.stt_loaded ?? false,
+      candidateSttLoaded: false,
+      candidateSttLoading: false,
+      candidateSttProvider: '',
     })
   },
 
   clearSession: () => {
     _chunkBuffer.clear()
+    _candidateSegmentIds = []
     if (_chunkFlushTimer !== null) {
       clearTimeout(_chunkFlushTimer)
       _chunkFlushTimer = null
     }
     set({
       transcriptions: [],
+      candidateTranscriptions: [],
       qaPairs: [],
       currentStreamingId: null,
       streamingIds: [],
       isPaused: false,
+      candidateSttLoaded: false,
+      candidateSttLoading: false,
+      candidateSttProvider: '',
     })
   },
 })

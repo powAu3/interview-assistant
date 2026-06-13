@@ -387,6 +387,41 @@ describe('PracticeMode', () => {
     })
   })
 
+  it('uses the stop-recording response as a final transcript fallback', async () => {
+    apiMock.practiceRecord.mockResolvedValue({ ok: true, text: '最后补上的转写' })
+    useInterviewStore.setState({
+      practiceStatus: 'awaiting_answer',
+      practiceRecording: true,
+      practiceAnswerDraft: '前半段回答',
+      practiceSession: createPracticeSession(),
+    } as any)
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }))
+
+    await waitFor(() => {
+      expect(apiMock.practiceRecord).toHaveBeenCalledWith('stop')
+      expect(useInterviewStore.getState().practiceAnswerDraft).toBe('前半段回答 最后补上的转写')
+    })
+  })
+
+  it('does not duplicate text when the stop-recording response repeats websocket transcript', async () => {
+    apiMock.practiceRecord.mockResolvedValue({ ok: true, text: '前半段回答' })
+    useInterviewStore.setState({
+      practiceStatus: 'awaiting_answer',
+      practiceRecording: true,
+      practiceAnswerDraft: '前半段回答',
+      practiceSession: createPracticeSession(),
+    } as any)
+
+    render(<PracticeMode />)
+    fireEvent.click(screen.getByRole('button', { name: '停止录音' }))
+
+    await waitFor(() => {
+      expect(useInterviewStore.getState().practiceAnswerDraft).toBe('前半段回答')
+    })
+  })
+
   it('uses a one-shot watchdog refresh when submit websocket hydration does not arrive', async () => {
     apiMock.practiceSubmit.mockResolvedValue({ ok: true })
     apiMock.practiceStatus.mockResolvedValue(
@@ -497,6 +532,31 @@ describe('PracticeMode', () => {
     expect(screen.getAllByText('题面模式')).toHaveLength(2)
     expect(screen.getByText('最后来一道实现题，边写边解释你的边界处理。')).toBeInTheDocument()
     expect(screen.getByTestId('practice-interviewer-preview')).not.toHaveAttribute('data-state', 'speaking')
+  })
+
+  it('defaults auto TTS to the male voice for the current male interviewer asset', async () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as object),
+        practice_tts_provider: 'edge_tts',
+        edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
+        edge_tts_voice_male: 'zh-CN-YunxiNeural',
+        practice_tts_speaker_female: 'zh-CN-XiaoxiaoNeural',
+        practice_tts_speaker_male: 'zh-CN-YunxiNeural',
+      },
+      practiceStatus: 'awaiting_answer',
+      practiceSession: createPracticeSession(),
+    }) as any)
+
+    render(<PracticeMode />)
+
+    await waitFor(() => expect(apiMock.practiceTts).toHaveBeenCalled())
+    expect(apiMock.practiceTts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferred_gender: 'male',
+        speaker: 'zh-CN-YunxiNeural',
+      }),
+    )
   })
 
   it('renders the persona summary card on the finished screen', () => {

@@ -93,6 +93,11 @@ _client_cache: dict[tuple[str, str], OpenAI] = {}
 _client_cache_lock = threading.Lock()
 
 
+def _openai_compat_headers() -> dict[str, str]:
+    # Some OpenAI-compatible gateways block the OpenAI SDK's default User-Agent.
+    return {"User-Agent": f"python-requests/{requests.__version__}"}
+
+
 def get_client() -> OpenAI:
     cfg = get_config()
     m = cfg.get_active_model()
@@ -104,7 +109,11 @@ def get_client_for_model(model_cfg) -> OpenAI:
     with _client_cache_lock:
         client = _client_cache.get(key)
         if client is None:
-            client = OpenAI(api_key=model_cfg.api_key, base_url=model_cfg.api_base_url)
+            client = OpenAI(
+                api_key=model_cfg.api_key,
+                base_url=model_cfg.api_base_url,
+                default_headers=_openai_compat_headers(),
+            )
             _client_cache[key] = client
         return client
 
@@ -132,6 +141,7 @@ def _vision_via_http(model_cfg, messages: list[dict]) -> str:
     base = (model_cfg.api_base_url or "").rstrip("/")
     url = f"{base}/chat/completions"
     headers = {
+        **_openai_compat_headers(),
         "Authorization": f"Bearer {model_cfg.api_key}",
         "Content-Type": "application/json",
     }
@@ -276,7 +286,103 @@ _EFFORT_BUDGET = {
     "low": 1024,
     "medium": 4096,
     "high": 10240,
+    "xhigh": 16384,
 }
+
+_THINK_DISABLED_BASE_PARAMS = {
+    "thinking": {"type": "disabled"},
+    "think_mode": False,
+    "enable_thinking": False,
+}
+
+_THINK_DISABLED_LOCAL_PARAMS = {
+    **_THINK_DISABLED_BASE_PARAMS,
+    "chat_template_kwargs": {"enable_thinking": False},
+}
+
+
+_GENERIC_REASONING_MARKERS = (
+    "reasoning",
+    "reasoner",
+    "thinking",
+    "deepseek-r1",
+    "deepseek-reasoner",
+    "qwq",
+    "qwen3",
+    "glm-4.5",
+    "glm-z1",
+    "glm-5",
+    "gemini-2.5",
+    "gemini-3",
+    "grok-4",
+)
+
+
+def _is_doubao_model(model_cfg) -> bool:
+    base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
+    model_name = (getattr(model_cfg, "model", "") or "").lower()
+    return "doubao" in model_name or "volces" in base_url or "ark" in base_url
+
+
+def _is_generic_reasoning_model(model_cfg) -> bool:
+    label = (
+        f"{getattr(model_cfg, 'api_base_url', '')} "
+        f"{getattr(model_cfg, 'name', '')} "
+        f"{getattr(model_cfg, 'model', '')}"
+    ).lower()
+    return any(marker in label for marker in _GENERIC_REASONING_MARKERS)
+
+
+def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
+    base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
+    model_name = (getattr(model_cfg, "model", "") or "").lower()
+    if _is_doubao_model(model_cfg):
+        return dict(_THINK_DISABLED_BASE_PARAMS)
+    if "localhost" in base_url or "127.0.0.1" in base_url or "sglang" in base_url:
+        return dict(_THINK_DISABLED_LOCAL_PARAMS)
+    if "glm" in model_name or "bigmodel" in base_url or (style == "generic" and _is_generic_reasoning_model(model_cfg)):
+        return dict(_THINK_DISABLED_BASE_PARAMS)
+    return {}
+
+
+def _model_dict_param(model_cfg, name: str) -> dict:
+    value = getattr(model_cfg, name, None) or {}
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _copy_config_with_updates(cfg, updates: dict):
+    if hasattr(cfg, "model_copy"):
+        return cfg.model_copy(update=updates)
+    data = dict(getattr(cfg, "__dict__", {}) or {})
+    data.update(updates)
+    return SimpleNamespace(**data)
+
+
+def _completion_token_kwargs(model_cfg, max_tokens: int) -> dict:
+    token_limit = max(1, int(max_tokens or 1))
+    if _detect_think_style(model_cfg) == "gpt":
+        return {"max_completion_tokens": token_limit}
+    return {"max_tokens": token_limit}
+
+
+def _claude_thinking_budget(effort: str, max_tokens: int) -> int:
+    token_limit = max(2, int(max_tokens or 2))
+    requested = _EFFORT_BUDGET.get(effort, 4096)
+    visible_answer_reserve = min(1024, max(1, token_limit // 4))
+    return max(1, min(requested, token_limit - visible_answer_reserve))
+
+
+def _usage_delta(prompt_tokens: int, completion_tokens: int, previous: tuple[int, int]) -> tuple[int, int, tuple[int, int]]:
+    prompt_tokens = int(prompt_tokens or 0)
+    completion_tokens = int(completion_tokens or 0)
+    previous_prompt, previous_completion = previous
+    if prompt_tokens >= previous_prompt and completion_tokens >= previous_completion:
+        return (
+            prompt_tokens - previous_prompt,
+            completion_tokens - previous_completion,
+            (prompt_tokens, completion_tokens),
+        )
+    return prompt_tokens, completion_tokens, (prompt_tokens, completion_tokens)
 
 def _detect_think_style(model_cfg) -> str:
     """Detect which thinking parameter format the model expects.
@@ -287,7 +393,7 @@ def _detect_think_style(model_cfg) -> str:
         'generic' – generic OpenAI-compatible (use thinking.type)
     """
     name = (model_cfg.model or "").lower()
-    if name.startswith("o1") or name.startswith("o3") or name.startswith("o4"):
+    if name.startswith("gpt-5") or name.startswith("o1") or name.startswith("o3") or name.startswith("o4"):
         return "gpt"
     if "claude" in name or "sonnet" in name or "haiku" in name or "opus" in name:
         return "claude"
@@ -295,21 +401,26 @@ def _detect_think_style(model_cfg) -> str:
 
 
 def _build_think_params(model_cfg, cfg) -> dict:
-    if not model_cfg.supports_think:
-        return {}
     effort = cfg.think_effort
     style = _detect_think_style(model_cfg)
-    if effort == "off":
-        if style == "gpt":
-            return {"reasoning_effort": "off", "think_mode": False}
-        return {"thinking": {"type": "disabled"}, "think_mode": False}
+    if not getattr(cfg, "think_mode", False) or effort == "off":
+        saved_disabled = _model_dict_param(model_cfg, "think_disabled_params")
+        if saved_disabled:
+            return saved_disabled
+        return _disabled_think_params_for_model(model_cfg, style)
+    saved_enabled = _model_dict_param(model_cfg, "think_enabled_params")
+    if saved_enabled and style != "gpt":
+        return saved_enabled
+    if not model_cfg.supports_think:
+        return {}
+    if _is_doubao_model(model_cfg):
+        return {}
     if style == "gpt":
-        return {
-            "reasoning_effort": effort,
-            "think_mode": True,
-        }
+        params = dict(saved_enabled)
+        params["reasoning_effort"] = effort
+        return params
     if style == "claude":
-        budget = _EFFORT_BUDGET.get(effort, 4096)
+        budget = _claude_thinking_budget(effort, getattr(cfg, "max_tokens", 4096))
         return {
             "thinking": {"type": "enabled", "budget_tokens": budget},
             "think_mode": True,
@@ -320,6 +431,14 @@ def _build_think_params(model_cfg, cfg) -> dict:
     }
 
 
+def _should_emit_think(model_cfg, cfg) -> bool:
+    return bool(
+        model_cfg.supports_think
+        and getattr(cfg, "think_mode", False)
+        and getattr(cfg, "think_effort", "off") != "off"
+    )
+
+
 def _try_stream_with_model(model_cfg, full_messages, cfg):
     client = get_client_for_model(model_cfg)
     extra_kwargs: dict = {}
@@ -327,13 +446,14 @@ def _try_stream_with_model(model_cfg, full_messages, cfg):
     if think_params:
         extra_kwargs["extra_body"] = think_params
     extra_kwargs["stream_options"] = {"include_usage": True}
+    token_kwargs = _completion_token_kwargs(model_cfg, cfg.max_tokens)
     try:
         response = client.chat.completions.create(
             model=model_cfg.model,
             messages=full_messages,
             temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
             stream=True,
+            **token_kwargs,
             **extra_kwargs,
         )
         return response
@@ -349,6 +469,7 @@ def _stream_via_http(model_cfg, full_messages, cfg, think_params):
     base = (model_cfg.api_base_url or "").rstrip("/")
     url = f"{base}/chat/completions"
     headers = {
+        **_openai_compat_headers(),
         "Authorization": f"Bearer {model_cfg.api_key}",
         "Content-Type": "application/json",
     }
@@ -356,9 +477,9 @@ def _stream_via_http(model_cfg, full_messages, cfg, think_params):
         "model": model_cfg.model,
         "messages": full_messages,
         "temperature": cfg.temperature,
-        "max_tokens": cfg.max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
+        **_completion_token_kwargs(model_cfg, cfg.max_tokens),
     }
     if think_params:
         payload.update(think_params)
@@ -456,22 +577,24 @@ def chat_stream(
                 full_messages_adj = full_messages
 
             response = _try_stream_with_model(model, full_messages_adj, cfg)
+            last_usage = (0, 0)
             for chunk in response:
                 if abort_check and abort_check():
                     return
                 if chunk.choices:
                     delta = chunk.choices[0].delta
                     reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
-                    if reasoning:
+                    if reasoning and _should_emit_think(model, cfg):
                         yield ("think", reasoning)
                     if delta.content:
                         yield ("text", delta.content)
                 if hasattr(chunk, "usage") and chunk.usage:
-                    _add_tokens(
+                    prompt_delta, completion_delta, last_usage = _usage_delta(
                         chunk.usage.prompt_tokens or 0,
                         chunk.usage.completion_tokens or 0,
-                        model.name,
+                        last_usage,
                     )
+                    _add_tokens(prompt_delta, completion_delta, model.name)
                     _broadcast_tokens()
             return
 
@@ -509,11 +632,20 @@ def chat_stream_single_model(
     system_prompt: Optional[str] = None,
     abort_check: Optional[Callable[[], bool]] = None,
     override_think_mode: Optional[bool] = None,
+    usage_callback: Optional[Callable[[int, int, str], None]] = None,
+    override_max_tokens: Optional[int] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """仅使用指定模型流式输出，不做跨模型降级（供并行答题）。"""
     cfg = get_config()
     if override_think_mode is not None:
-        cfg = cfg.model_copy(update={"think_mode": override_think_mode})
+        updates = {"think_mode": override_think_mode}
+        if override_think_mode and getattr(cfg, "think_effort", "off") == "off":
+            updates["think_effort"] = "xhigh"
+        elif not override_think_mode:
+            updates["think_effort"] = "off"
+        cfg = _copy_config_with_updates(cfg, updates)
+    if override_max_tokens is not None:
+        cfg = _copy_config_with_updates(cfg, {"max_tokens": max(1, int(override_max_tokens))})
     clean_messages = _sanitize_messages(messages, model_cfg.supports_vision)
     full_messages: list = []
     if system_prompt:
@@ -521,23 +653,28 @@ def chat_stream_single_model(
     full_messages.extend(clean_messages)
     model_name = model_cfg.name
     try:
+        emit_think = _should_emit_think(model_cfg, cfg)
         response = _try_stream_with_model(model_cfg, full_messages, cfg)
+        last_usage = (0, 0)
         for chunk in response:
             if abort_check and abort_check():
                 return
             if chunk.choices:
                 delta = chunk.choices[0].delta
                 reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
-                if reasoning:
+                if reasoning and emit_think:
                     yield ("think", reasoning)
                 if delta.content:
                     yield ("text", delta.content)
             if hasattr(chunk, "usage") and chunk.usage:
-                _add_tokens(
+                prompt_tokens, completion_tokens, last_usage = _usage_delta(
                     chunk.usage.prompt_tokens or 0,
                     chunk.usage.completion_tokens or 0,
-                    model_name,
+                    last_usage,
                 )
+                _add_tokens(prompt_tokens, completion_tokens, model_name)
+                if usage_callback:
+                    usage_callback(prompt_tokens, completion_tokens, model_name)
                 _broadcast_tokens()
     except Exception as e:
         err = _classify_exception(e)

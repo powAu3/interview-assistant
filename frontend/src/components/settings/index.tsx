@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import {
   X,
   LayoutGrid,
@@ -20,8 +20,46 @@ export default function SettingsDrawer() {
   const drawerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const previousActiveRef = useRef<HTMLElement | null>(null)
+  const wasOpenRef = useRef(false)
+  const dirtyExplicitCountRef = useRef(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [noResults, setNoResults] = useState(false)
+  const [dirtyExplicitSections, setDirtyExplicitSections] = useState<Record<string, boolean>>({})
+  const dirtyExplicitCount = Object.values(dirtyExplicitSections).filter(Boolean).length
+  const dirtyExplicitLabels = [
+    dirtyExplicitSections.speech ? '语音配置' : null,
+    dirtyExplicitSections.models ? '模型配置' : null,
+  ].filter(Boolean)
+
+  useEffect(() => {
+    const handleDirtyChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; dirty?: boolean }>).detail
+      if (!detail?.key) return
+      setDirtyExplicitSections((prev) => ({ ...prev, [detail.key as string]: !!detail.dirty }))
+    }
+    window.addEventListener('settings-dirty-change', handleDirtyChange)
+    return () => window.removeEventListener('settings-dirty-change', handleDirtyChange)
+  }, [])
+
+  useEffect(() => {
+    dirtyExplicitCountRef.current = dirtyExplicitCount
+  }, [dirtyExplicitCount])
+
+  const closeSettings = useCallback(() => {
+    if (dirtyExplicitCountRef.current > 0 && !window.confirm('有未保存更改，关闭后会丢失。')) {
+      return false
+    }
+    toggleSettings()
+    return true
+  }, [toggleSettings])
+
+  const changeTab = useCallback((tab: typeof settingsDrawerTab) => {
+    if (tab === settingsDrawerTab) return
+    if (dirtyExplicitCountRef.current > 0 && !window.confirm('有未保存更改，切换后会丢失。')) {
+      return
+    }
+    setSettingsDrawerTab(tab)
+  }, [setSettingsDrawerTab, settingsDrawerTab])
 
   // 检查搜索是否有命中 (仅 general/config tab 判断, 兼容 lazy tab 的挂载时序)
   useEffect(() => {
@@ -54,8 +92,21 @@ export default function SettingsDrawer() {
   }, [searchQuery, settingsDrawerTab, settingsOpen])
 
   useEffect(() => {
+    if (!settingsOpen) {
+      if (wasOpenRef.current) {
+        previousActiveRef.current?.focus()
+        wasOpenRef.current = false
+      }
+      return
+    }
+    if (!wasOpenRef.current) {
+      previousActiveRef.current = document.activeElement as HTMLElement | null
+      wasOpenRef.current = true
+    }
+  }, [settingsOpen])
+
+  useEffect(() => {
     if (!settingsOpen || !drawerRef.current) return
-    previousActiveRef.current = document.activeElement as HTMLElement | null
     const root = drawerRef.current
 
     // 涵盖原生表单元素 + 可编辑元素 + ARIA 自定义控件 + 显式 tabindex 节点
@@ -92,8 +143,7 @@ export default function SettingsDrawer() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        toggleSettings()
-        previousActiveRef.current?.focus()
+        closeSettings()
         return
       }
       if (e.key !== 'Tab') return
@@ -115,9 +165,8 @@ export default function SettingsDrawer() {
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      previousActiveRef.current?.focus()
     }
-  }, [settingsOpen, toggleSettings])
+  }, [settingsOpen, closeSettings])
 
   if (!settingsOpen) return null
 
@@ -131,7 +180,7 @@ export default function SettingsDrawer() {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={toggleSettings} />
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={closeSettings} />
       <div ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="fixed right-0 top-0 bottom-0 w-full sm:w-[520px] lg:w-[560px] bg-bg-secondary z-50 shadow-2xl flex flex-col border-l border-bg-tertiary">
         {/* Header */}
         <div className="flex-shrink-0 border-b border-bg-tertiary px-4 pt-4 pb-0 bg-bg-secondary/95">
@@ -142,8 +191,13 @@ export default function SettingsDrawer() {
                 设置中心
               </h2>
               <p className="text-[11px] text-text-muted mt-0.5">常用偏好、语音链路、模型队列分区管理</p>
+              {dirtyExplicitLabels.length > 0 && (
+                <p className="mt-1 text-[11px] font-medium text-accent-amber">
+                  未保存：{dirtyExplicitLabels.join(' · ')}
+                </p>
+              )}
             </div>
-            <button type="button" onClick={toggleSettings} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary" aria-label="关闭">
+            <button type="button" onClick={closeSettings} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary" aria-label="关闭">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -185,7 +239,7 @@ export default function SettingsDrawer() {
                 <button
                   key={t.key}
                   type="button"
-                  onClick={() => setSettingsDrawerTab(t.key)}
+                  onClick={() => changeTab(t.key)}
                   className={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-medium transition-all z-10 ${
                     settingsDrawerTab === t.key
                       ? 'text-accent-blue'

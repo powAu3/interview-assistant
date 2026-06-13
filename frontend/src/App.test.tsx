@@ -42,6 +42,8 @@ describe('App bootstrap', () => {
       sttActiveProvider: '',
       sttFallbackLoaded: false,
       modelHealth: {},
+      modelHealthDetail: {},
+      modelHealthLatency: {},
       tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
       fallbackToast: null,
       toastMessage: null,
@@ -125,6 +127,19 @@ describe('App bootstrap', () => {
 
     expect(apiMock.updateConfig).not.toHaveBeenCalled()
   })
+
+  it('surfaces model health detail in the priority model tooltip', async () => {
+    useInterviewStore.setState({
+      modelHealth: { 0: 'error' },
+      modelHealthDetail: { 0: '401 unauthorized' },
+      modelHealthLatency: {},
+    } as any)
+
+    render(<App />)
+
+    const trigger = await screen.findByRole('button', { name: /连接失败：401 unauthorized/ })
+    expect(trigger).toHaveAttribute('title', expect.stringContaining('401 unauthorized'))
+  })
 })
 
 describe('Window control buttons', () => {
@@ -142,6 +157,8 @@ describe('Window control buttons', () => {
       sttActiveProvider: '',
       sttFallbackLoaded: false,
       modelHealth: {},
+      modelHealthDetail: {},
+      modelHealthLatency: {},
       tokenUsage: { prompt: 0, completion: 0, total: 0, byModel: {} },
       fallbackToast: null,
       toastMessage: null,
