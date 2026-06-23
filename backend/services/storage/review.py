@@ -321,3 +321,88 @@ def get_session_detail(session_id: int) -> Optional[dict[str, Any]]:
 
     session["turns"] = turns
     return session
+
+
+def update_session_status(session_id: int, status: str):
+    """更新 session 状态"""
+    with _db_lock:
+        conn = _conn()
+        now = time.time()
+        conn.execute(
+            "UPDATE review_sessions SET status = ?, updated_at = ? WHERE id = ?",
+            (status, now, session_id),
+        )
+        conn.commit()
+        conn.close()
+
+
+def update_turn_analysis(
+    turn_id: int,
+    analysis_status: str,
+    strengths: Optional[list[str]] = None,
+    risks: Optional[list[str]] = None,
+    evidence: Optional[dict] = None,
+    scorecard: Optional[dict[str, int]] = None,
+):
+    """更新 turn 的分析结果"""
+    with _db_lock:
+        conn = _conn()
+        now = time.time()
+        conn.execute(
+            """
+            UPDATE review_turns
+            SET analysis_status = ?,
+                strengths_json = ?,
+                risks_json = ?,
+                evidence_json = ?,
+                scorecard_json = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                analysis_status,
+                json.dumps(strengths or [], ensure_ascii=False) if strengths is not None else None,
+                json.dumps(risks or [], ensure_ascii=False) if risks is not None else None,
+                json.dumps(evidence or {}, ensure_ascii=False) if evidence is not None else None,
+                json.dumps(scorecard or {}, ensure_ascii=False) if scorecard is not None else None,
+                now,
+                turn_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+
+def update_session_summary(
+    session_id: int,
+    summary_markdown: str,
+    strong_points: list[str],
+    weak_points: list[str],
+    avg_score: Optional[float] = None,
+):
+    """更新 session 的整体总结"""
+    with _db_lock:
+        conn = _conn()
+        now = time.time()
+        conn.execute(
+            """
+            UPDATE review_sessions
+            SET summary_markdown = ?,
+                strong_points_json = ?,
+                weak_points_json = ?,
+                avg_score = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                summary_markdown,
+                json.dumps(strong_points, ensure_ascii=False),
+                json.dumps(weak_points, ensure_ascii=False),
+                avg_score,
+                now,
+                session_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+

@@ -8,6 +8,7 @@ from typing import Optional
 from core.logger import get_logger
 from core.session import Session
 from services.storage import review
+from services import review_async_analysis
 
 logger = get_logger(__name__)
 
@@ -109,6 +110,10 @@ def on_assist_stop(session: Session) -> Optional[int]:
             session_id,
             len(session.qa_pairs),
         )
+
+        # 启动后台分析
+        review_async_analysis.analyze_session_async(session_id)
+
         return session_id
     except Exception as e:
         logger.error("Failed to end review session %d: %s", session_id, e, exc_info=True)
