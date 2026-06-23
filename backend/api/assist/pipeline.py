@@ -11,6 +11,7 @@ from core.background import BoundedTaskWorker
 from core.config import get_config
 from core.logger import get_interview_logger, get_logger
 from core.session import get_session, reset_session, conversation_lock
+from services import review_integration
 
 _ilog = get_interview_logger()
 _elog = get_logger("pipeline")
@@ -562,6 +563,13 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
         reason = "disabled" if not bool(getattr(cfg, "candidate_asr_enabled", False)) else "missing_or_same_device"
         broadcast({"type": "candidate_asr_status", "loaded": False, "loading": False, "provider": "off", "reason": reason})
 
+    # 创建 review session（如果满足条件）
+    review_integration.on_assist_start(
+        interviewer_device_id=device_id,
+        candidate_device_id=candidate_mic_device_id,
+        candidate_asr_enabled=bool(getattr(cfg, "candidate_asr_enabled", False)),
+    )
+
 
 def stop_interview_loop():
     global _interview_thread, _candidate_thread, _flush_thread
@@ -572,6 +580,10 @@ def stop_interview_loop():
     audio_capture.stop(owner="assist")
     _candidate_audio_capture.stop(owner="assist-candidate")
     session = get_session()
+
+    # 结束 review session（如果存在）
+    review_integration.on_assist_stop(session)
+
     with conversation_lock:
         session.is_recording = False
         session.is_paused = False
