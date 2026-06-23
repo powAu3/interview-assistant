@@ -330,14 +330,32 @@ def run_desktop_mode(port: int):
     # the port, it would fail deep inside that chain with a confusing error).
     kill_port(port)
 
-    print("  Electron 桌面模式")
-    print("  - 屏幕共享隐身: 已开启")
-    print("  - 全局快捷键: Ctrl+B 显示/隐藏")
-    print("  - 系统托盘: 右键切换置顶、隐身等")
-    print()
-    _print_access_info(port)
+    # Windows: 如果当前进程还有控制台窗口，先以无窗口模式重启自己
+    # 这样用户双击启动时，初始的命令行窗口会消失，只留 Electron 窗口
+    if platform.system() == "Windows" and os.environ.get(HIDE_CONSOLE_ENV) != "1":
+        print("  Electron 桌面模式")
+        print("  - 屏幕共享隐身: 已开启")
+        print("  - 全局快捷键: Ctrl+B 显示/隐藏")
+        print("  - 系统托盘: 右键切换置顶、隐身等")
+        print()
+        _print_access_info(port)
+        print()
+        print("  正在启动桌面应用...")
+        import time
+        time.sleep(1)  # 给用户 1 秒看到消息
 
-    env = {**os.environ, "PORT": str(port)}
+        # 重启自己，但这次带上隐藏标志
+        env = {**os.environ, HIDE_CONSOLE_ENV: "1"}
+        subprocess.Popen(
+            [sys.executable] + sys.argv,
+            env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+            cwd=os.getcwd(),
+        )
+        sys.exit(0)
+
+    # 到这里说明已经是无窗口模式了（或者不是 Windows）
+    env = {**os.environ, "PORT": str(port), HIDE_CONSOLE_ENV: "1"}
     proc = subprocess.run([npx, "electron", "."], cwd=DESKTOP_DIR, env=env, **_hidden_process_kwargs())
     sys.exit(proc.returncode)
 
