@@ -99,94 +99,6 @@ let lastOverlayState = {
   maxLines: 0,
 };
 
-function parseSayVoiceList(raw) {
-  return String(raw || '')
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .map((line) => {
-      const hashIdx = line.indexOf('#');
-      const left = (hashIdx >= 0 ? line.slice(0, hashIdx) : line).trim();
-      const parts = left.split(/\s+/);
-      if (parts.length < 2) return null;
-      const locale = parts[parts.length - 1];
-      const name = left.slice(0, left.length - locale.length).trim();
-      if (!name) return null;
-      let genderHint = 'unknown';
-      const lower = name.toLowerCase();
-      if (/(grandma|flo|meijia|shelley|sandy|kathy|kyoko|monica|anna)/.test(lower)) genderHint = 'female';
-      if (/(grandpa|eddy|reed|ralph|fred|daniel|albert|jorge)/.test(lower)) genderHint = 'male';
-      return {
-        voiceURI: `say:${name}`,
-        name,
-        lang: locale.replace('_', '-'),
-        source: 'macos-say',
-        genderHint,
-      };
-    })
-    .filter(Boolean);
-}
-
-function listSystemTtsVoices() {
-  return new Promise((resolve) => {
-    if (process.platform !== 'darwin') return resolve([]);
-    const child = spawn('say', ['-v', '?']);
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on('close', (code) => {
-      if (code !== 0) {
-        console.warn('listSystemTtsVoices failed:', stderr);
-        return resolve([]);
-      }
-      resolve(parseSayVoiceList(stdout));
-    });
-  });
-}
-
-function synthesizeSystemTts({ text, voiceName = '', rate = 180 }) {
-  return new Promise((resolve, reject) => {
-    if (process.platform !== 'darwin') {
-      return reject(new Error('System TTS is currently only implemented on macOS'));
-    }
-    const cleanText = String(text || '').trim();
-    if (!cleanText) return reject(new Error('TTS text is empty'));
-    const outputPath = path.join(app.getPath('temp'), `ia-practice-tts-${Date.now()}-${Math.random().toString(16).slice(2)}.aiff`);
-    const args = ['-o', outputPath, '-r', String(Math.max(90, Math.min(260, Math.round(Number(rate) || 180))))];
-    if (voiceName) args.push('-v', voiceName);
-    args.push(cleanText);
-
-    const child = spawn('say', args);
-    let stderr = '';
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on('close', (code) => {
-      if (code !== 0) {
-        try { fs.unlinkSync(outputPath); } catch {}
-        return reject(new Error(stderr || `say exited with code ${code}`));
-      }
-      try {
-        const audio = fs.readFileSync(outputPath);
-        try { fs.unlinkSync(outputPath); } catch {}
-        resolve({
-          provider: 'system',
-          voice: voiceName || '',
-          audio_base64: audio.toString('base64'),
-          content_type: 'audio/aiff',
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
 const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
 const PROMPT_OVERLAY_MIN_SIZE = { width: 180, height: 72 };
 const PROMPT_OVERLAY_MAX_SIZE = { heightRatio: 0.48 };
@@ -1093,14 +1005,6 @@ ipcMain.handle('destroy-overlay', () => {
   }
   return { ok: true };
 });
-ipcMain.handle('list-system-tts-voices', async () => listSystemTtsVoices());
-ipcMain.handle('synthesize-system-tts', async (_event, payload = {}) =>
-  synthesizeSystemTts({
-    text: payload.text,
-    voiceName: payload.voiceName,
-    rate: payload.rate,
-  })
-);
 ipcMain.handle('move-overlay-window', (_event, dx, dy) => {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const [x, y] = overlayWindow.getPosition();

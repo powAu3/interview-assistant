@@ -39,7 +39,6 @@ const SAMPLE_CONFIG = {
   generic_stt_model: '',
   position: '后端开发工程师',
   language: '中文',
-  practice_audience: 'social',
   auto_detect: true,
   silence_threshold: 0.01,
   silence_duration: 1.2,
@@ -58,7 +57,6 @@ const SAMPLE_CONFIG = {
 const SAMPLE_OPTIONS = {
   positions: ['后端开发工程师', '前端开发工程师', '全栈开发工程师', 'Java 工程师'],
   languages: ['中文', 'English'],
-  practice_audiences: ['social', 'campus_intern'],
   stt_providers: ['whisper', 'doubao', 'generic'],
   whisper_models: ['large-v3-turbo', 'medium', 'small'],
   screen_capture_regions: ['full', 'left_half', 'right_half', 'top_half', 'bottom_half'],
@@ -145,7 +143,7 @@ const SAMPLE_KNOWLEDGE_HISTORY = {
     },
     {
       id: 102,
-      session_type: 'practice',
+      session_type: 'assist',
       question: '说一下 MySQL 索引失效的常见场景。',
       answer: '包括最左前缀不满足、函数操作列、类型隐式转换等。',
       score: 7.3,
@@ -163,7 +161,7 @@ const SAMPLE_KNOWLEDGE_HISTORY = {
     },
     {
       id: 104,
-      session_type: 'practice',
+      session_type: 'assist',
       question: '高并发库存扣减怎么避免超卖？',
       answer: '可以结合 Redis 原子扣减、数据库乐观锁和异步回写。',
       score: 5.4,
@@ -273,29 +271,6 @@ const ASSIST_INIT = {
   stt_loaded: true,
 }
 
-const PRACTICE_MESSAGES = [
-  { type: 'stt_status', loaded: true, loading: false, delay: 20 },
-  { type: 'practice_status', status: 'questioning', delay: 40 },
-  {
-    type: 'practice_questions',
-    questions: [
-      { id: 1, category: 'project', question: '说一个你负责过并且真正做过性能优化的项目。' },
-      { id: 2, category: 'design', question: '设计一个高并发秒杀系统，重点讲防超卖和削峰。' },
-      { id: 3, category: 'basic', question: 'MySQL 索引为什么会失效？举三个常见例子。' },
-    ],
-    delay: 60,
-  },
-  {
-    type: 'practice_eval_done',
-    question_id: 1,
-    score: 8.4,
-    feedback:
-      '优点是项目背景和指标都比较具体，但建议再补充你本人主导的关键决策，例如缓存一致性、压测方法和线上验证过程。',
-    delay: 80,
-  },
-  { type: 'practice_next', index: 1, delay: 100 },
-]
-
 const RESUME_MESSAGES = [
   { type: 'stt_status', loaded: true, loading: false, delay: 20 },
   { type: 'resume_opt_done', text: SAMPLE_RESUME_OPTIMIZATION, delay: 40 },
@@ -321,7 +296,6 @@ const COMMON_MESSAGES = [
 
 const SHOTS = [
   { name: 'assist-mode.png', scenario: 'assist', run: captureAssist },
-  { name: 'practice-mode.png', scenario: 'practice', run: capturePractice },
   { name: 'knowledge-map.png', scenario: 'knowledge', run: captureKnowledge },
   { name: 'resume-optimizer.png', scenario: 'resume', run: captureResume },
 ]
@@ -375,7 +349,6 @@ function getApiPayload(url, method) {
   if (pathname === '/api/knowledge/history') return SAMPLE_KNOWLEDGE_HISTORY
   if (pathname === '/api/knowledge/reset') return { ok: true }
 
-  if (pathname === '/api/practice/status') return { ok: true }
   if (pathname === '/api/token/stats') {
     return {
       prompt: 4380,
@@ -400,7 +373,6 @@ function buildInitScriptConfig(scenario) {
       { type: 'audio_level', value: 0.62, delay: 80 },
       { ...SAMPLE_KB_HITS, delay: 120 },
     ],
-    practice: [...COMMON_MESSAGES, ...PRACTICE_MESSAGES],
     knowledge: [...COMMON_MESSAGES],
     resume: [...COMMON_MESSAGES, ...RESUME_MESSAGES],
   }
@@ -580,17 +552,6 @@ async function preparePage(browser, baseUrl, scenario) {
 async function captureAssist(page, outputPath) {
   await page.getByRole('heading', { name: '学习助手' }).waitFor({ timeout: 5000 })
   await page.getByText(/引用 2 条本地笔记/).waitFor({ timeout: 5000 }).catch(() => null)
-  await page.screenshot({ path: outputPath })
-}
-
-async function capturePractice(page, outputPath) {
-  await page.getByRole('tab', { name: /模拟练习/i }).click()
-  // 等 Practice 任一关键态可见：idle（"模拟面试练习"）或 questioning（"第 X 题"）
-  await Promise.race([
-    page.getByText('模拟面试练习').waitFor({ timeout: 6000 }).catch(() => null),
-    page.getByText(/第\s*\d+\s*题/).first().waitFor({ timeout: 6000 }).catch(() => null),
-  ])
-  await page.waitForTimeout(200)
   await page.screenshot({ path: outputPath })
 }
 

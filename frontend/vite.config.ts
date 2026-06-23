@@ -47,7 +47,6 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },
-      { find: /^three$/, replacement: path.resolve(__dirname, './src/components/practice/rocketboxThreeCoreShim.ts') },
     ],
   },
   server: {

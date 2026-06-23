@@ -182,7 +182,7 @@ class AudioCapture:
         # AGC state
         self._agc_peak: float = 0.0
         self._use_agc: bool = False
-        # Ownership token: only one of {"assist", "practice", ...} may hold the device
+        # Ownership token: only one caller (for example "assist") may hold the device
         self._owner: Optional[str] = None
 
     # ------------------------------------------------------------------
@@ -292,7 +292,7 @@ class AudioCapture:
     ):
         """Start audio capture on the requested device.
 
-        owner identifies the caller (e.g. ``"assist"`` / ``"practice"``).
+        owner identifies the caller (for example ``"assist"``).
         - 已运行且 owner 不一致:抛出 AudioBusyError(409)
         - 已运行且 owner 相同:静默 no-op(等价旧行为)
         - 已运行但当前无 owner 标签:沿用旧行为 no-op

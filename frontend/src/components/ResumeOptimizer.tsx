@@ -140,7 +140,7 @@ export default function ResumeOptimizer() {
         <ResumeMountPanel
           title="Resume Mount"
           description="这里的分析直接使用当前挂载简历，不会维护另一份独立副本。"
-          sharedNote="和主流程、模拟练习共用同一份简历历史与当前挂载记录。"
+          sharedNote="和主流程、面试复盘共用同一份简历历史与当前挂载记录。"
           variant="light"
         />
 

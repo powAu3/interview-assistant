@@ -299,7 +299,7 @@ export default function KnowledgeMap() {
               {historyTotal || rawHistory.length}
               <span className="ml-1 text-[10px] font-normal text-text-muted">条问答</span>
             </p>
-            <p className="mt-0.5 text-[10px] text-text-muted">实时辅助 + 模拟练习共同沉淀</p>
+            <p className="mt-0.5 text-[10px] text-text-muted">实时辅助 + 面试复盘共同沉淀</p>
           </div>
           <div className="rounded-xl border border-bg-tertiary bg-bg-secondary px-3 py-2">
             <p className="text-[10px] text-text-muted">当前加载口述覆盖</p>
@@ -423,7 +423,7 @@ export default function KnowledgeMap() {
               <Sparkles className="w-3.5 h-3.5 text-accent-amber/80" />
             </p>
             <p className="text-text-muted text-xs leading-relaxed">
-              完成几次「实时辅助」或「模拟练习」后，系统会自动从问答中提取知识点，
+              完成几次「实时辅助」或「面试复盘」后，系统会自动从问答中提取知识点，
               <br className="hidden sm:inline" />
               生成雷达图、薄弱点排名和历史记录。
             </p>
@@ -489,7 +489,7 @@ export default function KnowledgeMap() {
                 <div className="rounded-lg border border-bg-hover/60 bg-bg-tertiary/30 px-3 py-3">
                   <p className="text-xs font-medium text-text-secondary">还没有评分样本</p>
                   <p className="mt-1 text-[10px] leading-relaxed text-text-muted">
-                    实时辅助记录会先沉淀为知识点；完成模拟练习后会补充分数。现在也可以按高频知识点生成练习题。
+                    实时辅助记录会先沉淀为知识点；完成复盘分析后会补充分数。现在也可以按高频知识点生成练习题。
                   </p>
                   {unscoredTags.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
@@ -521,8 +521,8 @@ export default function KnowledgeMap() {
                 <div key={`${rec.id}-${rec.mergedCount ?? 1}`} className="border border-bg-tertiary rounded-lg overflow-hidden">
                   <button onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-bg-tertiary/50 transition-colors">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${rec.session_type === 'practice' ? 'bg-accent-blue/10 text-accent-blue' : 'bg-accent-green/10 text-accent-green'}`}>
-                      {rec.session_type === 'practice' ? '练习' : '辅助'}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded bg-accent-green/10 text-accent-green`}>
+                      辅助
                     </span>
                     {rec.mergedCount != null && rec.mergedCount > 1 && (
                       <span className="text-[9px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted shrink-0" title="由多条语音识别片段合并">

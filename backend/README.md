@@ -17,12 +17,11 @@
 | `api/realtime/` | WebSocket 广播。 |
 | `api/common/` | 配置、设备、简历上传、模型健康检测等（多 Tab 共用）。 |
 | `api/assist/` | 实时辅助（录音、转写、问答）。 |
-| `api/practice/` | 模拟练习。 |
 | `api/analytics/` | 能力分析（`/knowledge/*` 接口保持兼容）。 |
 | `api/resume/` | 简历优化。 |
 | `api/jobs/` | 求职看板（`/job-tracker/*`）。 |
 | **`core/`** | `config.py`、`session.py`。 |
-| **`services/`** | 业务实现：`stt`、`llm`、`audio`、`resume`、`practice` 等。 |
+| **`services/`** | 业务实现：`stt`、`llm`、`audio`、`resume` 等。 |
 | **`services/storage/`** | SQLite 访问逻辑与 `paths.py`（统一 `data/` 路径）。 |
 | **`services/capture/`** | 本机截屏子进程。 |
 

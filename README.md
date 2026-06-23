@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
 | **卡壳补位** | 截图审题、识图模型分析、知识库引用本地笔记 |
 | **个人材料接入** | 简历上传、简历优化、知识库引用本地笔记，让答案更贴近你的经历 |
 | **桌面端使用体验** | 共享隐身、Boss Key、托盘、轻量悬浮问答框、移动到鼠标附近 |
-| **复盘与提升** | 模拟练习、知识点能力分析、求职看板、Offer 对比 |
+| **复盘与提升** | 面试复盘、知识点能力分析、求职看板、Offer 对比 |
 
 ## 面试主流程
 
@@ -65,7 +65,7 @@ https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
   <tr>
     <td width="50%" valign="top">
       <h3>训练与复盘</h3>
-      <p>模拟练习、问答记录、能力分析和薄弱点沉淀，方便把“答过的问题”变成“会讲的话题”。</p>
+      <p>面试复盘、问答记录、能力分析和薄弱点沉淀，方便把“答过的问题”变成“会讲的话题”。</p>
     </td>
     <td width="50%" valign="top">
       <h3>求职材料</h3>
@@ -78,18 +78,12 @@ https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/practice-mode.png" alt="模拟练习" /></td>
     <td width="50%"><img src="docs/screenshots/knowledge-map.png" alt="能力分析" /></td>
+    <td width="50%"><img src="docs/screenshots/resume-optimizer.png" alt="简历优化" /></td>
   </tr>
   <tr>
-    <td align="center"><strong>模拟练习</strong><br /><sub>AI 面试官逐题发问、打分、总结</sub></td>
     <td align="center"><strong>能力分析</strong><br /><sub>知识点趋势、问答沉淀、薄弱项复盘</sub></td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="docs/screenshots/resume-optimizer.png" alt="简历优化" /></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center"><strong>简历优化</strong><br /><sub>把简历和 JD 放到一起，输出更像“能投出去”的版本</sub></td>
+    <td align="center"><strong>简历优化</strong><br /><sub>把简历和 JD 放到一起，输出更像“能投出去”的版本</sub></td>
   </tr>
 </table>
 
@@ -99,7 +93,7 @@ https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
 | --- | --- |
 | **实时辅助** | ASR 转写 → 问题识别 → 多模型回答 → 截图审题 / 知识库引用 |
 | **知识库 Beta** | 上传 `.md` / `.txt` / `.log` / `.docx` / `.pdf`，支持检索测试、最近命中和回答引用 |
-| **模拟练习** | AI 面试官出题、逐题评价、练习报告 |
+| **面试复盘** | 录制真实问答、ASR 纠错、逐题分析、整场总结 |
 | **能力分析** | 知识点标签、历史问答记录、薄弱点趋势 |
 | **简历优化** | 上传简历，对照 JD 给出优化建议和改写方向 |
 | **求职看板** | 表格 / Kanban、状态标签、拖拽排序、Offer 对比 |
@@ -120,7 +114,7 @@ sequenceDiagram
     participant DB as SQLite / 本地存储
 
     Entry->>Client: 启动桌面模式或浏览器模式
-    Client->>UI: 加载实时辅助 / 模拟练习 / 看板等前端模块
+    Client->>UI: 加载实时辅助 / 面试复盘 / 看板等前端模块
     UI->>API: 读取配置、设备列表、历史数据
     API->>DB: 读取 config / resume / knowledge / jobs
     DB-->>API: 返回本地状态
@@ -136,7 +130,7 @@ sequenceDiagram
     DB-->>KB: 返回相关片段
     KB-->>API: 返回引用结果
     API->>LLM: 组合转写、截图、知识库上下文
-    LLM-->>API: 流式回答 / 练习评价 / 简历建议
+    LLM-->>API: 流式回答 / 复盘分析 / 简历建议
     API->>DB: 持久化问答、配置、知识点与求职数据
     API-->>UI: 推送转录、答案、引用、状态更新
 ```
@@ -230,7 +224,6 @@ npm run demo:readme
 - `assist-demo-poster.png`：视频封面
 - `assist-demo.gif`：README 顶部实际使用的 GIF 演示
 - `assist-mode.png`：实时辅助界面
-- `practice-mode.png`：模拟练习
 - `knowledge-map.png`：能力分析
 - `resume-optimizer.png`：简历优化
 

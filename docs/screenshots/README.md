@@ -23,7 +23,6 @@ npm run demo:readme
 | `assist-demo-poster.png` | 视频封面图 |
 | `assist-demo.gif` | README 顶部实际使用的 GIF 演示 |
 | `assist-mode.png` | 实时辅助 |
-| `practice-mode.png` | 模拟练习 |
 | `knowledge-map.png` | 能力分析 |
 | `resume-optimizer.png` | 简历优化 |
 

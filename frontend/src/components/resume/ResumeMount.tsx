@@ -254,7 +254,7 @@ export function ResumeMountPanel({
             <p className={secondaryTextClass}>
               {hasResume
                 ? `当前挂载记录 ID：${activeHistoryId ?? '—'}`
-                : '上传或从历史中选用一份简历后，主流程、模拟练习和简历优化都会一起切换。'}
+                : '上传或从历史中选用一份简历后，主流程、面试复盘和简历优化都会一起切换。'}
             </p>
           </div>
         </div>

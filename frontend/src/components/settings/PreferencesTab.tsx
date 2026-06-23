@@ -102,7 +102,6 @@ export default function PreferencesTab() {
   const shortcuts = useShortcutsStore((s) => s.shortcuts)
 
   const [scrollBottomPx, setScrollBottomPx] = useState(40)
-  const [practiceAudience, setPracticeAudience] = useState('campus_intern')
   const [screenMaxLongEdge, setScreenMaxLongEdge] = useState(1600)
   const [multiScreenIdleSec, setMultiScreenIdleSec] = useState(10)
   const [kbTopK, setKbTopK] = useState(4)
@@ -113,9 +112,6 @@ export default function PreferencesTab() {
   useEffect(() => {
     if (config?.answer_autoscroll_bottom_px != null) {
       setScrollBottomPx(config.answer_autoscroll_bottom_px)
-    }
-    if (config?.practice_audience) {
-      setPracticeAudience(config.practice_audience)
     }
     if (config?.screen_capture_max_long_edge != null) {
       setScreenMaxLongEdge(config.screen_capture_max_long_edge)
@@ -134,7 +130,6 @@ export default function PreferencesTab() {
     }
   }, [
     config?.answer_autoscroll_bottom_px,
-    config?.practice_audience,
     config?.screen_capture_max_long_edge,
     config?.multi_screen_capture_idle_sec,
     config?.kb_top_k,
@@ -193,7 +188,7 @@ export default function PreferencesTab() {
             className="rounded-xl border border-accent-blue/30 bg-accent-blue/10 px-3 py-2.5 text-left hover:bg-accent-blue/15 transition-colors"
           >
             <span className="text-xs font-medium text-accent-blue">语音配置</span>
-            <p className="text-[11px] text-text-muted mt-1">切换 STT / TTS 与断句参数</p>
+            <p className="text-[11px] text-text-muted mt-1">切换 STT 与断句参数</p>
           </button>
         </div>
       </Section>
@@ -251,19 +246,6 @@ export default function PreferencesTab() {
           <p className="text-[10px] text-text-muted mt-0.5 leading-relaxed">
             当前：{config?.assist_high_churn_short_answer ? '简短回答' : '详细回答'}
           </p>
-        </Field>
-        <Field label="候选人维度" hint="影响练习模式的出题与点评风格">
-          <select value={practiceAudience}
-            onChange={(e) => {
-              const next = e.target.value
-              setPracticeAudience(next)
-              void autoSave.saveNow({ practice_audience: next })
-            }}
-            className="input-field">
-            {(options?.practice_audiences ?? ['campus_intern', 'social']).map((v) => (
-              <option key={v} value={v}>{v === 'social' ? '社招' : '校招（实习）'}</option>
-            ))}
-          </select>
         </Field>
       </Section>
 

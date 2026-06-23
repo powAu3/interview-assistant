@@ -204,7 +204,7 @@ export default function SpeechTab() {
         <div>
           <p className="text-sm font-semibold text-text-primary">语音链路</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
-            STT、TTS、麦克风和断句参数需要保存后才会影响运行链路。
+            STT、麦克风和断句参数需要保存后才会影响运行链路。
           </p>
         </div>
         <SaveStateBadge mode="explicit" state={effectiveSaveState} error={saveError} />

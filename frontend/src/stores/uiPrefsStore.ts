@@ -46,8 +46,6 @@ const APP_MODE_VALUES: ReadonlySet<AppMode> = new Set([
 function readAppMode(): AppMode {
   try {
     const v = localStorage.getItem(APP_MODE_KEY)
-    // 兼容旧 practice 值自动迁移到 review
-    if (v === 'practice') return 'review'
     if (v && APP_MODE_VALUES.has(v as AppMode)) return v as AppMode
   } catch {
     /* ignore */
