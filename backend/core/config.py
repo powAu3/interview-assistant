@@ -150,6 +150,10 @@ class AppConfig(BaseModel):
     kb_recent_hits_capacity: int = 50
     kb_asr_min_query_chars: int = 6
 
+    # --- Review (面试复盘) ---
+    review_enabled: bool = False
+    review_model_index: int = 0
+
     @model_validator(mode="after")
     def _ensure_valid_models(self):
         if self.stt_provider == "iflytek":
@@ -200,10 +204,15 @@ class AppConfig(BaseModel):
                 if getattr(model, "enabled", True):
                     self.active_model = i
                     break
+        self.review_model_index = max(0, min(int(self.review_model_index), len(self.models) - 1))
         return self
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))
+        return self.models[idx]
+
+    def get_review_model(self) -> ModelConfig:
+        idx = max(0, min(self.review_model_index, len(self.models) - 1))
         return self.models[idx]
 
 

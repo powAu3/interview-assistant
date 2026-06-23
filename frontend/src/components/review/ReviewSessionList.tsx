@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import dayjs from 'dayjs'
-import { Eye, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Eye, AlertCircle, CheckCircle, Clock, XCircle, Settings } from 'lucide-react'
 import { api } from '../../lib/api'
+import { useInterviewStore } from '../../stores/configStore'
 import type { ReviewSession, ReviewSessionsResponse } from './types'
 
 const STATUS_LABELS: Record<ReviewSession['status'], string> = {
@@ -28,7 +29,33 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ReviewSessionsResponse | null>(null)
   const [page, setPage] = useState(1)
+  const [showSettings, setShowSettings] = useState(false)
   const pageSize = 20
+
+  const config = useInterviewStore((s) => s.config)
+  const setConfig = useInterviewStore((s) => s.setConfig)
+
+  const reviewEnabled = config?.review_enabled ?? false
+  const reviewModelIndex = config?.review_model_index ?? 0
+  const models = config?.models ?? []
+
+  const handleToggleReview = async (enabled: boolean) => {
+    try {
+      const updated = await api.updateConfig({ review_enabled: enabled })
+      setConfig(updated)
+    } catch (err) {
+      console.error('Failed to update review_enabled:', err)
+    }
+  }
+
+  const handleChangeModel = async (modelIndex: number) => {
+    try {
+      const updated = await api.updateConfig({ review_model_index: modelIndex })
+      setConfig(updated)
+    } catch (err) {
+      console.error('Failed to update review_model_index:', err)
+    }
+  }
 
   const loadSessions = useCallback(async (p: number) => {
     setLoading(true)
@@ -66,14 +93,73 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             共 {total} 场面试记录
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowSettings(!showSettings)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-tertiary hover:bg-bg-hover text-text-primary text-sm font-medium transition-colors"
+        >
+          <Settings className="w-4 h-4" />
+          配置
+        </button>
       </div>
+
+      {showSettings && (
+        <div className="rounded-xl border border-accent-amber/30 bg-gradient-to-br from-[#2A2723] to-bg-secondary/95 p-5 shadow-lg">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-text-primary">启用面试复盘</div>
+                <div className="text-xs text-text-muted mt-1">
+                  开启后，实时辅助时自动录制面试记录并进行复盘分析
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggleReview(!reviewEnabled)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  reviewEnabled ? 'bg-accent-amber' : 'bg-bg-hover'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    reviewEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="border-t border-bg-hover/50 pt-4">
+              <label className="block text-sm font-semibold text-text-primary mb-2">
+                复盘分析模型
+              </label>
+              <select
+                value={reviewModelIndex}
+                onChange={(e) => handleChangeModel(Number(e.target.value))}
+                disabled={!reviewEnabled}
+                className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-bg-hover text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent-amber/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {models.map((model, idx) => (
+                  <option key={idx} value={idx} disabled={!model.enabled}>
+                    {model.name} {!model.enabled ? '(未启用)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-text-muted mt-2">
+                建议使用支持长文本的模型，以获得更准确的复盘分析
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {sessions.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-2">
             <p className="text-text-muted text-sm">暂无面试记录</p>
             <p className="text-text-muted/70 text-xs">
-              在实时辅助中同时开启面试官和候选人音频，即可自动记录
+              {reviewEnabled
+                ? '在实时辅助中同时开启面试官和候选人音频，即可自动记录'
+                : '请先在上方启用面试复盘功能'}
             </p>
           </div>
         </div>

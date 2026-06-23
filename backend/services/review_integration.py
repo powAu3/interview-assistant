@@ -7,6 +7,7 @@ from typing import Optional
 
 from core.logger import get_logger
 from core.session import Session
+from core.config import get_config
 from services.storage import review
 from services import review_async_analysis
 
@@ -23,11 +24,15 @@ def should_create_review_session(
     """
     判断是否应该创建 review session
     只有同时满足以下条件才记录：
-    1. interviewer 音频设备有效
-    2. candidate mic 有效
-    3. candidate ASR 开启
-    4. 两个设备不同
+    1. review_enabled 开启
+    2. interviewer 音频设备有效
+    3. candidate mic 有效
+    4. candidate ASR 开启
+    5. 两个设备不同
     """
+    cfg = get_config()
+    if not cfg.review_enabled:
+        return False
     if interviewer_device_id is None:
         return False
     if candidate_device_id is None:

@@ -13,19 +13,19 @@ logger = get_logger(__name__)
 
 
 def get_active_llm_client() -> tuple[OpenAI, str]:
-    """获取当前激活模型的客户端和模型名"""
+    """获取 review 配置的模型客户端和模型名"""
     cfg = get_config()
-    active_model = cfg.get_active_model()
+    review_model = cfg.get_review_model()
 
-    if not active_model.api_key or active_model.api_key in ("", "sk-your-api-key-here"):
-        raise ValueError("当前激活模型未配置有效的 API Key")
+    if not review_model.api_key or review_model.api_key in ("", "sk-your-api-key-here"):
+        raise ValueError("Review 模型未配置有效的 API Key")
 
     client = OpenAI(
-        api_key=active_model.api_key,
-        base_url=active_model.api_base_url,
+        api_key=review_model.api_key,
+        base_url=review_model.api_base_url,
     )
 
-    return client, active_model.model
+    return client, review_model.model
 
 
 def analyze_turn(

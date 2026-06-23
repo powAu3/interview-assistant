@@ -89,4 +89,6 @@ def build_config_payload(cfg) -> dict:
             else None
         ),
         "api_key_set": bool(active_model.api_key and active_model.api_key not in ("", "sk-your-api-key-here")),
+        "review_enabled": bool(getattr(cfg, "review_enabled", False)),
+        "review_model_index": int(getattr(cfg, "review_model_index", 0)),
     }

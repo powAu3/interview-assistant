@@ -116,6 +116,11 @@ export interface AppConfig {
   kb_asr_deadline_ms?: number
   /** 命中数上限 */
   kb_top_k?: number
+  // --- Review (面试复盘) ---
+  /** 是否启用面试复盘功能（默认关闭）*/
+  review_enabled?: boolean
+  /** 复盘分析使用的模型索引 */
+  review_model_index?: number
 }
 
 export type QAStatus = 'streaming' | 'done' | 'cancelled' | 'error'
