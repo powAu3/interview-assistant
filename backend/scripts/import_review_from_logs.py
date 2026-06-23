@@ -22,19 +22,21 @@ logger = get_logger(__name__)
 def parse_log_file(log_path: str) -> List[Dict[str, Any]]:
     """
     解析日志文件，提取面试会话
+    只提取有 conversation_loopback 的会话（表示有双音轨对话）
     返回会话列表，每个会话包含 turns
     """
     sessions = []
     current_session = None
     current_turns = []
     current_qa = {}
+    has_conversation = False  # 标记当前 session 是否有真实对话
 
     with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
             # 检测会话开始：INTERVIEW_START
             if 'INTERVIEW_START' in line:
                 # 如果有正在记录的 session，先保存
-                if current_session and current_turns:
+                if current_session and current_turns and has_conversation:
                     current_session['turns'] = current_turns
                     sessions.append(current_session)
 
@@ -53,6 +55,7 @@ def parse_log_file(log_path: str) -> List[Dict[str, Any]]:
                 }
                 current_turns = []
                 current_qa = {}
+                has_conversation = False
 
             # 检测会话结束：INTERVIEW_STOP
             elif current_session and 'INTERVIEW_STOP' in line:
@@ -65,6 +68,10 @@ def parse_log_file(log_path: str) -> List[Dict[str, Any]]:
                 if ts_match:
                     dt = datetime.strptime(ts_match.group(1), '%Y-%m-%d %H:%M:%S')
                     current_session['ended_at'] = dt.timestamp()
+
+            # 检测真实对话：source=conversation_loopback
+            elif current_session and 'source=conversation_loopback' in line:
+                has_conversation = True
 
             # 提取 ASR_QUESTION：面试官提的问题
             elif current_session and 'ASR_QUESTION' in line and 'text=' in line:
@@ -102,8 +109,8 @@ def parse_log_file(log_path: str) -> List[Dict[str, Any]]:
                 # 这里只能记录答案存在，实际文本在流式输出中，这里只标记有答案
                 current_qa['answer'] = '(系统参考答案)'
 
-    # 保存最后一个 session
-    if current_session:
+    # 保存最后一个 session（只保存有真实对话的）
+    if current_session and has_conversation:
         if current_qa.get('question'):
             current_turns.append(current_qa)
         if current_turns:

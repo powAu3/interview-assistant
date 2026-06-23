@@ -406,3 +406,43 @@ def update_session_summary(
         conn.commit()
         conn.close()
 
+
+def update_session_info(
+    session_id: int,
+    title: Optional[str] = None,
+    company: Optional[str] = None,
+    role: Optional[str] = None,
+):
+    """更新会话的标题、公司、岗位信息"""
+    now = time.time()
+    with _db_lock:
+        conn = _conn()
+
+        updates = []
+        params = []
+
+        if title is not None:
+            updates.append("title = ?")
+            params.append(title)
+        if company is not None:
+            updates.append("company = ?")
+            params.append(company)
+        if role is not None:
+            updates.append("role = ?")
+            params.append(role)
+
+        if not updates:
+            conn.close()
+            return
+
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(session_id)
+
+        conn.execute(
+            f"UPDATE review_sessions SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        conn.commit()
+        conn.close()
+

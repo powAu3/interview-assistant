@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Edit2 } from 'lucide-react'
 import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
 import { api, getErrorMessage } from '../../lib/api'
@@ -15,6 +15,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<ReviewSessionDetail | null>(null)
   const [expandedTurns, setExpandedTurns] = useState<Set<number>>(new Set())
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({ title: '', company: '', role: '' })
 
   useEffect(() => {
     async function load() {
@@ -23,6 +25,11 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       try {
         const data = await api.reviewSessionDetail(sessionId)
         setDetail(data)
+        setEditForm({
+          title: data.title || '',
+          company: data.company || '',
+          role: data.role || '',
+        })
         if (data.turns && data.turns.length > 0) {
           setExpandedTurns(new Set([data.turns[0].id]))
         }
@@ -45,6 +52,16 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       }
       return next
     })
+  }
+
+  const handleSaveEdit = async () => {
+    try {
+      await api.reviewUpdateSession(sessionId, editForm)
+      setDetail((prev) => prev ? { ...prev, ...editForm } : prev)
+      setEditing(false)
+    } catch (err) {
+      alert(getErrorMessage(err, '保存失败'))
+    }
   }
 
   if (loading) {
@@ -85,23 +102,91 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
-          <h2 className="text-xl font-semibold text-text-primary">
-            {detail.company && detail.role
-              ? `${detail.company} - ${detail.role}`
-              : detail.company || detail.role || '面试详情'}
-          </h2>
-          <div className="flex items-center gap-4 mt-1 text-xs text-text-muted">
-            <span>
-              {dayjs.unix(Math.floor(detail.started_at)).format('YYYY-MM-DD HH:mm')}
-            </span>
-            {detail.ended_at && (
-              <span>
-                时长 {Math.floor((detail.ended_at - detail.started_at) / 60)} 分钟
-              </span>
-            )}
-            <span>{detail.turn_count} 轮问答</span>
-            <span>平均分 {avgScoreDisplay}</span>
-          </div>
+          {editing ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                placeholder="面试标题（可选）"
+                className="w-full px-3 py-1.5 rounded-lg bg-bg-secondary border border-bg-hover text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent-blue/50"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={editForm.company}
+                  onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                  placeholder="公司名称"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-bg-secondary border border-bg-hover text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-accent-blue/50"
+                />
+                <input
+                  type="text"
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  placeholder="岗位名称"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-bg-secondary border border-bg-hover text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-accent-blue/50"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="px-3 py-1.5 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-accent-blue/90 transition-colors"
+                >
+                  保存
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false)
+                    setEditForm({
+                      title: detail.title || '',
+                      company: detail.company || '',
+                      role: detail.role || '',
+                    })
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-bg-tertiary text-text-primary text-xs font-medium hover:bg-bg-hover transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold text-text-primary">
+                  {detail.title || (detail.company && detail.role
+                    ? `${detail.company} - ${detail.role}`
+                    : detail.company || detail.role || '面试详情')}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="p-1.5 rounded-lg text-text-muted hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+                  title="编辑信息"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              </div>
+              {detail.title && (detail.company || detail.role) && (
+                <div className="text-sm text-text-secondary mt-1">
+                  {detail.company} {detail.company && detail.role ? '-' : ''} {detail.role}
+                </div>
+              )}
+              <div className="flex items-center gap-4 mt-1 text-xs text-text-muted">
+                <span>
+                  {dayjs.unix(Math.floor(detail.started_at)).format('YYYY-MM-DD HH:mm')}
+                </span>
+                {detail.ended_at && (
+                  <span>
+                    时长 {Math.floor((detail.ended_at - detail.started_at) / 60)} 分钟
+                  </span>
+                )}
+                <span>{detail.turn_count} 轮问答</span>
+                <span>平均分：{avgScoreDisplay}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

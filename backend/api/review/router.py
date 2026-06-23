@@ -1,8 +1,15 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from services.storage import review
 
 router = APIRouter()
+
+
+class UpdateSessionRequest(BaseModel):
+    title: str | None = None
+    company: str | None = None
+    role: str | None = None
 
 
 @router.get("/review/sessions")
@@ -18,6 +25,21 @@ async def get_session(session_id: int):
     if not detail:
         raise HTTPException(404, "Session not found")
     return detail
+
+
+@router.patch("/review/sessions/{session_id}")
+async def update_session(session_id: int, req: UpdateSessionRequest):
+    """更新会话信息（标题、公司、岗位）"""
+    try:
+        review.update_session_info(
+            session_id=session_id,
+            title=req.title,
+            company=req.company,
+            role=req.role,
+        )
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @router.get("/review/current")

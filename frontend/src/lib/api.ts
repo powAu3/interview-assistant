@@ -321,6 +321,8 @@ export const api = {
     request(`/api/review/sessions?page=${page}&page_size=${pageSize}`),
   reviewSessionDetail: (sessionId: number) =>
     request(`/api/review/sessions/${sessionId}`),
+  reviewUpdateSession: (sessionId: number, data: { title?: string; company?: string; role?: string }) =>
+    request(`/api/review/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   reviewCurrent: () =>
     request('/api/review/current'),
   reviewProfile: () =>

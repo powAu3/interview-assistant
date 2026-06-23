@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import dayjs from 'dayjs'
-import { Eye, AlertCircle, CheckCircle, Clock, XCircle, Settings } from 'lucide-react'
+import { Eye, AlertCircle, CheckCircle, Clock, XCircle, Settings, Brain, Power } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useInterviewStore } from '../../stores/configStore'
 import type { ReviewSession, ReviewSessionsResponse } from './types'
@@ -104,39 +104,66 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
       </div>
 
       {showSettings && (
-        <div className="rounded-xl border border-accent-amber/30 bg-gradient-to-br from-[#2A2723] to-bg-secondary/95 p-5 shadow-lg">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-text-primary">启用面试复盘</div>
-                <div className="text-xs text-text-muted mt-1">
-                  开启后，实时辅助时自动录制面试记录并进行复盘分析
+        <div className="rounded-xl border border-bg-hover/60 bg-bg-primary/35 overflow-hidden">
+          <div className="px-4 py-3 border-b border-bg-hover/50">
+            <h3 className="text-sm font-semibold text-text-primary">面试复盘配置</h3>
+            <p className="text-xs text-text-muted mt-1">
+              配置自动记录和分析设置
+            </p>
+          </div>
+          <div className="p-4 space-y-4">
+            {/* 启用开关 */}
+            <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/25 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    reviewEnabled ? 'bg-accent-green/15' : 'bg-bg-hover'
+                  }`}>
+                    <Power className={`w-4 h-4 ${reviewEnabled ? 'text-accent-green' : 'text-text-muted'}`} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-text-primary">启用面试复盘</div>
+                    <div className="text-[10px] text-text-muted mt-0.5">
+                      实时辅助时自动录制并分析
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleToggleReview(!reviewEnabled)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  reviewEnabled ? 'bg-accent-amber' : 'bg-bg-hover'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    reviewEnabled ? 'translate-x-6' : 'translate-x-1'
+                <button
+                  type="button"
+                  onClick={() => handleToggleReview(!reviewEnabled)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    reviewEnabled ? 'bg-accent-green' : 'bg-bg-hover'
                   }`}
-                />
-              </button>
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      reviewEnabled ? 'translate-x-[1.125rem]' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
-            <div className="border-t border-bg-hover/50 pt-4">
-              <label className="block text-sm font-semibold text-text-primary mb-2">
-                复盘分析模型
-              </label>
+            {/* 模型选择 */}
+            <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/25 p-3">
+              <div className="flex items-start gap-2.5 mb-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  reviewEnabled ? 'bg-accent-blue/15' : 'bg-bg-hover'
+                }`}>
+                  <Brain className={`w-4 h-4 ${reviewEnabled ? 'text-accent-blue' : 'text-text-muted'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-text-primary">复盘分析模型</div>
+                  <div className="text-[10px] text-text-muted mt-0.5">
+                    建议使用长文本模型以获得更准确的分析
+                  </div>
+                </div>
+              </div>
               <select
                 value={reviewModelIndex}
                 onChange={(e) => handleChangeModel(Number(e.target.value))}
                 disabled={!reviewEnabled}
-                className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-bg-hover text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent-amber/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-full px-3 py-2 rounded-lg bg-bg-secondary border border-bg-hover text-text-primary text-xs focus:outline-none focus:ring-1 focus:ring-accent-blue/50 focus:border-accent-blue/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {models.map((model, idx) => (
                   <option key={idx} value={idx} disabled={!model.enabled}>
@@ -144,10 +171,17 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-text-muted mt-2">
-                建议使用支持长文本的模型，以获得更准确的复盘分析
-              </p>
             </div>
+
+            {/* 说明信息 */}
+            {!reviewEnabled && (
+              <div className="rounded-lg bg-bg-hover/40 px-3 py-2 flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-text-muted flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-text-muted leading-relaxed">
+                  启用后，在实时辅助中同时开启面试官和候选人音频时，将自动创建复盘记录
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
