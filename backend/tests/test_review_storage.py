@@ -248,6 +248,37 @@ def test_turn_with_analysis():
     assert turn["scorecard"]["clarity"] == 8
 
 
+def test_update_turn_analysis_preserves_original_answer_when_corrected():
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    turn_id = review.add_turn(
+        session_id=session_id,
+        qa_id="qa-001",
+        seq=1,
+        question_text="Redis 有哪些数据结构？",
+        candidate_answer_text="red 地址有字符串和哈希",
+        duration_ms=30000,
+    )
+
+    review.update_turn_analysis(
+        turn_id=turn_id,
+        analysis_status="completed",
+        strengths=["覆盖了部分结构"],
+        risks=[],
+        evidence={"asr_correction": {"original": "red 地址有字符串和哈希", "corrected": "Redis 有字符串和哈希"}},
+        scorecard={"准确性": 6},
+        corrected_answer="Redis 有字符串和哈希",
+    )
+
+    turn = review.get_session_detail(session_id)["turns"][0]
+    assert turn["candidate_answer_text"] == "Redis 有字符串和哈希"
+    assert turn["original_candidate_answer_text"] == "red 地址有字符串和哈希"
+    assert turn["evidence"]["asr_correction"]["corrected"] == "Redis 有字符串和哈希"
+
+
 def test_nonexistent_session():
     """测试访问不存在的 session"""
     detail = review.get_session_detail(99999)

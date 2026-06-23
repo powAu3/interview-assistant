@@ -2,6 +2,7 @@
 Tests for review API endpoints.
 """
 import time
+import importlib
 import pytest
 from fastapi.testclient import TestClient
 from main import app
@@ -9,6 +10,7 @@ from services.storage import review
 
 
 client = TestClient(app)
+review_router = importlib.import_module("api.review.router")
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +45,95 @@ def test_list_sessions_empty():
     data = resp.json()
     assert data["total"] == 0
     assert data["items"] == []
+
+
+def test_create_manual_review_from_transcript(monkeypatch):
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_router.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    resp = client.post("/api/review/sessions/manual", json={
+        "title": "手动导入复盘",
+        "company": "ACME",
+        "role": "后端开发",
+        "transcript": "面试官: Redis 有哪些数据结构？\n候选人: red 地址有字符串和哈希。\nQ2: 怎么做缓存穿透？\nA2: 用布隆过滤器和空值缓存。",
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "started"
+    assert data["turn_count"] == 2
+    assert started_analysis == [data["session_id"]]
+
+    detail = review.get_session_detail(data["session_id"])
+    assert detail["source"] == "manual"
+    assert detail["status"] == "analyzing"
+    assert detail["company"] == "ACME"
+    assert detail["role"] == "后端开发"
+    assert detail["turns"][0]["question_text"] == "Redis 有哪些数据结构？"
+    assert "red 地址" in detail["turns"][0]["candidate_answer_text"]
+
+
+def test_create_manual_review_rejects_unstructured_text():
+    resp = client.post("/api/review/sessions/manual", json={
+        "transcript": "今天聊得还行，但是没有问答标记。",
+    })
+
+    assert resp.status_code == 400
+    assert "问答结构" in resp.json()["detail"]
+
+
+def test_asr_correction_test_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        review_router.review_analysis,
+        "run_asr_correction_check",
+        lambda question, candidate_answer: {
+            "ok": True,
+            "model_name": "lite-ark",
+            "model": "doubao-seed-2-0-lite-260428",
+            "original": candidate_answer,
+            "corrected": "Redis",
+            "changed": True,
+            "detail": "纠错完成",
+        },
+    )
+
+    resp = client.post("/api/review/asr-correction-test", json={
+        "question": "Redis 是什么？",
+        "answer": "red 地址",
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["model_name"] == "lite-ark"
+    assert data["corrected"] == "Redis"
+
+
+def test_asr_correction_test_endpoint_returns_model_error(monkeypatch):
+    monkeypatch.setattr(
+        review_router.review_analysis,
+        "run_asr_correction_check",
+        lambda question, candidate_answer: {
+            "ok": False,
+            "model_name": "lite-ark",
+            "model": "doubao-seed-2-0-lite-260428",
+            "original": candidate_answer,
+            "corrected": candidate_answer,
+            "changed": False,
+            "detail": "Your request was blocked",
+        },
+    )
+
+    resp = client.post("/api/review/asr-correction-test", json={"answer": "red 地址"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert "blocked" in data["detail"]
 
 
 def test_list_sessions_with_data():
@@ -245,3 +336,60 @@ def test_session_lifecycle():
     # 8. 出现在列表中
     resp = client.get("/api/review/sessions")
     assert resp.json()["total"] == 1
+
+
+def test_generate_starts_for_completed_session_without_analysis(monkeypatch):
+    """历史 completed 可能只是录制结束，缺少分析内容时仍应允许手动生成。"""
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_router.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    review.add_turn(
+        session_id=session_id,
+        qa_id="qa-001",
+        seq=1,
+        question_text="问题1",
+        candidate_answer_text="回答1",
+        duration_ms=30000,
+    )
+    review.end_session(session_id, status="completed")
+
+    resp = client.post(f"/api/review/sessions/{session_id}/generate")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "started"
+    assert started_analysis == [session_id]
+
+
+def test_generate_returns_done_for_completed_session_with_analysis(monkeypatch):
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_router.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    review.end_session(
+        session_id=session_id,
+        status="completed",
+        summary_markdown="## 总结\n表现良好",
+    )
+
+    resp = client.post(f"/api/review/sessions/{session_id}/generate")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "done"
+    assert started_analysis == []

@@ -104,9 +104,10 @@ def on_assist_stop(session: Session) -> Optional[int]:
                 analysis_status="pending",
             )
 
-        # 结束 session
+        # 结束录制并进入分析队列；completed 只表示分析结果已经生成。
         review.end_session(
             session_id=session_id,
+            status="analyzing",
             ended_at=time.time(),
         )
 

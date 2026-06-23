@@ -13,6 +13,12 @@ DB_PATH = sqlite_path("review.db")
 _db_lock = threading.Lock()
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -56,6 +62,7 @@ def init_db() -> None:
                 seq INTEGER NOT NULL,
                 question_text TEXT NOT NULL,
                 candidate_answer_text TEXT,
+                original_candidate_answer_text TEXT,
                 reference_answer_text TEXT,
                 code_text TEXT,
                 duration_ms INTEGER NOT NULL DEFAULT 0,
@@ -88,6 +95,7 @@ def init_db() -> None:
         try:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_review_turns_session_id ON review_turns(session_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_review_turns_qa_id ON review_turns(qa_id)")
+            _ensure_column(conn, "review_turns", "original_candidate_answer_text", "TEXT")
         except Exception:
             pass
         conn.commit()
@@ -103,6 +111,10 @@ def create_session(
     candidate_enabled: bool,
     jd_snapshot: str = "",
     resume_snapshot: str = "",
+    source: str = "assist",
+    title: str = "",
+    company: str = "",
+    role: str = "",
 ) -> int:
     """创建新 session，返回 session_id"""
     now = time.time()
@@ -112,15 +124,19 @@ def create_session(
             """
             INSERT INTO review_sessions (
                 status, started_at, source,
+                title, company, role,
                 interviewer_capture_enabled, candidate_capture_enabled,
                 jd_snapshot, resume_snapshot,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "recording",
                 started_at,
-                "assist",
+                source or "assist",
+                title or None,
+                company or None,
+                role or None,
                 1 if interviewer_enabled else 0,
                 1 if candidate_enabled else 0,
                 jd_snapshot or "",
@@ -343,32 +359,43 @@ def update_turn_analysis(
     risks: Optional[list[str]] = None,
     evidence: Optional[dict] = None,
     scorecard: Optional[dict[str, int]] = None,
+    corrected_answer: Optional[str] = None,
 ):
-    """更新 turn 的分析结果"""
+    """更新 turn 的分析结果（含 ASR 纠错后的回答）"""
     with _db_lock:
         conn = _conn()
         now = time.time()
-        conn.execute(
-            """
-            UPDATE review_turns
-            SET analysis_status = ?,
-                strengths_json = ?,
-                risks_json = ?,
-                evidence_json = ?,
-                scorecard_json = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                analysis_status,
-                json.dumps(strengths or [], ensure_ascii=False) if strengths is not None else None,
-                json.dumps(risks or [], ensure_ascii=False) if risks is not None else None,
-                json.dumps(evidence or {}, ensure_ascii=False) if evidence is not None else None,
-                json.dumps(scorecard or {}, ensure_ascii=False) if scorecard is not None else None,
-                now,
-                turn_id,
-            ),
-        )
+
+        # 构建动态 SQL
+        fields = [
+            "analysis_status = ?",
+            "strengths_json = ?",
+            "risks_json = ?",
+            "evidence_json = ?",
+            "scorecard_json = ?",
+        ]
+        params = [
+            analysis_status,
+            json.dumps(strengths or [], ensure_ascii=False) if strengths is not None else None,
+            json.dumps(risks or [], ensure_ascii=False) if risks is not None else None,
+            json.dumps(evidence or {}, ensure_ascii=False) if evidence is not None else None,
+            json.dumps(scorecard or {}, ensure_ascii=False) if scorecard is not None else None,
+        ]
+
+        # 如果提供了纠正后的回答，添加到更新字段
+        if corrected_answer is not None:
+            fields.append(
+                "original_candidate_answer_text = COALESCE(NULLIF(original_candidate_answer_text, ''), candidate_answer_text)"
+            )
+            fields.append("candidate_answer_text = ?")
+            params.append(corrected_answer)
+
+        fields.append("updated_at = ?")
+        params.append(now)
+        params.append(turn_id)
+
+        sql = f"UPDATE review_turns SET {', '.join(fields)} WHERE id = ?"
+        conn.execute(sql, params)
         conn.commit()
         conn.close()
 

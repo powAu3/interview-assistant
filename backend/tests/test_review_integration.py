@@ -106,8 +106,14 @@ def test_on_assist_start_no_session_when_conditions_not_met():
     assert review_integration.get_current_review_session_id() is None
 
 
-def test_on_assist_stop_saves_turns():
+def test_on_assist_stop_saves_turns(monkeypatch):
     """测试 assist 停止时保存 turns"""
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_integration.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
     # 先创建 session
     session_id = review_integration.on_assist_start(
         interviewer_device_id=1,
@@ -149,9 +155,10 @@ def test_on_assist_stop_saves_turns():
     # 验证数据库中的 turns
     detail = review.get_session_detail(session_id)
     assert detail is not None
-    assert detail["status"] == "completed"
+    assert detail["status"] == "analyzing"
     assert detail["turn_count"] == 2
     assert len(detail["turns"]) == 2
+    assert started_analysis == [session_id]
 
     turn1 = detail["turns"][0]
     assert turn1["qa_id"] == "qa1"
@@ -172,8 +179,14 @@ def test_on_assist_stop_no_session():
     assert ended_session_id is None
 
 
-def test_full_lifecycle():
+def test_full_lifecycle(monkeypatch):
     """测试完整生命周期"""
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_integration.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
     # 1. Start
     session_id = review_integration.on_assist_start(
         interviewer_device_id=1,
@@ -201,5 +214,6 @@ def test_full_lifecycle():
 
     # 5. 验证数据持久化
     detail = review.get_session_detail(session_id)
-    assert detail["status"] == "completed"
+    assert detail["status"] == "analyzing"
     assert detail["turn_count"] == 1
+    assert started_analysis == [session_id]
