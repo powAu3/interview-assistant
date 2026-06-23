@@ -29,6 +29,7 @@ export interface ReviewTurn {
   seq: number
   question_text: string
   candidate_answer_text: string
+  original_candidate_answer_text?: string | null
   reference_answer_text?: string | null
   code_text?: string | null
   duration_ms: number

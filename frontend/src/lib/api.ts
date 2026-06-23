@@ -323,6 +323,26 @@ export const api = {
     request(`/api/review/sessions/${sessionId}`),
   reviewUpdateSession: (sessionId: number, data: { title?: string; company?: string; role?: string }) =>
     request(`/api/review/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  reviewTriggerAnalysis: (sessionId: number) =>
+    request<{ status: string; message: string }>(`/api/review/sessions/${sessionId}/generate`, { method: 'POST', body: '{}' }),
+  reviewCreateManual: (data: { transcript: string; title?: string; company?: string; role?: string; analyze?: boolean }) =>
+    request<{ session_id: number; turn_count: number; status: string }>('/api/review/sessions/manual', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  reviewAsrCorrectionTest: (data?: { question?: string; answer?: string }) =>
+    request<{
+      ok: boolean
+      model_name: string
+      model: string
+      original: string
+      corrected: string
+      changed: boolean
+      detail?: string
+    }>('/api/review/asr-correction-test', {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    }),
   reviewCurrent: () =>
     request('/api/review/current'),
   reviewProfile: () =>
