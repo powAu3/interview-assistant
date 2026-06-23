@@ -1585,6 +1585,22 @@ select:focus-visible {
   animation: virtual-interviewer-portrait-idle 6.5s ease-in-out infinite;
 }
 
+.virtual-interviewer__portrait-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0.04) 8%, rgba(255, 255, 255, 0.12) 18%, rgba(255, 255, 255, 0.04) 33%);
+  background-size: 220% 100%;
+  animation: virtual-interviewer-skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+@keyframes virtual-interviewer-skeleton-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
 .virtual-interviewer__mouth-plate {
   position: absolute;
   inset: 0;

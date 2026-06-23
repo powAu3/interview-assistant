@@ -4,7 +4,6 @@ websockets>=12.0,<15.0
 python-multipart>=0.0.6,<1.0
 openai>=1.40.0,<2.0
 requests>=2.28.0,<3.0
-edge-tts>=7.2.8,<8.0
 websocket-client>=1.6.0,<2.0
 # PDF 简历：用 PyMuPDF 转图 + VL 模型识图（需在设置中配置识图模型）
 pymupdf>=1.24.0,<2.0

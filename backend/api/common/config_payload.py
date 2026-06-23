@@ -1,12 +1,10 @@
 from services.storage.resume_history import get_filename_for_id
-from services.tts import get_edge_tts_status
 
 
 def build_config_payload(cfg) -> dict:
     active_model = cfg.get_active_model()
     resume_active_history_id = getattr(cfg, "resume_active_history_id", None)
     return {
-        **get_edge_tts_status(),
         "models": [
             {
                 "name": model.name,
@@ -48,18 +46,8 @@ def build_config_payload(cfg) -> dict:
         "candidate_streaming_asr_enabled": bool(getattr(cfg, "candidate_streaming_asr_enabled", True)),
         "candidate_streaming_asr_interval_ms": max(800, min(5000, int(getattr(cfg, "candidate_streaming_asr_interval_ms", 1500) or 1500))),
         "candidate_mic_compatibility_mode": bool(getattr(cfg, "candidate_mic_compatibility_mode", True)),
-        "practice_tts_provider": getattr(cfg, "practice_tts_provider", "edge_tts") or "edge_tts",
-        "edge_tts_voice_female": getattr(cfg, "edge_tts_voice_female", "zh-CN-XiaoxiaoNeural") or "zh-CN-XiaoxiaoNeural",
-        "edge_tts_voice_male": getattr(cfg, "edge_tts_voice_male", "zh-CN-YunxiNeural") or "zh-CN-YunxiNeural",
-        "edge_tts_rate": getattr(cfg, "edge_tts_rate", "+0%") or "+0%",
-        "edge_tts_pitch": getattr(cfg, "edge_tts_pitch", "+0Hz") or "+0Hz",
-        "volcengine_tts_appkey": getattr(cfg, "volcengine_tts_appkey", "") or "",
-        "volcengine_tts_token": getattr(cfg, "volcengine_tts_token", "") or "",
-        "practice_tts_speaker_female": getattr(cfg, "practice_tts_speaker_female", "zh_female_qingxin") or "zh_female_qingxin",
-        "practice_tts_speaker_male": getattr(cfg, "practice_tts_speaker_male", "zh_male_chunhou") or "zh_male_chunhou",
         "position": cfg.position,
         "language": cfg.language,
-        "practice_audience": getattr(cfg, "practice_audience", "campus_intern"),
         "auto_detect": cfg.auto_detect,
         "silence_threshold": cfg.silence_threshold,
         "silence_duration": cfg.silence_duration,

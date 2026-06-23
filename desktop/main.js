@@ -95,6 +95,7 @@ let lastOverlayState = {
   mode: 'glass',
   focusWidthPct: 96,
   focusHeightPct: 90,
+  promptMaxWidth: 900,
   maxLines: 0,
 };
 
@@ -188,7 +189,7 @@ function synthesizeSystemTts({ text, voiceName = '', rate = 180 }) {
 
 const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
 const PROMPT_OVERLAY_MIN_SIZE = { width: 180, height: 72 };
-const PROMPT_OVERLAY_MAX_SIZE = { width: 520, heightRatio: 0.48 };
+const PROMPT_OVERLAY_MAX_SIZE = { heightRatio: 0.48 };
 const FOCUS_OVERLAY_MARGIN = 14;
 
 let _frontReassertTimer = null;
@@ -1009,6 +1010,10 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     const focusHeightPct = Number(payload.focusHeightPct);
     if (Number.isFinite(focusHeightPct)) style.focusHeightPct = Math.max(35, Math.min(100, Math.round(focusHeightPct)));
   }
+  if ('promptMaxWidth' in payload) {
+    const promptMaxWidth = Number(payload.promptMaxWidth);
+    if (Number.isFinite(promptMaxWidth)) style.promptMaxWidth = Math.max(200, Math.min(1500, Math.round(promptMaxWidth)));
+  }
   if ('maxLines' in payload) {
     const maxLines = Number(payload.maxLines);
     if (Number.isFinite(maxLines)) style.maxLines = Math.max(0, Math.min(50, Math.round(maxLines)));
@@ -1066,8 +1071,9 @@ ipcMain.handle('resize-overlay-window', (_event, payload = {}) => {
   const area = screen.getDisplayNearestPoint(center).workArea;
   const nextWidth = Number(payload.width);
   const nextHeight = Number(payload.height);
+  const promptMaxWidth = Math.max(200, Math.min(1500, Number(lastOverlayState?.promptMaxWidth) || 900));
   const width = Number.isFinite(nextWidth)
-    ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(PROMPT_OVERLAY_MAX_SIZE.width, area.width - 16, Math.round(nextWidth)))
+    ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(promptMaxWidth, area.width - 16, Math.round(nextWidth)))
     : bounds.width;
   const height = Number.isFinite(nextHeight)
     ? Math.max(PROMPT_OVERLAY_MIN_SIZE.height, Math.min(Math.round(area.height * PROMPT_OVERLAY_MAX_SIZE.heightRatio), Math.round(nextHeight)))

@@ -232,7 +232,7 @@ describe('InterviewOverlay', () => {
   })
 
   it('caps prompt overlay auto width so long content wraps', async () => {
-    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 520, height: 130 })
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 900, height: 130 })
     const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
     const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1200)
     ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
@@ -244,7 +244,7 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 520, height: 130 })
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 900, height: 130 })
       })
     } finally {
       scrollHeightSpy.mockRestore()

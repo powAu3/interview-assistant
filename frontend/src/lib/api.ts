@@ -316,37 +316,22 @@ export const api = {
     request(`/api/knowledge/history?page=${page}&page_size=${pageSize}`),
   knowledgeReset: () => request('/api/knowledge/reset', { method: 'DELETE' }),
 
+  // Review (面试复盘)
+  reviewSessions: (page: number = 1, pageSize: number = 20) =>
+    request(`/api/review/sessions?page=${page}&page_size=${pageSize}`),
+  reviewSessionDetail: (sessionId: number) =>
+    request(`/api/review/sessions/${sessionId}`),
+  reviewCurrent: () =>
+    request('/api/review/current'),
+  reviewProfile: () =>
+    request('/api/review/profile'),
+
   // Resume optimizer
   resumeOptimize: (jd: string) =>
     request('/api/resume/optimize', { method: 'POST', body: JSON.stringify({ jd }) }),
 
   // Token
   tokenStats: () => request('/api/token/stats'),
-
-  // Practice
-  practiceGenerate: (payload: { jd_text?: string; interviewer_style?: string }) =>
-    request('/api/practice/generate', { method: 'POST', body: JSON.stringify(payload) }),
-  practiceSubmit: (payload: {
-    transcript: string
-    code_text?: string
-    answer_mode: 'voice' | 'code' | 'voice+code'
-    duration_ms: number
-  }) => request('/api/practice/submit', { method: 'POST', body: JSON.stringify(payload) }),
-  practiceTts: (payload: { text: string; preferred_gender?: 'auto' | 'female' | 'male'; speaker?: string }) =>
-    request<{
-      ok: boolean
-      provider: string
-      speaker: string
-      audio_base64: string
-      content_type: string
-      duration: number
-    }>('/api/practice/tts', { method: 'POST', body: JSON.stringify(payload) }),
-  practiceNext: () => request('/api/practice/next', { method: 'POST' }),
-  practiceFinish: () => request('/api/practice/finish', { method: 'POST' }),
-  practiceReset: () => request('/api/practice/reset', { method: 'POST' }),
-  practiceRecord: (action: 'start' | 'stop', device_id?: number) =>
-    request<{ ok: boolean; text?: string }>('/api/practice/record', { method: 'POST', body: JSON.stringify({ action, device_id }) }),
-  practiceStatus: () => request('/api/practice/status'),
 
   // Job tracker (desktop / local SQLite)
   jobTrackerStages: () => request<{ stages: string[] }>('/api/job-tracker/stages'),

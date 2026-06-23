@@ -84,21 +84,9 @@ class AppConfig(BaseModel):
     candidate_streaming_asr_interval_ms: int = 1500
     # 只用于“我的麦克风”：始终共享读取；开启后冲突时会尝试更保守的采样与默认输入设备。
     candidate_mic_compatibility_mode: bool = True
-    # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
-    practice_tts_provider: str = "edge_tts"
-    edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"
-    edge_tts_voice_male: str = "zh-CN-YunxiNeural"
-    edge_tts_rate: str = "+0%"
-    edge_tts_pitch: str = "+0Hz"
-    volcengine_tts_appkey: str = ""
-    volcengine_tts_token: str = ""
-    practice_tts_speaker_female: str = "zh_female_qingxin"
-    practice_tts_speaker_male: str = "zh_male_chunhou"
 
     position: str = "后端开发"
     language: str = "Python"
-    # 模拟面试候选人维度：campus_intern=校招/实习，social=社招
-    practice_audience: str = "campus_intern"
     resume_text: Optional[str] = None
     # 当前生效的简历对应的历史记录 id（写入 config.json；简历正文仍不入库）
     resume_active_history_id: Optional[int] = None
@@ -282,10 +270,8 @@ LANGUAGE_OPTIONS = [
     "Python", "Java", "C++", "JavaScript", "TypeScript",
     "Go", "SQL",
 ]
-PRACTICE_AUDIENCE_OPTIONS = ["campus_intern", "social"]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API，generic=OpenAI-compatible HTTP ASR
 STT_PROVIDER_OPTIONS = ["whisper", "doubao", "generic"]
-PRACTICE_TTS_PROVIDER_OPTIONS = ["edge_tts", "local", "volcengine"]
 # 电脑截图区域
 SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]

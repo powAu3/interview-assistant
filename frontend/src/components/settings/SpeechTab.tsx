@@ -14,7 +14,6 @@ import {
 import { useInterviewStore } from '@/stores/configStore'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
-import { normalizePracticeTtsText, playBase64Audio, speakWithBrowserTts } from '@/lib/practiceTts'
 import {
   Section,
   Field,
@@ -183,46 +182,8 @@ export default function SpeechTab() {
   const handleTtsPreview = async () => {
     setTtsPreviewing(true)
     try {
-      const text = ttsPreviewText.trim()
-      if (!text) throw new Error('试听文本不能为空')
-      const normalizedText = normalizePracticeTtsText(text)
-      if (form.practice_tts_provider === 'volcengine' || form.practice_tts_provider === 'edge_tts') {
-        const result = await api.practiceTts({
-          text: normalizedText,
-          preferred_gender: 'female',
-          speaker: form.practice_tts_provider === 'edge_tts'
-            ? (form.edge_tts_voice_female || undefined)
-            : (form.practice_tts_speaker_female || undefined),
-        })
-        await playBase64Audio({
-          audioBase64: result.audio_base64,
-          contentType: result.content_type,
-        })
-        useInterviewStore.getState().setToastMessage(
-          form.practice_tts_provider === 'edge_tts'
-            ? `已试听 EdgeTTS 音色：${result.speaker}`
-            : `已试听火山引擎音色：${result.speaker}`,
-        )
-      } else if (window.electronAPI?.synthesizeSystemTts) {
-        const result = await window.electronAPI.synthesizeSystemTts({
-          text: normalizedText,
-          rate: 185,
-        })
-        await playBase64Audio({
-          audioBase64: result.audio_base64,
-          contentType: result.content_type,
-        })
-        useInterviewStore.getState().setToastMessage('已试听桌面系统语音')
-      } else {
-        const ok = await speakWithBrowserTts({
-          text: normalizedText,
-          synthesis: typeof window !== 'undefined' ? window.speechSynthesis : undefined,
-          preferredGender: 'female',
-          selectedVoiceURI: '',
-        })
-        if (!ok) throw new Error('本地试听失败')
-        useInterviewStore.getState().setToastMessage('已试听浏览器本地语音')
-      }
+      // Practice TTS 功能已移除，此处仅占位
+      useInterviewStore.getState().setToastMessage('TTS 试听功能已移除')
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e?.message ?? '试听失败')
     } finally {

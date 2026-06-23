@@ -183,12 +183,10 @@ describe('useInterviewWS', () => {
       ws.emitMessage({ type: 'resume_opt_start', scope: 'resume-opt', job_id: 'job-bg' })
       ws.emitMessage({ type: 'resume_opt_chunk', scope: 'resume-opt', job_id: 'job-bg', chunk: '后台分析' })
       ws.emitMessage({ type: 'resume_opt_done', scope: 'resume-opt', job_id: 'job-bg', text: '后台分析完成' })
-      ws.emitMessage({ type: 'practice_status', scope: 'practice', status: 'awaiting_answer' })
     })
 
     const state = useInterviewStore.getState()
     expect(state.resumeOptResult).toBe('后台分析完成')
     expect(state.resumeOptLoading).toBe(false)
-    expect(state.practiceStatus).toBe('awaiting_answer')
   })
 })

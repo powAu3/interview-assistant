@@ -20,7 +20,7 @@ const ASSIST_SPLIT_KEY = 'ia_assist_split_pct'
 const ASSIST_TRANSCRIPT_COLLAPSED_KEY = 'ia_assist_transcript_collapsed'
 const APP_MODE_KEY = 'ia_app_mode'
 
-export type AppMode = 'assist' | 'practice' | 'knowledge' | 'resume-opt' | 'job-tracker'
+export type AppMode = 'assist' | 'review' | 'knowledge' | 'resume-opt' | 'job-tracker'
 
 export const __UI_PREFS_TEST_KEYS = {
   overlayEnabled: INTERVIEW_OVERLAY_STORAGE_KEYS.enabled,
@@ -31,12 +31,13 @@ export const __UI_PREFS_TEST_KEYS = {
   overlayMode: INTERVIEW_OVERLAY_STORAGE_KEYS.mode,
   overlayFocusWidthPct: INTERVIEW_OVERLAY_STORAGE_KEYS.focusWidthPct,
   overlayFocusHeightPct: INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct,
+  overlayPromptMaxWidth: INTERVIEW_OVERLAY_STORAGE_KEYS.promptMaxWidth,
   overlayMaxLines: INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines,
 }
 
 const APP_MODE_VALUES: ReadonlySet<AppMode> = new Set([
   'assist',
-  'practice',
+  'review',
   'knowledge',
   'resume-opt',
   'job-tracker',
@@ -45,6 +46,8 @@ const APP_MODE_VALUES: ReadonlySet<AppMode> = new Set([
 function readAppMode(): AppMode {
   try {
     const v = localStorage.getItem(APP_MODE_KEY)
+    // 兼容旧 practice 值自动迁移到 review
+    if (v === 'practice') return 'review'
     if (v && APP_MODE_VALUES.has(v as AppMode)) return v as AppMode
   } catch {
     /* ignore */
@@ -124,6 +127,15 @@ function readOverlayFocusHeightPct(): number {
   return readOverlayPercent(INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct, 90, 35, 100)
 }
 
+function readOverlayPromptMaxWidth(): number {
+  try {
+    const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.promptMaxWidth)
+    const value = raw == null ? 900 : Number(raw)
+    if (Number.isFinite(value)) return Math.max(200, Math.min(1500, Math.round(value)))
+  } catch { /* ignore */ }
+  return 900
+}
+
 function readOverlayPercent(key: string, fallback: number, min: number, max: number): number {
   try {
     const raw = localStorage.getItem(key)
@@ -180,6 +192,12 @@ function normalizeOverlayFocusHeightPct(value: unknown): number | null {
   const next = Number(value)
   if (!Number.isFinite(next)) return null
   return Math.max(35, Math.min(100, Math.round(next)))
+}
+
+function normalizeOverlayPromptMaxWidth(value: unknown): number | null {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return null
+  return Math.max(200, Math.min(1500, Math.round(next)))
 }
 
 function normalizeOverlayMaxLines(value: unknown): number | null {
@@ -246,6 +264,7 @@ interface UiPrefsState {
   interviewOverlayMode: OverlayMode
   interviewOverlayFocusWidthPct: number
   interviewOverlayFocusHeightPct: number
+  interviewOverlayPromptMaxWidth: number
   interviewOverlayMaxLines: number
 
   setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
@@ -263,6 +282,7 @@ interface UiPrefsState {
   setInterviewOverlayMode: (mode: OverlayMode) => void
   setInterviewOverlayFocusWidthPct: (pct: number) => void
   setInterviewOverlayFocusHeightPct: (pct: number) => void
+  setInterviewOverlayPromptMaxWidth: (width: number) => void
   setInterviewOverlayMaxLines: (lines: number) => void
   syncInterviewOverlayPrefs: () => void
   applyInterviewOverlayState: (payload: OverlayStatePayload, options?: { persistStyle?: boolean }) => void
@@ -292,6 +312,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
   interviewOverlayMode: readOverlayMode(),
   interviewOverlayFocusWidthPct: readOverlayFocusWidthPct(),
   interviewOverlayFocusHeightPct: readOverlayFocusHeightPct(),
+  interviewOverlayPromptMaxWidth: readOverlayPromptMaxWidth(),
   interviewOverlayMaxLines: readOverlayMaxLines(),
 
   setAnswerPanelLayout: (layout) => {
@@ -390,6 +411,11 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct, String(next))
     set({ interviewOverlayFocusHeightPct: next })
   },
+  setInterviewOverlayPromptMaxWidth: (width) => {
+    const next = normalizeOverlayPromptMaxWidth(width) ?? 900
+    persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.promptMaxWidth, String(next))
+    set({ interviewOverlayPromptMaxWidth: next })
+  },
   setInterviewOverlayMaxLines: (lines) => {
     const next = normalizeOverlayMaxLines(lines) ?? 0
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines, String(next))
@@ -406,6 +432,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
       interviewOverlayMode: readOverlayMode(),
       interviewOverlayFocusWidthPct: readOverlayFocusWidthPct(),
       interviewOverlayFocusHeightPct: readOverlayFocusHeightPct(),
+      interviewOverlayPromptMaxWidth: readOverlayPromptMaxWidth(),
       interviewOverlayMaxLines: readOverlayMaxLines(),
     }),
   applyInterviewOverlayState: (payload, options = {}) => {
@@ -420,6 +447,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     const showBg = mode === null ? null : overlayModeToShowBg(mode)
     const focusWidthPct = shouldApplyStyle ? normalizeOverlayFocusWidthPct(payload.focusWidthPct) : null
     const focusHeightPct = shouldApplyStyle ? normalizeOverlayFocusHeightPct(payload.focusHeightPct) : null
+    const promptMaxWidth = shouldApplyStyle ? normalizeOverlayPromptMaxWidth(payload.promptMaxWidth) : null
     const maxLines = shouldApplyStyle ? normalizeOverlayMaxLines(payload.maxLines) : null
 
     if (enabled !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.enabled, enabled ? '1' : '0')
@@ -430,6 +458,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     if (showBg !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.showBg, showBg ? '1' : '0')
     if (focusWidthPct !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.focusWidthPct, String(focusWidthPct))
     if (focusHeightPct !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.focusHeightPct, String(focusHeightPct))
+    if (promptMaxWidth !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.promptMaxWidth, String(promptMaxWidth))
     if (maxLines !== null) persistOverlayPrefSilently(INTERVIEW_OVERLAY_STORAGE_KEYS.maxLines, String(maxLines))
 
     set((state) => ({
@@ -441,6 +470,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
       interviewOverlayMode: mode ?? state.interviewOverlayMode,
       interviewOverlayFocusWidthPct: focusWidthPct ?? state.interviewOverlayFocusWidthPct,
       interviewOverlayFocusHeightPct: focusHeightPct ?? state.interviewOverlayFocusHeightPct,
+      interviewOverlayPromptMaxWidth: promptMaxWidth ?? state.interviewOverlayPromptMaxWidth,
       interviewOverlayMaxLines: maxLines ?? state.interviewOverlayMaxLines,
     }))
   },

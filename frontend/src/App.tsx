@@ -20,7 +20,7 @@ import KnowledgeDrawer from '@/components/kb/KnowledgeDrawer'
 import { AppToastStack } from '@/components/app/AppToastStack'
 import { InitErrorScreen } from '@/components/app/InitErrorScreen'
 import { ModelPriorityDropdown } from '@/components/app/ModelPriorityDropdown'
-const PracticeMode = lazy(() => import('@/components/PracticeMode'))
+const ReviewMode = lazy(() => import('@/components/ReviewMode'))
 const KnowledgeMap = lazy(() => import('@/components/KnowledgeMap'))
 const ResumeOptimizer = lazy(() => import('@/components/ResumeOptimizer'))
 const JobTracker = lazy(() => import('@/components/JobTracker'))
@@ -181,7 +181,7 @@ export default function App() {
             {(
               [
                 ['assist', '实时辅助'],
-                ['practice', '模拟练习'],
+                ['review', '面试复盘'],
                 ['knowledge', '能力分析'],
                 ['resume-opt', '简历优化'],
                 ['job-tracker', '\u6C42\u804C\u770B\u677F'] as const,
@@ -447,10 +447,10 @@ export default function App() {
         </>
       )}
 
-      {/* ── Practice Mode ── */}
-      {appMode === 'practice' && (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-text-muted">加载模拟练习中…</div>}>
-          <PracticeMode />
+      {/* ── Review Mode ── */}
+      {appMode === 'review' && (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-text-muted">加载面试复盘中…</div>}>
+          <ReviewMode />
         </Suspense>
       )}
 
@@ -487,3 +487,4 @@ export default function App() {
     </div>
   )
 }
+

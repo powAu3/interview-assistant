@@ -8,7 +8,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from core.auth import is_auth_disabled, loopback_bypass_allowed, verify_token
 from core.logger import get_logger
 from core.session import snapshot_session
-from services.practice import get_practice
 from services.stt import get_stt_engine
 
 _log = get_logger("ws")
@@ -185,9 +184,6 @@ async def websocket_endpoint(ws: WebSocket):
             "candidate_transcriptions": snapshot.get("candidate_transcriptions", []),
             "candidate_answer_segments": snapshot.get("candidate_answer_segments", []),
             "qa_pairs": snapshot["qa_pairs"],
-            "practice_session": get_practice().to_dict(
-                reveal_feedback=get_practice().status == "finished"
-            ),
         })
         while True:
             data = await ws.receive_text()

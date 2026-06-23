@@ -7,24 +7,10 @@ real-person photos, celebrity/public-figure likenesses, or identity-preserving
 references. See `frontend/scripts/README-avatar-generation.md` for the img2
 prompt and review workflow.
 
-If generated portraits are missing during development, the UI falls back to the
-legacy Rocketbox poster below.
+The practice renderer consumes the lossy `.webp` exports (small, ~90KB each)
+under `generated/`. Keep the `.png`/`-hq.png` masters for regeneration, but the
+shipped bundle only needs the `.webp` files referenced from
+`frontend/src/components/practice/humanInterviewerAssets.ts`.
 
-## Legacy Rocketbox fallback
-
-Default model: `rocketbox-interviewer.glb`
-
-Source asset: Microsoft Rocketbox `Assets/Avatars/Professions/Business_Male_02/Export/Business_Male_02_facial.fbx`.
-
-Source repository: https://github.com/microsoft/Microsoft-Rocketbox
-
-License: Microsoft Rocketbox is published under the MIT License. A local copy is included in `Microsoft-Rocketbox-LICENSE.md`.
-
-Conversion notes:
-- Downloaded the `Business_Male_02_facial.fbx` file and its `m008_*` textures.
-- Converted TGA textures to 1024px PNG before FBX conversion because the original FBX stores Windows texture paths.
-- Converted FBX to GLB with FBX2glTF.
-- Compressed textures to WebP with glTF Transform, preserving the original scene scale and avoiding mesh quantization.
-- The visual foreground uses a cropped Rocketbox preview render from the same character because browser-side FBX conversion renders the eye/hair cards incorrectly without a Blender retargeting pass.
-
-`rocketbox-interviewer-poster.png` is a cropped transparent poster from the same Rocketbox character preview and is used for compact persona cards to avoid spawning multiple WebGL renderers.
+If the `.webp` file is missing at runtime, `VirtualInterviewer` shows a
+"待生成" placeholder so the app stays usable.

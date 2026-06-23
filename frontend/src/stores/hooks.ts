@@ -113,23 +113,3 @@ export const useResumeOpt = makeShallowHook((s) => ({
   setResumeOptLoading: s.setResumeOptLoading,
   resetResumeOpt: s.resetResumeOpt,
 }))
-
-// ---- 练习模式 ---------------------------------------------------------------
-export const usePractice = makeShallowHook((s) => ({
-  practiceStatus: s.practiceStatus,
-  practiceSession: s.practiceSession,
-  practiceRecording: s.practiceRecording,
-  practiceAnswerDraft: s.practiceAnswerDraft,
-  practiceCodeDraft: s.practiceCodeDraft,
-  practiceTtsSpeaking: s.practiceTtsSpeaking,
-  practiceElapsedMs: s.practiceElapsedMs,
-  setPracticeStatus: s.setPracticeStatus,
-  setPracticeSession: s.setPracticeSession,
-  setPracticeRecording: s.setPracticeRecording,
-  setPracticeAnswerDraft: s.setPracticeAnswerDraft,
-  appendPracticeAnswerDraft: s.appendPracticeAnswerDraft,
-  setPracticeCodeDraft: s.setPracticeCodeDraft,
-  setPracticeTtsSpeaking: s.setPracticeTtsSpeaking,
-  setPracticeElapsedMs: s.setPracticeElapsedMs,
-  resetPractice: s.resetPractice,
-}))

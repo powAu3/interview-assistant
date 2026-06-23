@@ -88,6 +88,7 @@ export default function PreferencesTab() {
   const overlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
   const overlayFocusWidthPct = useUiPrefsStore((s) => s.interviewOverlayFocusWidthPct)
   const overlayFocusHeightPct = useUiPrefsStore((s) => s.interviewOverlayFocusHeightPct)
+  const overlayPromptMaxWidth = useUiPrefsStore((s) => s.interviewOverlayPromptMaxWidth)
   const overlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const setOverlayEnabled = useUiPrefsStore((s) => s.setInterviewOverlayEnabled)
   const setOverlayOpacity = useUiPrefsStore((s) => s.setInterviewOverlayOpacity)
@@ -96,6 +97,7 @@ export default function PreferencesTab() {
   const setOverlayMode = useUiPrefsStore((s) => s.setInterviewOverlayMode)
   const setOverlayFocusWidthPct = useUiPrefsStore((s) => s.setInterviewOverlayFocusWidthPct)
   const setOverlayFocusHeightPct = useUiPrefsStore((s) => s.setInterviewOverlayFocusHeightPct)
+  const setOverlayPromptMaxWidth = useUiPrefsStore((s) => s.setInterviewOverlayPromptMaxWidth)
   const setOverlayMaxLines = useUiPrefsStore((s) => s.setInterviewOverlayMaxLines)
   const shortcuts = useShortcutsStore((s) => s.shortcuts)
 
@@ -377,6 +379,19 @@ export default function PreferencesTab() {
                   />
                 </Field>
               </div>
+            )}
+            {overlayMode === 'prompt' && (
+              <Field label={`提词模式最大宽度: ${overlayPromptMaxWidth}px`}>
+                <input
+                  type="range"
+                  min={200}
+                  max={1500}
+                  step={10}
+                  value={overlayPromptMaxWidth}
+                  onChange={(e) => setOverlayPromptMaxWidth(Number(e.target.value))}
+                  className="w-full max-w-[200px]"
+                />
+              </Field>
             )}
             <Field label={`字号: ${overlayFontSize}px`}>
               <input type="range" min={10} max={48} value={overlayFontSize}

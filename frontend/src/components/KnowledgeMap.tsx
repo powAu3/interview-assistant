@@ -439,11 +439,11 @@ export default function KnowledgeMap() {
             </button>
             <button
               type="button"
-              onClick={() => setAppMode('practice')}
+              onClick={() => setAppMode('review')}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-tertiary/60 border border-bg-hover/60 text-text-primary text-xs font-medium hover:bg-bg-hover/60 transition"
             >
               <BookOpen className="w-3.5 h-3.5 text-accent-blue" />
-              进入模拟练习
+              进入面试复盘
             </button>
           </div>
           <p className="text-[10px] text-text-muted/70 max-w-xs leading-relaxed">

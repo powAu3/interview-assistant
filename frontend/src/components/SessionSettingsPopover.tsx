@@ -79,7 +79,10 @@ export default function SessionSettingsPopover({
     if (v && v !== config?.language) await updateConfigAndRefresh({ language: v })
   }
 
-  const tokenByModel = Object.entries(tokenUsage.byModel || {})
+  const tokenByModel = Object.entries(tokenUsage.byModel || {}).map(([name, v]) => [
+    name,
+    v as { prompt: number; completion: number },
+  ] as const)
 
   return (
     <div

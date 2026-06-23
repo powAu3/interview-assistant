@@ -22,7 +22,6 @@ type FocusTabPane = {
 
 const FOCUS_TAB_CACHE_LIMIT = 20
 const FOCUS_TEXT_COLOR = '#263241'
-const PROMPT_OVERLAY_MAX_WIDTH = 520
 
 const OVERLAY_MARKDOWN_COMPONENTS: Components = {
   a({ children }) {
@@ -54,6 +53,7 @@ export default function InterviewOverlay() {
   const fontColor = useUiPrefsStore((s) => s.interviewOverlayFontColor)
   const overlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
   const maxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
+  const overlayPromptMaxWidth = useUiPrefsStore((s) => s.interviewOverlayPromptMaxWidth)
   const syncPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
   const applyState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
   const [activeFocusTabsByQaId, setActiveFocusTabsByQaId] = useState<Record<string, string>>({})
@@ -138,10 +138,10 @@ export default function InterviewOverlay() {
       el.scrollWidth,
     ))
     const contentHeight = Math.ceil(el.scrollHeight)
-    const nextWidth = Math.max(180, Math.min(PROMPT_OVERLAY_MAX_WIDTH, contentWidth + 16))
+    const nextWidth = Math.max(180, Math.min(overlayPromptMaxWidth, contentWidth + 16))
     const nextHeight = Math.max(72, Math.min(420, contentHeight + 12))
     window.electronAPI?.resizeOverlayWindow?.({ width: nextWidth, height: nextHeight })?.catch(() => {})
-  }, [answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text])
+  }, [answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth])
 
   const refreshShortcuts = useCallback(() => {
     window.electronAPI?.getShortcuts?.()

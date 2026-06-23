@@ -12,8 +12,7 @@ from pydantic import BaseModel, ValidationError
 from core.auth import get_token, is_auth_disabled, is_loopback_host
 from core.config import (
     get_config, update_config,
-    POSITION_OPTIONS, LANGUAGE_OPTIONS, PRACTICE_AUDIENCE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
-    PRACTICE_TTS_PROVIDER_OPTIONS,
+    POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
 )
 from core.env import env_int
@@ -374,13 +373,8 @@ async def api_update_config(body: ConfigUpdate):
                 d["think_mode"] = False
             elif val != "off" and d.get("think_mode", False) is False:
                 d["think_mode"] = True
-        if d.get("practice_audience") == "":
-            d.pop("practice_audience", None)
-        elif "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
-            raise HTTPException(
-                422,
-                f"practice_audience 必须是 {list(PRACTICE_AUDIENCE_OPTIONS)} 之一",
-            )
+        if d.get("language") and d["language"] not in LANGUAGE_OPTIONS:
+            raise HTTPException(422, f"language 必须是 {list(LANGUAGE_OPTIONS)} 之一")
         if d.get("practice_tts_provider") == "":
             d.pop("practice_tts_provider", None)
         elif "practice_tts_provider" in d and d["practice_tts_provider"] not in PRACTICE_TTS_PROVIDER_OPTIONS:
@@ -459,8 +453,6 @@ async def api_options():
     return {
         "positions": POSITION_OPTIONS,
         "languages": LANGUAGE_OPTIONS,
-        "practice_audiences": PRACTICE_AUDIENCE_OPTIONS,
-        "practice_tts_providers": PRACTICE_TTS_PROVIDER_OPTIONS,
         "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
         "screen_capture_regions": SCREEN_CAPTURE_REGION_OPTIONS,
