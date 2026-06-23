@@ -1,26 +1,31 @@
 """
 Review 模块 LLM 分析服务
-使用 Lite Ark 模型进行逐题分析和整场总结
+使用当前激活的 LLM 模型进行逐题分析和整场总结
 """
 import json
 from typing import Optional, Any
 from openai import OpenAI
 
 from core.logger import get_logger
+from core.config import get_config
 
 logger = get_logger(__name__)
 
-# Lite Ark 配置（可通过环境变量或配置文件覆盖）
-LITE_ARK_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
-LITE_ARK_MODEL = "ep-20250110190909-w7sxd"  # Lite 模型端点
 
+def get_active_llm_client() -> tuple[OpenAI, str]:
+    """获取当前激活模型的客户端和模型名"""
+    cfg = get_config()
+    active_model = cfg.get_active_model()
 
-def get_lite_ark_client(api_key: str) -> OpenAI:
-    """创建 Lite Ark 客户端"""
-    return OpenAI(
-        api_key=api_key,
-        base_url=LITE_ARK_API_BASE,
+    if not active_model.api_key or active_model.api_key in ("", "sk-your-api-key-here"):
+        raise ValueError("当前激活模型未配置有效的 API Key")
+
+    client = OpenAI(
+        api_key=active_model.api_key,
+        base_url=active_model.api_base_url,
     )
+
+    return client, active_model.model
 
 
 def analyze_turn(
@@ -28,7 +33,6 @@ def analyze_turn(
     candidate_answer: str,
     reference_answer: str,
     code_text: str = "",
-    api_key: str = "",
 ) -> dict[str, Any]:
     """
     分析单个 turn
@@ -40,8 +44,10 @@ def analyze_turn(
         "evidence": {"key": "value"}
     }
     """
-    if not api_key:
-        logger.warning("No API key provided for LLM analysis")
+    try:
+        client, model_name = get_active_llm_client()
+    except ValueError as e:
+        logger.warning("Failed to get active LLM client: %s", e)
         return {
             "strengths": [],
             "risks": [],
@@ -95,9 +101,8 @@ def analyze_turn(
 """
 
     try:
-        client = get_lite_ark_client(api_key)
         response = client.chat.completions.create(
-            model=LITE_ARK_MODEL,
+            model=model_name,
             messages=[
                 {
                     "role": "system",
@@ -146,7 +151,6 @@ def analyze_turn(
 
 def generate_summary(
     turns: list[dict[str, Any]],
-    api_key: str = "",
 ) -> dict[str, Any]:
     """
     生成整场面试的总结
@@ -157,10 +161,12 @@ def generate_summary(
         "weak_points": ["深度不够", "缺少实战案例"]
     }
     """
-    if not api_key:
-        logger.warning("No API key provided for summary generation")
+    try:
+        client, model_name = get_active_llm_client()
+    except ValueError as e:
+        logger.warning("Failed to get active LLM client: %s", e)
         return {
-            "summary_markdown": "未配置 API Key，无法生成总结",
+            "summary_markdown": "未配置有效的模型 API Key，无法生成总结",
             "strong_points": [],
             "weak_points": [],
         }
@@ -212,9 +218,8 @@ def generate_summary(
 """
 
     try:
-        client = get_lite_ark_client(api_key)
         response = client.chat.completions.create(
-            model=LITE_ARK_MODEL,
+            model=model_name,
             messages=[
                 {
                     "role": "system",

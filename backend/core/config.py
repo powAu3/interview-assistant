@@ -150,9 +150,6 @@ class AppConfig(BaseModel):
     kb_recent_hits_capacity: int = 50
     kb_asr_min_query_chars: int = 6
 
-    # --- Review Analysis (面试复盘分析) ---
-    review_analysis_api_key: str = ""  # Lite Ark API Key for review analysis
-
     @model_validator(mode="after")
     def _ensure_valid_models(self):
         if self.stt_provider == "iflytek":

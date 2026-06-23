@@ -36,14 +36,6 @@ def _analyze_session_worker(session_id: int):
     try:
         logger.info("Analyzing session_id=%d", session_id)
 
-        # 获取 API key
-        cfg = get_config()
-        api_key = getattr(cfg, "review_analysis_api_key", "")
-        if not api_key:
-            logger.warning("review_analysis_api_key not configured, skip analysis")
-            review.update_session_status(session_id, "completed")
-            return
-
         # 标记为分析中
         review.update_session_status(session_id, "analyzing")
 
@@ -72,7 +64,6 @@ def _analyze_session_worker(session_id: int):
                     candidate_answer=turn["candidate_answer_text"],
                     reference_answer=turn.get("reference_answer_text", ""),
                     code_text=turn.get("code_text", ""),
-                    api_key=api_key,
                 )
 
                 # 更新 turn
@@ -112,7 +103,6 @@ def _analyze_session_worker(session_id: int):
             try:
                 summary_result = review_analysis.generate_summary(
                     turns=analyzed_turns,
-                    api_key=api_key,
                 )
 
                 # 计算平均分
