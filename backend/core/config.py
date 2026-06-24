@@ -105,6 +105,8 @@ class AppConfig(BaseModel):
     assist_transcription_merge_gap_sec: float = 2.0
     # 从第一段 ASR 起最长等待（秒），超时强制送出，避免对方长停顿导致永远不触发
     assist_transcription_merge_max_sec: float = 12.0
+    # 主链路 VAD 单段最长语音（秒），避免面试官连续讲话被攒成超长音频导致远程 ASR 超时
+    assist_vad_max_speech_sec: float = 18.0
     # 实时辅助：问句候选组在最后一条有效追问后静默超过该秒数再确认提交
     assist_asr_confirm_window_sec: float = 0.45
     # 实时辅助：候选问句组从第一条有效追问开始的最长等待时间
@@ -198,6 +200,7 @@ class AppConfig(BaseModel):
         if not self.models:
             self.models = [_default_model_config()]
         self.screen_capture_max_long_edge = max(0, min(4000, int(self.screen_capture_max_long_edge or 0)))
+        self.assist_vad_max_speech_sec = max(6.0, min(60.0, float(self.assist_vad_max_speech_sec or 18.0)))
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
         if not getattr(self.models[self.active_model], "enabled", True):
             for i, model in enumerate(self.models):

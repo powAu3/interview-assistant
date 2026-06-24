@@ -1048,10 +1048,35 @@ function createAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// 优雅停止后端：发 SIGTERM,等 timeout 后兜底 SIGKILL,
-// 让 SQLite/FTS5 有机会刷盘 wal/-shm,避免下次启动恢复缓慢或索引异常。
+function requestAssistStop(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const req = http.request(`${SERVER_URL}/api/assist/stop`, {
+      method: 'POST',
+      timeout: timeoutMs,
+    }, (res) => {
+      res.resume();
+      res.on('end', finish);
+      res.on('close', finish);
+    });
+    req.on('error', finish);
+    req.on('timeout', () => {
+      try { req.destroy(); } catch (_) { /* ignore */ }
+      finish();
+    });
+    req.end();
+  });
+}
+
+// 优雅停止后端：先主动请求 assist stop，让复盘归档和 SQLite 刷盘完成；
+// 再发 SIGTERM，超时后兜底 SIGKILL。
 let pythonStopPromise = null;
-function gracefulStopPython(timeoutMs = 5000) {
+function gracefulStopPython(timeoutMs = 20000) {
   if (pythonStopPromise) return pythonStopPromise;
   const proc = pythonProcess;
   if (!proc) return Promise.resolve();
@@ -1059,19 +1084,23 @@ function gracefulStopPython(timeoutMs = 5000) {
     let settled = false;
     const finish = () => { if (settled) return; settled = true; resolve(); };
     proc.once('exit', finish);
-    try { proc.kill('SIGTERM'); } catch (err) { console.warn('[py] SIGTERM failed:', err.message); }
-    setTimeout(() => {
+    const stopTimeoutMs = Math.max(1000, Math.min(15000, timeoutMs - 5000));
+    requestAssistStop(stopTimeoutMs).then(() => {
       if (settled) return;
-      try {
-        if (!proc.killed) {
-          console.warn('[py] graceful timeout, escalating to SIGKILL');
-          proc.kill('SIGKILL');
+      try { proc.kill('SIGTERM'); } catch (err) { console.warn('[py] SIGTERM failed:', err.message); }
+      setTimeout(() => {
+        if (settled) return;
+        try {
+          if (!proc.killed) {
+            console.warn('[py] graceful timeout, escalating to SIGKILL');
+            proc.kill('SIGKILL');
+          }
+        } catch (err) {
+          console.warn('[py] SIGKILL failed:', err.message);
         }
-      } catch (err) {
-        console.warn('[py] SIGKILL failed:', err.message);
-      }
-      finish();
-    }, timeoutMs);
+        finish();
+      }, Math.max(1000, timeoutMs - stopTimeoutMs));
+    });
   });
   return pythonStopPromise;
 }

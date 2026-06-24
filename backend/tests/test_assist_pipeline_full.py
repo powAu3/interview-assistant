@@ -88,6 +88,10 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     pipeline._task_session_version = 0
     pipeline._interview_thread = None
     pipeline._candidate_thread = None
+    pipeline._stop_event.clear()
+    pipeline._pause_event.clear()
+    pipeline._candidate_flush_event.clear()
+    pipeline._flush_stop_event.clear()
     pipeline._candidate_whisper_preload_inflight.clear()
     pipeline._sync_compat_globals_to_asr_state()
     _DeferredThread.started = []
@@ -337,6 +341,37 @@ def test_startup_candidate_preload_skips_when_disabled(monkeypatch: pytest.Monke
     pipeline.preload_candidate_asr_if_enabled()
 
     assert calls == []
+
+
+def test_stop_waits_for_worker_flush_before_review_archive(monkeypatch: pytest.MonkeyPatch):
+    session = get_session()
+    session.is_recording = True
+    archived_counts: list[int] = []
+
+    class JoinAddsQa:
+        def is_alive(self):
+            return True
+
+        def join(self, timeout=None):
+            session.add_qa(
+                "最后 flush 出来的问题",
+                "最后生成完成的答案",
+                qa_id="qa-final",
+            )
+
+    pipeline._interview_thread = JoinAddsQa()
+    monkeypatch.setattr(pipeline, "broadcast", lambda _data: None)
+    monkeypatch.setattr(pipeline.audio_capture, "stop", lambda owner=None: None)
+    monkeypatch.setattr(pipeline._candidate_audio_capture, "stop", lambda owner=None: None)
+    monkeypatch.setattr(
+        pipeline.review_integration,
+        "on_assist_stop",
+        lambda archived_session: archived_counts.append(len(archived_session.qa_pairs)),
+    )
+
+    pipeline.stop_interview_loop()
+
+    assert archived_counts == [1]
 
 
 def test_candidate_whisper_preload_deduplicates_inflight_model(monkeypatch: pytest.MonkeyPatch):

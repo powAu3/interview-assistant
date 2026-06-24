@@ -59,6 +59,9 @@ def build_config_payload(cfg) -> dict:
         "assist_transcription_merge_max_sec": max(
             1.0, min(120.0, float(getattr(cfg, "assist_transcription_merge_max_sec", 12.0) or 12.0))
         ),
+        "assist_vad_max_speech_sec": max(
+            6.0, min(60.0, float(getattr(cfg, "assist_vad_max_speech_sec", 18.0) or 18.0))
+        ),
         "assist_asr_confirm_window_sec": max(
             0.0, min(5.0, float(getattr(cfg, "assist_asr_confirm_window_sec", 0.45) or 0.0))
         ),
