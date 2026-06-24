@@ -173,7 +173,7 @@ def test_list_sessions_with_data():
 def test_list_sessions_pagination():
     """测试分页"""
     # 创建 5 个 session
-    for i in range(5):
+    for _i in range(5):
         review.create_session(
             started_at=time.time(),
             interviewer_enabled=True,

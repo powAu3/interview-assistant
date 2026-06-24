@@ -139,7 +139,7 @@ SELECT id, name, email FROM users WHERE status = 'active';""",
         analysis_status="pending",
     )
 
-    print(f"[OK] Generated 3 test sessions:")
+    print("[OK] Generated 3 test sessions:")
     print(f"  - Session {session1}: Completed backend interview (3 turns)")
     print(f"  - Session {session2}: Partial frontend interview (2 turns)")
     print(f"  - Session {session3}: Recording interview (1 turn)")
