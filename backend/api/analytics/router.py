@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from services.storage.knowledge import get_summary, get_history, reset_all
 
 router = APIRouter()
-ABILITY_SESSION_TYPES = ("assist", "practice")
+ABILITY_SESSION_TYPES = ("assist",)
 
 
 @router.get("/knowledge/summary")

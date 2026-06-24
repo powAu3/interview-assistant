@@ -14,7 +14,7 @@ if str(BACKEND_DIR) not in sys.path:
 analytics_router = importlib.import_module("api.analytics.router")
 
 
-def test_knowledge_summary_defaults_to_assist_and_practice(monkeypatch: pytest.MonkeyPatch):
+def test_knowledge_summary_defaults_to_assist(monkeypatch: pytest.MonkeyPatch):
     seen: dict[str, tuple[str, ...]] = {}
 
     def fake_get_summary(session_types):
@@ -25,11 +25,11 @@ def test_knowledge_summary_defaults_to_assist_and_practice(monkeypatch: pytest.M
 
     result = asyncio.run(analytics_router.api_knowledge_summary())
 
-    assert seen["session_types"] == ("assist", "practice")
+    assert seen["session_types"] == ("assist",)
     assert result["tags"][0]["tag"] == "Redis"
 
 
-def test_knowledge_history_defaults_to_assist_and_practice(monkeypatch: pytest.MonkeyPatch):
+def test_knowledge_history_defaults_to_assist(monkeypatch: pytest.MonkeyPatch):
     seen: dict[str, object] = {}
 
     def fake_get_history(page, page_size, session_types):
@@ -45,6 +45,6 @@ def test_knowledge_history_defaults_to_assist_and_practice(monkeypatch: pytest.M
     assert seen == {
         "page": 2,
         "page_size": 10,
-        "session_types": ("assist", "practice"),
+        "session_types": ("assist",),
     }
     assert result["page"] == 2

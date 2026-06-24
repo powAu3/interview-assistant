@@ -439,7 +439,15 @@ def process_question_parallel(
             "model_index": model_idx,
         }
     )
-    if not images and _supports_candidate_context_source(source, meta) and candidate_context_enabled:
+    # 候选人回答窗口用于下一轮上下文或复盘记录；仅在相关能力开启时绑定 qa_id。
+    should_open_candidate_window = (
+        _supports_candidate_context_source(source, meta)
+        and (
+            candidate_context_enabled
+            or (bool(getattr(cfg, "review_enabled", False)) and bool(getattr(cfg, "candidate_asr_enabled", False)))
+        )
+    )
+    if should_open_candidate_window:
         with conversation_lock:
             get_session().open_candidate_answer_window(qa_id)
 

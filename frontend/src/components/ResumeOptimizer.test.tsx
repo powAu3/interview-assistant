@@ -96,7 +96,7 @@ describe('ResumeOptimizer', () => {
     render(<ResumeOptimizer />)
 
     expect(screen.getByText('张三_后端开发.pdf')).toBeInTheDocument()
-    expect(screen.getByText('和主流程、模拟练习共用同一份简历历史与当前挂载记录。')).toBeInTheDocument()
+    expect(screen.getByText('和主流程、面试复盘共用同一份简历历史与当前挂载记录。')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
 

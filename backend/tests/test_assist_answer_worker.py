@@ -457,6 +457,7 @@ def test_followup_prompt_uses_legacy_context_when_candidate_context_disabled(mon
     assert "你上次回答的要点：助手建议答案：缓存项目。" in prompt
     assert "候选人麦克风转写" not in prompt
     assert "风控规则引擎" not in prompt
+    assert session.current_candidate_qa_id == ""
 
 
 def test_followup_prompt_uses_legacy_context_when_candidate_asr_disabled(monkeypatch: pytest.MonkeyPatch):

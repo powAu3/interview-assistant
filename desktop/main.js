@@ -95,100 +95,13 @@ let lastOverlayState = {
   mode: 'glass',
   focusWidthPct: 96,
   focusHeightPct: 90,
+  promptMaxWidth: 900,
   maxLines: 0,
 };
 
-function parseSayVoiceList(raw) {
-  return String(raw || '')
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-    .map((line) => {
-      const hashIdx = line.indexOf('#');
-      const left = (hashIdx >= 0 ? line.slice(0, hashIdx) : line).trim();
-      const parts = left.split(/\s+/);
-      if (parts.length < 2) return null;
-      const locale = parts[parts.length - 1];
-      const name = left.slice(0, left.length - locale.length).trim();
-      if (!name) return null;
-      let genderHint = 'unknown';
-      const lower = name.toLowerCase();
-      if (/(grandma|flo|meijia|shelley|sandy|kathy|kyoko|monica|anna)/.test(lower)) genderHint = 'female';
-      if (/(grandpa|eddy|reed|ralph|fred|daniel|albert|jorge)/.test(lower)) genderHint = 'male';
-      return {
-        voiceURI: `say:${name}`,
-        name,
-        lang: locale.replace('_', '-'),
-        source: 'macos-say',
-        genderHint,
-      };
-    })
-    .filter(Boolean);
-}
-
-function listSystemTtsVoices() {
-  return new Promise((resolve) => {
-    if (process.platform !== 'darwin') return resolve([]);
-    const child = spawn('say', ['-v', '?']);
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on('close', (code) => {
-      if (code !== 0) {
-        console.warn('listSystemTtsVoices failed:', stderr);
-        return resolve([]);
-      }
-      resolve(parseSayVoiceList(stdout));
-    });
-  });
-}
-
-function synthesizeSystemTts({ text, voiceName = '', rate = 180 }) {
-  return new Promise((resolve, reject) => {
-    if (process.platform !== 'darwin') {
-      return reject(new Error('System TTS is currently only implemented on macOS'));
-    }
-    const cleanText = String(text || '').trim();
-    if (!cleanText) return reject(new Error('TTS text is empty'));
-    const outputPath = path.join(app.getPath('temp'), `ia-practice-tts-${Date.now()}-${Math.random().toString(16).slice(2)}.aiff`);
-    const args = ['-o', outputPath, '-r', String(Math.max(90, Math.min(260, Math.round(Number(rate) || 180))))];
-    if (voiceName) args.push('-v', voiceName);
-    args.push(cleanText);
-
-    const child = spawn('say', args);
-    let stderr = '';
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on('close', (code) => {
-      if (code !== 0) {
-        try { fs.unlinkSync(outputPath); } catch {}
-        return reject(new Error(stderr || `say exited with code ${code}`));
-      }
-      try {
-        const audio = fs.readFileSync(outputPath);
-        try { fs.unlinkSync(outputPath); } catch {}
-        resolve({
-          provider: 'system',
-          voice: voiceName || '',
-          audio_base64: audio.toString('base64'),
-          content_type: 'audio/aiff',
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
 const OVERLAY_PRESET = { width: 480, height: 320, minWidth: 300, minHeight: 100, resizable: true };
 const PROMPT_OVERLAY_MIN_SIZE = { width: 180, height: 72 };
-const PROMPT_OVERLAY_MAX_SIZE = { width: 520, heightRatio: 0.48 };
+const PROMPT_OVERLAY_MAX_SIZE = { heightRatio: 0.48 };
 const FOCUS_OVERLAY_MARGIN = 14;
 
 let _frontReassertTimer = null;
@@ -1009,6 +922,10 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     const focusHeightPct = Number(payload.focusHeightPct);
     if (Number.isFinite(focusHeightPct)) style.focusHeightPct = Math.max(35, Math.min(100, Math.round(focusHeightPct)));
   }
+  if ('promptMaxWidth' in payload) {
+    const promptMaxWidth = Number(payload.promptMaxWidth);
+    if (Number.isFinite(promptMaxWidth)) style.promptMaxWidth = Math.max(200, Math.min(1500, Math.round(promptMaxWidth)));
+  }
   if ('maxLines' in payload) {
     const maxLines = Number(payload.maxLines);
     if (Number.isFinite(maxLines)) style.maxLines = Math.max(0, Math.min(50, Math.round(maxLines)));
@@ -1066,8 +983,9 @@ ipcMain.handle('resize-overlay-window', (_event, payload = {}) => {
   const area = screen.getDisplayNearestPoint(center).workArea;
   const nextWidth = Number(payload.width);
   const nextHeight = Number(payload.height);
+  const promptMaxWidth = Math.max(200, Math.min(1500, Number(lastOverlayState?.promptMaxWidth) || 900));
   const width = Number.isFinite(nextWidth)
-    ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(PROMPT_OVERLAY_MAX_SIZE.width, area.width - 16, Math.round(nextWidth)))
+    ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(promptMaxWidth, area.width - 16, Math.round(nextWidth)))
     : bounds.width;
   const height = Number.isFinite(nextHeight)
     ? Math.max(PROMPT_OVERLAY_MIN_SIZE.height, Math.min(Math.round(area.height * PROMPT_OVERLAY_MAX_SIZE.heightRatio), Math.round(nextHeight)))
@@ -1087,14 +1005,6 @@ ipcMain.handle('destroy-overlay', () => {
   }
   return { ok: true };
 });
-ipcMain.handle('list-system-tts-voices', async () => listSystemTtsVoices());
-ipcMain.handle('synthesize-system-tts', async (_event, payload = {}) =>
-  synthesizeSystemTts({
-    text: payload.text,
-    voiceName: payload.voiceName,
-    rate: payload.rate,
-  })
-);
 ipcMain.handle('move-overlay-window', (_event, dx, dy) => {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const [x, y] = overlayWindow.getPosition();
@@ -1138,10 +1048,35 @@ function createAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// 优雅停止后端：发 SIGTERM,等 timeout 后兜底 SIGKILL,
-// 让 SQLite/FTS5 有机会刷盘 wal/-shm,避免下次启动恢复缓慢或索引异常。
+function requestAssistStop(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const req = http.request(`${SERVER_URL}/api/assist/stop`, {
+      method: 'POST',
+      timeout: timeoutMs,
+    }, (res) => {
+      res.resume();
+      res.on('end', finish);
+      res.on('close', finish);
+    });
+    req.on('error', finish);
+    req.on('timeout', () => {
+      try { req.destroy(); } catch (_) { /* ignore */ }
+      finish();
+    });
+    req.end();
+  });
+}
+
+// 优雅停止后端：先主动请求 assist stop，让复盘归档和 SQLite 刷盘完成；
+// 再发 SIGTERM，超时后兜底 SIGKILL。
 let pythonStopPromise = null;
-function gracefulStopPython(timeoutMs = 5000) {
+function gracefulStopPython(timeoutMs = 20000) {
   if (pythonStopPromise) return pythonStopPromise;
   const proc = pythonProcess;
   if (!proc) return Promise.resolve();
@@ -1149,19 +1084,23 @@ function gracefulStopPython(timeoutMs = 5000) {
     let settled = false;
     const finish = () => { if (settled) return; settled = true; resolve(); };
     proc.once('exit', finish);
-    try { proc.kill('SIGTERM'); } catch (err) { console.warn('[py] SIGTERM failed:', err.message); }
-    setTimeout(() => {
+    const stopTimeoutMs = Math.max(1000, Math.min(15000, timeoutMs - 5000));
+    requestAssistStop(stopTimeoutMs).then(() => {
       if (settled) return;
-      try {
-        if (!proc.killed) {
-          console.warn('[py] graceful timeout, escalating to SIGKILL');
-          proc.kill('SIGKILL');
+      try { proc.kill('SIGTERM'); } catch (err) { console.warn('[py] SIGTERM failed:', err.message); }
+      setTimeout(() => {
+        if (settled) return;
+        try {
+          if (!proc.killed) {
+            console.warn('[py] graceful timeout, escalating to SIGKILL');
+            proc.kill('SIGKILL');
+          }
+        } catch (err) {
+          console.warn('[py] SIGKILL failed:', err.message);
         }
-      } catch (err) {
-        console.warn('[py] SIGKILL failed:', err.message);
-      }
-      finish();
-    }, timeoutMs);
+        finish();
+      }, Math.max(1000, timeoutMs - stopTimeoutMs));
+    });
   });
   return pythonStopPromise;
 }

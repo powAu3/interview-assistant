@@ -301,6 +301,10 @@ class _Body:
         return self._data.get(name)
 
 
+def _stub_config_response(monkeypatch):
+    monkeypatch.setattr(common_router, "build_config_payload", lambda cfg: {"ok": True})
+
+
 def test_update_config_rejects_invalid_screen_capture_region(monkeypatch):
     """非法 screen_capture_region 必须 422, 而不是静默 pop."""
 
@@ -330,42 +334,13 @@ def test_update_config_rejects_invalid_screen_capture_region(monkeypatch):
     assert update_called is False
 
 
-def test_update_config_rejects_invalid_practice_audience(monkeypatch):
-    monkeypatch.setattr(
-        common_router, "PRACTICE_AUDIENCE_OPTIONS", ("campus_intern", "social")
-    )
-    update_called = False
-
-    def fake_update_config(d):
-        nonlocal update_called
-        update_called = True
-
-    monkeypatch.setattr(common_router, "update_config", fake_update_config)
-
-    async def fake_run_in_threadpool(fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
-
-    body = _Body(practice_audience="senior_hunter")
-
-    with pytest.raises(HTTPException) as exc:
-        _run(common_router.api_update_config(body))
-
-    assert exc.value.status_code == 422
-    assert "practice_audience" in exc.value.detail
-    assert update_called is False
-
-
 def test_update_config_treats_empty_enum_as_reset(monkeypatch):
     """空字符串视为「重置」, 应被 pop 掉 (而非 422), 让默认值生效。"""
 
     monkeypatch.setattr(
         common_router, "SCREEN_CAPTURE_REGION_OPTIONS", ("full", "left_half")
     )
-    monkeypatch.setattr(
-        common_router, "PRACTICE_AUDIENCE_OPTIONS", ("campus_intern", "social")
-    )
+    _stub_config_response(monkeypatch)
 
     captured: dict[str, dict] = {}
 
@@ -378,14 +353,12 @@ def test_update_config_treats_empty_enum_as_reset(monkeypatch):
     monkeypatch.setattr(common_router, "update_config", fake_update_config)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
 
-    body = _Body(screen_capture_region="", practice_audience="")
+    body = _Body(screen_capture_region="")
 
     result = _run(common_router.api_update_config(body))
 
     assert result == {"ok": True}
-    # 两个空字符串都被 pop 掉, 不出现在最终 update payload 中
     assert "screen_capture_region" not in captured["d"]
-    assert "practice_audience" not in captured["d"]
 
 
 def test_update_config_accepts_valid_enum(monkeypatch):
@@ -394,9 +367,7 @@ def test_update_config_accepts_valid_enum(monkeypatch):
     monkeypatch.setattr(
         common_router, "SCREEN_CAPTURE_REGION_OPTIONS", ("full", "left_half")
     )
-    monkeypatch.setattr(
-        common_router, "PRACTICE_AUDIENCE_OPTIONS", ("campus_intern", "social")
-    )
+    _stub_config_response(monkeypatch)
 
     seen: dict[str, object] = {}
 
@@ -409,13 +380,12 @@ def test_update_config_accepts_valid_enum(monkeypatch):
     monkeypatch.setattr(common_router, "update_config", fake_update_config)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
 
-    body = _Body(screen_capture_region="left_half", practice_audience="social")
+    body = _Body(screen_capture_region="left_half")
 
     result = _run(common_router.api_update_config(body))
 
     assert result == {"ok": True}
     assert seen["d"]["screen_capture_region"] == "left_half"
-    assert seen["d"]["practice_audience"] == "social"
 
 
 def test_update_config_accepts_xhigh_think_effort(monkeypatch):
@@ -429,6 +399,7 @@ def test_update_config_accepts_xhigh_think_effort(monkeypatch):
 
     monkeypatch.setattr(common_router, "update_config", fake_update_config)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    _stub_config_response(monkeypatch)
 
     result = _run(common_router.api_update_config(_Body(think_effort="xhigh")))
 
@@ -448,6 +419,7 @@ def test_update_config_accepts_screen_capture_max_long_edge_zero(monkeypatch):
 
     monkeypatch.setattr(common_router, "update_config", fake_update_config)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    _stub_config_response(monkeypatch)
 
     body = _Body(screen_capture_max_long_edge=0)
 
@@ -597,6 +569,7 @@ def test_update_config_keep_existing_api_key_placeholder(monkeypatch):
 
     monkeypatch.setattr(common_router, "update_config", fake_update_config)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    _stub_config_response(monkeypatch)
     monkeypatch.setattr(
         common_router,
         "get_config",
@@ -634,6 +607,7 @@ def test_update_config_keep_existing_api_key_uses_original_index_after_reorder(m
 
     monkeypatch.setattr(common_router, "update_config", fake_update_config)
     monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    _stub_config_response(monkeypatch)
     monkeypatch.setattr(
         common_router,
         "get_config",

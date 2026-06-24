@@ -13,7 +13,7 @@ import {
 } from './fixtures/sample-data.mjs'
 
 test.describe('shared resume mount', () => {
-  test('switching the mounted resume in resume optimizer syncs to practice mode', async ({ context, page }) => {
+  test('switching the mounted resume in resume optimizer updates shared config', async ({ context, page }) => {
     const config = {
       ...SAMPLE_CONFIG,
       has_resume: true,
@@ -128,7 +128,7 @@ test.describe('shared resume mount', () => {
     await page.getByRole('button', { name: '选用' }).first().click()
     await expect(page.getByText('李四_后端.pdf').first()).toBeVisible()
 
-    await page.getByRole('tab', { name: '模拟练习' }).click()
-    await expect(page.getByText('李四_后端.pdf').first()).toBeVisible()
+    await page.getByRole('tab', { name: '实时辅助' }).click()
+    await expect(page.getByRole('heading', { name: '学习助手' })).toBeVisible()
   })
 })

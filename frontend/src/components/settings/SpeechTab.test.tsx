@@ -7,7 +7,6 @@ import { useInterviewStore } from '@/stores/configStore'
 
 const apiMock = vi.hoisted(() => ({
   sttTest: vi.fn(),
-  practiceTts: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -18,17 +17,10 @@ vi.mock('@/lib/configSync', () => ({
   updateConfigAndRefresh: vi.fn().mockResolvedValue({ ok: true }),
 }))
 
-vi.mock('@/lib/practiceTts', () => ({
-  normalizePracticeTtsText: (text: string) => text,
-  playBase64Audio: vi.fn(),
-  speakWithBrowserTts: vi.fn().mockResolvedValue(true),
-}))
-
 describe('SpeechTab', () => {
   beforeEach(() => {
     vi.mocked(updateConfigAndRefresh).mockClear()
     apiMock.sttTest.mockResolvedValue({ ok: true, text: 'demo' })
-    apiMock.practiceTts.mockResolvedValue({ audio_base64: '', content_type: 'audio/mpeg', speaker: 'demo' })
 
     useInterviewStore.setState({
       config: {
@@ -56,15 +48,6 @@ describe('SpeechTab', () => {
         candidate_streaming_asr_enabled: true,
         candidate_streaming_asr_interval_ms: 1500,
         candidate_mic_compatibility_mode: true,
-        practice_tts_provider: 'edge_tts',
-        edge_tts_voice_female: 'zh-CN-XiaoxiaoNeural',
-        edge_tts_voice_male: 'zh-CN-YunxiNeural',
-        edge_tts_rate: '+0%',
-        edge_tts_pitch: '+0Hz',
-        volcengine_tts_appkey: '',
-        volcengine_tts_token: '',
-        practice_tts_speaker_female: 'zh_female_qingxin',
-        practice_tts_speaker_male: 'zh_male_chunhou',
         silence_threshold: 0.01,
         silence_duration: 1.2,
         transcription_min_sig_chars: 2,
@@ -72,12 +55,9 @@ describe('SpeechTab', () => {
         assist_transcription_merge_max_sec: 12.0,
         assist_high_churn_short_answer: false,
         auto_detect: true,
-        edge_tts_available: true,
-        edge_tts_status_detail: 'ok',
       },
       options: {
         stt_providers: ['whisper', 'doubao', 'generic'],
-        practice_tts_providers: ['edge_tts', 'local', 'volcengine'],
         whisper_models: ['tiny', 'base'],
       },
       toastMessage: null,

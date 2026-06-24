@@ -11,6 +11,7 @@ from core.background import BoundedTaskWorker
 from core.config import get_config
 from core.logger import get_interview_logger, get_logger
 from core.session import get_session, reset_session, conversation_lock
+from services import review_integration
 
 _ilog = get_interview_logger()
 _elog = get_logger("pipeline")
@@ -331,6 +332,24 @@ def _mark_seq_skipped(seq: int):
         _drain_commit_queue_locked()
 
 
+def _answer_work_idle() -> bool:
+    with _dispatch_lock:
+        pending = bool(_pending)
+        in_flight = bool(_in_flight_tasks)
+    with _commit_lock:
+        commits = bool(_commit_buffer)
+    return not pending and not in_flight and not commits
+
+
+def _wait_for_answer_work_idle(timeout_sec: float) -> bool:
+    deadline = time.monotonic() + max(0.0, timeout_sec)
+    while time.monotonic() < deadline:
+        if _answer_work_idle():
+            return True
+        time.sleep(0.05)
+    return _answer_work_idle()
+
+
 def _begin_asr_turn() -> int:
     global _latest_asr_turn_id
     with _dispatch_lock:
@@ -562,16 +581,54 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
         reason = "disabled" if not bool(getattr(cfg, "candidate_asr_enabled", False)) else "missing_or_same_device"
         broadcast({"type": "candidate_asr_status", "loaded": False, "loading": False, "provider": "off", "reason": reason})
 
+    # 创建 review session（如果满足条件）
+    review_integration.on_assist_start(
+        interviewer_device_id=device_id,
+        candidate_device_id=candidate_mic_device_id,
+        candidate_asr_enabled=bool(getattr(cfg, "candidate_asr_enabled", False)),
+    )
+
 
 def stop_interview_loop():
     global _interview_thread, _candidate_thread, _flush_thread
     _stop_event.set()
     _flush_stop_event.set()
     _pause_event.clear()
-    cancel_answer_work(reset_session_data=False)
+    _candidate_flush_event.set()
     audio_capture.stop(owner="assist")
     _candidate_audio_capture.stop(owner="assist-candidate")
     session = get_session()
+
+    current_thread = threading.current_thread()
+    if _interview_thread and _interview_thread.is_alive() and _interview_thread is not current_thread:
+        _interview_thread.join(timeout=5)
+    _interview_thread = None
+    if _flush_thread and _flush_thread.is_alive() and _flush_thread is not current_thread:
+        _flush_thread.join(timeout=1)
+    _flush_thread = None
+    if _candidate_thread and _candidate_thread.is_alive() and _candidate_thread is not current_thread:
+        _candidate_thread.join(timeout=5)
+    _candidate_thread = None
+
+    try:
+        _try_flush_asr_merge_buffer(
+            get_config(), session, time.monotonic(), True
+        )
+        _try_flush_asr_question_group(
+            get_config(), session, time.monotonic(), True
+        )
+    except Exception:
+        _elog.debug("final ASR flush during stop skipped", exc_info=True)
+
+    wait_sec = float(getattr(get_config(), "assist_stop_answer_wait_sec", 3.0) or 0.0)
+    if wait_sec > 0 and not _wait_for_answer_work_idle(min(wait_sec, 20.0)):
+        _elog.warning("ANSWER_STOP_WAIT_TIMEOUT pending/inflight work will be cancelled")
+    cancel_answer_work(reset_session_data=False)
+
+    # 结束 review session（如果存在）。必须在音频 worker 最后 flush、候选人 ASR final、
+    # 以及可等待的答案 commit 之后执行，否则关闭应用时复盘会漏掉末尾问题。
+    review_integration.on_assist_stop(session)
+
     with conversation_lock:
         session.is_recording = False
         session.is_paused = False
@@ -583,16 +640,7 @@ def stop_interview_loop():
             session.candidate_transcription_history = session.candidate_transcription_history[-30:]
     broadcast({"type": "recording", "value": False})
     broadcast({"type": "paused", "value": False})
-    if _interview_thread and _interview_thread.is_alive():
-        _interview_thread.join(timeout=3)
-    _interview_thread = None
-    # H4: 等待 flush 线程结束
-    if _flush_thread and _flush_thread.is_alive():
-        _flush_thread.join(timeout=1)
-    _flush_thread = None
-    if _candidate_thread and _candidate_thread.is_alive():
-        _candidate_thread.join(timeout=3)
-    _candidate_thread = None
+    _candidate_flush_event.clear()
     gc.collect()
     _ilog.info("INTERVIEW_STOP qa_count=%d", len(session.qa_pairs))
 
@@ -697,6 +745,7 @@ def _interview_worker():
         sample_rate=AudioCapture.SAMPLE_RATE,
         silence_threshold=getattr(cfg, "silence_threshold", 0.01),
         silence_duration=getattr(cfg, "silence_duration", 1.2),
+        max_speech_duration=getattr(cfg, "assist_vad_max_speech_sec", 18.0),
     )
     session = get_session()
     _reset_asr_merge_buffer()

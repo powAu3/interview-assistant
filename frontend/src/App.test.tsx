@@ -25,7 +25,6 @@ vi.mock('@/components/TranscriptionPanel', () => ({ default: () => <div>transcri
 vi.mock('@/components/AnswerPanel', () => ({ default: () => <div>answer</div> }))
 vi.mock('@/components/ControlBar', () => ({ default: () => <div>controls</div> }))
 vi.mock('@/components/SettingsDrawer', () => ({ default: () => null }))
-vi.mock('@/components/PracticeMode', () => ({ default: () => <div>practice</div> }))
 vi.mock('@/components/KnowledgeMap', () => ({ default: () => <div>knowledge</div> }))
 vi.mock('@/components/ResumeOptimizer', () => ({ default: () => <div>resume</div> }))
 vi.mock('@/components/JobTracker', () => ({ default: () => <div>jobs</div> }))

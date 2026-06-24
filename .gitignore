@@ -40,6 +40,11 @@ backend/job_tracker.db
 backend/job_tracker.db-shm
 backend/job_tracker.db-wal
 
+# Review 面试复盘数据库（包含真实面试记录，不提交）
+backend/data/review.db
+backend/data/review.db-wal
+backend/data/review.db-shm
+
 # Knowledge Base（用户上传的笔记/文件 + FTS 索引 + OCR/Vision 缓存）
 backend/data/kb/
 backend/data/kb.sqlite

@@ -84,21 +84,9 @@ class AppConfig(BaseModel):
     candidate_streaming_asr_interval_ms: int = 1500
     # 只用于“我的麦克风”：始终共享读取；开启后冲突时会尝试更保守的采样与默认输入设备。
     candidate_mic_compatibility_mode: bool = True
-    # Practice interviewer TTS: local browser fallback + Volcengine cloud provider
-    practice_tts_provider: str = "edge_tts"
-    edge_tts_voice_female: str = "zh-CN-XiaoxiaoNeural"
-    edge_tts_voice_male: str = "zh-CN-YunxiNeural"
-    edge_tts_rate: str = "+0%"
-    edge_tts_pitch: str = "+0Hz"
-    volcengine_tts_appkey: str = ""
-    volcengine_tts_token: str = ""
-    practice_tts_speaker_female: str = "zh_female_qingxin"
-    practice_tts_speaker_male: str = "zh_male_chunhou"
 
     position: str = "后端开发"
     language: str = "Python"
-    # 模拟面试候选人维度：campus_intern=校招/实习，social=社招
-    practice_audience: str = "campus_intern"
     resume_text: Optional[str] = None
     # 当前生效的简历对应的历史记录 id（写入 config.json；简历正文仍不入库）
     resume_active_history_id: Optional[int] = None
@@ -117,6 +105,8 @@ class AppConfig(BaseModel):
     assist_transcription_merge_gap_sec: float = 2.0
     # 从第一段 ASR 起最长等待（秒），超时强制送出，避免对方长停顿导致永远不触发
     assist_transcription_merge_max_sec: float = 12.0
+    # 主链路 VAD 单段最长语音（秒），避免面试官连续讲话被攒成超长音频导致远程 ASR 超时
+    assist_vad_max_speech_sec: float = 18.0
     # 实时辅助：问句候选组在最后一条有效追问后静默超过该秒数再确认提交
     assist_asr_confirm_window_sec: float = 0.45
     # 实时辅助：候选问句组从第一条有效追问开始的最长等待时间
@@ -162,6 +152,10 @@ class AppConfig(BaseModel):
     kb_recent_hits_capacity: int = 50
     kb_asr_min_query_chars: int = 6
 
+    # --- Review (面试复盘) ---
+    review_enabled: bool = False
+    review_model_index: int = 0
+
     @model_validator(mode="after")
     def _ensure_valid_models(self):
         if self.stt_provider == "iflytek":
@@ -206,16 +200,22 @@ class AppConfig(BaseModel):
         if not self.models:
             self.models = [_default_model_config()]
         self.screen_capture_max_long_edge = max(0, min(4000, int(self.screen_capture_max_long_edge or 0)))
+        self.assist_vad_max_speech_sec = max(6.0, min(60.0, float(self.assist_vad_max_speech_sec or 18.0)))
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
         if not getattr(self.models[self.active_model], "enabled", True):
             for i, model in enumerate(self.models):
                 if getattr(model, "enabled", True):
                     self.active_model = i
                     break
+        self.review_model_index = max(0, min(int(self.review_model_index), len(self.models) - 1))
         return self
 
     def get_active_model(self) -> ModelConfig:
         idx = max(0, min(self.active_model, len(self.models) - 1))
+        return self.models[idx]
+
+    def get_review_model(self) -> ModelConfig:
+        idx = max(0, min(self.review_model_index, len(self.models) - 1))
         return self.models[idx]
 
 
@@ -282,10 +282,8 @@ LANGUAGE_OPTIONS = [
     "Python", "Java", "C++", "JavaScript", "TypeScript",
     "Go", "SQL",
 ]
-PRACTICE_AUDIENCE_OPTIONS = ["campus_intern", "social"]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
 # 语音识别引擎：whisper=本地，doubao=豆包 API，generic=OpenAI-compatible HTTP ASR
 STT_PROVIDER_OPTIONS = ["whisper", "doubao", "generic"]
-PRACTICE_TTS_PROVIDER_OPTIONS = ["edge_tts", "local", "volcengine"]
 # 电脑截图区域
 SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]

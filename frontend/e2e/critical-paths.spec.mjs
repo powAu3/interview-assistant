@@ -7,10 +7,6 @@
  */
 import { test, expect } from '@playwright/test'
 import { installMocks, COMMON_WS_BOOTSTRAP } from './fixtures/setup.mjs'
-import {
-  SAMPLE_PRACTICE_CODING_SESSION,
-  SAMPLE_PRACTICE_SPEAKING_SESSION,
-} from './fixtures/sample-data.mjs'
 
 test.describe('app shell', () => {
   test.beforeEach(async ({ context }) => {
@@ -27,19 +23,20 @@ test.describe('app shell', () => {
     await expect(page.getByText('STT 就绪')).toBeVisible({ timeout: 5000 })
   })
 
-  test('module tabs switch between assist / practice / knowledge / resume / job-tracker', async ({ page }) => {
+  test('module tabs switch between assist / review / knowledge / resume / job-tracker', async ({ page }) => {
     await page.goto('/')
 
     const assistTab = page.getByRole('tab', { name: '实时辅助' })
-    const practiceTab = page.getByRole('tab', { name: '模拟练习' })
+    const reviewTab = page.getByRole('tab', { name: '面试复盘' })
     const knowledgeTab = page.getByRole('tab', { name: '能力分析' })
     const resumeTab = page.getByRole('tab', { name: '简历优化' })
     const jobTab = page.getByRole('tab', { name: /求职看板/ })
 
     await expect(assistTab).toHaveAttribute('aria-selected', 'true')
 
-    await practiceTab.click()
-    await expect(practiceTab).toHaveAttribute('aria-selected', 'true')
+    await reviewTab.click()
+    await expect(reviewTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByText('面试复盘').first()).toBeVisible({ timeout: 8000 })
 
     await knowledgeTab.click()
     await expect(knowledgeTab).toHaveAttribute('aria-selected', 'true')
@@ -112,63 +109,6 @@ test.describe('assist mode with WebSocket-driven Q/A', () => {
     await expect(
       page.getByText('核心要点是先讲背景与目标、再讲关键决策、最后讲量化结果。'),
     ).toBeVisible({ timeout: 5000 })
-  })
-})
-
-test.describe('practice mode booth', () => {
-  test('shows the virtual interviewer during an active practice session', async ({ context, page }) => {
-    await installMocks(context, {
-      messages: [
-        ...COMMON_WS_BOOTSTRAP,
-        {
-          type: 'init',
-          delay: 50,
-          stt_loaded: true,
-          is_recording: false,
-          is_paused: false,
-          practice_session: SAMPLE_PRACTICE_SPEAKING_SESSION,
-        },
-      ],
-      localStorage: {
-        'ia-color-scheme': 'vscode-light-plus',
-        'ia_app_mode': 'practice',
-      },
-    })
-
-    await page.goto('/')
-    const preview = page.getByTestId('practice-interviewer-preview')
-    await expect(preview).toBeVisible()
-    await expect(preview).toHaveAttribute('data-renderer', 'human-portrait')
-    await expect(preview).toHaveAttribute('data-persona', 'calm_pressing')
-    await expect(preview).toHaveAttribute('data-state', /speaking|listening/)
-    await expect(page.getByText(/状态 · (播报中|倾听中)/)).toBeVisible()
-    await expect(page.getByText(/当前来源：/)).toBeVisible()
-  })
-
-  test('keeps coding prompt mode out of speaking animation', async ({ context, page }) => {
-    await installMocks(context, {
-      messages: [
-        ...COMMON_WS_BOOTSTRAP,
-        {
-          type: 'init',
-          delay: 50,
-          stt_loaded: true,
-          is_recording: false,
-          is_paused: false,
-          practice_session: SAMPLE_PRACTICE_CODING_SESSION,
-        },
-      ],
-      localStorage: {
-        'ia-color-scheme': 'vscode-light-plus',
-        'ia_app_mode': 'practice',
-      },
-    })
-
-    await page.goto('/')
-    await expect(page.getByText('题面模式').first()).toBeVisible()
-    const preview = page.getByTestId('practice-interviewer-preview')
-    await expect(preview).toHaveAttribute('data-renderer', 'human-portrait')
-    await expect(preview).toHaveAttribute('data-state', 'listening')
   })
 })
 

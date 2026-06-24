@@ -182,7 +182,7 @@ class AudioCapture:
         # AGC state
         self._agc_peak: float = 0.0
         self._use_agc: bool = False
-        # Ownership token: only one of {"assist", "practice", ...} may hold the device
+        # Ownership token: only one caller (for example "assist") may hold the device
         self._owner: Optional[str] = None
 
     # ------------------------------------------------------------------
@@ -292,7 +292,7 @@ class AudioCapture:
     ):
         """Start audio capture on the requested device.
 
-        owner identifies the caller (e.g. ``"assist"`` / ``"practice"``).
+        owner identifies the caller (for example ``"assist"``).
         - 已运行且 owner 不一致:抛出 AudioBusyError(409)
         - 已运行且 owner 相同:静默 no-op(等价旧行为)
         - 已运行但当前无 owner 标签:沿用旧行为 no-op
@@ -570,15 +570,22 @@ class VADBuffer:
     """Voice Activity Detection: accumulate speech, trigger after silence."""
 
     def __init__(self, sample_rate: int = 16000, silence_threshold: float = 0.01,
-                 silence_duration: float = 2.5, min_speech_duration: float = 0.5):
+                 silence_duration: float = 2.5, min_speech_duration: float = 0.5,
+                 max_speech_duration: Optional[float] = None):
         self.sample_rate = sample_rate
         self.silence_threshold = silence_threshold
         self.silence_duration = silence_duration
         self.min_speech_duration = min_speech_duration
+        self.max_speech_duration = (
+            float(max_speech_duration)
+            if max_speech_duration and max_speech_duration > 0
+            else None
+        )
         self._buffer: list[np.ndarray] = []
         self._speech_started = False
         self._silence_start: Optional[float] = None
         self._speech_start: Optional[float] = None
+        self._speech_audio_samples = 0
 
     def feed(self, audio: np.ndarray) -> Optional[np.ndarray]:
         energy = float(np.sqrt(np.mean(audio ** 2)))
@@ -589,13 +596,22 @@ class VADBuffer:
                 self._speech_start = now
             self._silence_start = None
             self._buffer.append(audio)
+            self._speech_audio_samples += len(audio)
+            if (
+                self.max_speech_duration is not None
+                and self._speech_audio_samples / self.sample_rate >= self.max_speech_duration
+            ):
+                result = np.concatenate(self._buffer)
+                self._reset()
+                return result
             return None
         if self._speech_started:
             self._buffer.append(audio)
+            self._speech_audio_samples += len(audio)
             if self._silence_start is None:
                 self._silence_start = now
             elif now - self._silence_start >= self.silence_duration:
-                speech_duration = now - (self._speech_start or now)
+                speech_duration = self._speech_audio_samples / self.sample_rate
                 if speech_duration >= self.min_speech_duration and self._buffer:
                     result = np.concatenate(self._buffer)
                     self._reset()
@@ -615,6 +631,7 @@ class VADBuffer:
         self._speech_started = False
         self._silence_start = None
         self._speech_start = None
+        self._speech_audio_samples = 0
 
     @property
     def is_speaking(self) -> bool:

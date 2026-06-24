@@ -24,7 +24,7 @@ from core.env import env_int
 from core.logger import setup_logging, get_logger
 from services.stt import get_stt_engine
 from api.realtime import ws
-from api import common, assist, practice, analytics, resume, jobs
+from api import common, assist, analytics, resume, jobs, review
 from api import kb as kb_api
 
 setup_logging()
@@ -238,10 +238,10 @@ async def api_auth_info(request: Request):
 app.include_router(ws.router)
 app.include_router(common.router, prefix="/api")
 app.include_router(assist.router, prefix="/api")
-app.include_router(practice.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(resume.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
+app.include_router(review.router, prefix="/api")
 app.include_router(kb_api.router, prefix="/api")
 
 

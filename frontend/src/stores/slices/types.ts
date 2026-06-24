@@ -62,21 +62,8 @@ export interface AppConfig {
   candidate_streaming_asr_enabled?: boolean
   candidate_streaming_asr_interval_ms?: number
   candidate_mic_compatibility_mode?: boolean
-  practice_tts_provider?: string
-  edge_tts_available?: boolean
-  edge_tts_status_detail?: string
-  edge_tts_voice_female?: string
-  edge_tts_voice_male?: string
-  edge_tts_rate?: string
-  edge_tts_pitch?: string
-  volcengine_tts_appkey?: string
-  volcengine_tts_token?: string
-  practice_tts_speaker_female?: string
-  practice_tts_speaker_male?: string
   position: string
   language: string
-  /** 模拟练习候选人维度：campus_intern=校招/实习，social=社招 */
-  practice_audience?: string
   auto_detect: boolean
   silence_threshold: number
   silence_duration: number
@@ -95,6 +82,8 @@ export interface AppConfig {
   assist_transcription_merge_gap_sec?: number
   /** 从首段 ASR 起最长等待（秒），超时强制送出 */
   assist_transcription_merge_max_sec?: number
+  /** 主链路单段最长语音（秒），避免连续讲话攒成超长 ASR 请求 */
+  assist_vad_max_speech_sec?: number
   /** 高 churn 场景下自动切短答 */
   assist_high_churn_short_answer?: boolean
   /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
@@ -116,6 +105,11 @@ export interface AppConfig {
   kb_asr_deadline_ms?: number
   /** 命中数上限 */
   kb_top_k?: number
+  // --- Review (面试复盘) ---
+  /** 是否启用面试复盘功能（默认关闭）*/
+  review_enabled?: boolean
+  /** 复盘分析使用的模型索引 */
+  review_model_index?: number
 }
 
 export type QAStatus = 'streaming' | 'done' | 'cancelled' | 'error'
@@ -136,74 +130,6 @@ export interface QAPair {
   errorMessage?: string
 }
 
-export type PracticeAnswerMode = 'voice' | 'code' | 'voice+code'
-
-export interface PracticeContext {
-  position: string
-  language: string
-  audience: string
-  audience_label: string
-  resume_text: string
-  jd_text: string
-  interviewer_style?: string
-}
-
-export interface PracticePhase {
-  phase_id: string
-  label: string
-  category: string
-  focus: string[]
-  follow_up_budget: number
-  answer_mode: PracticeAnswerMode
-  question: string
-  written_prompt?: string
-  artifact_notes?: string[]
-}
-
-export interface PracticeBlueprint {
-  opening_script: string
-  phases: PracticePhase[]
-}
-
-export interface PracticeTurn {
-  turn_id: string
-  phase_id: string
-  phase_label: string
-  category: string
-  answer_mode: PracticeAnswerMode
-  question: string
-  prompt_script: string
-  stage_prompt?: string
-  interviewer_signal?: string
-  transition_line?: string
-  written_prompt?: string
-  artifact_notes?: string[]
-  asked_at: number
-  follow_up_of?: string | null
-  transcript: string
-  code_text: string
-  duration_ms: number
-  decision?: string
-  decision_reason?: string
-  evidence?: string[]
-  strengths?: string[]
-  risks?: string[]
-  scorecard?: Record<string, number>
-}
-
-export interface PracticeSessionSnapshot {
-  status: PracticeStatus
-  context: PracticeContext | null
-  blueprint: PracticeBlueprint | null
-  current_phase_index: number
-  current_turn: PracticeTurn | null
-  turn_history: PracticeTurn[]
-  interviewer_persona?: Record<string, string>
-  report_markdown: string
-  created_at: number
-  finished_at?: number | null
-}
-
 export interface DeviceItem {
   id: number
   name: string
@@ -221,8 +147,6 @@ export interface PlatformInfo {
 export interface OptionsInfo {
   positions: string[]
   languages: string[]
-  practice_audiences?: string[]
-  practice_tts_providers?: string[]
   stt_providers?: string[]
   whisper_models: string[]
   screen_capture_regions?: string[]
@@ -237,11 +161,3 @@ export interface TokenUsage {
 
 export type SettingsDrawerTab = 'general' | 'config' | 'models'
 export type ModelHealthStatus = 'checking' | 'ok' | 'error'
-export type PracticeStatus =
-  | 'idle'
-  | 'preparing'
-  | 'interviewer_speaking'
-  | 'awaiting_answer'
-  | 'thinking_next_turn'
-  | 'debriefing'
-  | 'finished'

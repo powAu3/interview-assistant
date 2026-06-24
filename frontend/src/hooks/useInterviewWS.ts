@@ -17,10 +17,6 @@ interface WsMsg {
   [k: string]: unknown
 }
 
-function normalizePracticeStatus(status: unknown) {
-  return status === 'interviewer_speaking' ? 'awaiting_answer' : status
-}
-
 export function useInterviewWS() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<number | null>(null)
@@ -107,16 +103,6 @@ export function useInterviewWS() {
     switch (msg.type) {
       case 'init':
         s.setInitData(msg as Parameters<typeof s.setInitData>[0])
-        if (msg.practice_session) {
-          s.setPracticeSession(msg.practice_session as Parameters<typeof s.setPracticeSession>[0])
-          if ((msg.practice_session as { status?: string })?.status) {
-            s.setPracticeStatus(
-              normalizePracticeStatus(
-                (msg.practice_session as { status: Parameters<typeof s.setPracticeStatus>[0] }).status,
-              ) as Parameters<typeof s.setPracticeStatus>[0],
-            )
-          }
-        }
         break
       case 'recording':
         s.setRecording(msg.value as boolean)
@@ -197,19 +183,6 @@ export function useInterviewWS() {
         if (msg.error) {
           s.pushToast(`会议软件可能独占麦克风，候选人口述记录已关闭，不影响面试录音: ${msg.error as string}`, 'warn')
         }
-        break
-      // Practice mode messages
-      case 'practice_status':
-        s.setPracticeStatus(normalizePracticeStatus(msg.status) as Parameters<typeof s.setPracticeStatus>[0])
-        break
-      case 'practice_session':
-        s.setPracticeSession(msg.session as Parameters<typeof s.setPracticeSession>[0])
-        break
-      case 'practice_recording':
-        s.setPracticeRecording(msg.value as boolean)
-        break
-      case 'practice_transcription':
-        s.appendPracticeAnswerDraft(msg.text as string)
         break
       case 'model_health':
         s.setModelHealth(

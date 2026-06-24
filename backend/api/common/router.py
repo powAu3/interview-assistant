@@ -12,8 +12,7 @@ from pydantic import BaseModel, ValidationError
 from core.auth import get_token, is_auth_disabled, is_loopback_host
 from core.config import (
     get_config, update_config,
-    POSITION_OPTIONS, LANGUAGE_OPTIONS, PRACTICE_AUDIENCE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
-    PRACTICE_TTS_PROVIDER_OPTIONS,
+    POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
 )
 from core.env import env_int
@@ -67,7 +66,6 @@ class ConfigUpdate(BaseModel):
     doubao_stt_boosting_table_id: Optional[str] = None
     position: Optional[str] = None
     language: Optional[str] = None
-    practice_audience: Optional[str] = None
     auto_detect: Optional[bool] = None
     silence_threshold: Optional[float] = None
     silence_duration: Optional[float] = None
@@ -100,20 +98,14 @@ class ConfigUpdate(BaseModel):
     candidate_streaming_asr_enabled: Optional[bool] = None
     candidate_streaming_asr_interval_ms: Optional[int] = None
     candidate_mic_compatibility_mode: Optional[bool] = None
-    practice_tts_provider: Optional[str] = None
-    edge_tts_voice_female: Optional[str] = None
-    edge_tts_voice_male: Optional[str] = None
-    edge_tts_rate: Optional[str] = None
-    edge_tts_pitch: Optional[str] = None
-    volcengine_tts_appkey: Optional[str] = None
-    volcengine_tts_token: Optional[str] = None
-    practice_tts_speaker_female: Optional[str] = None
-    practice_tts_speaker_male: Optional[str] = None
     # KB (Beta) - 详细字段(min_score / OCR / Vision / chunk_size 等)仍走 config.json
     kb_enabled: Optional[bool] = None
     kb_top_k: Optional[int] = None
     kb_deadline_ms: Optional[int] = None
     kb_asr_deadline_ms: Optional[int] = None
+    # Review (面试复盘)
+    review_enabled: Optional[bool] = None
+    review_model_index: Optional[int] = None
 
 
 _MODEL_API_KEY_KEEP = "__IA_KEEP_EXISTING_API_KEY__"
@@ -374,32 +366,8 @@ async def api_update_config(body: ConfigUpdate):
                 d["think_mode"] = False
             elif val != "off" and d.get("think_mode", False) is False:
                 d["think_mode"] = True
-        if d.get("practice_audience") == "":
-            d.pop("practice_audience", None)
-        elif "practice_audience" in d and d["practice_audience"] not in PRACTICE_AUDIENCE_OPTIONS:
-            raise HTTPException(
-                422,
-                f"practice_audience 必须是 {list(PRACTICE_AUDIENCE_OPTIONS)} 之一",
-            )
-        if d.get("practice_tts_provider") == "":
-            d.pop("practice_tts_provider", None)
-        elif "practice_tts_provider" in d and d["practice_tts_provider"] not in PRACTICE_TTS_PROVIDER_OPTIONS:
-            raise HTTPException(
-                422,
-                f"practice_tts_provider 必须是 {list(PRACTICE_TTS_PROVIDER_OPTIONS)} 之一",
-            )
-        if "practice_tts_speaker_female" in d:
-            d["practice_tts_speaker_female"] = str(d["practice_tts_speaker_female"]).strip()
-        if "practice_tts_speaker_male" in d:
-            d["practice_tts_speaker_male"] = str(d["practice_tts_speaker_male"]).strip()
-        if "edge_tts_voice_female" in d:
-            d["edge_tts_voice_female"] = str(d["edge_tts_voice_female"]).strip()
-        if "edge_tts_voice_male" in d:
-            d["edge_tts_voice_male"] = str(d["edge_tts_voice_male"]).strip()
-        if "edge_tts_rate" in d:
-            d["edge_tts_rate"] = str(d["edge_tts_rate"]).strip()
-        if "edge_tts_pitch" in d:
-            d["edge_tts_pitch"] = str(d["edge_tts_pitch"]).strip()
+        if d.get("language") and d["language"] not in LANGUAGE_OPTIONS:
+            raise HTTPException(422, f"language 必须是 {list(LANGUAGE_OPTIONS)} 之一")
         if "kb_top_k" in d:
             d["kb_top_k"] = max(1, min(20, int(d["kb_top_k"])))
         if "kb_deadline_ms" in d:
@@ -419,7 +387,8 @@ async def api_update_config(body: ConfigUpdate):
         new_model = body.whisper_model
         if hasattr(engine, "change_model"):
             threading.Thread(target=lambda: engine.change_model(new_model), daemon=True).start()
-    return {"ok": True}
+    # 返回更新后的完整配置，而不是简单的 {ok: True}
+    return build_config_payload(get_config())
 
 
 @router.get("/network-info")
@@ -459,8 +428,6 @@ async def api_options():
     return {
         "positions": POSITION_OPTIONS,
         "languages": LANGUAGE_OPTIONS,
-        "practice_audiences": PRACTICE_AUDIENCE_OPTIONS,
-        "practice_tts_providers": PRACTICE_TTS_PROVIDER_OPTIONS,
         "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
         "screen_capture_regions": SCREEN_CAPTURE_REGION_OPTIONS,
