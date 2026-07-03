@@ -73,10 +73,16 @@ class ConfigUpdate(BaseModel):
     transcription_min_sig_chars: Optional[int] = None
     assist_transcription_merge_gap_sec: Optional[float] = None
     assist_transcription_merge_max_sec: Optional[float] = None
+    assist_vad_max_speech_sec: Optional[float] = None
+    assist_vad_min_speech_sec: Optional[float] = None
     assist_asr_confirm_window_sec: Optional[float] = None
     assist_asr_group_max_wait_sec: Optional[float] = None
     assist_asr_interrupt_running: Optional[bool] = None
     assist_high_churn_short_answer: Optional[bool] = None
+    assist_realtime_max_tokens: Optional[int] = None
+    assist_realtime_high_churn_max_tokens: Optional[int] = None
+    assist_stop_answer_wait_sec: Optional[float] = None
+    assist_interviewer_asr_drain_timeout_sec: Optional[float] = None
     screen_capture_region: Optional[str] = None
     screen_capture_max_long_edge: Optional[int] = None
     multi_screen_capture_idle_sec: Optional[float] = None
@@ -335,6 +341,14 @@ async def api_update_config(body: ConfigUpdate):
             d["assist_transcription_merge_max_sec"] = max(
                 1.0, min(120.0, float(d["assist_transcription_merge_max_sec"]))
             )
+        if "assist_vad_max_speech_sec" in d:
+            d["assist_vad_max_speech_sec"] = max(
+                6.0, min(60.0, float(d["assist_vad_max_speech_sec"]))
+            )
+        if "assist_vad_min_speech_sec" in d:
+            d["assist_vad_min_speech_sec"] = max(
+                0.1, min(2.0, float(d["assist_vad_min_speech_sec"]))
+            )
         if "assist_asr_confirm_window_sec" in d:
             d["assist_asr_confirm_window_sec"] = max(
                 0.0, min(5.0, float(d["assist_asr_confirm_window_sec"]))
@@ -342,6 +356,24 @@ async def api_update_config(body: ConfigUpdate):
         if "assist_asr_group_max_wait_sec" in d:
             d["assist_asr_group_max_wait_sec"] = max(
                 0.2, min(8.0, float(d["assist_asr_group_max_wait_sec"]))
+            )
+        if "assist_realtime_max_tokens" in d:
+            d["assist_realtime_max_tokens"] = max(
+                256, min(4096, int(d["assist_realtime_max_tokens"]))
+            )
+        if "assist_realtime_high_churn_max_tokens" in d:
+            realtime_cap = int(d.get("assist_realtime_max_tokens", get_config().assist_realtime_max_tokens))
+            d["assist_realtime_high_churn_max_tokens"] = max(
+                128,
+                min(realtime_cap, int(d["assist_realtime_high_churn_max_tokens"])),
+            )
+        if "assist_stop_answer_wait_sec" in d:
+            d["assist_stop_answer_wait_sec"] = max(
+                0.0, min(20.0, float(d["assist_stop_answer_wait_sec"]))
+            )
+        if "assist_interviewer_asr_drain_timeout_sec" in d:
+            d["assist_interviewer_asr_drain_timeout_sec"] = max(
+                0.5, min(30.0, float(d["assist_interviewer_asr_drain_timeout_sec"]))
             )
         # 非法 enum 值必须明确报错: 静默 pop 会让前端以为保存成功,
         # 但实际配置没变, 用户看到的 UI 状态与后端不一致 (P0 #3 in CR)。

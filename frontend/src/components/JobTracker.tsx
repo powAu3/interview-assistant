@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import dayjs from 'dayjs'
 import {
   LayoutGrid,
   Plus,
@@ -9,6 +10,8 @@ import {
   RefreshCw,
   Briefcase,
   Sparkles,
+  X,
+  MessageSquareText,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
@@ -25,6 +28,20 @@ import { STAGE_LABELS, TERMINAL_STAGES } from './job-tracker/stageConfig'
 
 const SHOW_TERMINAL_STORAGE_KEY = 'ia-jobtracker-show-terminal'
 
+type ApplicationReviewItem = {
+  id: number
+  status: string
+  started_at: number
+  ended_at: number | null
+  title?: string | null
+  company?: string | null
+  role?: string | null
+  turn_count: number
+  avg_score: number | null
+  summary_preview?: string | null
+  updated_at: number
+}
+
 export default function JobTracker() {
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
@@ -39,6 +56,9 @@ export default function JobTracker() {
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareItems, setCompareItems] = useState<Offer[]>([])
   const [offerModalApp, setOfferModalApp] = useState<Application | null>(null)
+  const [reviewModalApp, setReviewModalApp] = useState<Application | null>(null)
+  const [reviewItems, setReviewItems] = useState<ApplicationReviewItem[]>([])
+  const [reviewLoading, setReviewLoading] = useState(false)
   const [showTerminalStages, setShowTerminalStages] = useState(() => {
     try {
       const v = localStorage.getItem(SHOW_TERMINAL_STORAGE_KEY)
@@ -183,6 +203,35 @@ export default function JobTracker() {
   const openOfferModal = useCallback((app: Application) => {
     setOfferModalApp(app)
   }, [])
+
+  const openReviewsModal = useCallback(
+    async (app: Application) => {
+      setReviewModalApp(app)
+      setReviewItems([])
+      setReviewLoading(true)
+      try {
+        const res = await api.jobTrackerApplicationReviews(app.id)
+        setReviewItems((res.items as Record<string, unknown>[]).map((item) => ({
+          id: Number(item.id),
+          status: String(item.status ?? ''),
+          started_at: Number(item.started_at ?? 0),
+          ended_at: item.ended_at != null ? Number(item.ended_at) : null,
+          title: item.title != null ? String(item.title) : null,
+          company: item.company != null ? String(item.company) : null,
+          role: item.role != null ? String(item.role) : null,
+          turn_count: Number(item.turn_count ?? 0),
+          avg_score: item.avg_score != null ? Number(item.avg_score) : null,
+          summary_preview: item.summary_preview != null ? String(item.summary_preview) : null,
+          updated_at: Number(item.updated_at ?? 0),
+        })))
+      } catch (e) {
+        setToastMessage(e instanceof Error ? e.message : '加载关联复盘失败')
+      } finally {
+        setReviewLoading(false)
+      }
+    },
+    [setToastMessage],
+  )
 
   const saveOffer = useCallback(
     async (payload: Record<string, unknown>) => {
@@ -372,6 +421,7 @@ export default function JobTracker() {
             onPatch={onPatch}
             onDelete={onDelete}
             onOpenOffer={openOfferModal}
+            onOpenReviews={openReviewsModal}
             dense={dense}
             search={search}
           />
@@ -407,6 +457,91 @@ export default function JobTracker() {
           <OfferCompareModal open={compareOpen} items={compareItems} onClose={() => setCompareOpen(false)} />
         </Suspense>
       )}
+
+      {reviewModalApp != null && (
+        <ApplicationReviewsModal
+          app={reviewModalApp}
+          items={reviewItems}
+          loading={reviewLoading}
+          onClose={() => setReviewModalApp(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ApplicationReviewsModal({
+  app,
+  items,
+  loading,
+  onClose,
+}: {
+  app: Application
+  items: ApplicationReviewItem[]
+  loading: boolean
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-bg-hover bg-bg-secondary shadow-2xl">
+        <div className="flex items-center justify-between border-b border-bg-hover px-5 py-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">
+              <MessageSquareText className="h-4 w-4 text-accent-blue" />
+              关联复盘
+            </h3>
+            <p className="mt-1 text-xs text-text-muted">{app.company} · {app.position || '岗位'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"
+            aria-label="关闭"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="max-h-[65vh] overflow-y-auto p-5">
+          {loading ? (
+            <div className="py-10 text-center text-sm text-text-muted">加载中...</div>
+          ) : items.length === 0 ? (
+            <div className="rounded-xl border border-bg-hover bg-bg-tertiary/30 px-4 py-10 text-center text-sm text-text-muted">
+              暂无关联复盘
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div key={item.id} className="rounded-xl border border-bg-hover bg-bg-tertiary/30 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-text-primary">
+                        {item.title || item.company || item.role || `复盘 #${item.id}`}
+                      </div>
+                      <div className="mt-1 text-xs text-text-muted">
+                        {dayjs.unix(Math.floor(item.ended_at ?? item.started_at)).format('YYYY-MM-DD HH:mm')} · {item.turn_count} 轮 · {item.status}
+                      </div>
+                    </div>
+                    <div className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                      item.avg_score == null
+                        ? 'bg-bg-hover text-text-muted'
+                        : item.avg_score < 6
+                          ? 'bg-yellow-500/15 text-yellow-500'
+                          : item.avg_score >= 8
+                            ? 'bg-green-500/15 text-green-500'
+                            : 'bg-blue-500/15 text-blue-500'
+                    }`}>
+                      {item.avg_score != null ? item.avg_score.toFixed(1) : '--'}
+                    </div>
+                  </div>
+                  {item.summary_preview ? (
+                    <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-text-secondary">{item.summary_preview}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

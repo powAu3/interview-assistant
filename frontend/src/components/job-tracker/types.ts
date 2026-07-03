@@ -16,6 +16,14 @@ export interface TodoItem {
   due?: string
 }
 
+export interface ApplicationReviewSummary {
+  review_count: number
+  latest_review_id: number | null
+  latest_avg_score: number | null
+  latest_review_at: number | null
+  latest_status: string | null
+}
+
 export interface Application {
   id: number
   company: string
@@ -31,6 +39,7 @@ export interface Application {
   created_at: number
   updated_at: number
   sort_order: number
+  review_summary: ApplicationReviewSummary
 }
 
 export interface Offer {
@@ -53,6 +62,9 @@ export interface Offer {
 
 export function parseApplication(raw: Record<string, unknown>): Application {
   const todos = raw.todos
+  const reviewSummary = (raw.review_summary && typeof raw.review_summary === 'object'
+    ? raw.review_summary
+    : {}) as Partial<ApplicationReviewSummary>
   return {
     id: Number(raw.id),
     company: String(raw.company ?? ''),
@@ -68,6 +80,13 @@ export function parseApplication(raw: Record<string, unknown>): Application {
     updated_at: Number(raw.updated_at ?? 0),
     sort_order: Number(raw.sort_order ?? 0),
     todos: Array.isArray(todos) ? (todos as TodoItem[]) : [],
+    review_summary: {
+      review_count: Number(reviewSummary.review_count ?? 0),
+      latest_review_id: reviewSummary.latest_review_id != null ? Number(reviewSummary.latest_review_id) : null,
+      latest_avg_score: reviewSummary.latest_avg_score != null ? Number(reviewSummary.latest_avg_score) : null,
+      latest_review_at: reviewSummary.latest_review_at != null ? Number(reviewSummary.latest_review_at) : null,
+      latest_status: reviewSummary.latest_status != null ? String(reviewSummary.latest_status) : null,
+    },
   }
 }
 

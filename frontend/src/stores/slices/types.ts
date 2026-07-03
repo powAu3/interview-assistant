@@ -84,8 +84,18 @@ export interface AppConfig {
   assist_transcription_merge_max_sec?: number
   /** 主链路单段最长语音（秒），避免连续讲话攒成超长 ASR 请求 */
   assist_vad_max_speech_sec?: number
+  /** 主链路单段最短语音（秒），短于该值的片段不送 ASR */
+  assist_vad_min_speech_sec?: number
   /** 高 churn 场景下自动切短答 */
   assist_high_churn_short_answer?: boolean
+  /** 实时语音问答默认输出 token 上限 */
+  assist_realtime_max_tokens?: number
+  /** 高 churn 短答模式输出 token 上限 */
+  assist_realtime_high_churn_max_tokens?: number
+  /** 停止录音时等待答案 worker 收尾的最长秒数 */
+  assist_stop_answer_wait_sec?: number
+  /** 停止录音时等待面试官 ASR segment worker 清空队列的最长秒数 */
+  assist_interviewer_asr_drain_timeout_sec?: number
   /** 电脑截图区域：full | left_half | right_half | top_half | bottom_half */
   screen_capture_region?: string
   /** 截图送入识图模型前的最长边限制；0=不缩放 */

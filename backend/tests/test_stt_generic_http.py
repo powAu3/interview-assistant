@@ -204,6 +204,179 @@ def test_transcribe_with_fallback_suppresses_short_empty_remote_audio(monkeypatc
     assert calls["circuit_failure"] == 0
 
 
+def test_transcribe_with_fallback_can_force_fallback_on_short_empty_remote_audio(monkeypatch):
+    import core.config as core_config
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {"stt_provider": "generic", "whisper_model": "base", "whisper_language": "auto"})(),
+    )
+
+    class _RemoteEngine:
+        def transcribe(self, audio, sample_rate=16000, position="", language=""):
+            return ""
+
+    calls = {"fallback": 0, "circuit_failure": 0}
+    monkeypatch.setattr(stt_factory, "get_stt_engine", lambda model_size=None, language=None, provider=None: _RemoteEngine())
+    monkeypatch.setattr(stt_factory, "_is_circuit_open", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        stt_factory,
+        "_call_circuit_record_failure",
+        lambda *_args, **_kwargs: calls.__setitem__("circuit_failure", calls["circuit_failure"] + 1),
+    )
+    monkeypatch.setattr(stt_factory, "_circuit_reset", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        stt_factory,
+        "_call_whisper_transcribe",
+        lambda *args, **kwargs: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text",
+    )
+    monkeypatch.setattr(stt_factory, "_is_whisper_engine_loaded", lambda *_args, **_kwargs: True)
+    _patch_broadcast(monkeypatch, [])
+
+    text = stt_factory.transcribe_with_fallback(
+        np.zeros(16000 * 2, dtype=np.float32),
+        16000,
+        provider="generic",
+        scope="interviewer",
+        fallback_on_empty_remote=True,
+    )
+
+    assert text == "fallback text"
+    assert calls["fallback"] == 1
+    assert calls["circuit_failure"] == 1
+
+
+def test_transcribe_with_fallback_retries_empty_interviewer_remote_with_tail_pad(monkeypatch):
+    import core.config as core_config
+
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {"stt_provider": "generic", "whisper_model": "base", "whisper_language": "auto"})(),
+    )
+
+    calls = {"audio_lengths": [], "fallback": 0}
+
+    class _RemoteEngine:
+        @property
+        def is_loaded(self):
+            return True
+
+        def transcribe(self, audio, sample_rate=16000, position="", language=""):
+            calls["audio_lengths"].append(len(audio))
+            return "" if len(calls["audio_lengths"]) == 1 else "retry text"
+
+    monkeypatch.setattr(stt_factory, "get_stt_engine", lambda provider=None, model_size=None, language=None: _RemoteEngine())
+    monkeypatch.setattr(stt_factory, "_call_circuit_open", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(stt_factory, "_call_circuit_reset", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(stt_factory, "_call_circuit_record_failure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        stt_factory,
+        "_call_whisper_transcribe",
+        lambda *args, **kwargs: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text",
+    )
+    monkeypatch.setattr(stt_factory, "_is_whisper_engine_loaded", lambda *_args, **_kwargs: True)
+    _patch_broadcast(monkeypatch, [])
+
+    text = stt_factory.transcribe_with_fallback(
+        np.zeros(16000 * 2, dtype=np.float32),
+        16000,
+        provider="generic",
+        scope="interviewer",
+        fallback_on_empty_remote=True,
+    )
+
+    assert text == "retry text"
+    assert calls["fallback"] == 0
+    assert calls["audio_lengths"] == [32000, 32000 + int(16000 * (stt_factory.REMOTE_EMPTY_RETRY_PAD_MS / 1000.0))]
+
+
+def test_transcribe_with_fallback_does_not_tail_pad_retry_candidate_empty_remote(monkeypatch):
+    import core.config as core_config
+
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {"stt_provider": "generic", "whisper_model": "base", "whisper_language": "auto"})(),
+    )
+
+    calls = {"audio_lengths": [], "fallback": 0, "circuit_failure": 0}
+
+    class _RemoteEngine:
+        def transcribe(self, audio, sample_rate=16000, position="", language=""):
+            calls["audio_lengths"].append(len(audio))
+            return ""
+
+    monkeypatch.setattr(stt_factory, "get_stt_engine", lambda provider=None, model_size=None, language=None: _RemoteEngine())
+    monkeypatch.setattr(stt_factory, "_call_circuit_open", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(stt_factory, "_call_circuit_reset", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        stt_factory,
+        "_call_circuit_record_failure",
+        lambda *_args, **_kwargs: calls.__setitem__("circuit_failure", calls["circuit_failure"] + 1),
+    )
+    monkeypatch.setattr(
+        stt_factory,
+        "_call_whisper_transcribe",
+        lambda *args, **kwargs: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text",
+    )
+    monkeypatch.setattr(stt_factory, "_is_whisper_engine_loaded", lambda *_args, **_kwargs: True)
+    _patch_broadcast(monkeypatch, [])
+
+    text = stt_factory.transcribe_with_fallback(
+        np.zeros(16000 * 2, dtype=np.float32),
+        16000,
+        provider="generic",
+        scope="candidate",
+        fallback_on_empty_remote=True,
+    )
+
+    assert text == "fallback text"
+    assert calls["audio_lengths"] == [32000]
+    assert calls["fallback"] == 1
+    assert calls["circuit_failure"] == 1
+
+
+def test_transcribe_with_fallback_retries_remote_once_before_fallback(monkeypatch):
+    import core.config as core_config
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {"stt_provider": "doubao", "whisper_model": "base", "whisper_language": "auto"})(),
+    )
+
+    calls = {"remote": 0, "fallback": 0, "sleep": []}
+
+    class _RemoteEngine:
+        @property
+        def is_loaded(self):
+            return True
+
+        def transcribe(self, audio, sample_rate=16000, position="", language=""):
+            calls["remote"] += 1
+            raise ConnectionError("connection reset")
+
+    monkeypatch.setattr(stt_factory, "get_stt_engine", lambda provider=None, model_size=None, language=None: _RemoteEngine())
+    monkeypatch.setattr(stt_factory, "_is_circuit_open", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(stt_factory, "_circuit_reset", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(stt_factory, "_call_circuit_record_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        stt_factory,
+        "_call_whisper_transcribe",
+        lambda *args, **kwargs: calls.__setitem__("fallback", calls["fallback"] + 1) or "fallback text",
+    )
+    monkeypatch.setattr(stt_factory, "_is_whisper_engine_loaded", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(stt_factory.time, "sleep", lambda seconds: calls["sleep"].append(seconds))
+    _patch_broadcast(monkeypatch, [])
+
+    text = stt_factory.transcribe_with_fallback(np.zeros(16000 * 8, dtype=np.float32), 16000, provider="doubao")
+
+    assert text == "fallback text"
+    assert calls["remote"] == 2
+    assert calls["fallback"] == 1
+    assert calls["sleep"] == [0.3]
+
+
 def test_transcribe_with_fallback_loads_unready_whisper_before_returning(monkeypatch):
     import core.config as core_config
     monkeypatch.setattr(

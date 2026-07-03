@@ -19,6 +19,8 @@ export function showExamOverlayPrompt() {
     mode: 'prompt',
     focusWidthPct: next.interviewOverlayFocusWidthPct,
     focusHeightPct: next.interviewOverlayFocusHeightPct,
+    promptMaxWidth: next.interviewOverlayPromptMaxWidth,
+    promptAutoFollow: next.interviewOverlayPromptAutoFollow,
     maxLines: next.interviewOverlayMaxLines,
   }).catch(() => {})
 }

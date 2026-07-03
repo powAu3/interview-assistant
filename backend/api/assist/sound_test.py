@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 from pathlib import Path
@@ -20,7 +21,7 @@ from services.llm import (
     create_answer_stream_sanitizer,
     postprocess_answer_for_mode,
 )
-from services.stt import get_stt_engine
+from services.stt import transcribe_with_fallback
 
 PREFLIGHT_SCENARIOS = [
     {
@@ -140,6 +141,184 @@ def play_preflight_audio() -> float:
     started = time.monotonic()
     play_audio_file(PREFLIGHT_AUDIO_PATH)
     return time.monotonic() - started
+
+
+def play_audio_fixture(audio_path: str | Path | None = None) -> float:
+    target = Path(audio_path) if audio_path else PREFLIGHT_AUDIO_PATH
+    if not target.exists():
+        raise RuntimeError(f"测试音频不存在: {target}")
+    started = time.monotonic()
+    play_audio_file(target)
+    return time.monotonic() - started
+
+
+def collect_capture_audio_during_playback(
+    cap: AudioCapture,
+    play_fn,
+    *,
+    trailing_sec: float = 0.45,
+    poll_interval: float = 0.02,
+) -> tuple[Optional[np.ndarray], float]:
+    chunks: list[np.ndarray] = []
+    playback_queue: queue.Queue[tuple[str, float | Exception]] = queue.Queue(maxsize=1)
+
+    def _append_chunk(timeout: float) -> None:
+        chunk = cap.get_audio_chunk(timeout=max(0.0, timeout))
+        if chunk is not None and len(chunk) > 0:
+            chunks.append(chunk)
+
+    def _drain_ready_chunks() -> None:
+        drain_chunks = getattr(cap, "drain_audio_chunks", None)
+        if callable(drain_chunks):
+            try:
+                ready_chunks = drain_chunks(timeout=0.0, max_chunks=32) or []
+            except TypeError:
+                ready_chunks = drain_chunks(timeout=0.0) or []
+            for chunk in ready_chunks:
+                if chunk is not None and len(chunk) > 0:
+                    chunks.append(chunk)
+            return
+        while True:
+            chunk = cap.get_audio_chunk(timeout=0.0)
+            if chunk is None or len(chunk) <= 0:
+                return
+            chunks.append(chunk)
+
+    def _runner():
+        try:
+            playback_queue.put(("ok", float(play_fn() or 0.0)))
+        except Exception as exc:
+            playback_queue.put(("err", exc))
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    started = time.monotonic()
+    thread.start()
+
+    while thread.is_alive():
+        _append_chunk(poll_interval)
+    thread.join(timeout=0.1)
+    playback_elapsed = max(0.0, time.monotonic() - started)
+    try:
+        status, payload = playback_queue.get_nowait()
+    except queue.Empty:
+        status, payload = ("ok", playback_elapsed)
+    if status == "err":
+        raise payload  # type: ignore[misc]
+
+    # Playback completion and scheduler jitter can leave queued chunks unread
+    # even when trailing_sec is 0; drain all currently available chunks first.
+    _drain_ready_chunks()
+
+    trailing_deadline = time.monotonic() + max(0.0, float(trailing_sec or 0.0))
+    while time.monotonic() < trailing_deadline:
+        _append_chunk(poll_interval)
+        _drain_ready_chunks()
+
+    if not chunks:
+        return None, float(payload or playback_elapsed)
+    return np.concatenate(chunks), float(payload or playback_elapsed)
+
+
+def replay_preflight_capture_stt(
+    device_id: int,
+    *,
+    repeats: int = 3,
+    gap_sec: float = 0.25,
+    audio_path: str | Path | None = None,
+    expected_phrase: Optional[str] = None,
+) -> dict:
+    rounds: list[dict] = []
+    cfg = get_config()
+    cap = AudioCapture()
+    normalized_repeats = max(1, min(20, int(repeats or 1)))
+    normalized_gap_sec = max(0.0, min(2.0, float(gap_sec or 0.0)))
+    target_phrase = (expected_phrase or PREFLIGHT_EXPECTED_PHRASE or "").strip()
+    try:
+        cap.start(int(device_id), owner="audio-preflight-replay", mic_compatibility_mode=True)
+        time.sleep(0.15)
+        for idx in range(normalized_repeats):
+            round_started = time.monotonic()
+            captured, playback_elapsed = collect_capture_audio_during_playback(
+                cap,
+                lambda: play_audio_fixture(audio_path),
+                trailing_sec=0.45,
+            )
+            transcript = ""
+            rms = 0.0
+            peak = 0.0
+            stt_ms = 0
+            capture_stats = {}
+            if captured is not None and len(captured) > 0:
+                audio = captured.astype(np.float32)
+                rms = float(AudioCapture.compute_energy(audio))
+                peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
+                snapshot_fn = getattr(cap, "capture_stats_snapshot", None)
+                if callable(snapshot_fn):
+                    try:
+                        capture_stats = dict(snapshot_fn() or {})
+                    except Exception:
+                        capture_stats = {}
+                stt_started = time.monotonic()
+                transcript = transcribe_with_fallback(
+                    audio,
+                    AudioCapture.SAMPLE_RATE,
+                    position=getattr(cfg, "position", ""),
+                    language=getattr(cfg, "language", ""),
+                    scope="interviewer",
+                    fallback_on_empty_remote=True,
+                ) or ""
+                stt_ms = int((time.monotonic() - stt_started) * 1000)
+            ok, detail = match_phrase(target_phrase, transcript)
+            total_ms = int((time.monotonic() - round_started) * 1000)
+            rounds.append(
+                {
+                    "round": idx + 1,
+                    "ok": ok,
+                    "detail": detail,
+                    "transcript": transcript,
+                    "rms": rms,
+                    "peak": peak,
+                    "playback_sec": playback_elapsed,
+                    "stt_ms": stt_ms,
+                    "total_ms": total_ms,
+                    "provider": getattr(cfg, "stt_provider", "whisper"),
+                    "capture": capture_stats,
+                }
+            )
+            if idx + 1 < normalized_repeats and normalized_gap_sec > 0:
+                time.sleep(normalized_gap_sec)
+    finally:
+        cap.stop(owner="audio-preflight-replay")
+
+    success_count = sum(1 for item in rounds if item["ok"])
+    stt_values = [int(item.get("stt_ms", 0)) for item in rounds if int(item.get("stt_ms", 0)) > 0]
+    total_values = [int(item.get("total_ms", 0)) for item in rounds if int(item.get("total_ms", 0)) > 0]
+    raw_drop_values = [
+        int((item.get("capture") or {}).get("dropped_chunks_count", 0))
+        for item in rounds
+    ]
+    discontinuity_values = [
+        int((item.get("capture") or {}).get("loopback_discontinuity_count", 0))
+        for item in rounds
+    ]
+    return {
+        "device_id": int(device_id),
+        "repeats": normalized_repeats,
+        "success_count": success_count,
+        "failure_count": len(rounds) - success_count,
+        "provider": getattr(cfg, "stt_provider", "whisper"),
+        "expected_phrase": target_phrase,
+        "audio_path": str(Path(audio_path)) if audio_path else str(PREFLIGHT_AUDIO_PATH),
+        "summary": {
+            "avg_stt_ms": int(sum(stt_values) / len(stt_values)) if stt_values else 0,
+            "max_stt_ms": max(stt_values) if stt_values else 0,
+            "avg_total_ms": int(sum(total_values) / len(total_values)) if total_values else 0,
+            "max_total_ms": max(total_values) if total_values else 0,
+            "max_raw_queue_drop_count": max(raw_drop_values) if raw_drop_values else 0,
+            "max_loopback_discontinuity_count": max(discontinuity_values) if discontinuity_values else 0,
+        },
+        "rounds": rounds,
+    }
 
 
 def test_input_audio(device_id: int, duration_sec: float = 1.2) -> dict:
@@ -372,8 +551,14 @@ def _run_preflight(device_id: Optional[int], scenario_id: str):
         _set_step("capture", "pass", f"已捕获真实音频（RMS {energy:.4f}）")
 
         _set_step("stt", "running", "正在识别测试音频…")
-        engine = get_stt_engine()
-        transcript = engine.transcribe(captured.astype(np.float32), sample_rate=AudioCapture.SAMPLE_RATE) or ""
+        transcript = transcribe_with_fallback(
+            captured.astype(np.float32),
+            AudioCapture.SAMPLE_RATE,
+            position=getattr(cfg, "position", ""),
+            language=getattr(cfg, "language", ""),
+            scope="interviewer",
+            fallback_on_empty_remote=True,
+        ) or ""
         _set_status(captured_transcript=transcript)
         ok, detail = match_phrase(expected_phrase, transcript)
         _set_step("stt", "pass" if transcript.strip() else "fail", transcript.strip() or "识别结果为空", {"transcript": transcript})

@@ -9,7 +9,7 @@ import {
   type ColumnPinningState,
 } from '@tanstack/react-table'
 import dayjs from 'dayjs'
-import { Trash2, Briefcase } from 'lucide-react'
+import { Trash2, Briefcase, MessageSquareText } from 'lucide-react'
 import type { Application, Offer } from './types'
 import { ONGOING_STAGES, STAGE_LABELS, STAGE_ORDER, TERMINAL_STAGES } from './stageConfig'
 import { filterApplicationsBySearch } from './search'
@@ -130,6 +130,44 @@ function TodosCell({
   )
 }
 
+function ReviewSummaryCell({
+  app,
+  dense,
+  onOpenReviews,
+}: {
+  app: Application
+  dense?: boolean
+  onOpenReviews: (app: Application) => void
+}) {
+  const summary = app.review_summary
+  if (!summary || summary.review_count <= 0) {
+    return <span className="text-text-muted/50 text-[10px]">—</span>
+  }
+  const score = summary.latest_avg_score
+  const tone = score == null
+    ? 'border-bg-hover bg-bg-tertiary text-text-muted'
+    : score < 6
+      ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
+      : score >= 8
+        ? 'border-green-500/30 bg-green-500/10 text-green-500'
+        : 'border-blue-500/30 bg-blue-500/10 text-blue-500'
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenReviews(app)}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-left ${tone} hover:brightness-110 ${dense ? 'text-[10px]' : 'text-xs'}`}
+      title="查看关联复盘"
+    >
+      <MessageSquareText className="h-3.5 w-3.5" />
+      <span>复盘 {summary.review_count}</span>
+      {score != null ? <span>· {score.toFixed(1)}</span> : null}
+      {summary.latest_review_at != null ? (
+        <span className="text-text-muted">{dayjs.unix(Math.floor(summary.latest_review_at)).format('M/D')}</span>
+      ) : null}
+    </button>
+  )
+}
+
 type Props = {
   applications: Application[]
   offerByAppId: Map<number, Offer>
@@ -138,6 +176,7 @@ type Props = {
   onPatch: (id: number, patch: Partial<Application>) => void | Promise<boolean>
   onDelete: (id: number) => void
   onOpenOffer: (app: Application) => void
+  onOpenReviews: (app: Application) => void
   dense: boolean
   search: string
 }
@@ -150,6 +189,7 @@ export default function ApplicationsTable({
   onPatch,
   onDelete,
   onOpenOffer,
+  onOpenReviews,
   dense,
   search,
 }: Props) {
@@ -316,6 +356,18 @@ export default function ApplicationsTable({
           />
         ),
       }),
+      columnHelper.display({
+        id: 'review_summary',
+        header: '复盘',
+        size: 132,
+        cell: ({ row }) => (
+          <ReviewSummaryCell
+            app={row.original}
+            dense={dense}
+            onOpenReviews={onOpenReviews}
+          />
+        ),
+      }),
       columnHelper.accessor('todos', {
         header: '待办',
         size: 160,
@@ -377,7 +429,7 @@ export default function ApplicationsTable({
         ),
       }),
     ],
-    [dense, offerByAppId, onDelete, onOpenOffer, patch, selectedOfferIds, toggleOfferSelect],
+    [dense, offerByAppId, onDelete, onOpenOffer, onOpenReviews, patch, selectedOfferIds, toggleOfferSelect],
   )
 
   const table = useReactTable({

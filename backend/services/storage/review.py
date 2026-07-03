@@ -11,6 +11,7 @@ from services.storage.paths import sqlite_path
 
 DB_PATH = sqlite_path("review.db")
 _db_lock = threading.Lock()
+_UNSET = object()
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -39,6 +40,7 @@ def init_db() -> None:
                 title TEXT,
                 company TEXT,
                 role TEXT,
+                application_id INTEGER,
                 jd_snapshot TEXT,
                 resume_snapshot TEXT,
                 interviewer_capture_enabled INTEGER NOT NULL DEFAULT 0,
@@ -96,6 +98,8 @@ def init_db() -> None:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_review_turns_session_id ON review_turns(session_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_review_turns_qa_id ON review_turns(qa_id)")
             _ensure_column(conn, "review_turns", "original_candidate_answer_text", "TEXT")
+            _ensure_column(conn, "review_sessions", "application_id", "INTEGER")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_review_sessions_application_id ON review_sessions(application_id)")
         except Exception:
             pass
         conn.commit()
@@ -115,6 +119,7 @@ def create_session(
     title: str = "",
     company: str = "",
     role: str = "",
+    application_id: Optional[int] = None,
 ) -> int:
     """创建新 session，返回 session_id"""
     now = time.time()
@@ -124,11 +129,11 @@ def create_session(
             """
             INSERT INTO review_sessions (
                 status, started_at, source,
-                title, company, role,
+                title, company, role, application_id,
                 interviewer_capture_enabled, candidate_capture_enabled,
                 jd_snapshot, resume_snapshot,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 "recording",
@@ -137,6 +142,7 @@ def create_session(
                 title or None,
                 company or None,
                 role or None,
+                int(application_id) if application_id is not None else None,
                 1 if interviewer_enabled else 0,
                 1 if candidate_enabled else 0,
                 jd_snapshot or "",
@@ -308,6 +314,8 @@ def get_session_detail(session_id: int) -> Optional[dict[str, Any]]:
         conn.close()
 
     session = dict(session_row)
+    application_id = session.get("application_id")
+    session["application"] = _application_brief(application_id) if application_id else None
 
     # 解析 session JSON 字段
     for field in ["strong_points", "weak_points", "behavior_traits", "domain_summary"]:
@@ -350,6 +358,7 @@ def update_session_status(session_id: int, status: str):
         )
         conn.commit()
         conn.close()
+    sync_application_todos_for_session(session_id)
 
 
 def update_turn_analysis(
@@ -362,9 +371,13 @@ def update_turn_analysis(
     corrected_answer: Optional[str] = None,
 ):
     """更新 turn 的分析结果（含 ASR 纠错后的回答）"""
+    session_id: Optional[int] = None
     with _db_lock:
         conn = _conn()
         now = time.time()
+        row = conn.execute("SELECT session_id FROM review_turns WHERE id = ?", (turn_id,)).fetchone()
+        if row:
+            session_id = int(row["session_id"])
 
         # 构建动态 SQL
         fields = [
@@ -398,6 +411,8 @@ def update_turn_analysis(
         conn.execute(sql, params)
         conn.commit()
         conn.close()
+    if session_id is not None:
+        sync_application_todos_for_session(session_id)
 
 
 def update_session_summary(
@@ -432,6 +447,7 @@ def update_session_summary(
         )
         conn.commit()
         conn.close()
+    sync_application_todos_for_session(session_id)
 
 
 def update_session_info(
@@ -439,11 +455,20 @@ def update_session_info(
     title: Optional[str] = None,
     company: Optional[str] = None,
     role: Optional[str] = None,
+    application_id: Any = _UNSET,
 ):
     """更新会话的标题、公司、岗位信息"""
     now = time.time()
+    old_application_id: Optional[int] = None
     with _db_lock:
         conn = _conn()
+        if application_id is not _UNSET:
+            row = conn.execute(
+                "SELECT application_id FROM review_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if row and row["application_id"] is not None:
+                old_application_id = int(row["application_id"])
 
         updates = []
         params = []
@@ -457,6 +482,9 @@ def update_session_info(
         if role is not None:
             updates.append("role = ?")
             params.append(role)
+        if application_id is not _UNSET:
+            updates.append("application_id = ?")
+            params.append(int(application_id) if application_id is not None else None)
 
         if not updates:
             conn.close()
@@ -472,4 +500,195 @@ def update_session_info(
         )
         conn.commit()
         conn.close()
+    if application_id is not _UNSET:
+        new_application_id = int(application_id) if application_id is not None else None
+        if old_application_id is not None and old_application_id != new_application_id:
+            _remove_review_todos_from_application(session_id, old_application_id)
+        sync_application_todos_for_session(session_id)
+
+
+def _application_brief(application_id: Any) -> Optional[dict[str, Any]]:
+    try:
+        from services.storage import job_tracker
+
+        app = job_tracker.get_application(int(application_id))
+    except Exception:
+        return None
+    if not app:
+        return None
+    return {
+        "id": app["id"],
+        "company": app.get("company", ""),
+        "position": app.get("position", ""),
+        "city": app.get("city", ""),
+        "stage": app.get("stage", ""),
+    }
+
+
+def get_application_review_summaries(application_ids: list[int]) -> dict[int, dict[str, Any]]:
+    ids = sorted({int(i) for i in application_ids if int(i) > 0})
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    with _db_lock:
+        conn = _conn()
+        rows = conn.execute(
+            f"""
+            SELECT id, application_id, status, started_at, ended_at, avg_score
+            FROM review_sessions
+            WHERE application_id IN ({placeholders})
+            ORDER BY application_id ASC, COALESCE(ended_at, started_at) DESC, id DESC
+            """,
+            ids,
+        ).fetchall()
+        conn.close()
+
+    summaries: dict[int, dict[str, Any]] = {
+        app_id: {
+            "review_count": 0,
+            "latest_review_id": None,
+            "latest_avg_score": None,
+            "latest_review_at": None,
+            "latest_status": None,
+        }
+        for app_id in ids
+    }
+    for row in rows:
+        app_id = int(row["application_id"])
+        summary = summaries[app_id]
+        summary["review_count"] += 1
+        if summary["latest_review_id"] is None:
+            summary["latest_review_id"] = int(row["id"])
+            summary["latest_avg_score"] = row["avg_score"]
+            summary["latest_review_at"] = row["ended_at"] if row["ended_at"] is not None else row["started_at"]
+            summary["latest_status"] = row["status"]
+    return summaries
+
+
+def list_reviews_for_application(application_id: int) -> list[dict[str, Any]]:
+    with _db_lock:
+        conn = _conn()
+        rows = conn.execute(
+            """
+            SELECT id, status, started_at, ended_at, title, company, role,
+                   turn_count, avg_score, summary_markdown, updated_at
+            FROM review_sessions
+            WHERE application_id = ?
+            ORDER BY COALESCE(ended_at, started_at) DESC, id DESC
+            """,
+            (int(application_id),),
+        ).fetchall()
+        conn.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        if item.get("summary_markdown"):
+            item["summary_preview"] = str(item["summary_markdown"]).strip()[:180]
+        item.pop("summary_markdown", None)
+        out.append(item)
+    return out
+
+
+def _review_todo_prefix(session_id: int) -> str:
+    return f"review-{int(session_id)}-"
+
+
+def _turn_avg_score(turn: dict[str, Any]) -> Optional[float]:
+    scorecard = turn.get("scorecard") or {}
+    if not isinstance(scorecard, dict) or not scorecard:
+        return None
+    values: list[float] = []
+    for value in scorecard.values():
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _build_review_todos(detail: dict[str, Any]) -> list[dict[str, Any]]:
+    session_id = int(detail["id"])
+    todos: list[dict[str, Any]] = []
+    for idx, point in enumerate((detail.get("weak_points") or [])[:3], start=1):
+        text = str(point).strip()
+        if text:
+            todos.append({
+                "id": f"{_review_todo_prefix(session_id)}weak-{idx}",
+                "title": f"复盘补强：{text}",
+                "done": False,
+            })
+    low_turns = []
+    for turn in detail.get("turns") or []:
+        avg = _turn_avg_score(turn)
+        if avg is not None and avg < 6:
+            low_turns.append((avg, turn))
+    low_turns.sort(key=lambda item: item[0])
+    for _avg, turn in low_turns[:2]:
+        question = str(turn.get("question_text") or "").strip()
+        if len(question) > 42:
+            question = question[:42] + "..."
+        todos.append({
+            "id": f"{_review_todo_prefix(session_id)}turn-{turn.get('id') or turn.get('seq')}",
+            "title": f"复练第 {turn.get('seq')} 题：{question}",
+            "done": False,
+        })
+    return todos
+
+
+def sync_application_todos_for_session(session_id: int) -> bool:
+    detail = get_session_detail(session_id)
+    if not detail or not detail.get("application_id"):
+        return False
+    try:
+        from services.storage import job_tracker
+
+        app = job_tracker.get_application(int(detail["application_id"]))
+    except Exception:
+        return False
+    if not app:
+        return False
+
+    prefix = _review_todo_prefix(session_id)
+    generated = _build_review_todos(detail)
+    existing_todos = app.get("todos") or []
+    existing_by_id = {
+        str(todo.get("id")): todo
+        for todo in existing_todos
+        if isinstance(todo, dict) and todo.get("id")
+    }
+    kept = [
+        todo
+        for todo in existing_todos
+        if not (isinstance(todo, dict) and str(todo.get("id", "")).startswith(prefix))
+    ]
+    next_todos = list(kept)
+    for todo in generated:
+        old = existing_by_id.get(todo["id"]) or {}
+        next_todos.append({**todo, "done": bool(old.get("done", False))})
+    job_tracker.patch_application(int(app["id"]), {"todos": next_todos})
+    return True
+
+
+def _remove_review_todos_from_application(session_id: int, application_id: int) -> bool:
+    try:
+        from services.storage import job_tracker
+
+        app = job_tracker.get_application(int(application_id))
+    except Exception:
+        return False
+    if not app:
+        return False
+    prefix = _review_todo_prefix(session_id)
+    existing_todos = app.get("todos") or []
+    next_todos = [
+        todo
+        for todo in existing_todos
+        if not (isinstance(todo, dict) and str(todo.get("id", "")).startswith(prefix))
+    ]
+    if len(next_todos) == len(existing_todos):
+        return False
+    job_tracker.patch_application(int(app["id"]), {"todos": next_todos})
+    return True
 

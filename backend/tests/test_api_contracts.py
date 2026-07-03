@@ -113,3 +113,63 @@ def test_api_ask_from_server_screen_cancels_existing_generation(monkeypatch: pyt
     assert submitted[0][1] == "data:image/jpeg;base64,a"
     assert submitted[0][3] == "server_screen_left"
     assert cancel_calls == [False]
+
+
+def test_api_preflight_replay_validates_params_and_returns_result(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        assist_routes,
+        "get_session",
+        lambda: SimpleNamespace(is_recording=False, is_paused=False),
+    )
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    replay_calls = {}
+
+    def fake_replay(device_id, *, repeats=3, gap_sec=0.25, audio_path=None, expected_phrase=None):
+        replay_calls.update(
+            {
+                "device_id": device_id,
+                "repeats": repeats,
+                "gap_sec": gap_sec,
+                "audio_path": audio_path,
+                "expected_phrase": expected_phrase,
+            }
+        )
+        return {"device_id": device_id, "success_count": repeats, "failure_count": 0}
+
+    monkeypatch.setattr(assist_routes, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr("api.assist.sound_test.replay_preflight_capture_stt", fake_replay)
+
+    result = asyncio.run(
+        assist_routes.api_preflight_replay({
+            "device_id": 7,
+            "repeats": 4,
+            "gap_sec": 0.1,
+            "audio_path": "tmp/sample.wav",
+            "expected_phrase": "你好",
+        })
+    )
+
+    assert result == {"device_id": 7, "success_count": 4, "failure_count": 0}
+    assert replay_calls == {
+        "device_id": 7,
+        "repeats": 4,
+        "gap_sec": 0.1,
+        "audio_path": "tmp/sample.wav",
+        "expected_phrase": "你好",
+    }
+
+
+def test_api_preflight_replay_rejects_when_recording(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        assist_routes,
+        "get_session",
+        lambda: SimpleNamespace(is_recording=True, is_paused=False),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(assist_routes.api_preflight_replay({"device_id": 7}))
+
+    assert exc_info.value.status_code == 409

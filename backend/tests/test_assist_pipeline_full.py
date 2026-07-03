@@ -37,6 +37,14 @@ class _DeferredThread:
         self.target(*self.args, **self.kwargs)
 
 
+class _DeferredTimer(_DeferredThread):
+    started: list["_DeferredTimer"] = []
+
+    def __init__(self, interval, function, args=None, kwargs=None):
+        super().__init__(function, args=tuple(args or ()), kwargs=kwargs or {}, daemon=True)
+        self.interval = interval
+
+
 def _cfg():
     models = [
         SimpleNamespace(
@@ -76,10 +84,8 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     pipeline._pending.clear()
     pipeline._in_flight_tasks.clear()
     pipeline._latest_asr_turn_id = 0
-    pipeline._pending_asr_group = None
-    pipeline._asr_merge_parts = []
-    pipeline._asr_merge_mono_first = None
-    pipeline._asr_merge_mono_last = None
+    pipeline._reset_asr_merge_buffer()
+    pipeline._reset_pending_asr_group()
     pipeline._recent_asr_turn_monos = []
     pipeline._commit_buffer.clear()
     pipeline._skipped_commit_seqs.clear()
@@ -93,14 +99,15 @@ def reset_pipeline_state(monkeypatch: pytest.MonkeyPatch):
     pipeline._candidate_flush_event.clear()
     pipeline._flush_stop_event.clear()
     pipeline._candidate_whisper_preload_inflight.clear()
-    pipeline._sync_compat_globals_to_asr_state()
     _DeferredThread.started = []
+    _DeferredTimer.started = []
 
     cfg = _cfg()
     monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
     monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
     monkeypatch.setattr(pipeline, "get_model_health", lambda _idx: None)
     monkeypatch.setattr(pipeline.threading, "Thread", _DeferredThread)
+    monkeypatch.setattr(pipeline.threading, "Timer", _DeferredTimer)
     monkeypatch.setattr(pipeline, "_submit_knowledge_record", lambda _q, _a, *_rest: True)
     monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kwargs: "system")
     monkeypatch.setattr(
@@ -216,6 +223,7 @@ def test_running_asr_worker_can_still_be_cancelled_when_interrupt_enabled(
 ):
     cfg = _cfg()
     cfg.assist_asr_interrupt_running = True
+    cfg.max_parallel_answers = 1
     broadcasts: list[dict] = []
     monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
     monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
@@ -242,6 +250,80 @@ def test_running_asr_worker_can_still_be_cancelled_when_interrupt_enabled(
     event_types = [event["type"] for event in broadcasts]
     assert event_types == ["answer_start", "answer_cancelled"]
     assert get_session().qa_pairs == []
+
+
+def test_running_asr_worker_is_not_cancelled_when_parallel_slots_available(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    cfg = _cfg()
+    cfg.assist_asr_interrupt_running = True
+    cfg.max_parallel_answers = 2
+    broadcasts: list[dict] = []
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "旧回答应继续提交")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    pipeline._latest_asr_turn_id = 1
+    assert pipeline.submit_answer_task(
+        (
+            "旧 ASR 问题",
+            None,
+            False,
+            "conversation_mic",
+            {"origin": "asr", "asr_turn_id": 1},
+        )
+    )
+    assert pipeline._begin_asr_turn() == 2
+    _DeferredThread.started[0].run()
+
+    event_types = [event["type"] for event in broadcasts]
+    assert event_types == ["answer_start", "answer_chunk", "answer_done", "token_update"]
+    assert [qa.answer for qa in get_session().qa_pairs] == ["旧回答应继续提交"]
+
+
+def test_late_asr_constraint_tail_updates_deferred_pending_task(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(pipeline, "broadcast", lambda _data: None)
+    now_values = iter([100.0, 100.0])
+    monkeypatch.setattr(pipeline.time, "monotonic", lambda: next(now_values))
+
+    task = (
+        "rules 和 skills 的区别是什么",
+        None,
+        False,
+        "conversation_loopback",
+        {
+            "origin": "asr",
+            "asr_turn_id": 1,
+            "utterances": ["rules 和 skills 的区别是什么"],
+            "dispatch_after_mono": 101.2,
+            "asr_tail_grace_until_mono": 101.2,
+        },
+    )
+
+    assert pipeline.submit_answer_task(task)
+    assert _DeferredThread.started == []
+    assert len(_DeferredTimer.started) == 1
+
+    merged = pipeline._append_late_asr_constraint_tail(
+        "不要结合项目",
+        "conversation_loopback",
+        now_mono=100.6,
+    )
+
+    assert merged is True
+    assert len(pipeline._pending) == 1
+    updated_task = pipeline._pending[0][0]
+    assert "rules 和 skills 的区别是什么" in updated_task[0]
+    assert "不要结合项目" in updated_task[0]
+    assert updated_task[4]["utterances"] == [
+        "rules 和 skills 的区别是什么",
+        "不要结合项目",
+    ]
 
 
 def test_candidate_whisper_preload_runs_in_background(monkeypatch: pytest.MonkeyPatch):
@@ -396,6 +478,7 @@ def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
     monkeypatch: pytest.MonkeyPatch,
 ):
     broadcasts: list[dict] = []
+    review_calls: list[dict] = []
 
     class _MainAudio:
         SAMPLE_RATE = 16000
@@ -426,6 +509,11 @@ def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
     monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
     monkeypatch.setattr(pipeline, "_device_is_loopback", lambda _device_id: True)
     monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+    monkeypatch.setattr(
+        pipeline.review_integration,
+        "on_assist_start",
+        lambda **kwargs: review_calls.append(kwargs),
+    )
 
     pipeline.start_nonblocking(10, 11)
 
@@ -441,3 +529,10 @@ def test_candidate_audio_start_failure_does_not_block_interviewer_chain(
         and "mic unavailable" in event.get("error", "")
         for event in broadcasts
     )
+    assert review_calls == [
+        {
+            "interviewer_device_id": 10,
+            "candidate_device_id": None,
+            "candidate_asr_enabled": True,
+        }
+    ]

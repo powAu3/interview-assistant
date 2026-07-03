@@ -109,6 +109,11 @@ TERM_CORRECTIONS = {
     r"(?i)(?<![a-zA-Z])mq(?![a-zA-Z])": "MQ",
     r"(?i)my\s*sql": "MySQL",
     r"(?i)(?<![a-zA-Z])circle(?![a-zA-Z])": "SQL",
+    r"(?i)Rose(?=和\s*Skills|和\s*skills)": "rules",
+    r"(?i)Rose\s*和\s*SQL(?=的区别)": "rules和Skills",
+    r"(?i)如\s*Redis\s*和\s*SQL\s*的区别.{0,4}什么": "rules和Skills的区别是什么",
+    r"(?i)如\s*Redis\s*[、,，和]\s*ZSET\s*的区别是什么": "rules和Skills的区别是什么",
+    r"(?i)SQL\s*所以失效": "SQL 索引失效",
     r"(?i)(?<![a-zA-Z])setcode(?![a-zA-Z])": "SQL code",
     r"(?i)SekoAI": "SQL AI",
     r"下皮|下屏|下期|沙皮": "虾皮",
@@ -139,6 +144,8 @@ TERM_CORRECTIONS = {
     r"解释1[。.]下": "解释一下",
     r"展开讲1[。.]下": "展开讲一下",
     r"举个例子[!！]1": "举个例子",
+    r"结合效果母": "结合项目",
+    r"那准备的验重": "那怎么验证",
 }
 
 INTERVIEW_TERM_CORRECTIONS = {
@@ -297,9 +304,28 @@ def join_transcription_fragments(parts: list[str]) -> str:
         return ""
     acc = qs[0]
     for q in qs[1:]:
+        overlap_len = _suffix_prefix_overlap_len(acc, q)
+        if overlap_len > 0:
+            q = q[overlap_len:].lstrip()
+            if not q:
+                continue
         need_space = bool(re.search(r"[a-zA-Z0-9]$", acc) and re.match(r"^[a-zA-Z0-9]", q))
         acc = f"{acc} {q}" if need_space else f"{acc}{q}"
     return acc.strip()
+
+
+def _suffix_prefix_overlap_len(prev: str, cur: str) -> int:
+    left = (prev or "").strip()
+    right = (cur or "").strip()
+    if not left or not right:
+        return 0
+    max_overlap = min(len(left), len(right), 32)
+    for size in range(max_overlap, 0, -1):
+        if left[-size:] == right[:size]:
+            significant = transcription_significant_len(right[:size])
+            if significant >= 4 or size >= 6:
+                return size
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +370,12 @@ _LOW_VALUE_FRAGMENT = re.compile(
     r"还有什么|还是什么|对吧|是吧|"
     r"对(?:[，,。.]?在.*里面)?|嗯+|啊+|哦+|噢+|好+|OK|ok|Uh"
     r")$",
+    re.IGNORECASE,
+)
+_QUESTION_CONSTRAINT_TAIL = re.compile(
+    r"(?:不要|别|先不|不用|不需要|无需).{0,12}(?:结合|联系|套|带入|展开).{0,12}(?:项目|简历|经历)|"
+    r"(?:不要|别|先不|不用|不需要|无需).{0,12}(?:项目|简历|经历)|"
+    r"(?:只讲|就讲|单独讲).{0,12}(?:概念|原理|区别|核心|技术)",
     re.IGNORECASE,
 )
 _QUESTION_SPLIT = re.compile(r"[？?]+")
@@ -463,6 +495,9 @@ def classify_asr_question_candidate(
     has_tail_question = bool(re.search(r"(?:吗|么|呢)$", normalized))
     incomplete_tail = bool(_INCOMPLETE_TAIL.search(normalized))
     low_value_fragment = bool(_LOW_VALUE_FRAGMENT.fullmatch(normalized))
+    constraint_tail = bool(_QUESTION_CONSTRAINT_TAIL.search(normalized))
+    if constraint_tail and sig >= max(3, need):
+        return "candidate", normalized
     if low_value_fragment:
         return "ignore", normalized
     if has_question_mark and sig >= 2:
@@ -481,6 +516,13 @@ def classify_asr_question_candidate(
     if sig >= need:
         return "candidate", normalized
     return "ignore", normalized
+
+
+def is_asr_question_constraint_tail(text: str) -> bool:
+    normalized = normalize_transcription_for_analysis(text)
+    if not normalized:
+        return False
+    return bool(_QUESTION_CONSTRAINT_TAIL.search(normalized))
 
 
 def is_viable_asr_question_group(

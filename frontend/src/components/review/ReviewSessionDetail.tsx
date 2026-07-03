@@ -15,11 +15,18 @@ import {
   Activity,
   ClipboardCheck,
   Tags,
+  Link2,
+  Unlink,
+  ExternalLink,
 } from 'lucide-react'
 import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
 import { api, getErrorMessage } from '../../lib/api'
 import type { ReviewSessionDetail, ReviewTurn } from './types'
+import type { Application } from '../job-tracker/types'
+import { parseApplication } from '../job-tracker/types'
+import { STAGE_LABELS } from '../job-tracker/stageConfig'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 interface Props {
   sessionId: number
@@ -34,6 +41,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ title: '', company: '', role: '' })
   const [triggering, setTriggering] = useState(false)
+  const [applications, setApplications] = useState<Application[]>([])
+  const [applicationSearch, setApplicationSearch] = useState('')
+  const [binding, setBinding] = useState(false)
+  const setAppMode = useUiPrefsStore((s) => s.setAppMode)
 
   useEffect(() => {
     async function load() {
@@ -58,6 +69,24 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
     }
     load()
   }, [sessionId])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadApplications() {
+      try {
+        const res = await api.jobTrackerApplications()
+        if (!cancelled) {
+          setApplications((res.items as Record<string, unknown>[]).map(parseApplication))
+        }
+      } catch {
+        if (!cancelled) setApplications([])
+      }
+    }
+    loadApplications()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const toggleTurn = (turnId: number) => {
     setExpandedTurns((prev) => {
@@ -98,6 +127,20 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
     }
   }
 
+  const handleBindApplication = async (applicationId: number | null) => {
+    setBinding(true)
+    try {
+      await api.reviewUpdateSession(sessionId, { application_id: applicationId })
+      const data = await api.reviewSessionDetail(sessionId)
+      setDetail(data)
+      alert(applicationId == null ? '已解除求职记录关联' : '已关联求职记录，并同步复盘待办')
+    } catch (err) {
+      alert(getErrorMessage(err, '关联求职记录失败'))
+    } finally {
+      setBinding(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -130,6 +173,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       ((turn.strengths?.length ?? 0) > 0 || (turn.risks?.length ?? 0) > 0 || Object.keys(turn.scorecard ?? {}).length > 0),
     )
   const canTrigger = detail.status === 'analysis_failed' ||
+    detail.status === 'recorded' ||
+    detail.status === 'recording' ||
     detail.status === 'partial_capture' ||
     (detail.status === 'completed' && !hasGeneratedAnalysis)
   const isAnalyzing = detail.status === 'analyzing'
@@ -143,6 +188,13 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const nextActions = buildNextActions(detail)
   const scoreDimensions = buildScoreDimensions(detail)
   const followUpDrills = buildFollowUpDrills(detail)
+  const applicationQuery = applicationSearch.trim().toLowerCase()
+  const filteredApplications = applications
+    .filter((app) => {
+      if (!applicationQuery) return true
+      return `${app.company} ${app.position} ${app.city}`.toLowerCase().includes(applicationQuery)
+    })
+    .slice(0, 8)
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-6 overflow-hidden">
@@ -303,6 +355,16 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
               </div>
             </div>
           )}
+
+          <ApplicationLinkPanel
+            detail={detail}
+            applications={filteredApplications}
+            search={applicationSearch}
+            binding={binding}
+            onSearch={setApplicationSearch}
+            onBind={handleBindApplication}
+            onGoJobTracker={() => setAppMode('job-tracker')}
+          />
 
           {(scoreDimensions.length > 0 || followUpDrills.length > 0) && (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
@@ -601,6 +663,125 @@ function TurnCard({
                   : '暂无分析'}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ApplicationLinkPanel({
+  detail,
+  applications,
+  search,
+  binding,
+  onSearch,
+  onBind,
+  onGoJobTracker,
+}: {
+  detail: ReviewSessionDetail
+  applications: Application[]
+  search: string
+  binding: boolean
+  onSearch: (value: string) => void
+  onBind: (applicationId: number | null) => void
+  onGoJobTracker: () => void
+}) {
+  const linked = detail.application
+  const [changing, setChanging] = useState(false)
+  const selecting = !linked || changing
+  return (
+    <div className="rounded-lg border border-bg-hover/70 bg-bg-secondary/45 p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <Link2 className="h-4 w-4 text-accent-blue" />
+          关联求职记录
+        </h3>
+        {linked ? (
+          <button
+            type="button"
+            onClick={onGoJobTracker}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-accent-blue/25 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            去求职看板
+          </button>
+        ) : null}
+      </div>
+
+      {linked && !changing ? (
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-text-primary">
+              {linked.company || '未命名公司'} · {linked.position || '岗位'}
+            </div>
+            <div className="mt-1 text-xs text-text-muted">
+              {linked.city ? `${linked.city} · ` : ''}{STAGE_LABELS[linked.stage] ?? linked.stage}
+            </div>
+            <div className="mt-2 text-xs text-text-secondary">
+              这场复盘的弱项和低分题会同步到该岗位的待办里。
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={binding}
+              onClick={() => setChanging(true)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-blue/25 bg-accent-blue/10 px-3 py-2 text-xs font-medium text-accent-blue hover:bg-accent-blue/15 disabled:opacity-60"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              改绑
+            </button>
+            <button
+              type="button"
+              disabled={binding}
+              onClick={() => onBind(null)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/15 disabled:opacity-60"
+            >
+              <Unlink className="h-3.5 w-3.5" />
+              解绑
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {selecting && (
+        <div className="space-y-3">
+          {linked ? (
+            <div className="flex items-center justify-between rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-2 text-xs text-text-muted">
+              <span>当前关联：{linked.company || '未命名公司'} · {linked.position || '岗位'}</span>
+              <button type="button" onClick={() => setChanging(false)} className="text-accent-blue hover:underline">取消改绑</button>
+            </div>
+          ) : null}
+          <input
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="搜索公司、岗位、城市后绑定..."
+            className="w-full rounded-lg border border-bg-hover bg-bg-tertiary/45 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent-blue/50 focus:outline-none"
+          />
+          <div className="grid gap-2 md:grid-cols-2">
+            {applications.map((app) => (
+              <button
+                key={app.id}
+                type="button"
+                disabled={binding}
+                onClick={() => {
+                  setChanging(false)
+                  onBind(app.id)
+                }}
+                className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-2 text-left hover:border-accent-blue/35 hover:bg-accent-blue/5 disabled:opacity-60"
+              >
+                <div className="text-sm font-semibold text-text-primary">{app.company || '未命名公司'}</div>
+                <div className="mt-1 text-xs text-text-muted">
+                  {app.position || '岗位'}{app.city ? ` · ${app.city}` : ''} · {STAGE_LABELS[app.stage] ?? app.stage}
+                </div>
+              </button>
+            ))}
+          </div>
+          {applications.length === 0 ? (
+            <div className="rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-4 text-center text-xs text-text-muted">
+              暂无可绑定的求职记录，请先在求职看板新增一条。
+            </div>
+          ) : null}
         </div>
       )}
     </div>

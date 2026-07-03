@@ -17,6 +17,8 @@ _doubao_engine: Optional[DoubaoSTT] = None
 _generic_engine: Optional[GenericHTTPSTT] = None
 _engine_lock = threading.Lock()
 _whisper_infer_lock = threading.Lock()
+REMOTE_EMPTY_RETRY_PAD_MS = 240
+REMOTE_EMPTY_RETRY_MAX_AUDIO_SEC = 6.0
 
 # ---------------------------------------------------------------------------
 # Circuit breaker for remote STT engines (doubao / generic)
@@ -121,6 +123,20 @@ def _call_circuit_record_failure(scope: str, *, is_timeout: bool, is_auth: bool)
         _circuit_record_failure(is_timeout=is_timeout, is_auth=is_auth, scope=scope)
     except TypeError:
         _circuit_record_failure(is_timeout=is_timeout, is_auth=is_auth)
+
+
+def _pad_audio_tail_silence(
+    audio: np.ndarray,
+    sample_rate: int,
+    *,
+    pad_ms: int,
+) -> np.ndarray:
+    if sample_rate <= 0 or len(audio) <= 0 or pad_ms <= 0:
+        return audio
+    pad_samples = int(round(sample_rate * (pad_ms / 1000.0)))
+    if pad_samples <= 0:
+        return audio
+    return np.concatenate([audio, np.zeros(pad_samples, dtype=audio.dtype)])
 
 
 # ---------------------------------------------------------------------------
@@ -494,6 +510,7 @@ def transcribe_with_fallback(
     scope: str = "interviewer",
     whisper_lock_timeout_sec: Optional[float] = None,
     whisper_require_loaded: bool = False,
+    fallback_on_empty_remote: bool = False,
 ) -> str:
     """Resilient transcription: retry once, then fallback to whisper, with circuit breaker.
 
@@ -596,7 +613,54 @@ def transcribe_with_fallback(
             else:
                 text = primary.transcribe(audio, sample_rate, position=position, language=language)
             if is_remote and not (text or "").strip():
-                if audio_sec < 5.0:
+                _log.warning(
+                    "STT %s returned empty text scope=%s raw=%.1fs fallback_on_empty=%s",
+                    selected_provider,
+                    circuit_scope,
+                    audio_sec,
+                    fallback_on_empty_remote,
+                )
+                if (
+                    circuit_scope == "interviewer"
+                    and audio_sec > 0.0
+                    and audio_sec <= REMOTE_EMPTY_RETRY_MAX_AUDIO_SEC
+                ):
+                    try:
+                        retry_audio = _pad_audio_tail_silence(
+                            audio,
+                            sample_rate,
+                            pad_ms=REMOTE_EMPTY_RETRY_PAD_MS,
+                        )
+                        retry_audio_sec = len(retry_audio) / sample_rate if sample_rate else audio_sec
+                        _log.info(
+                            "STT %s retrying empty interviewer segment with tail pad raw=%.1fs padded=%.1fs",
+                            selected_provider,
+                            audio_sec,
+                            retry_audio_sec,
+                        )
+                        retry_text = primary.transcribe(
+                            retry_audio,
+                            sample_rate,
+                            position=position,
+                            language=language,
+                        )
+                        if (retry_text or "").strip():
+                            _call_circuit_reset(circuit_scope)
+                            broadcast({
+                                "type": status_event_type,
+                                "loaded": bool(primary.is_loaded),
+                                "loading": False,
+                                "provider": selected_provider,
+                            })
+                            return retry_text
+                    except Exception as retry_err:
+                        _log.warning(
+                            "STT %s empty-text retry failed scope=%s: %s",
+                            selected_provider,
+                            circuit_scope,
+                            retry_err,
+                        )
+                if not fallback_on_empty_remote and audio_sec < 5.0:
                     _log.info(
                         "STT %s returned empty text for short audio %.1fs; suppress fallback",
                         selected_provider,

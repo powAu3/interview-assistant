@@ -8,7 +8,7 @@ from typing import Any, Callable, Optional
 
 from core.config import get_config
 from core.session import get_session, conversation_lock
-from services.stt import classify_followup
+from services.stt import classify_followup, normalize_transcription_for_analysis
 from services.llm import (
     PROMPT_MODE_ASR_REALTIME,
     PROMPT_MODE_MANUAL_TEXT,
@@ -127,6 +127,124 @@ def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
     )
 
 
+_FOLLOWUP_BRIDGE_PREFIXES = (
+    "那",
+    "那么",
+    "然后",
+    "所以",
+    "但是",
+    "不过",
+    "另外",
+    "还有",
+    "这个",
+    "那个",
+    "这样",
+    "这种",
+    "刚才",
+    "前面",
+    "上面",
+)
+_FOLLOWUP_BRIDGE_PHRASES = (
+    "刚才说的",
+    "前面说的",
+    "上一个",
+    "上一轮",
+    "这个怎么",
+    "那个怎么",
+    "怎么验证",
+    "为什么不",
+    "展开讲",
+    "详细讲",
+    "具体讲",
+    "举个例子",
+    "补充一下",
+    "接着说",
+    "继续说",
+)
+
+_RESUME_CONTEXT_CUES = (
+    "项目",
+    "简历",
+    "实习",
+    "经历",
+    "自我介绍",
+    "你做过",
+    "你之前做",
+    "你负责",
+    "你们当时",
+    "上一家公司",
+    "项目里",
+)
+_RESUME_CONTEXT_NEGATIONS = (
+    "不要结合项目",
+    "不结合项目",
+    "先不说项目",
+    "不要结合简历",
+    "不结合简历",
+)
+
+
+def _followup_needs_bridge(question_text: str) -> bool:
+    normalized = normalize_transcription_for_analysis(question_text)
+    if not normalized:
+        return False
+    if len(normalized) <= 18:
+        return True
+    if any(phrase in normalized for phrase in _FOLLOWUP_BRIDGE_PHRASES) and len(normalized) <= 42:
+        return True
+    if any(normalized.startswith(prefix) for prefix in _FOLLOWUP_BRIDGE_PREFIXES) and len(normalized) <= 34:
+        return True
+    return False
+
+
+def _question_explicitly_requests_resume_context(question_text: str) -> bool:
+    normalized = normalize_transcription_for_analysis(question_text)
+    if not normalized:
+        return False
+    if any(phrase in normalized for phrase in _RESUME_CONTEXT_NEGATIONS):
+        return False
+    return any(phrase in normalized for phrase in _RESUME_CONTEXT_CUES)
+
+
+def _question_rejects_resume_context(question_text: str) -> bool:
+    normalized = normalize_transcription_for_analysis(question_text)
+    if not normalized:
+        return False
+    return any(phrase in normalized for phrase in _RESUME_CONTEXT_NEGATIONS)
+
+
+def _should_include_resume_context(
+    prompt_mode: PromptMode,
+    question_text: str,
+    *,
+    last_qa=None,
+    is_followup: bool = False,
+    followup_needs_bridge: bool = False,
+) -> bool:
+    if _question_rejects_resume_context(question_text):
+        return False
+    if prompt_mode != PROMPT_MODE_ASR_REALTIME:
+        return True
+    if _question_explicitly_requests_resume_context(question_text):
+        return True
+    if not is_followup or not last_qa or not followup_needs_bridge:
+        return False
+    return _question_explicitly_requests_resume_context(getattr(last_qa, "question", ""))
+
+
+def _empty_history_stats(profile: str) -> dict[str, Any]:
+    return {
+        "messages": 0,
+        "history_messages": 0,
+        "stripped_images": 0,
+        "profile": profile,
+        "raw_text_chars": 0,
+        "trimmed_text_chars": 0,
+        "max_chars_per_message": 0,
+        "total_char_budget": 0,
+    }
+
+
 def _history_context_options(prompt_mode: PromptMode, written_exam: bool) -> dict[str, Any]:
     if written_exam:
         return {
@@ -138,11 +256,11 @@ def _history_context_options(prompt_mode: PromptMode, written_exam: bool) -> dic
         }
     if prompt_mode == PROMPT_MODE_ASR_REALTIME:
         return {
-            "profile": "asr_light",
-            "turns": 2,
-            "max_chars_per_message": 700,
+            "profile": "asr_compact",
+            "turns": 1,
+            "max_chars_per_message": 520,
             "include_summary": False,
-            "total_char_budget": 1800,
+            "total_char_budget": 1100,
         }
     if prompt_mode == PROMPT_MODE_SERVER_SCREEN:
         return {
@@ -169,8 +287,21 @@ def _history_context_options(prompt_mode: PromptMode, written_exam: bool) -> dic
     }
 
 
-def _max_tokens_for_prompt(prompt_mode: PromptMode, cfg) -> int:
-    return max(1, int(getattr(cfg, "max_tokens", 4096) or 4096))
+def _max_tokens_for_prompt(
+    prompt_mode: PromptMode,
+    cfg,
+    *,
+    high_churn_short_answer: bool = False,
+) -> int:
+    base_limit = max(1, int(getattr(cfg, "max_tokens", 4096) or 4096))
+    if prompt_mode == PROMPT_MODE_ASR_REALTIME:
+        cap = (
+            int(getattr(cfg, "assist_realtime_high_churn_max_tokens", 420) or 420)
+            if high_churn_short_answer
+            else int(getattr(cfg, "assist_realtime_max_tokens", 900) or 900)
+        )
+        return max(1, min(base_limit, cap))
+    return base_limit
 
 
 def _wait_for_candidate_context_if_pending(session_ref, qa_id: str, wait_ms: int) -> None:
@@ -222,6 +353,7 @@ def process_question_parallel(
     written_exam_think = bool(getattr(cfg, "written_exam_think", False))
     prompt_mode = prompt_mode_for_task(source, manual_input, written_exam=written_exam)
     exam_preflight_id = str(meta.get("exam_preflight_id") or "") if meta.get("exam_preflight") else ""
+    high_churn_short_answer = bool(meta.get("high_churn_short_answer", False))
 
     def _broadcast(data: dict) -> None:
         if exam_preflight_id:
@@ -263,14 +395,6 @@ def process_question_parallel(
             deps.error_logger.warning("kb retrieve in answer worker failed: %s", exc)
             kb_hits = []
             kb_degraded = True
-
-    system_prompt = build_system_prompt(
-        manual_input=manual_input,
-        mode=prompt_mode,
-        screen_region=getattr(cfg, "screen_capture_region", "left_half"),
-        high_churn_short_answer=bool(meta.get("high_churn_short_answer", False)),
-        kb_hits=kb_hits or None,
-    )
 
     images = _normalize_task_images(image)
 
@@ -331,6 +455,7 @@ def process_question_parallel(
     candidate_context_chars = len(actual_spoken_answer[:candidate_max_chars]) if actual_spoken_answer else 0
 
     is_followup = False
+    followup_needs_bridge = False
     if (
         not written_exam
         and not images
@@ -339,9 +464,20 @@ def process_question_parallel(
         and classify_followup(question_text, last_qa.question, actual_spoken_answer or last_qa.answer[:500])
     ):
         is_followup = True
-        prev_answer_budget = max(200, min(500, candidate_max_chars // 2))
-        prev_answer_summary = last_qa.answer[:prev_answer_budget]
-        if not candidate_context_enabled:
+        followup_needs_bridge = _followup_needs_bridge(question_text)
+        prev_answer_budget = 0
+        prev_answer_summary = ""
+        if followup_needs_bridge:
+            prev_answer_budget = max(160, min(280, candidate_max_chars // 3 if candidate_max_chars > 0 else 160))
+            prev_answer_summary = last_qa.answer[:prev_answer_budget]
+        if not followup_needs_bridge:
+            user_for_llm = (
+                f"[追问上下文] 上一个问题：{last_qa.question}\n"
+                "当前追问已经自带比较完整的对象、条件和要问点。只把上一轮当作主题锚点，"
+                "不要重复上一轮助手建议答案，也不要硬套候选人上一轮项目细节、示例或量化结果。\n\n"
+                f"现在面试官追问：{question_text}"
+            )
+        elif not candidate_context_enabled:
             user_for_llm = (
                 f"[追问上下文] 上一个问题：{last_qa.question}\n"
                 f"你上次回答的要点：{prev_answer_summary}\n\n"
@@ -372,6 +508,12 @@ def process_question_parallel(
             f"现在面试官问题：{question_text}"
         )
 
+    if prompt_mode == PROMPT_MODE_ASR_REALTIME and is_followup:
+        base_messages = []
+        history_stats = _empty_history_stats(
+            "asr_followup_bridge" if followup_needs_bridge else "asr_followup_anchor_only"
+        )
+
     if written_followup_context:
         if isinstance(user_for_llm, list):
             if user_for_llm and isinstance(user_for_llm[0], dict) and user_for_llm[0].get("type") == "text":
@@ -392,6 +534,21 @@ def process_question_parallel(
 
     with conversation_lock:
         session_ref.close_candidate_answer_window()
+
+    system_prompt = build_system_prompt(
+        manual_input=manual_input,
+        mode=prompt_mode,
+        screen_region=getattr(cfg, "screen_capture_region", "left_half"),
+        high_churn_short_answer=high_churn_short_answer,
+        kb_hits=kb_hits or None,
+        include_resume=_should_include_resume_context(
+            prompt_mode,
+            question_text,
+            last_qa=last_qa,
+            is_followup=is_followup,
+            followup_needs_bridge=followup_needs_bridge,
+        ),
+    )
 
     messages_for_llm = base_messages + [{"role": "user", "content": user_for_llm}]
     deps.logger.info(
@@ -497,7 +654,11 @@ def process_question_parallel(
             abort_check=deps.abort_check,
             override_think_mode=think_override,
             usage_callback=_record_usage,
-            override_max_tokens=_max_tokens_for_prompt(prompt_mode, cfg),
+            override_max_tokens=_max_tokens_for_prompt(
+                prompt_mode,
+                cfg,
+                high_churn_short_answer=high_churn_short_answer,
+            ),
         ):
             if deps.abort_check():
                 break

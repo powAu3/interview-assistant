@@ -31,6 +31,7 @@ import {
   ChevronRight,
   Inbox,
   ArrowRight,
+  MessageSquareText,
 } from 'lucide-react'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { isLightColorScheme } from '@/lib/colorScheme'
@@ -164,6 +165,8 @@ function SortableKanbanCard({
   const leftBorder = getCardLeftBorder(app.stage, isLight)
   const theme = getStageTheme(app.stage, isLight)
   const nextStage = nextStageAfter(app.stage)
+  const reviewSummary = app.review_summary
+  const reviewScore = reviewSummary?.latest_avg_score
 
   return (
     <div
@@ -230,6 +233,22 @@ function SortableKanbanCard({
               >
                 <Calendar className="w-3 h-3 opacity-80" />
                 {dayjs.unix(Math.floor(fu)).format('M/D')}
+              </span>
+            ) : null}
+            {reviewSummary?.review_count > 0 ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                  reviewScore == null
+                    ? isLight ? 'bg-gray-100 text-gray-500' : 'bg-white/[0.06] text-text-muted'
+                    : reviewScore < 6
+                      ? 'bg-yellow-500/15 text-yellow-500'
+                      : reviewScore >= 8
+                        ? 'bg-green-500/15 text-green-500'
+                        : 'bg-blue-500/15 text-blue-500'
+                }`}
+              >
+                <MessageSquareText className="w-3 h-3 opacity-80" />
+                复盘 {reviewSummary.review_count}{reviewScore != null ? ` · ${reviewScore.toFixed(1)}` : ''}
               </span>
             ) : null}
           </div>

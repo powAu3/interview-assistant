@@ -13,6 +13,7 @@ import threading
 import platform
 import queue
 import time
+import warnings
 import wave
 from pathlib import Path
 from typing import Callable, Optional
@@ -161,6 +162,10 @@ class AudioCapture:
     CHANNELS = 1
     BLOCK_SIZE = 1024
     DTYPE = "float32"
+    LOOPBACK_RECORDER_BLOCK_SIZE = BLOCK_SIZE * 4
+    LOOPBACK_RECORD_NUMFRAMES = BLOCK_SIZE
+    MAX_QUEUE_CHUNK_SAMPLES = BLOCK_SIZE * 4
+    MIN_LOOPBACK_QUEUE_CHUNK_SAMPLES = 640
 
     # AGC constants
     AGC_NOISE_GATE = 0.003
@@ -184,6 +189,11 @@ class AudioCapture:
         self._use_agc: bool = False
         # Ownership token: only one caller (for example "assist") may hold the device
         self._owner: Optional[str] = None
+        self._dropped_chunks_count = 0
+        self._loopback_discontinuity_count = 0
+        self._max_queue_chunk_samples = 0
+        self._last_queue_chunk_samples = 0
+        self._seen_soundcard_warning_messages: set[str] = set()
 
     # ------------------------------------------------------------------
     # Device listing
@@ -311,6 +321,11 @@ class AudioCapture:
             self._resample_state = [None]
             self._agc_peak = 0.0
             self._sc_stop.clear()
+            self._dropped_chunks_count = 0
+            self._loopback_discontinuity_count = 0
+            self._max_queue_chunk_samples = 0
+            self._last_queue_chunk_samples = 0
+            self._seen_soundcard_warning_messages = set()
 
             if _is_sc_id(device_id):
                 self._use_agc = True
@@ -319,18 +334,39 @@ class AudioCapture:
                 self._use_agc = False
                 self._start_sounddevice(int(device_id), mic_compatibility_mode=mic_compatibility_mode)
 
+    def _iter_queueable_chunks(self, audio: np.ndarray):
+        limit = max(1, int(getattr(self, "MAX_QUEUE_CHUNK_SAMPLES", self.BLOCK_SIZE * 4) or 1))
+        total = len(audio)
+        for start in range(0, total, limit):
+            yield audio[start:start + limit]
+
+    def _enqueue_chunk(self, audio: np.ndarray) -> None:
+        chunk_samples = int(len(audio))
+        if chunk_samples <= 0:
+            return
+        self._last_queue_chunk_samples = chunk_samples
+        self._max_queue_chunk_samples = max(self._max_queue_chunk_samples, chunk_samples)
+        if self._audio_queue.full():
+            # 队列满属异常（采集/消费速率失衡，主循环阻塞）；丢最旧块并告警，便于定位漏听。
+            try:
+                dropped = self._audio_queue.get_nowait()
+            except queue.Empty:
+                dropped = None
+            if dropped is not None:
+                self._dropped_chunks_count += 1
+                _alog.warning("audio_queue_full_dropped chunk_samples=%d", len(dropped))
+        self._audio_queue.put_nowait(audio)
+
     def _push(self, audio: np.ndarray):
         """Common path: optionally AGC → queue → callback."""
+        if len(audio) <= 0:
+            return
         if audio.dtype != np.float32:
             audio = audio.astype(np.float32)
         if self._use_agc:
             audio = self._apply_agc(audio)
-        if self._audio_queue.full():
-            try:
-                self._audio_queue.get_nowait()
-            except queue.Empty:
-                pass
-        self._audio_queue.put_nowait(audio)
+        for chunk in self._iter_queueable_chunks(audio):
+            self._enqueue_chunk(chunk)
         if self._callback:
             self._callback(audio)
 
@@ -369,12 +405,44 @@ class AudioCapture:
                         raise RuntimeError(f"系统音频设备已失效 ID={device_id}，请刷新页面重新选择设备")
                     mic = _sc.get_microphone(active_guid, include_loopback=True)
                 _alog.info("soundcard loopback opened: %s", mic.name)
+                pending_chunks: list[np.ndarray] = []
+                pending_samples = 0
                 with mic.recorder(samplerate=self.SAMPLE_RATE,
                                   channels=1,
-                                  blocksize=self.BLOCK_SIZE) as rec:
+                                  blocksize=self.LOOPBACK_RECORDER_BLOCK_SIZE) as rec:
                     while not stop_event.is_set() and self._running:
-                        data = rec.record(numframes=self.BLOCK_SIZE)
-                        self._push(data[:, 0].copy())
+                        with warnings.catch_warnings(record=True) as caught:
+                            warnings.simplefilter("always")
+                            # SoundCard docs recommend using a fixed numframes that is
+                            # noticeably smaller than blocksize on WASAPI to reduce
+                            # latency spikes and backend-sized chunk jitter.
+                            data = rec.record(numframes=self.LOOPBACK_RECORD_NUMFRAMES)
+                        if caught:
+                            for warning in caught:
+                                warning_text = str(getattr(warning, "message", "") or "")
+                                if "data discontinuity in recording" in warning_text.lower():
+                                    self._loopback_discontinuity_count += 1
+                                    _alog.warning(
+                                        "soundcard_loopback_discontinuity count=%d",
+                                        self._loopback_discontinuity_count,
+                                    )
+                                elif "fromstring is deprecated" in warning_text.lower():
+                                    continue
+                                elif warning_text not in self._seen_soundcard_warning_messages:
+                                    self._seen_soundcard_warning_messages.add(warning_text)
+                                    _alog.warning("soundcard warning: %s", warning_text)
+                        if data is None or len(data) <= 0:
+                            continue
+                        mono = data[:, 0].copy()
+                        pending_chunks.append(mono)
+                        pending_samples += len(mono)
+                        if pending_samples < self.MIN_LOOPBACK_QUEUE_CHUNK_SAMPLES:
+                            continue
+                        self._push(np.concatenate(pending_chunks))
+                        pending_chunks = []
+                        pending_samples = 0
+                if pending_chunks:
+                    self._push(np.concatenate(pending_chunks))
             except Exception as e:
                 _alog.error("soundcard error: %s", e, exc_info=True)
                 self._running = False
@@ -500,7 +568,7 @@ class AudioCapture:
             f"最后错误: {last_error}"
         )
 
-    def stop(self, owner: Optional[str] = None):
+    def stop(self, owner: Optional[str] = None, *, clear_queue: bool = True):
         """Stop the running stream.
 
         If owner is provided and does not match current owner, the call is
@@ -527,9 +595,10 @@ class AudioCapture:
                 self._sc_thread.join(timeout=1.0)
             self._sc_thread = None
             self._owner = None
-            # H1: 清空音频队列，避免长时间录音后内存泄漏
-            with self._audio_queue.mutex:
-                self._audio_queue.queue.clear()
+            if clear_queue:
+                # H1: 清空音频队列，避免长时间录音后内存泄漏
+                with self._audio_queue.mutex:
+                    self._audio_queue.queue.clear()
 
     @property
     def current_owner(self) -> Optional[str]:
@@ -539,23 +608,48 @@ class AudioCapture:
     # 引发 ASR 处理尖刺。32 个 chunk ≈ 2 秒音频,够 STT 一次推理用。
     MAX_DRAIN_CHUNKS = 32
 
-    def get_audio_chunk(
+    def drain_audio_chunks(
         self,
-        timeout: float = 0.1,  # noqa: ARG002 - 保留向后兼容签名
+        timeout: float = 0.1,
         max_chunks: Optional[int] = None,
-    ) -> Optional[np.ndarray]:
+    ) -> list[np.ndarray]:
         limit = max_chunks if max_chunks and max_chunks > 0 else self.MAX_DRAIN_CHUNKS
         chunks: list[np.ndarray] = []
         try:
-            for _ in range(limit):
-                chunks.append(self._audio_queue.get_nowait())
+            first = self._audio_queue.get(timeout=max(0.0, timeout))
         except queue.Empty:
-            pass
+            return chunks
+        chunks.append(first)
+        while len(chunks) < limit:
+            try:
+                chunks.append(self._audio_queue.get_nowait())
+            except queue.Empty:
+                break
+        return chunks
+
+    def get_audio_chunk(
+        self,
+        timeout: float = 0.1,
+        max_chunks: Optional[int] = None,
+    ) -> Optional[np.ndarray]:
+        chunks = self.drain_audio_chunks(timeout=timeout, max_chunks=max_chunks)
         return np.concatenate(chunks) if chunks else None
 
     @property
     def is_running(self) -> bool:
         return self._running
+
+    @property
+    def dropped_chunks_count(self) -> int:
+        return int(self._dropped_chunks_count)
+
+    def capture_stats_snapshot(self) -> dict[str, int]:
+        return {
+            "dropped_chunks_count": int(self._dropped_chunks_count),
+            "loopback_discontinuity_count": int(self._loopback_discontinuity_count),
+            "max_queue_chunk_samples": int(self._max_queue_chunk_samples),
+            "last_queue_chunk_samples": int(self._last_queue_chunk_samples),
+        }
 
     @staticmethod
     def compute_energy(audio: np.ndarray) -> float:
@@ -571,7 +665,9 @@ class VADBuffer:
 
     def __init__(self, sample_rate: int = 16000, silence_threshold: float = 0.01,
                  silence_duration: float = 2.5, min_speech_duration: float = 0.5,
-                 max_speech_duration: Optional[float] = None):
+                 max_speech_duration: Optional[float] = None,
+                 preroll_duration: float = 0.0,
+                 rollover_duration: float = 0.0):
         self.sample_rate = sample_rate
         self.silence_threshold = silence_threshold
         self.silence_duration = silence_duration
@@ -581,11 +677,66 @@ class VADBuffer:
             if max_speech_duration and max_speech_duration > 0
             else None
         )
+        self.preroll_duration = max(0.0, float(preroll_duration or 0.0))
+        self.rollover_duration = max(0.0, float(rollover_duration or 0.0))
         self._buffer: list[np.ndarray] = []
+        self._preroll: list[np.ndarray] = []
         self._speech_started = False
         self._silence_start: Optional[float] = None
         self._speech_start: Optional[float] = None
         self._speech_audio_samples = 0
+        self._preroll_samples = 0
+        self._trailing_silence_samples = 0
+        self._preroll_max_samples = int(round(self.sample_rate * self.preroll_duration))
+        self._rollover_max_samples = int(round(self.sample_rate * self.rollover_duration))
+        self._last_flush_reason: Optional[str] = None
+        self._last_segment_started_at: Optional[float] = None
+        self._last_segment_ended_at: Optional[float] = None
+
+    def _append_preroll(self, audio: np.ndarray) -> None:
+        if self._preroll_max_samples <= 0 or len(audio) <= 0:
+            return
+        self._preroll.append(audio)
+        self._preroll_samples += len(audio)
+        while self._preroll and self._preroll_samples > self._preroll_max_samples:
+            dropped = self._preroll.pop(0)
+            self._preroll_samples -= len(dropped)
+
+    def _consume_preroll(self) -> list[np.ndarray]:
+        if not self._preroll:
+            return []
+        chunks = self._preroll
+        self._preroll = []
+        self._preroll_samples = 0
+        return chunks
+
+    def _buffer_tail_chunks(self, keep_samples: int) -> list[np.ndarray]:
+        if keep_samples <= 0 or not self._buffer:
+            return []
+        remaining = keep_samples
+        kept: list[np.ndarray] = []
+        for chunk in reversed(self._buffer):
+            if remaining <= 0:
+                break
+            if len(chunk) <= remaining:
+                kept.append(chunk.copy())
+                remaining -= len(chunk)
+            else:
+                kept.append(chunk[-remaining:].copy())
+                remaining = 0
+        kept.reverse()
+        return kept
+
+    def _seed_next_segment_from_rollover(self) -> None:
+        if self._rollover_max_samples <= 0:
+            self._reset()
+            return
+        rollover_chunks = self._buffer_tail_chunks(self._rollover_max_samples)
+        self._reset()
+        if not rollover_chunks:
+            return
+        self._preroll = rollover_chunks
+        self._preroll_samples = sum(len(chunk) for chunk in rollover_chunks)
 
     def feed(self, audio: np.ndarray) -> Optional[np.ndarray]:
         energy = float(np.sqrt(np.mean(audio ** 2)))
@@ -593,8 +744,17 @@ class VADBuffer:
         if energy > self.silence_threshold:
             if not self._speech_started:
                 self._speech_started = True
-                self._speech_start = now
+                preroll_chunks = self._consume_preroll()
+                if preroll_chunks:
+                    self._buffer.extend(preroll_chunks)
+                    self._speech_audio_samples += sum(len(chunk) for chunk in preroll_chunks)
+                    self._speech_start = now - (self._speech_audio_samples / self.sample_rate)
+                    self._last_segment_started_at = self._speech_start
+                else:
+                    self._speech_start = now
+                    self._last_segment_started_at = now
             self._silence_start = None
+            self._trailing_silence_samples = 0
             self._buffer.append(audio)
             self._speech_audio_samples += len(audio)
             if (
@@ -602,26 +762,49 @@ class VADBuffer:
                 and self._speech_audio_samples / self.sample_rate >= self.max_speech_duration
             ):
                 result = np.concatenate(self._buffer)
-                self._reset()
+                self._last_flush_reason = "max_speech"
+                self._last_segment_ended_at = now
+                self._seed_next_segment_from_rollover()
                 return result
+            return None
+        if not self._speech_started:
+            self._append_preroll(audio)
             return None
         if self._speech_started:
             self._buffer.append(audio)
             self._speech_audio_samples += len(audio)
+            self._trailing_silence_samples += len(audio)
             if self._silence_start is None:
                 self._silence_start = now
-            elif now - self._silence_start >= self.silence_duration:
+                if self.silence_duration <= 0:
+                    return None
+            silence_elapsed_sec = self._trailing_silence_samples / self.sample_rate
+            should_flush = (
+                silence_elapsed_sec > self.silence_duration
+                if self.silence_duration <= 0
+                else silence_elapsed_sec >= self.silence_duration
+            )
+            if should_flush:
                 speech_duration = self._speech_audio_samples / self.sample_rate
                 if speech_duration >= self.min_speech_duration and self._buffer:
                     result = np.concatenate(self._buffer)
+                    self._last_flush_reason = "silence"
+                    self._last_segment_ended_at = now
                     self._reset()
                     return result
+                # 片段过短被视为噪声/语气词丢弃。用 debug 避免刷屏；排查漏听时把 logger 调到 DEBUG。
+                _alog.debug(
+                    "vad_drop_short_segment duration=%.2fs threshold=%.2fs samples=%d",
+                    speech_duration, self.min_speech_duration, self._speech_audio_samples,
+                )
                 self._reset()
         return None
 
     def flush(self) -> Optional[np.ndarray]:
         if self._buffer:
             result = np.concatenate(self._buffer)
+            self._last_flush_reason = "stop_flush"
+            self._last_segment_ended_at = time.time()
             self._reset()
             return result
         return None
@@ -632,6 +815,7 @@ class VADBuffer:
         self._silence_start = None
         self._speech_start = None
         self._speech_audio_samples = 0
+        self._trailing_silence_samples = 0
 
     @property
     def is_speaking(self) -> bool:
@@ -645,6 +829,18 @@ class VADBuffer:
         if not self._buffer:
             return None
         return np.concatenate(self._buffer)
+
+    @property
+    def last_flush_reason(self) -> Optional[str]:
+        return self._last_flush_reason
+
+    @property
+    def last_segment_started_at(self) -> Optional[float]:
+        return self._last_segment_started_at
+
+    @property
+    def last_segment_ended_at(self) -> Optional[float]:
+        return self._last_segment_ended_at
 
 
 audio_capture = AudioCapture()

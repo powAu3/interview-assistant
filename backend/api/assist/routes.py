@@ -240,6 +240,47 @@ async def api_preflight_status():
     return get_preflight_status()
 
 
+@router.post("/preflight/replay")
+async def api_preflight_replay(body: dict):
+    session = get_session()
+    if session.is_recording and not session.is_paused:
+        raise HTTPException(409, "请先暂停或结束面试，再做高频回放检测")
+    device_id = body.get("device_id")
+    if device_id is None:
+        raise HTTPException(400, "device_id 必须提供")
+    try:
+        device_id = int(device_id)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "device_id 必须是整数")
+    repeats = body.get("repeats", 3)
+    gap_sec = body.get("gap_sec", 0.25)
+    audio_path = body.get("audio_path")
+    expected_phrase = body.get("expected_phrase")
+    try:
+        repeats = int(repeats)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "repeats 必须是整数")
+    try:
+        gap_sec = float(gap_sec)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "gap_sec 必须是数字")
+    try:
+        from .sound_test import replay_preflight_capture_stt
+        return await run_in_threadpool(
+            replay_preflight_capture_stt,
+            device_id,
+            repeats=repeats,
+            gap_sec=gap_sec,
+            audio_path=audio_path,
+            expected_phrase=expected_phrase,
+        )
+    except AudioBusyError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        _rlog.warning("preflight replay failed device=%s: %s", device_id, e, exc_info=True)
+        raise HTTPException(503, f"高频回放检测失败: {e}")
+
+
 @router.post("/exam-preflight/run")
 async def api_exam_preflight_run():
     from .exam_test import start_exam_preflight

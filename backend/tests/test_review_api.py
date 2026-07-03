@@ -4,9 +4,17 @@ Tests for review API endpoints.
 import time
 import importlib
 import pytest
+from pathlib import Path
+import sys
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from fastapi.testclient import TestClient
 from main import app
 from services.storage import review
+from services.storage import job_tracker as jt
 
 
 client = TestClient(app)
@@ -242,6 +250,48 @@ def test_get_session_detail():
     assert turn["candidate_answer_text"] == "测试回答"
 
 
+def test_update_session_binds_application_and_returns_detail_application():
+    app_row = jt.create_application({"company": "ACME", "position": "后端", "stage": "interview1"})
+    try:
+        session_id = review.create_session(
+            started_at=time.time(),
+            interviewer_enabled=True,
+            candidate_enabled=True,
+        )
+
+        resp = client.patch(
+            f"/api/review/sessions/{session_id}",
+            json={"application_id": app_row["id"]},
+        )
+        detail_resp = client.get(f"/api/review/sessions/{session_id}")
+
+        assert resp.status_code == 200
+        assert resp.json()["synced_todos"] is True
+        assert detail_resp.status_code == 200
+        data = detail_resp.json()
+        assert data["application_id"] == app_row["id"]
+        assert data["application"]["company"] == "ACME"
+        assert data["application"]["position"] == "后端"
+    finally:
+        jt.delete_application(app_row["id"])
+
+
+def test_update_session_rejects_missing_application():
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+
+    resp = client.patch(
+        f"/api/review/sessions/{session_id}",
+        json={"application_id": 99999999},
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Application not found"
+
+
 def test_get_session_detail_not_found():
     """测试获取不存在的 session"""
     resp = client.get("/api/review/sessions/99999")
@@ -338,6 +388,21 @@ def test_session_lifecycle():
     assert resp.json()["total"] == 1
 
 
+def test_get_current_session_excludes_recorded_sessions():
+    """已结束但待手动生成的 recorded session 不应再被视为当前进行中。"""
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    review.end_session(session_id, status="recorded")
+
+    resp = client.get("/api/review/current")
+
+    assert resp.status_code == 200
+    assert resp.json()["session"] is None
+
+
 def test_generate_starts_for_completed_session_without_analysis(monkeypatch):
     """历史 completed 可能只是录制结束，缺少分析内容时仍应允许手动生成。"""
     started_analysis: list[int] = []
@@ -361,6 +426,36 @@ def test_generate_starts_for_completed_session_without_analysis(monkeypatch):
         duration_ms=30000,
     )
     review.end_session(session_id, status="completed")
+
+    resp = client.post(f"/api/review/sessions/{session_id}/generate")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "started"
+    assert started_analysis == [session_id]
+
+
+def test_generate_starts_for_recorded_session(monkeypatch):
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_router.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    review.add_turn(
+        session_id=session_id,
+        qa_id="qa-001",
+        seq=1,
+        question_text="问题1",
+        candidate_answer_text="回答1",
+        duration_ms=30000,
+    )
+    review.end_session(session_id, status="recorded")
 
     resp = client.post(f"/api/review/sessions/{session_id}/generate")
 

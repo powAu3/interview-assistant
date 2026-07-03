@@ -12,6 +12,7 @@ export interface OverlayStatePayload {
   focusWidthPct?: number
   focusHeightPct?: number
   promptMaxWidth?: number
+  promptAutoFollow?: boolean
   maxLines: number
 }
 
@@ -25,6 +26,7 @@ export const INTERVIEW_OVERLAY_STORAGE_KEYS = {
   focusWidthPct: 'ia_overlay_focus_width_pct',
   focusHeightPct: 'ia_overlay_focus_height_pct',
   promptMaxWidth: 'ia_overlay_prompt_max_width',
+  promptAutoFollow: 'ia_overlay_prompt_auto_follow',
   maxLines: 'ia_overlay_max_lines',
 } as const
 

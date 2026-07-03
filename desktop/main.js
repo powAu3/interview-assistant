@@ -96,6 +96,7 @@ let lastOverlayState = {
   focusWidthPct: 96,
   focusHeightPct: 90,
   promptMaxWidth: 900,
+  promptAutoFollow: false,
   maxLines: 0,
 };
 
@@ -213,14 +214,26 @@ function getFocusOverlayBounds() {
   };
 }
 
-function getNormalOverlayBounds() {
+function getNormalOverlayBounds(mode) {
   const storedPos = getStoredOverlayPosition();
   const saved = loadOverlayWindowState();
   const storedSize = saved?.position;
   const minOverlayWidth = OVERLAY_PRESET.minWidth || OVERLAY_PRESET.width;
   const minOverlayHeight = OVERLAY_PRESET.minHeight || OVERLAY_PRESET.height;
-  const width = Math.max((storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width, minOverlayWidth);
-  const height = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
+  // prompt 模式宽度由内容自适应驱动 (受 promptMaxWidth 约束), 旧物理 position.w 无意义;
+  // 直接用 promptMaxWidth 作初始宽, 避免重开时先显示旧值再被前端收窄/撑开。
+  let width;
+  let height;
+  if (mode === 'prompt') {
+    const promptMax = Number(lastOverlayState?.promptMaxWidth);
+    width = Math.isFinite(promptMax) && promptMax > 0
+      ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(1500, Math.round(promptMax)))
+      : 900;
+    height = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
+  } else {
+    width = Math.max((storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width, minOverlayWidth);
+    height = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
+  }
   return {
     ...(storedPos ? storedPos : getDefaultOverlayBounds()),
     width,
@@ -235,25 +248,28 @@ function applyOverlayModeBounds() {
     mode === 'prompt' ? PROMPT_OVERLAY_MIN_SIZE.width : OVERLAY_PRESET.minWidth,
     mode === 'prompt' ? PROMPT_OVERLAY_MIN_SIZE.height : OVERLAY_PRESET.minHeight,
   );
-  const bounds = mode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds();
+  const bounds = mode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds(mode);
   overlayWindow.setBounds(bounds, false);
 }
 
-function persistOverlayPosition() {
+function persistOverlayPosition(force = false) {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   if (lastOverlayState?.mode === 'focus') return;
-  if (Date.now() < overlayAutoResizeUntil) return;
+  // fuse 屏蔽窗口 resize/moved 事件在程序化 setBounds 后 500ms 内的频繁写盘;
+  // force=true 用于程序化设尺寸后的显式落盘 (来自 resize-overlay-window IPC), 绕过 fuse。
+  if (!force && Date.now() < overlayAutoResizeUntil) return;
   const bounds = overlayWindow.getBounds();
   const saved = loadOverlayWindowState();
   saved.position = { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height };
   saveOverlayWindowState(saved);
 }
 
-function schedulePersistOverlayPosition() {
+function schedulePersistOverlayPosition(force = false) {
   if (overlayPositionSaveTimer) clearTimeout(overlayPositionSaveTimer);
+  const scheduledForce = force;
   overlayPositionSaveTimer = setTimeout(() => {
     overlayPositionSaveTimer = null;
-    persistOverlayPosition();
+    persistOverlayPosition(scheduledForce);
   }, 180);
 }
 
@@ -369,7 +385,8 @@ function createOverlayWindow() {
     return overlayWindow;
   }
 
-  const initialBounds = lastOverlayState?.mode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds();
+  const initialMode = lastOverlayState?.mode || (lastOverlayState?.showBg === false ? 'prompt' : 'glass');
+  const initialBounds = initialMode === 'focus' ? getFocusOverlayBounds() : getNormalOverlayBounds(initialMode);
 
   // 透明浮窗: 视觉上能看到桌面, 需要 transparent: true + alpha=0 背景.
   // 注意: setContentProtection 在 macOS 的透明窗口上只是 best effort,
@@ -926,6 +943,9 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     const promptMaxWidth = Number(payload.promptMaxWidth);
     if (Number.isFinite(promptMaxWidth)) style.promptMaxWidth = Math.max(200, Math.min(1500, Math.round(promptMaxWidth)));
   }
+  if ('promptAutoFollow' in payload && typeof payload.promptAutoFollow === 'boolean') {
+    style.promptAutoFollow = payload.promptAutoFollow;
+  }
   if ('maxLines' in payload) {
     const maxLines = Number(payload.maxLines);
     if (Number.isFinite(maxLines)) style.maxLines = Math.max(0, Math.min(50, Math.round(maxLines)));
@@ -995,6 +1015,8 @@ ipcMain.handle('resize-overlay-window', (_event, payload = {}) => {
 
   overlayAutoResizeUntil = Date.now() + 500;
   overlayWindow.setBounds({ x, y, width, height }, false);
+  // 程序化设的尺寸是 prompt 自适应的权威值, 显式落盘 (绕过 fuse), 使重开时生效。
+  schedulePersistOverlayPosition(true);
   return { ok: true, width, height };
 });
 // M3: 添加 destroyOverlay 接口，支持显式销毁悬浮窗

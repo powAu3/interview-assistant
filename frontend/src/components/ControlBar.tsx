@@ -273,6 +273,8 @@ export default function ControlBar() {
           mode: s.interviewOverlayMode,
           focusWidthPct: s.interviewOverlayFocusWidthPct,
           focusHeightPct: s.interviewOverlayFocusHeightPct,
+          promptMaxWidth: s.interviewOverlayPromptMaxWidth,
+          promptAutoFollow: s.interviewOverlayPromptAutoFollow,
           maxLines: s.interviewOverlayMaxLines,
         }).catch(() => {})
       }

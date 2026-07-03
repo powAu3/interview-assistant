@@ -1,12 +1,20 @@
 export interface ReviewSession {
   id: number
-  status: 'recording' | 'analyzing' | 'completed' | 'partial_capture' | 'analysis_failed'
+  status: 'recording' | 'recorded' | 'analyzing' | 'completed' | 'partial_capture' | 'analysis_failed'
   started_at: number
   ended_at: number | null
   source: string
   title?: string | null
   company?: string | null
   role?: string | null
+  application_id?: number | null
+  application?: {
+    id: number
+    company: string
+    position: string
+    city: string
+    stage: string
+  } | null
   jd_snapshot?: string | null
   resume_snapshot?: string | null
   interviewer_capture_enabled: boolean

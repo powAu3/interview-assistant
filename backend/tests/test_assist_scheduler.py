@@ -32,6 +32,26 @@ def test_begin_asr_turn_drops_pending_asr_only():
     assert pending == [(_manual_task("手动问题"), 1, 3)]
 
 
+def test_begin_asr_turn_keeps_pending_asr_when_interrupt_disabled():
+    pending: list[scheduler.PendingTask] = [
+        (_asr_task("旧 ASR", 1), 0, 3),
+        (_manual_task("手动问题"), 1, 3),
+    ]
+
+    latest_turn, skipped = scheduler.begin_asr_turn(
+        pending,
+        1,
+        interrupt_pending_asr=False,
+    )
+
+    assert latest_turn == 2
+    assert skipped == []
+    assert pending == [
+        (_asr_task("旧 ASR", 1), 0, 3),
+        (_manual_task("手动问题"), 1, 3),
+    ]
+
+
 def test_claim_next_dispatch_avoids_physical_busy_model_for_asr():
     pending: list[scheduler.PendingTask] = [(_asr_task("最新问题", 2), 2, 7)]
     in_flight = {1: (2, _asr_task("旧问题", 1))}
@@ -55,6 +75,59 @@ def test_claim_next_dispatch_avoids_physical_busy_model_for_asr():
     assert pending == []
     assert in_flight[2] == (0, _asr_task("最新问题", 2))
     assert calls == [({2}, {2})]
+
+
+def test_claim_next_dispatch_can_keep_stale_asr_when_interrupt_disabled():
+    pending: list[scheduler.PendingTask] = [(_asr_task("旧问题", 1), 2, 7)]
+    in_flight: dict[int, tuple[int, scheduler.TaskPayload]] = {}
+
+    step = scheduler.claim_next_dispatch(
+        pending,
+        in_flight,
+        latest_asr_turn_id=2,
+        max_parallel_slots=2,
+        pick_model_index=lambda _task, _busy, _avoid_models=None: 0,
+        interrupt_stale_asr=False,
+    )
+
+    assert step.claim is not None
+    assert step.claim.seq == 2
+    assert step.skipped_seq is None
+    assert pending == []
+
+
+def test_claim_next_dispatch_waits_for_deferred_task():
+    task = (
+        "稍后分发",
+        None,
+        False,
+        "conversation_mic",
+        {"origin": "asr", "asr_turn_id": 2, "dispatch_after_mono": 10.0},
+    )
+    pending: list[scheduler.PendingTask] = [(task, 2, 7)]
+    in_flight: dict[int, tuple[int, scheduler.TaskPayload]] = {}
+
+    early = scheduler.claim_next_dispatch(
+        pending,
+        in_flight,
+        latest_asr_turn_id=2,
+        max_parallel_slots=2,
+        pick_model_index=lambda _task, _busy, _avoid_models=None: 0,
+        now_mono=9.5,
+    )
+    ready = scheduler.claim_next_dispatch(
+        pending,
+        in_flight,
+        latest_asr_turn_id=2,
+        max_parallel_slots=2,
+        pick_model_index=lambda _task, _busy, _avoid_models=None: 0,
+        now_mono=10.0,
+    )
+
+    assert early.claim is None
+    assert pending == []
+    assert ready.claim is not None
+    assert ready.claim.seq == 2
 
 
 def test_drain_commit_queue_skips_then_drains_in_order():

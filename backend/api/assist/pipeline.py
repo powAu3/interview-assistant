@@ -1,11 +1,13 @@
 """Interview assist pipeline: ASR buffering, task dispatch, parallel answer workers."""
 
 import gc
+import numpy as np
 import queue
 import time
 import threading
+from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Literal, Optional
 
 from core.background import BoundedTaskWorker
 from core.config import get_config
@@ -17,6 +19,7 @@ _ilog = get_interview_logger()
 _elog = get_logger("pipeline")
 from services.audio import AudioCapture, VADBuffer, audio_capture
 from services.stt import (
+    build_asr_question_group_text,
     get_stt_engine,
     transcribe_with_fallback,
     transcription_for_publish,
@@ -58,6 +61,7 @@ from api.assist.scheduler import (
 # ---------------------------------------------------------------------------
 
 _interview_thread: Optional[threading.Thread] = None
+_interviewer_asr_thread: Optional[threading.Thread] = None
 _candidate_thread: Optional[threading.Thread] = None
 _candidate_audio_capture = AudioCapture()
 _stop_event = threading.Event()
@@ -70,6 +74,11 @@ _candidate_whisper_preload_inflight: set[tuple[str, str]] = set()
 _flush_thread: Optional[threading.Thread] = None
 _flush_queue: queue.Queue = queue.Queue(maxsize=10)
 _flush_stop_event = threading.Event()
+_interviewer_segment_queue_maxsize = 12
+_interviewer_segment_drain_timeout_sec = 1.5
+_interviewer_vad_preroll_sec = 0.24
+_interviewer_vad_rollover_sec = 0.28
+_vad_feed_chunk_samples = 320
 
 _answer_generation = 0
 _gen_lock = threading.Lock()
@@ -87,10 +96,6 @@ _next_commit_seq = 0
 _next_submit_seq = 0
 _commit_lock = threading.Lock()
 
-_asr_merge_parts: list[str] = []
-_asr_merge_mono_first: Optional[float] = None
-_asr_merge_mono_last: Optional[float] = None
-_pending_asr_group: Optional[PendingASRGroup] = None
 _recent_asr_turn_monos: list[float] = []
 _knowledge_worker: Optional[BoundedTaskWorker] = None
 _asr_state = AssistAsrStateMachine(
@@ -99,8 +104,40 @@ _asr_state = AssistAsrStateMachine(
     begin_asr_turn=lambda: _begin_asr_turn(),
     record_asr_turn=lambda now_mono: _record_asr_turn(now_mono),
     is_high_churn_submission=lambda cfg, now_mono: _is_high_churn_asr_submission(cfg, now_mono),
+    append_late_constraint_tail=lambda text, source, now_mono: _append_late_asr_constraint_tail(text, source, now_mono),
     logger=_ilog,
 )
+
+
+@dataclass
+class InterviewerSegment:
+    audio: Any
+    sample_rate: int
+    started_mono: float
+    ended_mono: float
+    audio_sec: float
+    flush_reason: Literal["silence", "max_speech", "pause_flush", "stop_flush"]
+    capture_is_loopback: bool
+
+
+class _InterviewerRuntime:
+    def __init__(self):
+        self.segment_queue: queue.Queue[InterviewerSegment] = queue.Queue(
+            maxsize=_interviewer_segment_queue_maxsize
+        )
+        self.drain_event = threading.Event()
+        self.raw_queue_drop_count = 0
+        self.segment_emitted = 0
+        self.segment_dropped = 0
+        self.last_chunk_mono: Optional[float] = None
+        self.last_chunk_audio_sec = 0.0
+        self.max_observed_segment_queue_depth = 0
+        self.loopback_discontinuity_count = 0
+        self.max_raw_chunk_samples = 0
+
+
+_interviewer_runtime: Optional[_InterviewerRuntime] = None
+_last_interviewer_runtime_snapshot: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +146,6 @@ _asr_state = AssistAsrStateMachine(
 
 def _reset_asr_merge_buffer_locked():
     _asr_state.reset_merge_buffer()
-    _sync_asr_state_to_compat_globals()
 
 
 def _reset_asr_merge_buffer():
@@ -119,27 +155,11 @@ def _reset_asr_merge_buffer():
 
 def _reset_pending_asr_group_locked():
     _asr_state.reset_pending_group()
-    _sync_asr_state_to_compat_globals()
 
 
 def _reset_pending_asr_group():
     with _asr_state_lock:
         _reset_pending_asr_group_locked()
-
-
-def _sync_compat_globals_to_asr_state():
-    _asr_state.merge_parts = _asr_merge_parts
-    _asr_state.merge_mono_first = _asr_merge_mono_first
-    _asr_state.merge_mono_last = _asr_merge_mono_last
-    _asr_state.pending_group = _pending_asr_group
-
-
-def _sync_asr_state_to_compat_globals():
-    global _asr_merge_parts, _asr_merge_mono_first, _asr_merge_mono_last, _pending_asr_group
-    _asr_merge_parts = _asr_state.merge_parts
-    _asr_merge_mono_first = _asr_state.merge_mono_first
-    _asr_merge_mono_last = _asr_state.merge_mono_last
-    _pending_asr_group = _asr_state.pending_group
 
 
 def _prune_recent_asr_turns_locked(now_mono: float, window_sec: float = 6.0):
@@ -198,6 +218,285 @@ def _get_latest_asr_turn_id() -> int:
 
 def _is_stale_inflight_asr_task(task: TaskPayload) -> bool:
     return is_stale_inflight_asr_task(task, _latest_asr_turn_id)
+
+
+def _assist_vad_min_speech_sec(cfg) -> float:
+    return max(0.1, float(getattr(cfg, "assist_vad_min_speech_sec", 0.3) or 0.3))
+
+
+def _assist_vad_min_samples(cfg) -> int:
+    return int(AudioCapture.SAMPLE_RATE * _assist_vad_min_speech_sec(cfg))
+
+
+def _new_interviewer_runtime() -> _InterviewerRuntime:
+    return _InterviewerRuntime()
+
+
+def _set_interviewer_runtime(runtime: Optional[_InterviewerRuntime]) -> None:
+    global _interviewer_runtime
+    _interviewer_runtime = runtime
+
+
+def _set_last_interviewer_runtime_snapshot(snapshot: Optional[dict[str, Any]]) -> None:
+    global _last_interviewer_runtime_snapshot
+    _last_interviewer_runtime_snapshot = dict(snapshot) if snapshot is not None else None
+
+
+def _snapshot_interviewer_runtime(
+    runtime: _InterviewerRuntime,
+    *,
+    live: bool,
+    drained: Optional[bool] = None,
+    remaining_after_drain: Optional[int] = None,
+) -> dict[str, Any]:
+    snapshot = {
+        "live": bool(live),
+        "raw_queue_drop_count": int(runtime.raw_queue_drop_count),
+        "loopback_discontinuity_count": int(runtime.loopback_discontinuity_count),
+        "segment_emitted": int(runtime.segment_emitted),
+        "segment_dropped": int(runtime.segment_dropped),
+        "segment_queue_depth": int(runtime.segment_queue.qsize()),
+        "segment_backlog": int(_interviewer_segment_backlog(runtime)),
+        "max_observed_segment_queue_depth": int(runtime.max_observed_segment_queue_depth),
+        "max_raw_chunk_samples": int(runtime.max_raw_chunk_samples),
+    }
+    if drained is not None:
+        snapshot["drained"] = bool(drained)
+        snapshot["drain_timed_out"] = not bool(drained)
+    if remaining_after_drain is not None:
+        snapshot["remaining_after_drain"] = int(remaining_after_drain)
+    return snapshot
+
+
+def get_interviewer_runtime_snapshot() -> Optional[dict[str, Any]]:
+    runtime = _interviewer_runtime
+    if runtime is not None:
+        return _snapshot_interviewer_runtime(runtime, live=True)
+    if _last_interviewer_runtime_snapshot is None:
+        return None
+    return dict(_last_interviewer_runtime_snapshot)
+
+
+def _log_interviewer_chunk_gap(
+    runtime: _InterviewerRuntime,
+    batch_started_mono: float,
+    batch_audio_sec: float,
+) -> None:
+    if runtime.last_chunk_mono is not None:
+        expected_next_started = runtime.last_chunk_mono + max(0.0, runtime.last_chunk_audio_sec)
+        gap_ms = (batch_started_mono - expected_next_started) * 1000.0
+        if gap_ms >= 250:
+            _ilog.warning("INTERVIEWER_CHUNK_GAP gap_ms=%.0f", gap_ms)
+    runtime.last_chunk_mono = batch_started_mono
+    runtime.last_chunk_audio_sec = max(0.0, float(batch_audio_sec or 0.0))
+
+
+def _refresh_interviewer_raw_drop_count(runtime: _InterviewerRuntime) -> None:
+    snapshot_fn = getattr(audio_capture, "capture_stats_snapshot", None)
+    if callable(snapshot_fn):
+        try:
+            capture_stats = snapshot_fn()
+        except Exception:
+            capture_stats = None
+        if isinstance(capture_stats, dict):
+            runtime.raw_queue_drop_count = int(
+                capture_stats.get("dropped_chunks_count", runtime.raw_queue_drop_count)
+            )
+            runtime.loopback_discontinuity_count = int(
+                capture_stats.get("loopback_discontinuity_count", runtime.loopback_discontinuity_count)
+            )
+            runtime.max_raw_chunk_samples = int(
+                capture_stats.get("max_queue_chunk_samples", runtime.max_raw_chunk_samples)
+            )
+            return
+    dropped = getattr(audio_capture, "dropped_chunks_count", None)
+    if dropped is None:
+        return
+    runtime.raw_queue_drop_count = int(dropped)
+
+
+def _interviewer_segment_backlog(runtime: _InterviewerRuntime) -> int:
+    unfinished = getattr(runtime.segment_queue, "unfinished_tasks", None)
+    if unfinished is None:
+        return runtime.segment_queue.qsize()
+    return max(0, int(unfinished))
+
+
+def _emit_interviewer_segment(
+    runtime: _InterviewerRuntime,
+    segment: InterviewerSegment,
+) -> None:
+    try:
+        runtime.segment_queue.put_nowait(segment)
+        runtime.segment_emitted += 1
+        depth = runtime.segment_queue.qsize()
+        runtime.max_observed_segment_queue_depth = max(
+            runtime.max_observed_segment_queue_depth, depth
+        )
+        _ilog.info(
+            "INTERVIEWER_SEGMENT_EMITTED flush_reason=%s audio_sec=%.2f queue_depth=%d",
+            segment.flush_reason,
+            segment.audio_sec,
+            depth,
+        )
+    except queue.Full:
+        dropped = None
+        try:
+            dropped = runtime.segment_queue.get_nowait()
+            runtime.segment_queue.task_done()
+        except queue.Empty:
+            dropped = None
+        if dropped is not None:
+            runtime.segment_dropped += 1
+        try:
+            runtime.segment_queue.put_nowait(segment)
+            runtime.segment_emitted += 1
+            depth = runtime.segment_queue.qsize()
+            runtime.max_observed_segment_queue_depth = max(
+                runtime.max_observed_segment_queue_depth, depth
+            )
+        except queue.Full:
+            runtime.segment_dropped += 1
+            depth = runtime.segment_queue.qsize()
+        _elog.warning(
+            "INTERVIEWER_SEGMENT_QUEUE_FULL flush_reason=%s audio_sec=%.2f dropped_total=%d queue_depth=%d",
+            segment.flush_reason,
+            segment.audio_sec,
+            runtime.segment_dropped,
+            depth,
+        )
+
+
+def _maybe_build_interviewer_segment(
+    cfg,
+    runtime: _InterviewerRuntime,
+    session,
+    speech_audio,
+    *,
+    flush_reason: Literal["silence", "max_speech", "pause_flush", "stop_flush"],
+    segment_started_mono: float,
+    segment_ended_mono: float,
+) -> bool:
+    if speech_audio is None:
+        return False
+    min_interviewer_samples = _assist_vad_min_samples(cfg)
+    if len(speech_audio) < min_interviewer_samples:
+        return False
+    audio_sec = len(speech_audio) / AudioCapture.SAMPLE_RATE
+    ended_mono = max(0.0, float(segment_ended_mono))
+    started_mono = max(0.0, min(float(segment_started_mono), ended_mono))
+    if ended_mono - started_mono + 1e-6 < audio_sec:
+        started_mono = max(0.0, ended_mono - audio_sec)
+    segment = InterviewerSegment(
+        audio=speech_audio,
+        sample_rate=AudioCapture.SAMPLE_RATE,
+        started_mono=started_mono,
+        ended_mono=ended_mono,
+        audio_sec=audio_sec,
+        flush_reason=flush_reason,
+        capture_is_loopback=bool(getattr(session, "capture_is_loopback", False)),
+    )
+    _emit_interviewer_segment(runtime, segment)
+    return True
+
+
+def _drain_interviewer_segments(timeout_sec: float) -> tuple[bool, int]:
+    runtime = _interviewer_runtime
+    if runtime is None:
+        return True, 0
+    deadline = time.monotonic() + max(0.0, timeout_sec)
+    while time.monotonic() < deadline:
+        if _interviewer_segment_backlog(runtime) == 0:
+            return True, 0
+        time.sleep(0.02)
+    remaining = _interviewer_segment_backlog(runtime)
+    return remaining == 0, remaining
+
+
+def _interviewer_segment_drain_timeout() -> float:
+    return max(
+        0.5,
+        min(
+            30.0,
+            float(
+                getattr(
+                    get_config(),
+                    "assist_interviewer_asr_drain_timeout_sec",
+                    _interviewer_segment_drain_timeout_sec,
+                )
+                or _interviewer_segment_drain_timeout_sec
+            ),
+        ),
+    )
+
+
+def _stop_capture_compat(capture, *, owner: str, clear_queue: bool) -> None:
+    try:
+        capture.stop(owner=owner, clear_queue=clear_queue)
+    except TypeError:
+        capture.stop(owner=owner)
+
+
+def _start_interview_worker_thread_if_needed() -> None:
+    global _interview_thread
+    if _interview_thread and _interview_thread.is_alive():
+        return
+    _interview_thread = threading.Thread(target=_interview_worker, daemon=True)
+    _interview_thread.start()
+
+
+def _drain_remaining_interviewer_audio_chunks(
+    runtime: _InterviewerRuntime,
+    vad: VADBuffer,
+    cfg,
+    session,
+) -> None:
+    while True:
+        chunks = audio_capture.drain_audio_chunks(timeout=0.0, max_chunks=6)
+        if not chunks:
+            break
+        now = time.monotonic()
+        offset_samples = 0
+        total_samples = sum(len(chunk) for chunk in chunks)
+        batch_end_mono = now
+        batch_start_mono = max(0.0, batch_end_mono - (total_samples / AudioCapture.SAMPLE_RATE))
+        _log_interviewer_chunk_gap(
+            runtime,
+            batch_start_mono,
+            total_samples / AudioCapture.SAMPLE_RATE,
+        )
+        for chunk in chunks:
+            offset_samples += len(chunk)
+            chunk_ended_mono = batch_start_mono + (offset_samples / AudioCapture.SAMPLE_RATE)
+            speech_audio = vad.feed(chunk)
+            if speech_audio is None:
+                continue
+            flush_reason = getattr(vad, "last_flush_reason", None) or "silence"
+            segment_ended_mono = chunk_ended_mono
+            segment_started_mono = max(
+                0.0,
+                segment_ended_mono - (len(speech_audio) / AudioCapture.SAMPLE_RATE),
+            )
+            _maybe_build_interviewer_segment(
+                cfg,
+                runtime,
+                session,
+                speech_audio,
+                flush_reason=(
+                    "max_speech"
+                    if flush_reason == "max_speech"
+                    else "silence"
+                ),
+                segment_started_mono=segment_started_mono,
+                segment_ended_mono=segment_ended_mono,
+            )
+
+
+def _iter_vad_feed_chunks(audio_chunk: np.ndarray):
+    frame = max(1, int(_vad_feed_chunk_samples))
+    total = len(audio_chunk)
+    for start in range(0, total, frame):
+        yield audio_chunk[start:start + frame]
 
 
 # ---------------------------------------------------------------------------
@@ -352,8 +651,13 @@ def _wait_for_answer_work_idle(timeout_sec: float) -> bool:
 
 def _begin_asr_turn() -> int:
     global _latest_asr_turn_id
+    cfg = get_config()
     with _dispatch_lock:
-        _latest_asr_turn_id, skipped = scheduler_begin_asr_turn(_pending, _latest_asr_turn_id)
+        _latest_asr_turn_id, skipped = scheduler_begin_asr_turn(
+            _pending,
+            _latest_asr_turn_id,
+            interrupt_pending_asr=_should_interrupt_stale_asr(cfg),
+        )
         turn_id = _latest_asr_turn_id
     for seq in skipped:
         _mark_seq_skipped(seq)
@@ -378,6 +682,11 @@ def _max_parallel_slots() -> int:
     return scheduler_max_parallel_slots(get_config(), get_model_health)
 
 
+def _should_interrupt_stale_asr(cfg=None) -> bool:
+    cfg = cfg or get_config()
+    return bool(asr_interrupt_running(cfg) and scheduler_max_parallel_slots(cfg, get_model_health) <= 1)
+
+
 def submit_answer_task(task: TaskPayload) -> bool:
     global _next_submit_seq
     if pick_model_index(task, set()) is None:
@@ -393,7 +702,12 @@ def submit_answer_task(task: TaskPayload) -> bool:
         _next_submit_seq += 1
         tv = _task_session_version
         _pending.append((task, seq, tv))
+        delay = max(0.0, float(_task_meta(task).get("dispatch_after_mono", 0.0) or 0.0) - time.monotonic())
     _try_dispatch()
+    if delay > 0:
+        timer = threading.Timer(delay, _try_dispatch)
+        timer.daemon = True
+        timer.start()
     return True
 
 
@@ -403,23 +717,53 @@ def submit_answer_task(task: TaskPayload) -> bool:
 
 def _flush_asr_question_group_now(cfg, session) -> None:
     with _asr_state_lock:
-        _sync_compat_globals_to_asr_state()
         _asr_state.flush_question_group_now(cfg, session)
-        _sync_asr_state_to_compat_globals()
 
 
 def _try_flush_asr_question_group(cfg, session, now_mono: float, force: bool = False) -> None:
     with _asr_state_lock:
-        _sync_compat_globals_to_asr_state()
         _asr_state.try_flush_question_group(cfg, session, now_mono, force)
-        _sync_asr_state_to_compat_globals()
 
 
 def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: float) -> None:
     with _asr_state_lock:
-        _sync_compat_globals_to_asr_state()
         _asr_state.handle_auto_detect_asr_text(cfg, session, pub, source, now_mono)
-        _sync_asr_state_to_compat_globals()
+
+
+def _append_late_asr_constraint_tail(text: str, source: str, now_mono: float) -> bool:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return False
+    with _dispatch_lock:
+        for idx in range(len(_pending) - 1, -1, -1):
+            task, seq, session_version = _pending[idx]
+            question, image, manual_input, task_source, meta = task
+            if not _is_asr_task(task) or task_source != source:
+                continue
+            grace_until = float(meta.get("asr_tail_grace_until_mono", 0.0) or 0.0)
+            if grace_until and now_mono > grace_until:
+                continue
+            utterances = [str(item).strip() for item in (meta.get("utterances") or []) if str(item).strip()]
+            if not utterances:
+                utterances = [str(question or "").strip()]
+            if cleaned in utterances:
+                return True
+            utterances.append(cleaned)
+            updated_question = build_asr_question_group_text(utterances) or f"{question}\n{cleaned}".strip()
+            updated_meta = {**meta, "utterances": utterances, "late_constraint_tail": True}
+            _pending[idx] = (
+                (updated_question, image, manual_input, task_source, updated_meta),
+                seq,
+                session_version,
+            )
+            _ilog.info(
+                "ASR_LATE_CONSTRAINT_MERGED seq=%d text=%r question=%r",
+                seq,
+                cleaned[:80],
+                updated_question[:150],
+            )
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -428,23 +772,17 @@ def _handle_auto_detect_asr_text(cfg, session, pub: str, source: str, now_mono: 
 
 def _flush_asr_merge_buffer_now(cfg, session) -> None:
     with _asr_state_lock:
-        _sync_compat_globals_to_asr_state()
         _asr_state.flush_merge_buffer_now(cfg, session)
-        _sync_asr_state_to_compat_globals()
 
 
 def _try_flush_asr_merge_buffer(cfg, session, now_mono: float, force: bool = False) -> None:
     with _asr_state_lock:
-        _sync_compat_globals_to_asr_state()
         _asr_state.try_flush_merge_buffer(cfg, session, now_mono, force)
-        _sync_asr_state_to_compat_globals()
 
 
 def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, force_flush_tail: bool = False) -> None:
     with _asr_state_lock:
-        _sync_compat_globals_to_asr_state()
         _asr_state.append_transcription_fragment(cfg, session, pub, now_mono, force_flush_tail)
-        _sync_asr_state_to_compat_globals()
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +798,8 @@ def _try_dispatch():
                 _latest_asr_turn_id,
                 _max_parallel_slots(),
                 pick_model_index,
+                interrupt_stale_asr=_should_interrupt_stale_asr(),
+                now_mono=time.monotonic(),
             )
         if step.skipped_seq is not None:
             _mark_seq_skipped(step.skipped_seq)
@@ -516,14 +856,14 @@ def _device_is_loopback(device_id: Optional[int]) -> bool:
 def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: Optional[int] = None):
     global _interview_thread, _candidate_thread
     stop_interview_loop()
+    _set_last_interviewer_runtime_snapshot(None)
     _stop_event.clear()
     _pause_event.clear()
     _candidate_flush_event.clear()
 
     session = get_session()
-    with conversation_lock:
-        session.is_recording = True
-        session.is_paused = False
+    capture_is_loopback = bool(getattr(session, "capture_is_loopback", False))
+    review_candidate_device_id: Optional[int] = None
 
     if device_id is not None:
         capture_is_loopback = _device_is_loopback(device_id)
@@ -537,12 +877,15 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
     else:
         _ilog.info("INTERVIEW_START no_device (written_exam_mode)")
 
+    with conversation_lock:
+        session.is_recording = True
+        session.is_paused = False
+
     broadcast({"type": "recording", "value": True})
     broadcast({"type": "paused", "value": False})
 
     if device_id is not None:
-        _interview_thread = threading.Thread(target=_interview_worker, daemon=True)
-        _interview_thread.start()
+        _start_interview_worker_thread_if_needed()
 
     cfg = get_config()
     if (
@@ -561,6 +904,7 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
                 session.last_candidate_mic_device_id = int(candidate_mic_device_id)
             _candidate_thread = threading.Thread(target=_candidate_worker, daemon=True)
             _candidate_thread.start()
+            review_candidate_device_id = int(candidate_mic_device_id)
             _ilog.info("CANDIDATE_ASR_START device=%s", candidate_mic_device_id)
         except Exception as exc:
             with conversation_lock:
@@ -584,25 +928,63 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
     # 创建 review session（如果满足条件）
     review_integration.on_assist_start(
         interviewer_device_id=device_id,
-        candidate_device_id=candidate_mic_device_id,
+        candidate_device_id=review_candidate_device_id,
         candidate_asr_enabled=bool(getattr(cfg, "candidate_asr_enabled", False)),
     )
 
 
 def stop_interview_loop():
-    global _interview_thread, _candidate_thread, _flush_thread
+    global _interview_thread, _interviewer_asr_thread, _candidate_thread, _flush_thread
     _stop_event.set()
-    _flush_stop_event.set()
     _pause_event.clear()
     _candidate_flush_event.set()
-    audio_capture.stop(owner="assist")
-    _candidate_audio_capture.stop(owner="assist-candidate")
+    _stop_capture_compat(audio_capture, owner="assist", clear_queue=False)
+    _stop_capture_compat(_candidate_audio_capture, owner="assist-candidate", clear_queue=True)
     session = get_session()
+    runtime = _interviewer_runtime
+    runtime_snapshot: Optional[dict[str, Any]] = None
 
     current_thread = threading.current_thread()
     if _interview_thread and _interview_thread.is_alive() and _interview_thread is not current_thread:
         _interview_thread.join(timeout=5)
     _interview_thread = None
+    if runtime is not None:
+        try:
+            _refresh_interviewer_raw_drop_count(runtime)
+            runtime.drain_event.set()
+            drain_timeout_sec = _interviewer_segment_drain_timeout()
+            drained, remaining = _drain_interviewer_segments(drain_timeout_sec)
+            if _interviewer_asr_thread and _interviewer_asr_thread.is_alive() and _interviewer_asr_thread is not current_thread:
+                _interviewer_asr_thread.join(timeout=drain_timeout_sec)
+                drained = _interviewer_segment_backlog(runtime) == 0
+                remaining = _interviewer_segment_backlog(runtime)
+            _ilog.info(
+                "INTERVIEWER_ASR_DRAIN drained=%s remaining=%d segment_emitted=%d segment_dropped=%d raw_queue_drop_count=%d loopback_discontinuity_count=%d max_raw_chunk_samples=%d max_segment_queue_depth=%d",
+                drained,
+                remaining,
+                runtime.segment_emitted,
+                runtime.segment_dropped,
+                runtime.raw_queue_drop_count,
+                runtime.loopback_discontinuity_count,
+                runtime.max_raw_chunk_samples,
+                runtime.max_observed_segment_queue_depth,
+            )
+            if not drained:
+                _elog.warning("INTERVIEWER_ASR_DRAIN_TIMEOUT remaining=%d", remaining)
+            runtime_snapshot = _snapshot_interviewer_runtime(
+                runtime,
+                live=False,
+                drained=drained,
+                remaining_after_drain=remaining,
+            )
+        except Exception:
+            _elog.error("interviewer ASR drain failed", exc_info=True)
+        if runtime_snapshot is None:
+            runtime_snapshot = _snapshot_interviewer_runtime(runtime, live=False)
+        _set_last_interviewer_runtime_snapshot(runtime_snapshot)
+    if _interviewer_asr_thread and _interviewer_asr_thread.is_alive() and _interviewer_asr_thread is not current_thread:
+        _interviewer_asr_thread.join(timeout=0.2)
+    _interviewer_asr_thread = None
     if _flush_thread and _flush_thread.is_alive() and _flush_thread is not current_thread:
         _flush_thread.join(timeout=1)
     _flush_thread = None
@@ -620,7 +1002,7 @@ def stop_interview_loop():
     except Exception:
         _elog.debug("final ASR flush during stop skipped", exc_info=True)
 
-    wait_sec = float(getattr(get_config(), "assist_stop_answer_wait_sec", 3.0) or 0.0)
+    wait_sec = float(getattr(get_config(), "assist_stop_answer_wait_sec", 3.0))
     if wait_sec > 0 and not _wait_for_answer_work_idle(min(wait_sec, 20.0)):
         _elog.warning("ANSWER_STOP_WAIT_TIMEOUT pending/inflight work will be cancelled")
     cancel_answer_work(reset_session_data=False)
@@ -641,6 +1023,7 @@ def stop_interview_loop():
     broadcast({"type": "recording", "value": False})
     broadcast({"type": "paused", "value": False})
     _candidate_flush_event.clear()
+    _set_interviewer_runtime(None)
     gc.collect()
     _ilog.info("INTERVIEW_STOP qa_count=%d", len(session.qa_pairs))
 
@@ -648,8 +1031,8 @@ def stop_interview_loop():
 def pause_interview():
     _pause_event.set()
     _candidate_flush_event.set()
-    audio_capture.stop(owner="assist")
-    _candidate_audio_capture.stop(owner="assist-candidate")
+    _stop_capture_compat(audio_capture, owner="assist", clear_queue=False)
+    _stop_capture_compat(_candidate_audio_capture, owner="assist-candidate", clear_queue=False)
     session = get_session()
     with conversation_lock:
         session.is_paused = True
@@ -657,20 +1040,32 @@ def pause_interview():
 
 
 def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: Optional[int] = None):
-    global _candidate_thread
+    global _interview_thread, _candidate_thread
     session = get_session()
-    capture_is_loopback = session.capture_is_loopback
-    next_device_id = session.last_device_id
+    capture_is_loopback = bool(getattr(session, "capture_is_loopback", False))
+    next_device_id = int(getattr(session, "last_device_id", 0) or 0)
+    should_resume_interviewer = bool(
+        device_id is not None
+        or (_interview_thread and _interview_thread.is_alive())
+        or bool(getattr(audio_capture, "is_running", False))
+    )
     if device_id is not None:
         next_device_id = int(device_id)
         capture_is_loopback = _device_is_loopback(next_device_id)
-    audio_capture.start(next_device_id, owner="assist")
-    next_candidate_id = session.last_candidate_mic_device_id
+    if should_resume_interviewer:
+        audio_capture.start(next_device_id, owner="assist")
+        _start_interview_worker_thread_if_needed()
+    next_candidate_id = int(getattr(session, "last_candidate_mic_device_id", 0) or 0)
+    should_resume_candidate = bool(
+        candidate_mic_device_id is not None
+        or (_candidate_thread and _candidate_thread.is_alive())
+        or bool(getattr(_candidate_audio_capture, "is_running", False))
+    )
     if candidate_mic_device_id is not None:
         next_candidate_id = int(candidate_mic_device_id)
     cfg = get_config()
     if (
-        next_candidate_id
+        should_resume_candidate
         and bool(getattr(cfg, "candidate_asr_enabled", False))
         and int(next_candidate_id) != int(next_device_id)
     ):
@@ -725,9 +1120,59 @@ def _flush_worker():
             _elog.error("flush_worker error: %s", e, exc_info=True)
 
 
+def _interviewer_asr_worker(runtime: _InterviewerRuntime, session, cfg) -> None:
+    while True:
+        if runtime.drain_event.is_set() and _interviewer_segment_backlog(runtime) == 0:
+            break
+        try:
+            segment = runtime.segment_queue.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        try:
+            queue_delay_ms = max(0.0, (time.monotonic() - segment.ended_mono) * 1000.0)
+            broadcast({"type": "transcribing", "value": True})
+            t0 = time.monotonic()
+            current_cfg = get_config()
+            text = transcribe_with_fallback(
+                segment.audio,
+                segment.sample_rate,
+                position=current_cfg.position,
+                language=current_cfg.language,
+                scope="interviewer",
+                fallback_on_empty_remote=True,
+            )
+            text = postprocess_interview_transcription(text)
+            stt_ms = (time.monotonic() - t0) * 1000
+            pub = transcription_for_publish(
+                text,
+                getattr(current_cfg, "transcription_min_sig_chars", 2),
+            )
+            _ilog.info(
+                "INTERVIEWER_ASR_SEGMENT flush_reason=%s queue_delay_ms=%.0f raw=%.1fs stt=%.0fms ratio=%.2f publish_chars=%d",
+                segment.flush_reason,
+                queue_delay_ms,
+                segment.audio_sec,
+                stt_ms,
+                (stt_ms / 1000.0 / segment.audio_sec) if segment.audio_sec > 0 else 0.0,
+                len(pub) if pub else 0,
+            )
+            if pub:
+                _ilog.info("ASR publish=%r", pub[:120])
+                _append_transcription_fragment(
+                    current_cfg, session, pub, time.monotonic(), False
+                )
+        except Exception as e:
+            _elog.error("interviewer ASR segment error: %s", e, exc_info=True)
+        finally:
+            runtime.segment_queue.task_done()
+            broadcast({"type": "transcribing", "value": False})
+
+
 def _interview_worker():
     cfg = get_config()
     engine = get_stt_engine()
+    runtime = _interviewer_runtime or _new_interviewer_runtime()
+    _set_interviewer_runtime(runtime)
 
     if not engine.is_loaded:
         broadcast({"type": "stt_status", "loaded": False, "loading": True, "provider": getattr(cfg, "stt_provider", "whisper")})
@@ -746,9 +1191,14 @@ def _interview_worker():
         silence_threshold=getattr(cfg, "silence_threshold", 0.01),
         silence_duration=getattr(cfg, "silence_duration", 1.2),
         max_speech_duration=getattr(cfg, "assist_vad_max_speech_sec", 18.0),
+        min_speech_duration=getattr(cfg, "assist_vad_min_speech_sec", 0.3),
+        preroll_duration=_interviewer_vad_preroll_sec,
+        rollover_duration=_interviewer_vad_rollover_sec,
     )
     session = get_session()
     _reset_asr_merge_buffer()
+    _reset_pending_asr_group()
+    pause_flushed = False
 
     # gc.collect() 之前直接放在主 ASR 循环里 (每 60s 同步执行),
     # 大堆下单次 50~500ms, 期间无法读音频可能丢块。改成独立 daemon 线程,
@@ -775,76 +1225,118 @@ def _interview_worker():
     _flush_stop_event.clear()
     _flush_thread.start()
 
+    global _interviewer_asr_thread
+    _interviewer_asr_thread = threading.Thread(
+        target=_interviewer_asr_worker,
+        args=(runtime, session, cfg),
+        daemon=True,
+        name="assist-interviewer-asr",
+    )
+    _interviewer_asr_thread.start()
+
     try:
         while not _stop_event.is_set():
+            if _pause_event.is_set():
+                if not pause_flushed:
+                    _refresh_interviewer_raw_drop_count(runtime)
+                    _drain_remaining_interviewer_audio_chunks(runtime, vad, cfg, session)
+                    remaining = vad.flush()
+                    if remaining is not None:
+                        remaining_end_mono = time.monotonic()
+                        _maybe_build_interviewer_segment(
+                            cfg,
+                            runtime,
+                            session,
+                            remaining,
+                            flush_reason="pause_flush",
+                            segment_started_mono=max(
+                                0.0,
+                                remaining_end_mono - (len(remaining) / AudioCapture.SAMPLE_RATE),
+                            ),
+                            segment_ended_mono=remaining_end_mono,
+                        )
+                    pause_flushed = True
+                now = time.monotonic()
+                try:
+                    _flush_queue.put_nowait((get_config(), session, now))
+                except queue.Full:
+                    pass
+                time.sleep(0.1)
+                continue
+            pause_flushed = False
+            if not audio_capture.is_running:
+                _elog.error("Interview worker: audio capture stopped unexpectedly, exiting loop")
+                broadcast({"type": "error", "message": "音频采集异常中断，面试录音已停止"})
+                break
             now = time.monotonic()
+            _refresh_interviewer_raw_drop_count(runtime)
             # H4: 将 flush 逻辑移到独立线程，避免阻塞音频采集
             try:
                 _flush_queue.put_nowait((get_config(), session, now))
             except queue.Full:
                 pass  # 如果队列满，跳过本次 flush
 
-            if _pause_event.is_set():
-                time.sleep(0.1)
-                continue
-
-            chunk = audio_capture.get_audio_chunk(timeout=0.1)
-            if chunk is None:
+            chunks = audio_capture.drain_audio_chunks(timeout=0.1, max_chunks=6)
+            if not chunks:
                 time.sleep(0.05)
                 continue
-
-            energy = AudioCapture.compute_energy(chunk)
+            energy = AudioCapture.compute_energy(np.concatenate(chunks))
             broadcast({"type": "audio_level", "value": round(energy, 4)})
 
-            speech_audio = vad.feed(chunk)
-            if speech_audio is not None and len(speech_audio) > AudioCapture.SAMPLE_RATE * 0.3:
-                broadcast({"type": "transcribing", "value": True})
-                try:
-                    t0 = time.monotonic()
-                    text = transcribe_with_fallback(
+            offset_samples = 0
+            total_samples = sum(len(chunk) for chunk in chunks)
+            batch_end_mono = now
+            batch_start_mono = max(0.0, batch_end_mono - (total_samples / AudioCapture.SAMPLE_RATE))
+            _log_interviewer_chunk_gap(
+                runtime,
+                batch_start_mono,
+                total_samples / AudioCapture.SAMPLE_RATE,
+            )
+            for chunk in chunks:
+                chunk_started_mono = batch_start_mono + (offset_samples / AudioCapture.SAMPLE_RATE)
+                chunk_offset = 0
+                for vad_chunk in _iter_vad_feed_chunks(chunk):
+                    sub_started_mono = chunk_started_mono + (chunk_offset / AudioCapture.SAMPLE_RATE)
+                    chunk_offset += len(vad_chunk)
+                    offset_samples += len(vad_chunk)
+                    sub_ended_mono = batch_start_mono + (offset_samples / AudioCapture.SAMPLE_RATE)
+                    speech_audio = vad.feed(vad_chunk)
+                    if speech_audio is None:
+                        continue
+                    flush_reason = getattr(vad, "last_flush_reason", None) or "silence"
+                    segment_ended_mono = sub_ended_mono
+                    segment_started_mono = max(
+                        0.0,
+                        segment_ended_mono - (len(speech_audio) / AudioCapture.SAMPLE_RATE),
+                    )
+                    _maybe_build_interviewer_segment(
+                        cfg,
+                        runtime,
+                        session,
                         speech_audio,
-                        AudioCapture.SAMPLE_RATE,
-                        position=cfg.position,
-                        language=cfg.language,
+                        flush_reason=(
+                            "max_speech"
+                            if flush_reason == "max_speech"
+                            else "silence"
+                        ),
+                        segment_started_mono=segment_started_mono,
+                        segment_ended_mono=segment_ended_mono,
                     )
-                    text = postprocess_interview_transcription(text)
-                    stt_ms = (time.monotonic() - t0) * 1000
-                    audio_sec = len(speech_audio) / AudioCapture.SAMPLE_RATE
-                    _ilog.info(
-                        "ASR raw=%.1fs stt=%.0fms text=%r",
-                        audio_sec, stt_ms, text[:120] if text else "",
-                    )
-                    min_sig = getattr(
-                        get_config(), "transcription_min_sig_chars", 2
-                    )
-                    pub = transcription_for_publish(text, min_sig)
-                    if pub:
-                        _ilog.info("ASR publish=%r", pub[:120])
-                        _append_transcription_fragment(
-                            get_config(), session, pub, time.monotonic(), False
-                        )
-                except Exception as e:
-                    _elog.error("ASR transcribe error: %s", e, exc_info=True)
-                finally:
-                    broadcast({"type": "transcribing", "value": False})
 
+        _refresh_interviewer_raw_drop_count(runtime)
+        _drain_remaining_interviewer_audio_chunks(runtime, vad, cfg, session)
         remaining = vad.flush()
-        if remaining is not None and len(remaining) > AudioCapture.SAMPLE_RATE * 0.3:
-            try:
-                text = transcribe_with_fallback(
-                    remaining, AudioCapture.SAMPLE_RATE, position=cfg.position, language=cfg.language
-                )
-                text = postprocess_interview_transcription(text)
-                min_sig = getattr(
-                    get_config(), "transcription_min_sig_chars", 2
-                )
-                pub = transcription_for_publish(text, min_sig)
-                if pub:
-                    _append_transcription_fragment(
-                        get_config(), session, pub, time.monotonic(), True
-                    )
-            except Exception:
-                pass
+        if remaining is not None:
+            remaining_end_mono = time.monotonic()
+            _maybe_build_interviewer_segment(
+                cfg,
+                runtime,
+                session,
+                remaining,
+                flush_reason="stop_flush",
+                segment_started_mono=remaining_end_mono - (len(remaining) / AudioCapture.SAMPLE_RATE),
+                segment_ended_mono=remaining_end_mono,
+            )
     except Exception as e:
         _elog.error("Interview worker crashed: %s", e, exc_info=True)
         broadcast({"type": "error", "message": f"\u9762\u8bd5\u5faa\u73af\u5f02\u5e38: {e}"})
@@ -857,7 +1349,7 @@ def _interview_worker():
         # 重复调用也是 no-op (内部用 _lock + _running 标志位防御)。
         # 这能修复 worker 异常崩溃后麦克风/系统音频设备一直被占用的泄漏。
         try:
-            audio_capture.stop(owner="assist")
+            _stop_capture_compat(audio_capture, owner="assist", clear_queue=True)
         except Exception:
             _elog.error("audio_capture.stop in worker finally failed", exc_info=True)
         # 通知 GC daemon 退出并 join, 让 worker 生命周期完全确定 (避免测试需要
@@ -875,17 +1367,12 @@ def _interview_worker():
         except Exception:
             pass
         try:
-            _try_flush_asr_merge_buffer(
-                get_config(), get_session(), time.monotonic(), True
-            )
+            if _interviewer_asr_thread and _interviewer_asr_thread.is_alive():
+                runtime.drain_event.set()
+                _interviewer_asr_thread.join(timeout=_interviewer_segment_drain_timeout())
         except Exception:
             pass
-        try:
-            _try_flush_asr_question_group(
-                get_config(), get_session(), time.monotonic(), True
-            )
-        except Exception:
-            pass
+        _refresh_interviewer_raw_drop_count(runtime)
 
 
 def _candidate_provider_config(cfg) -> tuple[str, str, str, bool]:
@@ -1132,8 +1619,8 @@ def _candidate_worker():
                     _finalize_candidate_audio(vad.flush(), "PAUSE_FINAL")
                 time.sleep(0.1)
                 continue
-            chunk = _candidate_audio_capture.get_audio_chunk(timeout=0.1)
-            if chunk is None:
+            chunks = _candidate_audio_capture.drain_audio_chunks(timeout=0.1, max_chunks=6)
+            if not chunks:
                 time.sleep(0.05)
                 continue
 
@@ -1144,7 +1631,17 @@ def _candidate_worker():
                         session.mark_candidate_asr_idle()
                 continue
 
-            speech_audio = vad.feed(chunk)
+            pending_audio = None
+            speech_audio = None
+            for chunk in chunks:
+                for vad_chunk in _iter_vad_feed_chunks(chunk):
+                    # 注意: 不能写 `vad.feed(vad_chunk) or speech_audio` —— feed 返回的是
+                    # 多元素 ndarray, 布尔求值会抛 ValueError。显式判 None 后覆盖, 语义为
+                    # 「保留本 batch 内最后一个 flush 段」(drain batch ≤1.5s, 默认 silence
+                    # duration 1.2s 下一个 batch 最多一次 flush, 与原版单块 feed 等价)。
+                    flushed = vad.feed(vad_chunk)
+                    if flushed is not None:
+                        speech_audio = flushed
             if getattr(vad, "has_pending_audio", False):
                 with conversation_lock:
                     if hasattr(session, "mark_candidate_asr_busy"):
@@ -1246,7 +1743,7 @@ def _candidate_worker():
         broadcast({"type": "candidate_asr_status", "loaded": False, "loading": False, "provider": provider, "error": str(e)[:160]})
     finally:
         try:
-            _candidate_audio_capture.stop(owner="assist-candidate")
+            _stop_capture_compat(_candidate_audio_capture, owner="assist-candidate", clear_queue=True)
         except Exception:
             _elog.error("candidate audio_capture.stop failed", exc_info=True)
 
@@ -1270,7 +1767,7 @@ def _process_question_parallel(
             return True
         if (
             _is_asr_task(task)
-            and _asr_interrupt_running(cfg)
+            and _should_interrupt_stale_asr(cfg)
             and my_asr_turn
             and my_asr_turn < _get_latest_asr_turn_id()
         ):

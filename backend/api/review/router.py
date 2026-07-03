@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from services.storage import review
+from services.storage import job_tracker
 from services import review_analysis, review_async_analysis
 
 router = APIRouter()
@@ -14,6 +15,7 @@ class UpdateSessionRequest(BaseModel):
     title: str | None = None
     company: str | None = None
     role: str | None = None
+    application_id: int | None = None
 
 
 class ManualReviewRequest(BaseModel):
@@ -138,13 +140,24 @@ async def get_session(session_id: int):
 async def update_session(session_id: int, req: UpdateSessionRequest):
     """更新会话信息（标题、公司、岗位）"""
     try:
-        review.update_session_info(
-            session_id=session_id,
-            title=req.title,
-            company=req.company,
-            role=req.role,
-        )
-        return {"success": True}
+        if not review.get_session_detail(session_id):
+            raise HTTPException(404, "Session not found")
+        updates = req.model_dump(exclude_unset=True)
+        if "application_id" in updates and updates["application_id"] is not None:
+            if not job_tracker.get_application(int(updates["application_id"])):
+                raise HTTPException(404, "Application not found")
+        update_kwargs = {
+            "session_id": session_id,
+            "title": updates.get("title"),
+            "company": updates.get("company"),
+            "role": updates.get("role"),
+        }
+        if "application_id" in updates:
+            update_kwargs["application_id"] = updates["application_id"]
+        review.update_session_info(**update_kwargs)
+        return {"success": True, "synced_todos": "application_id" in updates}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -196,8 +209,8 @@ async def trigger_review_analysis(session_id: int):
     if status == "completed" and _has_generated_analysis(detail):
         return {"status": "done", "message": "复盘已完成"}
 
-    # 允许触发的状态：历史 completed 空复盘、部分录制、分析失败或旧的 recording 归档。
-    if status not in ["recording", "completed", "partial_capture", "analysis_failed"]:
+    # 允许触发的状态：已录制待分析、历史 completed 空复盘、部分录制、分析失败或旧的 recording 归档。
+    if status not in ["recorded", "recording", "completed", "partial_capture", "analysis_failed"]:
         raise HTTPException(400, f"当前状态 {status} 不支持触发分析")
 
     try:

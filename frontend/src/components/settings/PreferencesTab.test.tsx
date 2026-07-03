@@ -5,6 +5,7 @@ import PreferencesTab from './PreferencesTab'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import { prepareExamOverlayPrompt } from '@/lib/examOverlay'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 vi.mock('@/lib/configSync', () => ({
   updateConfigAndRefresh: vi.fn().mockResolvedValue({ ok: true }),
@@ -20,6 +21,7 @@ describe('PreferencesTab', () => {
   })
 
   beforeEach(() => {
+    localStorage.clear()
     vi.mocked(updateConfigAndRefresh).mockReset()
     vi.mocked(updateConfigAndRefresh).mockResolvedValue({ ok: true } as any)
     vi.mocked(prepareExamOverlayPrompt).mockClear()
@@ -42,6 +44,13 @@ describe('PreferencesTab', () => {
       sttActiveProvider: 'whisper',
       sttFallbackLoaded: false,
     } as any)
+    useUiPrefsStore.setState({
+      interviewOverlayEnabled: false,
+      interviewOverlayMode: 'glass',
+      interviewOverlayShowBg: true,
+      interviewOverlayPromptMaxWidth: 900,
+      interviewOverlayPromptAutoFollow: false,
+    })
   })
 
   it('exposes the screen capture long-edge limit', async () => {
@@ -164,5 +173,24 @@ describe('PreferencesTab', () => {
       await Promise.resolve()
     })
     expect(prepareExamOverlayPrompt).not.toHaveBeenCalled()
+  })
+
+  it('lets prompt mode opt into auto-follow from local overlay preferences', () => {
+    useUiPrefsStore.setState({
+      interviewOverlayEnabled: true,
+      interviewOverlayMode: 'prompt',
+      interviewOverlayShowBg: false,
+      interviewOverlayPromptAutoFollow: false,
+    })
+    render(<PreferencesTab />)
+
+    fireEvent.click(screen.getByText('工作模式'))
+    const toggle = screen.getByLabelText('靠近底部时自动跟随最新内容') as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+
+    fireEvent.click(toggle)
+
+    expect(useUiPrefsStore.getState().interviewOverlayPromptAutoFollow).toBe(true)
+    expect(localStorage.getItem('ia_overlay_prompt_auto_follow')).toBe('1')
   })
 })

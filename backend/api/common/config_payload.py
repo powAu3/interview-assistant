@@ -62,6 +62,9 @@ def build_config_payload(cfg) -> dict:
         "assist_vad_max_speech_sec": max(
             6.0, min(60.0, float(getattr(cfg, "assist_vad_max_speech_sec", 18.0) or 18.0))
         ),
+        "assist_vad_min_speech_sec": max(
+            0.1, min(2.0, float(getattr(cfg, "assist_vad_min_speech_sec", 0.3) or 0.3))
+        ),
         "assist_asr_confirm_window_sec": max(
             0.0, min(5.0, float(getattr(cfg, "assist_asr_confirm_window_sec", 0.45) or 0.0))
         ),
@@ -70,6 +73,23 @@ def build_config_payload(cfg) -> dict:
         ),
         "assist_asr_interrupt_running": bool(getattr(cfg, "assist_asr_interrupt_running", True)),
         "assist_high_churn_short_answer": bool(getattr(cfg, "assist_high_churn_short_answer", False)),
+        "assist_realtime_max_tokens": max(
+            256, min(4096, int(getattr(cfg, "assist_realtime_max_tokens", 720) or 720))
+        ),
+        "assist_realtime_high_churn_max_tokens": max(
+            128,
+            min(
+                max(256, min(4096, int(getattr(cfg, "assist_realtime_max_tokens", 720) or 720))),
+                int(getattr(cfg, "assist_realtime_high_churn_max_tokens", 320) or 320),
+            ),
+        ),
+        "assist_stop_answer_wait_sec": max(
+            0.0, min(20.0, float(getattr(cfg, "assist_stop_answer_wait_sec", 3.0)))
+        ),
+        "assist_interviewer_asr_drain_timeout_sec": max(
+            0.5,
+            min(30.0, float(getattr(cfg, "assist_interviewer_asr_drain_timeout_sec", 6.0) or 6.0)),
+        ),
         "screen_capture_region": getattr(cfg, "screen_capture_region", "left_half") or "left_half",
         "screen_capture_max_long_edge": max(
             0,

@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 from services.stt import (
     build_asr_question_group_text,
     classify_asr_question_candidate,
+    is_asr_question_constraint_tail,
     is_viable_asr_question_group,
     join_transcription_fragments,
     transcription_for_publish,
@@ -35,6 +36,7 @@ class AssistAsrStateMachine:
         record_asr_turn: Callable[[float], None],
         is_high_churn_submission: Callable[[Any, float], bool],
         logger,
+        append_late_constraint_tail: Callable[[str, str, float], bool] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ):
         self.broadcast = broadcast
@@ -42,6 +44,7 @@ class AssistAsrStateMachine:
         self.begin_asr_turn = begin_asr_turn
         self.record_asr_turn = record_asr_turn
         self.is_high_churn_submission = is_high_churn_submission
+        self.append_late_constraint_tail = append_late_constraint_tail or (lambda _text, _source, _now: False)
         self.logger = logger
         self.clock = clock
         self.merge_parts: list[str] = []
@@ -90,6 +93,8 @@ class AssistAsrStateMachine:
                     "asr_turn_id": turn_id,
                     "utterances": list(group.utterances),
                     "high_churn_short_answer": high_churn_short,
+                    "dispatch_after_mono": now_mono + _asr_late_constraint_grace_sec(cfg),
+                    "asr_tail_grace_until_mono": now_mono + _asr_late_constraint_grace_sec(cfg),
                 },
             )
         )
@@ -101,6 +106,8 @@ class AssistAsrStateMachine:
         confirm = _asr_confirm_window_sec(cfg)
         fast_confirm = _asr_fast_confirm_sec(cfg)
         max_wait = _asr_group_max_wait_sec(cfg)
+        if group.has_promote and len(group.utterances) == 1:
+            max_wait = max(max_wait, fast_confirm + confirm)
         since_last = now_mono - group.last_mono
         age = now_mono - group.first_mono
         if force or age >= max_wait:
@@ -113,13 +120,29 @@ class AssistAsrStateMachine:
             self.flush_question_group_now(cfg, session)
 
     def handle_auto_detect_asr_text(self, cfg, session, pub: str, source: str, now_mono: float) -> None:
-        self.try_flush_question_group(cfg, session, now_mono, False)
         kind, cleaned = classify_asr_question_candidate(
             pub,
             getattr(cfg, "transcription_min_sig_chars", 2),
         )
         if not cleaned:
             return
+        if (
+            self.pending_group is None
+            and kind == "candidate"
+            and is_asr_question_constraint_tail(cleaned)
+            and self.append_late_constraint_tail(cleaned, source, now_mono)
+        ):
+            return
+        if (
+            self.pending_group is not None
+            and kind == "candidate"
+            and is_asr_question_constraint_tail(cleaned)
+        ):
+            self.pending_group.utterances.append(cleaned)
+            self.pending_group.last_mono = now_mono
+            self.pending_group.source = source
+            return
+        self.try_flush_question_group(cfg, session, now_mono, False)
         if kind == "ignore" and self.pending_group is None:
             return
         if self.pending_group is None:
@@ -218,8 +241,13 @@ def _asr_group_max_wait_sec(cfg) -> float:
 
 
 def _asr_fast_confirm_sec(cfg) -> float:
-    fast = float(getattr(cfg, "assist_asr_fast_confirm_sec", 0.2) or 0.0)
+    fast = float(getattr(cfg, "assist_asr_fast_confirm_sec", 1.15) or 0.0)
     return max(0.1, min(2.0, fast))
+
+
+def _asr_late_constraint_grace_sec(cfg) -> float:
+    grace = float(getattr(cfg, "assist_asr_late_constraint_grace_sec", 1.2) or 0.0)
+    return max(0.0, min(3.0, grace))
 
 
 def asr_interrupt_running(cfg) -> bool:

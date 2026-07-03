@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 import sys
+from typing import Any
 
 import pytest
 
@@ -41,6 +42,8 @@ def _cfg():
         screen_capture_region="left_half",
         kb_enabled=False,
         kb_trigger_modes=[],
+        assist_realtime_max_tokens=720,
+        assist_realtime_high_churn_max_tokens=320,
     )
 
 
@@ -166,7 +169,7 @@ def test_process_question_parallel_submits_candidate_answer_to_knowledge(monkeyp
     ]
 
 
-def test_process_question_parallel_logs_token_delta_and_uses_configured_max_tokens(monkeypatch: pytest.MonkeyPatch):
+def test_process_question_parallel_logs_token_delta_and_uses_realtime_token_cap(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     info_calls: list[tuple[tuple, dict]] = []
     captured: dict[str, object] = {}
@@ -202,11 +205,59 @@ def test_process_question_parallel_logs_token_delta_and_uses_configured_max_toke
         deps=deps,
     )
 
-    assert captured["override_max_tokens"] == 4096
+    assert captured["override_max_tokens"] == 720
     done_call = next(args for args, _kwargs in info_calls if "ANSWER_DONE" in args[0])
     assert "tokens_prompt_delta" in done_call[0]
     assert 123 in done_call
     assert 45 in done_call
+
+
+def test_process_question_parallel_uses_global_max_tokens_for_manual_text(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+
+    def fake_stream(*_args, **kwargs):
+        captured["override_max_tokens"] = kwargs.get("override_max_tokens")
+        yield ("text", "回答")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("Redis 怎么持久化？", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["override_max_tokens"] == 4096
+
+
+def test_process_question_parallel_uses_high_churn_token_cap(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+
+    def fake_stream(*_args, **kwargs):
+        captured["override_max_tokens"] = kwargs.get("override_max_tokens")
+        yield ("text", "回答")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "那这个怎么验证？",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2, "high_churn_short_answer": True},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["override_max_tokens"] == 320
 
 
 def test_process_question_parallel_marks_seq_skipped_when_aborted(
@@ -324,6 +375,111 @@ def test_followup_prompt_uses_candidate_spoken_answer_as_auxiliary_context(monke
     assert "通用缓存项目" in prompt
 
 
+def test_self_contained_concept_followup_disables_resume_context(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：我做了通用缓存项目，QPS 提升 20%。",
+        qa_id="qa-prev",
+        source="conversation_loopback",
+        model_name="模型一",
+    )
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: True)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "只讲概念。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "另外我单独问一个概念题，rules 和 skills 的区别是什么？不要结合项目，就讲核心区别。",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is False
+
+
+def test_resume_question_keeps_resume_context_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "讲项目。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("讲讲你在项目里怎么做权限模型的？", None, False, "conversation_loopback", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is True
+
+
+def test_manual_question_negating_project_context_disables_resume(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "只讲概念。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "rules 和 skills 的区别是什么？不要结合项目，就讲核心区别。",
+            None,
+            True,
+            "manual_text",
+            {},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is False
+
+
 def test_realtime_asr_source_uses_candidate_context_and_opens_next_window(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     seen: dict[str, str] = {}
@@ -371,6 +527,108 @@ def test_realtime_asr_source_uses_candidate_context_and_opens_next_window(monkey
     assert "风控规则引擎" in seen["user"]
     answer_start = next(event for event in broadcasts if event["type"] == "answer_start")
     assert session.current_candidate_qa_id == answer_start["id"]
+
+
+def test_followup_prompt_uses_anchor_only_when_question_is_self_contained(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, Any] = {}
+    session = get_session()
+    session.add_user_message("上一轮用户问题")
+    session.add_assistant_message("上一轮助手答案")
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：我做了通用缓存项目，QPS 提升 20%。",
+        qa_id="qa-prev",
+        source="conversation_loopback",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控规则引擎，核心是灰度发布和回滚，误杀率下降了三成。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: True)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["messages"] = messages
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "围绕当前完整追问回答。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "你刚才说到权限是动态获取的，那 token 过期以后怎么续期和重试？",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert "只把上一轮当作主题锚点" in prompt
+    assert "助手上一轮建议答案" not in prompt
+    assert "候选人麦克风转写（辅助参考" not in prompt
+    assert "风控规则引擎" not in prompt
+    assert seen["messages"] == [{"role": "user", "content": prompt}]
+
+
+def test_followup_prompt_uses_inline_context_without_repeating_base_history(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, Any] = {}
+    session = get_session()
+    session.add_user_message("更早之前的问题")
+    session.add_assistant_message("更早之前的答案")
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：缓存项目。",
+        qa_id="qa-prev",
+        source="conversation_loopback",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控规则引擎。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: True)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["messages"] = messages
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "继续追问。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "那这个怎么验证？",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert "候选人麦克风转写（辅助参考，可能有识别误差）" in seen["user"]
+    assert seen["messages"] == [{"role": "user", "content": seen["user"]}]
 
 
 def test_non_followup_prompt_can_include_candidate_spoken_background(monkeypatch: pytest.MonkeyPatch):

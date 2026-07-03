@@ -154,9 +154,16 @@ def physical_busy_models(in_flight_tasks: dict[int, tuple[int, TaskPayload]]) ->
     return {model_idx for model_idx, _task in in_flight_tasks.values()}
 
 
-def begin_asr_turn(pending: list[PendingTask], latest_asr_turn_id: int) -> tuple[int, list[int]]:
+def begin_asr_turn(
+    pending: list[PendingTask],
+    latest_asr_turn_id: int,
+    *,
+    interrupt_pending_asr: bool = True,
+) -> tuple[int, list[int]]:
     latest_asr_turn_id += 1
     skipped: list[int] = []
+    if not interrupt_pending_asr:
+        return latest_asr_turn_id, skipped
     kept: list[PendingTask] = []
     for task, seq, session_version in pending:
         if is_asr_task(task):
@@ -173,6 +180,9 @@ def claim_next_dispatch(
     latest_asr_turn_id: int,
     max_parallel_slots: int,
     pick_model_index: Callable[[TaskPayload, set[int], Optional[set[int]]], Optional[int]],
+    *,
+    interrupt_stale_asr: bool = True,
+    now_mono: float | None = None,
 ) -> DispatchStep:
     busy_models, effective_slots = dispatch_snapshot(in_flight_tasks, latest_asr_turn_id)
     physical_busy = physical_busy_models(in_flight_tasks)
@@ -183,7 +193,11 @@ def claim_next_dispatch(
     while idx < len(pending):
         task, seq, session_version = pending[idx]
         meta = task_meta(task)
-        if is_asr_task(task) and int(meta.get("asr_turn_id", 0)) < latest_asr_turn_id:
+        dispatch_after = float(meta.get("dispatch_after_mono", 0.0) or 0.0)
+        if now_mono is not None and dispatch_after > now_mono:
+            idx += 1
+            continue
+        if interrupt_stale_asr and is_asr_task(task) and int(meta.get("asr_turn_id", 0)) < latest_asr_turn_id:
             pending.pop(idx)
             return DispatchStep(skipped_seq=seq)
         avoid_models = physical_busy if is_asr_task(task) else None

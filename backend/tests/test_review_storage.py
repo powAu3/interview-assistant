@@ -3,6 +3,13 @@ Tests for review storage (sessions, turns, profile snapshots).
 """
 import time
 import pytest
+from pathlib import Path
+import sys
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from services.storage import review
 
 
@@ -71,6 +78,19 @@ def test_get_current_session():
     # 结束后不再是 current
     review.end_session(session_id, status="completed")
     current = review.get_current_session()
+    assert current is None
+
+
+def test_get_current_session_excludes_recorded():
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    review.end_session(session_id, status="recorded")
+
+    current = review.get_current_session()
+
     assert current is None
 
 
@@ -322,3 +342,90 @@ def test_session_turn_count_sync():
 
     detail = review.get_session_detail(session_id)
     assert detail["turn_count"] == 2
+
+
+def test_application_link_syncs_review_todos_and_cleans_rebind(tmp_path, monkeypatch):
+    from services.storage import job_tracker as jt
+
+    monkeypatch.setattr(review, "DB_PATH", str(tmp_path / "review.db"))
+    monkeypatch.setattr(jt, "DB_PATH", str(tmp_path / "job_tracker.db"))
+    review.init_db()
+    jt.init_db()
+
+    app1 = jt.create_application({"company": "A 公司", "position": "后端"})
+    app2 = jt.create_application({"company": "B 公司", "position": "平台"})
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    turn_id = review.add_turn(
+        session_id=session_id,
+        qa_id="qa-001",
+        seq=1,
+        question_text="SQL 索引失效怎么排查？",
+        candidate_answer_text="我会先看 explain。",
+    )
+    review.update_turn_analysis(
+        turn_id=turn_id,
+        analysis_status="completed",
+        scorecard={"准确性": 5, "深度": 4},
+    )
+    review.update_session_summary(
+        session_id=session_id,
+        summary_markdown="总结",
+        strong_points=[],
+        weak_points=["索引原理展开不足", "缺少验证闭环"],
+        avg_score=4.5,
+    )
+
+    review.update_session_info(session_id, application_id=app1["id"])
+    todos = jt.get_application(app1["id"])["todos"]
+    assert [todo["id"] for todo in todos if todo["id"].startswith(f"review-{session_id}-")] == [
+        f"review-{session_id}-weak-1",
+        f"review-{session_id}-weak-2",
+        f"review-{session_id}-turn-{turn_id}",
+    ]
+
+    review.update_session_info(session_id, application_id=app1["id"])
+    todos_again = jt.get_application(app1["id"])["todos"]
+    assert len([todo for todo in todos_again if todo["id"].startswith(f"review-{session_id}-")]) == 3
+
+    review.update_session_info(session_id, application_id=app2["id"])
+    assert not [
+        todo for todo in jt.get_application(app1["id"])["todos"]
+        if todo["id"].startswith(f"review-{session_id}-")
+    ]
+    assert len([
+        todo for todo in jt.get_application(app2["id"])["todos"]
+        if todo["id"].startswith(f"review-{session_id}-")
+    ]) == 3
+
+    review.update_session_info(session_id, application_id=None)
+    assert not [
+        todo for todo in jt.get_application(app2["id"])["todos"]
+        if todo["id"].startswith(f"review-{session_id}-")
+    ]
+
+
+def test_application_review_summary_uses_latest_session(tmp_path, monkeypatch):
+    from services.storage import job_tracker as jt
+
+    monkeypatch.setattr(review, "DB_PATH", str(tmp_path / "review.db"))
+    monkeypatch.setattr(jt, "DB_PATH", str(tmp_path / "job_tracker.db"))
+    review.init_db()
+    jt.init_db()
+
+    app = jt.create_application({"company": "A 公司", "position": "后端"})
+    old_id = review.create_session(time.time() - 100, True, True, application_id=app["id"])
+    review.end_session(old_id, status="completed", ended_at=time.time() - 90)
+    review.update_session_summary(old_id, "old", [], [], avg_score=5.0)
+    latest_id = review.create_session(time.time() - 10, True, True, application_id=app["id"])
+    review.end_session(latest_id, status="completed", ended_at=time.time())
+    review.update_session_summary(latest_id, "latest", [], [], avg_score=8.0)
+
+    summary = review.get_application_review_summaries([app["id"]])[app["id"]]
+
+    assert summary["review_count"] == 2
+    assert summary["latest_review_id"] == latest_id
+    assert summary["latest_avg_score"] == 8.0

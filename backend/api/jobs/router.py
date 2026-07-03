@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.storage import job_tracker as jt
+from services.storage import review
 
 router = APIRouter()
 
@@ -92,7 +93,18 @@ async def api_list_applications(
     sort_by: str = "updated_at",
     sort_dir: str = "desc",
 ):
-    return {"items": jt.list_applications(stage=stage, q=q, sort_by=sort_by, sort_dir=sort_dir)}
+    items = jt.list_applications(stage=stage, q=q, sort_by=sort_by, sort_dir=sort_dir)
+    summaries = review.get_application_review_summaries([int(item["id"]) for item in items])
+    empty_summary = {
+        "review_count": 0,
+        "latest_review_id": None,
+        "latest_avg_score": None,
+        "latest_review_at": None,
+        "latest_status": None,
+    }
+    for item in items:
+        item["review_summary"] = summaries.get(int(item["id"]), dict(empty_summary))
+    return {"items": items}
 
 
 @router.post("/job-tracker/applications")
@@ -128,6 +140,13 @@ async def api_patch_application(app_id: int, body: ApplicationPatch):
     if not row:
         raise HTTPException(404, "Not found")
     return row
+
+
+@router.get("/job-tracker/applications/{app_id}/reviews")
+async def api_application_reviews(app_id: int):
+    if not jt.get_application(app_id):
+        raise HTTPException(404, "Application not found")
+    return {"items": review.list_reviews_for_application(app_id)}
 
 
 @router.delete("/job-tracker/applications/{app_id}")

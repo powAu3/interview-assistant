@@ -151,14 +151,10 @@ def test_run_preflight_updates_status_and_completes(monkeypatch: pytest.MonkeyPa
         def compute_energy(audio):
             return 0.1
 
-    class FakeEngine:
-        def transcribe(self, audio, sample_rate=16000):
-            return sound_test.PREFLIGHT_EXPECTED_PHRASE
-
     cfg = SimpleNamespace(stt_provider='whisper', get_active_model=lambda: SimpleNamespace(name='demo', model='demo-model'))
     monkeypatch.setattr(sound_test, 'get_config', lambda: cfg)
     monkeypatch.setattr(sound_test, 'AudioCapture', FakeCapture)
-    monkeypatch.setattr(sound_test, 'get_stt_engine', lambda: FakeEngine())
+    monkeypatch.setattr(sound_test, 'transcribe_with_fallback', lambda *args, **kwargs: sound_test.PREFLIGHT_EXPECTED_PHRASE)
     monkeypatch.setattr(
         sound_test,
         'generate_preflight_answer',
@@ -216,3 +212,102 @@ def test_generate_preflight_answer_uses_real_answer_pipeline(monkeypatch: pytest
     assert calls['messages'] == [{'role': 'user', 'content': '请做一下自我介绍'}]
     assert calls['system_prompt'] == 'system-prompt'
     assert calls['postprocess'] == ('真实回答', sound_test.PROMPT_MODE_MANUAL_TEXT)
+
+
+def test_replay_preflight_capture_stt_collects_round_stats(monkeypatch: pytest.MonkeyPatch):
+    starts: list[tuple[int, str | None, dict]] = []
+    stops: list[str | None] = []
+    transcripts = iter([
+        sound_test.PREFLIGHT_EXPECTED_PHRASE,
+        "识别失败内容",
+        sound_test.PREFLIGHT_EXPECTED_PHRASE,
+    ])
+
+    class FakeCapture:
+        SAMPLE_RATE = 16000
+        def __init__(self):
+            self._stats_calls = 0
+
+        def start(self, device_id, owner=None, **kwargs):
+            starts.append((device_id, owner, kwargs))
+
+        def stop(self, owner=None):
+            stops.append(owner)
+
+        @staticmethod
+        def compute_energy(audio):
+            return float(np.sqrt(np.mean(audio ** 2)))
+
+        def capture_stats_snapshot(self):
+            self._stats_calls += 1
+            return {
+                "dropped_chunks_count": 0,
+                "loopback_discontinuity_count": 0,
+            }
+
+    monkeypatch.setattr(sound_test, "AudioCapture", FakeCapture)
+    monkeypatch.setattr(
+        sound_test,
+        "get_config",
+        lambda: SimpleNamespace(stt_provider="doubao"),
+    )
+    monkeypatch.setattr(
+        sound_test,
+        "transcribe_with_fallback",
+        lambda *args, **kwargs: next(transcripts),
+    )
+    monkeypatch.setattr(sound_test, "play_preflight_audio", lambda: 0.5)
+    monkeypatch.setattr(
+        sound_test,
+        "collect_capture_audio_during_playback",
+        lambda cap, play_fn, trailing_sec=0.45, poll_interval=0.02: (
+            np.ones(1600, dtype=np.float32) * 0.1,
+            float(play_fn()),
+        ),
+    )
+    monkeypatch.setattr(sound_test.time, "sleep", lambda _: None)
+
+    result = sound_test.replay_preflight_capture_stt(12, repeats=3, gap_sec=0.1)
+
+    assert result["device_id"] == 12
+    assert result["repeats"] == 3
+    assert result["success_count"] == 2
+    assert result["failure_count"] == 1
+    assert result["provider"] == "doubao"
+    assert "summary" in result
+    assert result["summary"]["avg_stt_ms"] >= 0
+    assert result["summary"]["avg_total_ms"] >= 0
+    assert result["summary"]["max_raw_queue_drop_count"] == 0
+    assert result["summary"]["max_loopback_discontinuity_count"] == 0
+    assert [round_item["ok"] for round_item in result["rounds"]] == [True, False, True]
+    assert all("stt_ms" in round_item for round_item in result["rounds"])
+    assert all("total_ms" in round_item for round_item in result["rounds"])
+    assert all("capture" in round_item for round_item in result["rounds"])
+    assert starts == [(12, "audio-preflight-replay", {"mic_compatibility_mode": True})]
+    assert stops == ["audio-preflight-replay"]
+
+
+def test_collect_capture_audio_during_playback_captures_while_playing(monkeypatch: pytest.MonkeyPatch):
+    chunks = [
+        np.ones(3, dtype=np.float32),
+        np.ones(2, dtype=np.float32),
+        None,
+        None,
+    ]
+
+    class FakeCapture:
+        def get_audio_chunk(self, timeout=0.02):
+            return chunks.pop(0) if chunks else None
+
+    monkeypatch.setattr(sound_test.time, "sleep", lambda _: None)
+
+    captured, playback_sec = sound_test.collect_capture_audio_during_playback(
+        FakeCapture(),
+        lambda: 0.5,
+        trailing_sec=0.0,
+        poll_interval=0.0,
+    )
+
+    assert playback_sec == 0.5
+    assert captured is not None
+    assert len(captured) == 5

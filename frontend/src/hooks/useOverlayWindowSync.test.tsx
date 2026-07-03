@@ -41,6 +41,8 @@ beforeEach(() => {
     interviewOverlayMode: 'glass',
     interviewOverlayFocusWidthPct: 96,
     interviewOverlayFocusHeightPct: 90,
+    interviewOverlayPromptMaxWidth: 900,
+    interviewOverlayPromptAutoFollow: false,
     interviewOverlayMaxLines: 0,
   })
 })
@@ -56,7 +58,14 @@ describe('useOverlayWindowSync', () => {
     render(<Harness isRecording={false} appMode="assist" />)
     expect(api.syncOverlayWindow).toHaveBeenCalledTimes(1)
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false, opacity: 0.88, mode: 'glass', focusWidthPct: 96, focusHeightPct: 90 }),
+      expect.objectContaining({
+        enabled: false,
+        opacity: 0.88,
+        mode: 'glass',
+        focusWidthPct: 96,
+        focusHeightPct: 90,
+        promptAutoFollow: false,
+      }),
     )
     expect(api.syncOverlayWindow).toHaveBeenLastCalledWith(
       expect.not.objectContaining({ visible: expect.anything() }),
@@ -146,6 +155,7 @@ describe('useOverlayWindowSync', () => {
         mode: 'focus',
         focusWidthPct: 83,
         focusHeightPct: 71,
+        promptAutoFollow: true,
         showBg: false,
         maxLines: 7.4,
       })
@@ -160,6 +170,7 @@ describe('useOverlayWindowSync', () => {
       interviewOverlayMode: 'focus',
       interviewOverlayFocusWidthPct: 83,
       interviewOverlayFocusHeightPct: 71,
+      interviewOverlayPromptAutoFollow: true,
       interviewOverlayMaxLines: 7,
     })
     expect(localStorage.getItem('ia_overlay_enabled')).toBe('1')
@@ -170,6 +181,7 @@ describe('useOverlayWindowSync', () => {
     expect(localStorage.getItem('ia_overlay_show_bg')).toBe('1')
     expect(localStorage.getItem('ia_overlay_focus_width_pct')).toBe('83')
     expect(localStorage.getItem('ia_overlay_focus_height_pct')).toBe('71')
+    expect(localStorage.getItem('ia_overlay_prompt_auto_follow')).toBe('1')
     expect(localStorage.getItem('ia_overlay_max_lines')).toBe('7')
     expect(eventSpy).not.toHaveBeenCalled()
 

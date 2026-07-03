@@ -7,6 +7,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from api.common.config_payload import build_config_payload  # noqa: E402
 from core.config import AppConfig, ModelConfig  # noqa: E402
 
 
@@ -64,3 +65,31 @@ def test_think_effort_accepts_xhigh():
 
     assert cfg.think_mode is True
     assert cfg.think_effort == "xhigh"
+
+
+def test_assist_stop_answer_wait_default_is_preserved():
+    cfg = AppConfig()
+
+    assert cfg.assist_stop_answer_wait_sec == 3.0
+
+
+def test_assist_stop_answer_wait_can_be_disabled_explicitly():
+    cfg = AppConfig(assist_stop_answer_wait_sec=0)
+
+    assert cfg.assist_stop_answer_wait_sec == 0.0
+
+
+def test_config_payload_includes_realtime_voice_runtime_knobs():
+    cfg = AppConfig(
+        assist_realtime_max_tokens=800,
+        assist_realtime_high_churn_max_tokens=360,
+        assist_stop_answer_wait_sec=2.5,
+        assist_interviewer_asr_drain_timeout_sec=8.0,
+    )
+
+    payload = build_config_payload(cfg)
+
+    assert payload["assist_realtime_max_tokens"] == 800
+    assert payload["assist_realtime_high_churn_max_tokens"] == 360
+    assert payload["assist_stop_answer_wait_sec"] == 2.5
+    assert payload["assist_interviewer_asr_drain_timeout_sec"] == 8.0

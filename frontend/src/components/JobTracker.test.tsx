@@ -9,6 +9,7 @@ const apiMock = vi.hoisted(() => ({
   jobTrackerCreateApplication: vi.fn(),
   jobTrackerPatchApplication: vi.fn(),
   jobTrackerDeleteApplication: vi.fn(),
+  jobTrackerApplicationReviews: vi.fn(),
   jobTrackerReorderStage: vi.fn(),
   jobTrackerCompare: vi.fn(),
 }))
@@ -53,9 +54,31 @@ describe('JobTracker', () => {
         feedback: '',
         todos: [],
         sort_order: 0,
+        review_summary: {
+          review_count: 2,
+          latest_review_id: 11,
+          latest_avg_score: 7.1,
+          latest_review_at: 1710003600,
+          latest_status: 'completed',
+        },
       }],
     })
     apiMock.jobTrackerListOffers.mockResolvedValue({ items: [] })
+    apiMock.jobTrackerApplicationReviews.mockResolvedValue({
+      items: [{
+        id: 11,
+        status: 'completed',
+        started_at: 1710000000,
+        ended_at: 1710003600,
+        title: '系统设计复盘',
+        company: 'Acme',
+        role: 'Frontend',
+        turn_count: 4,
+        avg_score: 7.1,
+        summary_preview: '缓存与限流回答不错，容量估算需要补强。',
+        updated_at: 1710003600,
+      }],
+    })
   })
 
   it('loads and renders application rows', async () => {
@@ -71,5 +94,16 @@ describe('JobTracker', () => {
     fireEvent.click(screen.getByRole('button', { name: '看板' }))
 
     await waitFor(() => expect(screen.getByText('Acme')).toBeInTheDocument())
+  })
+
+  it('shows review summary and opens linked reviews', async () => {
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getByDisplayValue('Acme')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /复盘 2/ }))
+
+    await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(1))
+    expect(await screen.findByText('系统设计复盘')).toBeInTheDocument()
+    expect(screen.getByText(/缓存与限流回答不错/)).toBeInTheDocument()
   })
 })

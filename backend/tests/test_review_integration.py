@@ -8,6 +8,13 @@ from services.storage import review
 from core.session import Session, QAPair
 
 
+class _FakeConfig:
+    """最小化 config 替身, 只暴露 review_enabled"""
+
+    def __init__(self, review_enabled: bool):
+        self.review_enabled = review_enabled
+
+
 @pytest.fixture(autouse=True)
 def clean_review_db():
     """清理 review 数据库"""
@@ -107,7 +114,10 @@ def test_on_assist_start_no_session_when_conditions_not_met():
 
 
 def test_on_assist_stop_saves_turns(monkeypatch):
-    """测试 assist 停止时保存 turns"""
+    """测试 assist 停止时保存 turns (review_enabled=True 自动分析)"""
+    monkeypatch.setattr(
+        review_integration, "get_config", lambda: _FakeConfig(review_enabled=True)
+    )
     started_analysis: list[int] = []
     monkeypatch.setattr(
         review_integration.review_async_analysis,
@@ -180,7 +190,10 @@ def test_on_assist_stop_no_session():
 
 
 def test_full_lifecycle(monkeypatch):
-    """测试完整生命周期"""
+    """测试完整生命周期 (review_enabled=True 自动分析)"""
+    monkeypatch.setattr(
+        review_integration, "get_config", lambda: _FakeConfig(review_enabled=True)
+    )
     started_analysis: list[int] = []
     monkeypatch.setattr(
         review_integration.review_async_analysis,
@@ -217,3 +230,43 @@ def test_full_lifecycle(monkeypatch):
     assert detail["status"] == "analyzing"
     assert detail["turn_count"] == 1
     assert started_analysis == [session_id]
+
+
+def test_on_assist_stop_recorded_when_review_disabled(monkeypatch):
+    """review_enabled=False: 仍创建 session 并落盘 turns, 但不自动分析, 状态 recorded"""
+    monkeypatch.setattr(
+        review_integration, "get_config", lambda: _FakeConfig(review_enabled=False)
+    )
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_integration.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    session_id = review_integration.on_assist_start(
+        interviewer_device_id=1,
+        candidate_device_id=2,
+        candidate_asr_enabled=True,
+    )
+    assert session_id is not None
+
+    mock_session = Session()
+    mock_session.qa_pairs = [
+        QAPair(id="qa1", question="Q1", answer="A1", timestamp=1000.0),
+    ]
+    mock_session.get_candidate_answer_for_qa = lambda qa_id, max_chars: "候选人回答"
+
+    ended_session_id = review_integration.on_assist_stop(mock_session)
+    assert ended_session_id == session_id
+
+    # 不自动分析
+    assert started_analysis == []
+
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    # 落盘为 recorded, 等待手动触发
+    assert detail["status"] == "recorded"
+    assert detail["turn_count"] == 1
+    assert len(detail["turns"]) == 1
+    assert detail["ended_at"] is not None

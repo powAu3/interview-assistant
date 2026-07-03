@@ -89,6 +89,7 @@ export default function PreferencesTab() {
   const overlayFocusWidthPct = useUiPrefsStore((s) => s.interviewOverlayFocusWidthPct)
   const overlayFocusHeightPct = useUiPrefsStore((s) => s.interviewOverlayFocusHeightPct)
   const overlayPromptMaxWidth = useUiPrefsStore((s) => s.interviewOverlayPromptMaxWidth)
+  const overlayPromptAutoFollow = useUiPrefsStore((s) => s.interviewOverlayPromptAutoFollow)
   const overlayMaxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const setOverlayEnabled = useUiPrefsStore((s) => s.setInterviewOverlayEnabled)
   const setOverlayOpacity = useUiPrefsStore((s) => s.setInterviewOverlayOpacity)
@@ -98,6 +99,7 @@ export default function PreferencesTab() {
   const setOverlayFocusWidthPct = useUiPrefsStore((s) => s.setInterviewOverlayFocusWidthPct)
   const setOverlayFocusHeightPct = useUiPrefsStore((s) => s.setInterviewOverlayFocusHeightPct)
   const setOverlayPromptMaxWidth = useUiPrefsStore((s) => s.setInterviewOverlayPromptMaxWidth)
+  const setOverlayPromptAutoFollow = useUiPrefsStore((s) => s.setInterviewOverlayPromptAutoFollow)
   const setOverlayMaxLines = useUiPrefsStore((s) => s.setInterviewOverlayMaxLines)
   const shortcuts = useShortcutsStore((s) => s.shortcuts)
 
@@ -363,17 +365,26 @@ export default function PreferencesTab() {
               </div>
             )}
             {overlayMode === 'prompt' && (
-              <Field label={`提词模式最大宽度: ${overlayPromptMaxWidth}px`}>
-                <input
-                  type="range"
-                  min={200}
-                  max={1500}
-                  step={10}
-                  value={overlayPromptMaxWidth}
-                  onChange={(e) => setOverlayPromptMaxWidth(Number(e.target.value))}
-                  className="w-full max-w-[200px]"
-                />
-              </Field>
+              <div className="space-y-3">
+                <Field label={`提词模式最大宽度: ${overlayPromptMaxWidth}px`}>
+                  <input
+                    type="range"
+                    min={200}
+                    max={1500}
+                    step={10}
+                    value={overlayPromptMaxWidth}
+                    onChange={(e) => setOverlayPromptMaxWidth(Number(e.target.value))}
+                    className="w-full max-w-[200px]"
+                  />
+                </Field>
+                <Field label="提词模式滚动" hint="关闭后生成内容不会自动滚到底，适合从开头读答案">
+                  <Toggle
+                    checked={overlayPromptAutoFollow}
+                    onChange={setOverlayPromptAutoFollow}
+                    label="靠近底部时自动跟随最新内容"
+                  />
+                </Field>
+              </div>
             )}
             <Field label={`字号: ${overlayFontSize}px`}>
               <input type="range" min={10} max={48} value={overlayFontSize}

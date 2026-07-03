@@ -429,6 +429,42 @@ def test_update_config_accepts_screen_capture_max_long_edge_zero(monkeypatch):
     assert seen["d"]["screen_capture_max_long_edge"] == 0
 
 
+def test_update_config_clamps_realtime_voice_runtime_knobs(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_update_config(d):
+        seen["d"] = dict(d)
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    cfg = _FakeCfg(models=[_FakeModel("main")], active=0)
+    cfg.assist_realtime_max_tokens = 720
+    monkeypatch.setattr(common_router, "get_config", lambda: cfg)
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    _stub_config_response(monkeypatch)
+
+    body = _Body(
+        assist_vad_max_speech_sec=90,
+        assist_vad_min_speech_sec=0.01,
+        assist_realtime_max_tokens=200,
+        assist_realtime_high_churn_max_tokens=9999,
+        assist_stop_answer_wait_sec=30,
+        assist_interviewer_asr_drain_timeout_sec=99,
+    )
+
+    result = _run(common_router.api_update_config(body))
+
+    assert result == {"ok": True}
+    assert seen["d"]["assist_vad_max_speech_sec"] == 60.0
+    assert seen["d"]["assist_vad_min_speech_sec"] == 0.1
+    assert seen["d"]["assist_realtime_max_tokens"] == 256
+    assert seen["d"]["assist_realtime_high_churn_max_tokens"] == 256
+    assert seen["d"]["assist_stop_answer_wait_sec"] == 20.0
+    assert seen["d"]["assist_interviewer_asr_drain_timeout_sec"] == 30.0
+
+
 def test_update_config_rejects_legacy_iflytek_provider(monkeypatch):
     update_called = False
 

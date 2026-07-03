@@ -22,17 +22,18 @@ def should_create_review_session(
     candidate_asr_enabled: bool,
 ) -> bool:
     """
-    判断是否应该创建 review session
-    只有同时满足以下条件才记录：
-    1. review_enabled 开启
-    2. interviewer 音频设备有效
-    3. candidate mic 有效
-    4. candidate ASR 开启
-    5. 两个设备不同
+    判断是否应该创建 review session。
+
+    落盘与 LLM 分析解耦: review_enabled 不再阻止创建 session —— 只要录音设备
+    配齐就创建并落盘 QA turns, 后续是否自动跑 LLM 复盘由 on_assist_stop 按
+    review_enabled 决定 (关闭时置 recorded 状态, 可手动触发)。
+
+    仅当以下条件全部满足才创建:
+    1. interviewer 音频设备有效
+    2. candidate mic 有效
+    3. candidate ASR 开启
+    4. 两个设备不同
     """
-    cfg = get_config()
-    if not cfg.review_enabled:
-        return False
     if interviewer_device_id is None:
         return False
     if candidate_device_id is None:
@@ -104,21 +105,31 @@ def on_assist_stop(session: Session) -> Optional[int]:
                 analysis_status="pending",
             )
 
-        # 结束录制并进入分析队列；completed 只表示分析结果已经生成。
+        # 结束录制。review_enabled 控制是否立即进入分析队列; 关闭时只落盘为
+        # recorded, 保留 ended_at, 等待前端手动触发 (POST /review/sessions/{id}/generate)。
+        # completed 只表示分析结果已经生成。
+        auto_analyze = bool(get_config().review_enabled)
         review.end_session(
             session_id=session_id,
-            status="analyzing",
+            status="analyzing" if auto_analyze else "recorded",
             ended_at=time.time(),
         )
 
         logger.info(
-            "Review session ended: session_id=%d, turn_count=%d",
+            "Review session ended: session_id=%d, turn_count=%d, auto_analyze=%s",
             session_id,
             len(session.qa_pairs),
+            auto_analyze,
         )
 
-        # 启动后台分析
-        review_async_analysis.analyze_session_async(session_id)
+        if auto_analyze:
+            # 启动后台分析
+            review_async_analysis.analyze_session_async(session_id)
+        else:
+            logger.info(
+                "Review session %d recorded (auto-analysis disabled, trigger manually)",
+                session_id,
+            )
 
         return session_id
     except Exception as e:

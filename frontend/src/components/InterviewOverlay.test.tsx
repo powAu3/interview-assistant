@@ -37,6 +37,8 @@ beforeEach(() => {
     interviewOverlayMode: 'glass',
     interviewOverlayFocusWidthPct: 96,
     interviewOverlayFocusHeightPct: 90,
+    interviewOverlayPromptMaxWidth: 900,
+    interviewOverlayPromptAutoFollow: false,
     interviewOverlayMaxLines: 0,
   })
   localStorage.setItem('ia_overlay_enabled', '1')
@@ -63,8 +65,40 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-shell--nobg')).toBeInTheDocument()
   })
 
-  it('keeps following streamed prompt overlay content while the user is near the bottom', () => {
+  it('does not auto-follow streamed prompt overlay content by default', () => {
     useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    useInterviewStore.setState({
+      qaPairs: [{ ...qa, answer: '正在生成第一段。', status: 'streaming' }],
+      streamingIds: ['qa-1'],
+    })
+    const { rerender } = render(<InterviewOverlay />)
+    const scroller = document.querySelector('.ov-answer') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    scroller.scrollTop = 790
+
+    act(() => {
+      useInterviewStore.setState({
+        qaPairs: [{ ...qa, answer: '正在生成第一段。\n继续生成第二段。', status: 'streaming' }],
+        streamingIds: ['qa-1'],
+      })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(scroller.scrollTop).toBe(790)
+  })
+
+  it('keeps following streamed prompt overlay content when auto-follow is enabled', () => {
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'prompt',
+      interviewOverlayShowBg: false,
+      interviewOverlayPromptAutoFollow: true,
+    })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    localStorage.setItem('ia_overlay_prompt_auto_follow', '1')
     useInterviewStore.setState({
       qaPairs: [{ ...qa, answer: '正在生成第一段。', status: 'streaming' }],
       streamingIds: ['qa-1'],
@@ -88,7 +122,14 @@ describe('InterviewOverlay', () => {
   })
 
   it('pauses prompt overlay auto-follow when the user scrolls up during streaming', () => {
-    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'prompt',
+      interviewOverlayShowBg: false,
+      interviewOverlayPromptAutoFollow: true,
+    })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    localStorage.setItem('ia_overlay_prompt_auto_follow', '1')
     useInterviewStore.setState({
       qaPairs: [{ ...qa, answer: '正在生成第一段。', status: 'streaming' }],
       streamingIds: ['qa-1'],
@@ -249,6 +290,30 @@ describe('InterviewOverlay', () => {
     } finally {
       scrollHeightSpy.mockRestore()
       scrollWidthSpy.mockRestore()
+    }
+  })
+
+  it('uses promptMaxWidth as initial width when there is no content yet', async () => {
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 700, height: 130 })
+    const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(0)
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'prompt',
+      interviewOverlayShowBg: false,
+      interviewOverlayPromptMaxWidth: 700,
+    })
+    useInterviewStore.setState({ qaPairs: [], streamingIds: [] })
+
+    try {
+      render(<InterviewOverlay />)
+
+      await waitFor(() => {
+        expect(resizeOverlayWindow).toHaveBeenCalledWith(expect.objectContaining({ width: 700 }))
+      })
+    } finally {
+      scrollWidthSpy.mockRestore()
+      scrollHeightSpy.mockRestore()
     }
   })
 

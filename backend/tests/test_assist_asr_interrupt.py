@@ -29,8 +29,8 @@ def reset_assist_globals(monkeypatch: pytest.MonkeyPatch):
         assist_router._in_flight_tasks.clear()
     if hasattr(assist_router, "_latest_asr_turn_id"):
         assist_router._latest_asr_turn_id = 0
-    if hasattr(assist_router, "_pending_asr_group"):
-        assist_router._pending_asr_group = None
+    assist_router._reset_asr_merge_buffer()
+    assist_router._reset_pending_asr_group()
     assist_router._commit_buffer.clear()
     if hasattr(assist_router, "_skipped_commit_seqs"):
         assist_router._skipped_commit_seqs.clear()
@@ -129,7 +129,7 @@ def test_auto_detect_group_flush_ignores_backchannel_and_submits_latest_group(
         "conversation_mic",
         0.2,
     )
-    assist_router._try_flush_asr_question_group(cfg, session, 0.45, False)
+    assist_router._try_flush_asr_question_group(cfg, session, 0.9, False)
 
     assert len(submitted) == 1
     question_text, _, manual_input, source, meta = submitted[0]
@@ -159,7 +159,12 @@ def test_auto_detect_group_flush_does_not_submit_single_statement_without_questi
     assert submitted == []
 
 
-def test_begin_asr_turn_drops_pending_asr_but_keeps_manual():
+def test_begin_asr_turn_drops_pending_asr_but_keeps_manual(monkeypatch: pytest.MonkeyPatch):
+    cfg = _cfg(max_parallel_answers=1, assist_asr_interrupt_running=True)
+    cfg.models = [
+        SimpleNamespace(enabled=True, api_key="k", supports_vision=False),
+    ]
+    monkeypatch.setattr(assist_router, "get_config", lambda: cfg)
     assist_router._latest_asr_turn_id = 1
     assist_router._pending[:] = [
         (("旧 ASR", None, False, "conversation_mic", {"origin": "asr", "asr_turn_id": 1}), 0, 0),
@@ -232,13 +237,14 @@ def test_cancel_answer_work_clears_everything_and_optionally_session_history():
     assist_router._pending[:] = [
         (("待处理", None, False, "conversation_mic", {"origin": "asr", "asr_turn_id": 1}), 0, 0)
     ]
-    assist_router._pending_asr_group = assist_router.PendingASRGroup(
-        source="conversation_mic",
-        utterances=["候选组"],
-        first_mono=0.0,
-        last_mono=0.1,
-        has_promote=True,
-    )
+    with assist_router._asr_state_lock:
+        assist_router._asr_state.pending_group = assist_router.PendingASRGroup(
+            source="conversation_mic",
+            utterances=["候选组"],
+            first_mono=0.0,
+            last_mono=0.1,
+            has_promote=True,
+        )
     assist_router._in_flight_tasks[9] = (
         2,
         ("生成中", None, False, "conversation_mic", {"origin": "asr", "asr_turn_id": 1}),
@@ -248,7 +254,8 @@ def test_cancel_answer_work_clears_everything_and_optionally_session_history():
 
     assist_router.cancel_answer_work(reset_session_data=False)
     assert assist_router._pending == []
-    assert assist_router._pending_asr_group is None
+    with assist_router._asr_state_lock:
+        assert assist_router._asr_state.pending_group is None
     assert assist_router._in_flight_tasks == {}
     assert assist_router._recent_asr_turn_monos == []
     assert assist_router._answer_generation == 8

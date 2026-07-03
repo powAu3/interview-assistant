@@ -78,6 +78,16 @@ def test_written_exam_prompt_never_includes_resume(reset_resume):
     assert "<resume_context>" not in p
 
 
+def test_prompt_can_explicitly_disable_resume_context(reset_resume):
+    cfg = reset_resume
+    cfg.resume_text = "项目A: 后端重构，Kafka, Redis；2022 字节实习。"
+    p = build_system_prompt(mode="asr_realtime", include_resume=False)
+    assert "项目A" not in p
+    assert "Kafka" not in p
+    assert "简历使用规则" not in p
+    assert "<resume_context>" not in p
+
+
 def test_written_exam_prompt_handles_incremental_screenshots_and_failures(reset_resume):
     p = build_system_prompt(mode="written_exam")
     assert "连续截图/失败反馈规则" in p
@@ -122,8 +132,8 @@ def test_asr_prompt_asks_for_candidate_voice_not_template_headings():
     assert "结论先行" in p
     assert "专注面板输出协议" in p
     assert "## 标题" in p
-    assert "普通场景题 360-650 字" in p
-    assert "复杂排障/设计题 650-1000 字" in p
+    assert "普通场景题 280-520 字" in p
+    assert "项目深挖/复杂排障/系统设计题 420-780 字" in p
 
 
 def test_asr_prompt_keeps_concept_comparison_from_forced_project_story():
@@ -132,13 +142,18 @@ def test_asr_prompt_keeps_concept_comparison_from_forced_project_story():
     assert "rules 和 skills" in p
     assert "不要为了显得丰富而硬凑项目经历" in p
     assert "只有明确问“你的项目/你做过/简历里的 X”" in p
+    assert "项目/经历使用硬规则" in p
+    assert "不要把例子伪装成候选人亲历" in p
+    assert "匿名工程例子" in p
 
 
 def test_asr_prompt_uses_density_by_question_type_not_fixed_long_answer():
     p = _asr_prompt(high_churn=False)
-    assert "概念/优缺点/区别题 220-420 字" in p
-    assert "普通场景题 360-650 字" in p
-    assert "复杂排障/设计题 650-1000 字" in p
+    assert "概念/优缺点/区别题 180-320 字" in p
+    assert "普通场景题 280-520 字" in p
+    assert "项目深挖/复杂排障/系统设计题 420-780 字" in p
+    assert "详细模式只增加机制、取舍、验证和边界密度" in p
+    assert "不等于自动进入个人项目叙述" in p
     assert "不为凑字数扩展" in p
     assert "普通题 360-700 字" not in p
 
@@ -154,6 +169,7 @@ def test_asr_prompt_contains_recent_asr_term_repairs():
 def test_followup_prompt_inherits_context_for_fragments():
     p = _asr_prompt(high_churn=False)
     assert "优先继承上一轮的业务场景和技术对象" in p
+    assert "当前追问已经把对象、条件和要问点说完整了" in p
     assert "题干续句" in p
     assert "安卓能登录但 iOS 不行" in p
 
@@ -173,6 +189,10 @@ def test_manual_prompt_warns_not_to_emit_template_labels():
     assert "普通题 500-900 字" in p
     assert "复杂设计/排障/治理题 900-1500 字" in p
     assert "题型模板" in p
+    assert "普通技术题不要强行改写成个人项目故事" in p
+    assert "详细模式只代表讲清机制、方案取舍、验证和风险" in p
+    assert "不代表要编个人项目经历" in p
+    assert "只有题干明确问" in p
 
 
 def test_stream_sanitizer_removes_split_think_tags():

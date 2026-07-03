@@ -107,6 +107,9 @@ class AppConfig(BaseModel):
     assist_transcription_merge_max_sec: float = 12.0
     # 主链路 VAD 单段最长语音（秒），避免面试官连续讲话被攒成超长音频导致远程 ASR 超时
     assist_vad_max_speech_sec: float = 18.0
+    # 主链路 VAD 单段最短语音（秒）；短于该值的片段视为噪声/语气词丢弃，不送 STT。
+    # 调小可减少短句被误丢（漏听），调大可减少噪声片段送 STT。原硬编码 0.5。
+    assist_vad_min_speech_sec: float = 0.3
     # 实时辅助：问句候选组在最后一条有效追问后静默超过该秒数再确认提交
     assist_asr_confirm_window_sec: float = 0.45
     # 实时辅助：候选问句组从第一条有效追问开始的最长等待时间
@@ -115,6 +118,14 @@ class AppConfig(BaseModel):
     assist_asr_interrupt_running: bool = True
     # 实时辅助：高 churn 场景下自动切短答，优先跟住最新问题
     assist_high_churn_short_answer: bool = False
+    # 实时语音问答默认输出 token 上限，避免首题展开过长拖慢后续题。
+    assist_realtime_max_tokens: int = 720
+    # 高 churn 短答模式的更严格 token 上限。
+    assist_realtime_high_churn_max_tokens: int = 320
+    # stop 时等待 answer worker 收尾的最长时间；压测 interviewer 转写链路时可设为 0。
+    assist_stop_answer_wait_sec: float = 3.0
+    # stop 时等待面试官 ASR segment worker 清空队列的最长时间；本地 Whisper 需要更宽裕。
+    assist_interviewer_asr_drain_timeout_sec: float = 6.0
     # 电脑截图区域：full=全屏，left_half/right_half/top_half/bottom_half=对应半屏
     screen_capture_region: str = "left_half"
     # 截图送入识图模型前的最长边限制；0=不缩放。默认 1600 兼顾题面可读性与 token/带宽。
@@ -178,6 +189,11 @@ class AppConfig(BaseModel):
         self.candidate_context_wait_ms = max(0, min(2000, int(self.candidate_context_wait_ms or 0)))
         self.candidate_context_max_chars = max(100, min(4000, int(self.candidate_context_max_chars or 900)))
         self.candidate_context_min_chars = max(1, min(100, int(self.candidate_context_min_chars or 6)))
+        self.assist_realtime_max_tokens = max(256, min(4096, int(self.assist_realtime_max_tokens or 720)))
+        self.assist_realtime_high_churn_max_tokens = max(
+            128,
+            min(self.assist_realtime_max_tokens, int(self.assist_realtime_high_churn_max_tokens or 320)),
+        )
         self.candidate_streaming_asr_interval_ms = max(800, min(5000, int(self.candidate_streaming_asr_interval_ms or 1500)))
         self.candidate_mic_compatibility_mode = bool(self.candidate_mic_compatibility_mode)
         wl = (self.whisper_language or "").strip()
@@ -201,6 +217,12 @@ class AppConfig(BaseModel):
             self.models = [_default_model_config()]
         self.screen_capture_max_long_edge = max(0, min(4000, int(self.screen_capture_max_long_edge or 0)))
         self.assist_vad_max_speech_sec = max(6.0, min(60.0, float(self.assist_vad_max_speech_sec or 18.0)))
+        self.assist_vad_min_speech_sec = max(0.1, min(2.0, float(self.assist_vad_min_speech_sec or 0.3)))
+        self.assist_stop_answer_wait_sec = max(0.0, min(20.0, float(self.assist_stop_answer_wait_sec)))
+        self.assist_interviewer_asr_drain_timeout_sec = max(
+            0.5,
+            min(30.0, float(self.assist_interviewer_asr_drain_timeout_sec or 6.0)),
+        )
         self.active_model = max(0, min(int(self.active_model), len(self.models) - 1))
         if not getattr(self.models[self.active_model], "enabled", True):
             for i, model in enumerate(self.models):

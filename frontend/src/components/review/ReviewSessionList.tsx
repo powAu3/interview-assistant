@@ -26,6 +26,7 @@ import type { ReviewSession, ReviewSessionsResponse } from './types'
 
 const STATUS_LABELS: Record<ReviewSession['status'], string> = {
   recording: '录制中',
+  recorded: '待生成',
   analyzing: '分析中',
   completed: '已完成',
   partial_capture: '部分录制',
@@ -34,6 +35,7 @@ const STATUS_LABELS: Record<ReviewSession['status'], string> = {
 
 const STATUS_ICONS: Record<ReviewSession['status'], ComponentType<{ className?: string }>> = {
   recording: Clock,
+  recorded: Sparkles,
   analyzing: Loader2,
   completed: CheckCircle,
   partial_capture: AlertCircle,
@@ -42,6 +44,7 @@ const STATUS_ICONS: Record<ReviewSession['status'], ComponentType<{ className?: 
 
 const STATUS_COLORS: Record<ReviewSession['status'], string> = {
   recording: 'text-blue-500',
+  recorded: 'text-amber-500',
   analyzing: 'text-blue-500',
   completed: 'text-green-500',
   partial_capture: 'text-yellow-500',
@@ -156,6 +159,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const completedSessions = sessions.filter((session) => session.status === 'completed' && hasGeneratedAnalysis(session))
   const analyzingCount = sessions.filter((session) => session.status === 'analyzing').length
   const actionRequiredCount = sessions.filter((session) =>
+    session.status === 'recorded' ||
     session.status === 'analysis_failed' ||
     session.status === 'partial_capture' ||
     (session.status === 'completed' && !hasGeneratedAnalysis(session)),
@@ -587,6 +591,8 @@ function SessionTable({
               const isTriggering = triggeringIds.has(session.id)
               const canTrigger = session.status === 'analysis_failed' ||
                 session.status === 'partial_capture' ||
+                session.status === 'recorded' ||
+                session.status === 'recording' ||
                 (session.status === 'completed' && !hasGeneratedAnalysis(session))
               const showTriggerButton = canTrigger && !isTriggering
 

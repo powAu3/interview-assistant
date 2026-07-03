@@ -321,7 +321,7 @@ export const api = {
     request(`/api/review/sessions?page=${page}&page_size=${pageSize}`),
   reviewSessionDetail: (sessionId: number) =>
     request(`/api/review/sessions/${sessionId}`),
-  reviewUpdateSession: (sessionId: number, data: { title?: string; company?: string; role?: string }) =>
+  reviewUpdateSession: (sessionId: number, data: { title?: string; company?: string; role?: string; application_id?: number | null }) =>
     request(`/api/review/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   reviewTriggerAnalysis: (sessionId: number) =>
     request<{ status: string; message: string }>(`/api/review/sessions/${sessionId}/generate`, { method: 'POST', body: '{}' }),
@@ -372,6 +372,8 @@ export const api = {
     request(`/api/job-tracker/applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   jobTrackerDeleteApplication: (id: number) =>
     request(`/api/job-tracker/applications/${id}`, { method: 'DELETE' }),
+  jobTrackerApplicationReviews: (id: number) =>
+    request<{ items: Record<string, unknown>[] }>(`/api/job-tracker/applications/${id}/reviews`),
   jobTrackerBatchStage: (ids: number[], stage: string) =>
     request('/api/job-tracker/applications/batch-stage', {
       method: 'PATCH',

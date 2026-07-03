@@ -13,6 +13,8 @@ describe('uiPrefsStore overlay state sync', () => {
       interviewOverlayMode: 'glass',
       interviewOverlayFocusWidthPct: 96,
       interviewOverlayFocusHeightPct: 90,
+      interviewOverlayPromptMaxWidth: 900,
+      interviewOverlayPromptAutoFollow: false,
       interviewOverlayMaxLines: 0,
     })
   })
@@ -24,6 +26,7 @@ describe('uiPrefsStore overlay state sync', () => {
     localStorage.setItem(__UI_PREFS_TEST_KEYS.overlayFontColor, '#abcdef')
     localStorage.setItem(__UI_PREFS_TEST_KEYS.overlayShowBg, '0')
     localStorage.removeItem(__UI_PREFS_TEST_KEYS.overlayMode)
+    localStorage.setItem(__UI_PREFS_TEST_KEYS.overlayPromptAutoFollow, '1')
     localStorage.setItem(__UI_PREFS_TEST_KEYS.overlayMaxLines, '7')
     useUiPrefsStore.getState().syncInterviewOverlayPrefs()
 
@@ -44,6 +47,7 @@ describe('uiPrefsStore overlay state sync', () => {
     expect(state.interviewOverlayFontColor).toBe('#abcdef')
     expect(state.interviewOverlayShowBg).toBe(false)
     expect(state.interviewOverlayMode).toBe('prompt')
+    expect(state.interviewOverlayPromptAutoFollow).toBe(true)
     expect(state.interviewOverlayMaxLines).toBe(7)
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayOpacity)).toBe('0.42')
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayEnabled)).toBe('1')
@@ -63,6 +67,7 @@ describe('uiPrefsStore overlay state sync', () => {
       mode: 'focus',
       focusWidthPct: 88,
       focusHeightPct: 76,
+      promptAutoFollow: true,
       showBg: true,
       maxLines: 4,
     })
@@ -76,6 +81,7 @@ describe('uiPrefsStore overlay state sync', () => {
     expect(state.interviewOverlayShowBg).toBe(true)
     expect(state.interviewOverlayFocusWidthPct).toBe(88)
     expect(state.interviewOverlayFocusHeightPct).toBe(76)
+    expect(state.interviewOverlayPromptAutoFollow).toBe(true)
     expect(state.interviewOverlayMaxLines).toBe(4)
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayOpacity)).toBe('0.7')
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayFontColor)).toBe('#123456')
@@ -83,6 +89,7 @@ describe('uiPrefsStore overlay state sync', () => {
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayShowBg)).toBe('1')
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayFocusWidthPct)).toBe('88')
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayFocusHeightPct)).toBe('76')
+    expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayPromptAutoFollow)).toBe('1')
   })
 
   it('setInterviewOverlayMode persists focus mode and compatibility showBg', () => {
@@ -106,5 +113,14 @@ describe('uiPrefsStore overlay state sync', () => {
     })
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayFocusWidthPct)).toBe('82')
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayFocusHeightPct)).toBe('64')
+  })
+
+  it('defaults prompt auto-follow off and persists opt-in', () => {
+    expect(useUiPrefsStore.getState().interviewOverlayPromptAutoFollow).toBe(false)
+
+    useUiPrefsStore.getState().setInterviewOverlayPromptAutoFollow(true)
+
+    expect(useUiPrefsStore.getState().interviewOverlayPromptAutoFollow).toBe(true)
+    expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayPromptAutoFollow)).toBe('1')
   })
 })

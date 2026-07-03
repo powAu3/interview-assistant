@@ -54,6 +54,7 @@ export default function InterviewOverlay() {
   const overlayMode = useUiPrefsStore((s) => s.interviewOverlayMode)
   const maxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const overlayPromptMaxWidth = useUiPrefsStore((s) => s.interviewOverlayPromptMaxWidth)
+  const overlayPromptAutoFollow = useUiPrefsStore((s) => s.interviewOverlayPromptAutoFollow)
   const syncPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
   const applyState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
   const [activeFocusTabsByQaId, setActiveFocusTabsByQaId] = useState<Record<string, string>>({})
@@ -110,22 +111,27 @@ export default function InterviewOverlay() {
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
   const answerAutoFollowRef = useRef(true)
   const updateAnswerAutoFollow = useCallback(() => {
+    if (overlayMode === 'prompt' && !overlayPromptAutoFollow) {
+      answerAutoFollowRef.current = false
+      return
+    }
     const el = answerScrollRef.current
     if (!el) return
     answerAutoFollowRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 28
-  }, [])
+  }, [overlayMode, overlayPromptAutoFollow])
 
   useEffect(() => {
-    answerAutoFollowRef.current = true
-  }, [displayedQaKey, overlayMode, activeFocusTab])
+    answerAutoFollowRef.current = overlayMode !== 'prompt' || overlayPromptAutoFollow
+  }, [displayedQaKey, overlayMode, activeFocusTab, overlayPromptAutoFollow])
 
   useLayoutEffect(() => {
     if (!isStreaming) return
+    if (overlayMode === 'prompt' && !overlayPromptAutoFollow) return
     const el = answerScrollRef.current
     if (!el) return
     if (!answerAutoFollowRef.current) return
     el.scrollTop = el.scrollHeight
-  }, [answerText, activeFocusTab, isStreaming])
+  }, [answerText, activeFocusTab, isStreaming, overlayMode, overlayPromptAutoFollow])
 
   useLayoutEffect(() => {
     if (!enabled || overlayMode !== 'prompt') return
@@ -138,7 +144,10 @@ export default function InterviewOverlay() {
       el.scrollWidth,
     ))
     const contentHeight = Math.ceil(el.scrollHeight)
-    const nextWidth = Math.max(180, Math.min(overlayPromptMaxWidth, contentWidth + 16))
+    // 有内容时按内容宽度自适应 (上限 promptMaxWidth); 无内容时直接用 promptMaxWidth,
+    // 避免开窗瞬间被空内容收窄成最小宽、再随答案流式撑开的视觉跳变。
+    const targetWidth = hasContent ? Math.min(overlayPromptMaxWidth, contentWidth + 16) : overlayPromptMaxWidth
+    const nextWidth = Math.max(180, targetWidth)
     const nextHeight = Math.max(72, Math.min(420, contentHeight + 12))
     window.electronAPI?.resizeOverlayWindow?.({ width: nextWidth, height: nextHeight })?.catch(() => {})
   }, [answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth])
