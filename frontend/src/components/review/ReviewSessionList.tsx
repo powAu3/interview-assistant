@@ -466,7 +466,6 @@ function ReviewZeroState({
           <div className="text-sm font-semibold text-text-primary">暂无复盘记录</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
             <span>自动记录 {reviewEnabled ? '已启用' : '未启用'}</span>
-            <span>可手动导入</span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

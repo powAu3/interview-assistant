@@ -1247,16 +1247,6 @@ function JobTrackerZeroState({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-text-primary">暂无岗位记录</div>
-          <div className="mt-1 text-xs text-text-muted">
-            先记录公司、岗位、城市、阶段和投递日期。
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-secondary">
-            {['公司', '岗位', '城市', '阶段', '投递日期'].map((item) => (
-              <span key={item} className="rounded-md border border-bg-hover bg-bg-secondary px-2 py-1">
-                {item}
-              </span>
-            ))}
-          </div>
         </div>
         <button
           type="button"
