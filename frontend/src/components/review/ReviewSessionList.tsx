@@ -722,8 +722,8 @@ function SessionTable({
 
   if (visibleGroups.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-bg-hover bg-bg-secondary/30 px-4 py-6 text-sm text-text-muted">
-        当前筛选下还没有复盘记录。
+      <div className="px-1 py-6 text-sm text-text-muted">
+        没有复盘记录
       </div>
     )
   }
@@ -738,22 +738,20 @@ function SessionTable({
               <span className="text-[11px] text-text-muted">{group.items.length} 场</span>
             </div>
           </div>
-          <div className="overflow-hidden rounded-lg border border-bg-hover/75 bg-bg-secondary/15">
-            <div className="divide-y divide-bg-hover/70">
-              {buildSessionClusters(group.items).map((cluster) => (
-                <ReviewTimelineCluster
-                  key={cluster.key}
-                  cluster={cluster}
-                  linkedReviewCounts={linkedReviewCounts}
-                  linkedTimelineLabels={linkedTimelineLabels}
-                  triggeringIds={triggeringIds}
-                  hasGeneratedAnalysis={hasGeneratedAnalysis}
-                  onViewDetail={onViewDetail}
-                  onOpenApplication={onOpenApplication}
-                  onTriggerAnalysis={onTriggerAnalysis}
-                />
-              ))}
-            </div>
+          <div className="divide-y divide-bg-hover/70 border-y border-bg-hover/70">
+            {buildSessionClusters(group.items).map((cluster) => (
+              <ReviewTimelineCluster
+                key={cluster.key}
+                cluster={cluster}
+                linkedReviewCounts={linkedReviewCounts}
+                linkedTimelineLabels={linkedTimelineLabels}
+                triggeringIds={triggeringIds}
+                hasGeneratedAnalysis={hasGeneratedAnalysis}
+                onViewDetail={onViewDetail}
+                onOpenApplication={onOpenApplication}
+                onTriggerAnalysis={onTriggerAnalysis}
+              />
+            ))}
           </div>
         </section>
       ))}
@@ -786,7 +784,7 @@ function ReviewTimelineCluster({
   return (
     <section>
       {showTimelineHeader ? (
-        <div className="border-b border-bg-hover bg-bg-secondary/35 px-3 py-2">
+        <div className="border-b border-bg-hover px-3 py-2">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
