@@ -197,13 +197,12 @@ function SortableKanbanCard({
       ref={setNodeRef}
       style={style}
       className={`
-        kanban-card rounded-2xl border pl-2 pr-3 py-2.5 border-l-[3px] group/card
+        kanban-card rounded-lg border pl-2 pr-3 py-2.5 border-l-[3px] group/card
         ${leftBorder}
         ${isLight
-          ? 'border-gray-200/80 bg-white shadow-sm'
-          : 'border-white/[0.07] bg-bg-secondary/90 shadow-md shadow-black/20'
+          ? 'border-gray-200/80 bg-white'
+          : 'border-white/[0.07] bg-bg-secondary/90'
         }
-        ${theme.cardGlow}
         ${busy ? 'opacity-50 pointer-events-none' : ''}
         ${isDragging ? 'opacity-40 ring-2 ring-accent-blue/30 scale-[1.02]' : ''}
       `}
@@ -227,7 +226,7 @@ function SortableKanbanCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             <span
-              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors ${theme.iconBg} ${theme.iconText}`}
+              className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${theme.iconBg} ${theme.iconText}`}
             >
               <Building2 className="w-4 h-4" strokeWidth={2} />
             </span>
@@ -332,32 +331,31 @@ function KanbanColumn({
     <div
       data-kanban-stage={stage}
       className={`
-        flex w-[min(100vw-2rem,280px)] shrink-0 snap-start flex-col rounded-2xl border overflow-hidden
-        min-h-[min(480px,60vh)] max-h-[calc(100vh-200px)] transition-shadow
+        flex w-[min(100vw-2rem,280px)] shrink-0 snap-start flex-col rounded-lg border overflow-hidden
+        min-h-[min(480px,60vh)] max-h-[calc(100vh-200px)]
         ${isLight
-          ? 'border-gray-200 bg-gray-50/80 shadow-sm'
-          : 'border-white/[0.08] bg-bg-secondary/40 shadow-lg shadow-black/10'
+          ? 'border-gray-200 bg-gray-50/80'
+          : 'border-white/[0.08] bg-bg-secondary/40'
         }
       `}
     >
       {/* Stage color bar */}
-      <div className={`h-1.5 w-full shrink-0 bg-gradient-to-r ${theme.bar}`} />
+      <div className={`h-1 w-full shrink-0 ${theme.dotColor}`} />
 
       {/* Column header */}
       <div
-        className={`flex items-center gap-2.5 border-b px-3 py-3 shrink-0 bg-gradient-to-b ${theme.headerBg} ${
-          isLight ? 'border-gray-200' : 'border-white/[0.06]'
+        className={`flex items-center gap-2.5 border-b px-3 py-2.5 shrink-0 ${
+          isLight ? 'border-gray-200 bg-white/60' : 'border-white/[0.06] bg-black/10'
         }`}
       >
         <div
-          className={`flex h-9 w-9 items-center justify-center rounded-xl ${theme.iconBg}`}
+          className={`flex h-8 w-8 items-center justify-center rounded-md ${theme.iconBg}`}
         >
           <Icon className={`w-[18px] h-[18px] ${theme.iconText}`} strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className={`text-xs font-bold truncate flex items-center gap-1.5 ${isLight ? 'text-gray-800' : 'text-text-primary'}`}>
+          <h3 className={`truncate text-xs font-bold ${isLight ? 'text-gray-800' : 'text-text-primary'}`}>
             <span>{STAGE_LABELS[stage] ?? stage}</span>
-            <span className="text-[10px] opacity-60">{STAGE_EMOJI[stage]}</span>
           </h3>
           <p className={`text-[10px] mt-0.5 ${isLight ? 'text-gray-400' : 'text-text-muted'}`}>
             {list.length}{' \u6761\u8BB0\u5F55'}
@@ -395,7 +393,7 @@ function KanbanColumn({
         </SortableContext>
         {list.length === 0 && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-12 text-center">
-            <div className={`rounded-2xl p-3 ${isLight ? 'bg-gray-100' : 'bg-white/[0.03]'}`}>
+            <div className={`rounded-lg p-3 ${isLight ? 'bg-gray-100' : 'bg-white/[0.03]'}`}>
               <Inbox className={`w-8 h-8 ${isLight ? 'text-gray-300' : 'text-text-muted/30'}`} strokeWidth={1.5} />
             </div>
             <p className={`text-[11px] ${isLight ? 'text-gray-400' : 'text-text-muted/60'}`}>{'\u65E0\u5339\u914D\u8BB0\u5F55'}</p>
@@ -412,7 +410,7 @@ function CardPreview({ app, isLight }: { app: Application; isLight: boolean }) {
   return (
     <div
       className={`
-        w-[260px] cursor-grabbing rounded-2xl border border-l-[3px] px-3 py-2.5 shadow-2xl
+        w-[260px] cursor-grabbing rounded-lg border border-l-[3px] px-3 py-2.5 shadow-lg
         ${leftBorder}
         ${isLight ? 'border-gray-200 bg-white' : 'border-white/20 bg-[#1e1e2a]'}
       `}
@@ -556,7 +554,7 @@ export default function KanbanBoard({
 
   return (
     <div
-      className={`flex h-full min-h-0 gap-3 rounded-2xl border p-3 md:p-4 ${
+      className={`flex h-full min-h-0 gap-3 rounded-lg border p-3 md:p-4 ${
         isLight ? 'border-gray-200 bg-white/60' : 'border-white/[0.07] bg-bg-primary/40'
       }`}
     >
@@ -603,7 +601,7 @@ export default function KanbanBoard({
         <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+              className={`flex h-9 w-9 items-center justify-center rounded-lg ${
                 isLight ? 'bg-blue-500/10 text-blue-600' : 'bg-violet-500/20 text-violet-200'
               }`}
             >
@@ -633,7 +631,7 @@ export default function KanbanBoard({
               </button>
             ) : null}
             <label
-              className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
                 isLight
                   ? 'border-gray-200 bg-white hover:bg-gray-50'
                   : 'border-white/[0.08] bg-black/20 hover:bg-white/[0.04]'
@@ -647,7 +645,7 @@ export default function KanbanBoard({
               />
               {'\u663E\u793A\u5DF2\u7ED3\u675F'}
             </label>
-            <div className={`flex rounded-xl border p-0.5 ${isLight ? 'border-gray-200' : 'border-bg-hover'}`}>
+            <div className={`flex rounded-lg border p-0.5 ${isLight ? 'border-gray-200' : 'border-bg-hover'}`}>
               <button
                 type="button"
                 aria-label="\u5411\u5DE6"
@@ -680,7 +678,7 @@ export default function KanbanBoard({
                 onClick={() => scrollToStage(st)}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors ${
                   isLight
-                    ? 'bg-white border border-gray-200 text-gray-600 shadow-sm'
+                    ? 'bg-white border border-gray-200 text-gray-600'
                     : 'bg-white/[0.06] border border-white/10 text-text-muted'
                 }`}
               >
