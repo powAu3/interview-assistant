@@ -466,7 +466,7 @@ function ReviewZeroState({
           <div className="text-sm font-semibold text-text-primary">暂无复盘记录</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
             <span>自动记录 {reviewEnabled ? '已启用' : '未启用'}</span>
-            <span>可手动导入历史面试</span>
+            <span>可手动导入</span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -547,7 +547,6 @@ function ManualImportPanel({
         </div>
         <div>
           <h3 className="text-sm font-semibold text-text-primary">手动复盘导入</h3>
-          <p className="mt-1 text-xs text-text-muted">粘贴问答，生成复盘。</p>
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -577,8 +576,7 @@ function ManualImportPanel({
         placeholder={'面试官: 请介绍一下 Redis 缓存穿透。\n候选人: 我会用布隆过滤器和空值缓存...\nQ2: 讲讲索引失效场景。\nA2: ...'}
         className={`${FIELD_CLASS} mt-3 min-h-[180px] resize-y font-mono leading-relaxed`}
       />
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="text-[11px] text-text-muted">手动记录，不影响实时辅助。</div>
+      <div className="mt-3 flex justify-end">
         <button
           type="button"
           onClick={handleSubmit}
@@ -638,7 +636,6 @@ function ReviewSettingsPanel({
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-text-primary">复盘配置</h3>
-          <p className="mt-1 text-xs text-text-muted">自动记录和分析模型。</p>
         </div>
         <button
           type="button"
@@ -676,9 +673,6 @@ function ReviewSettingsPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xs font-semibold text-text-primary">ASR 纠错自检</div>
-            <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
-              使用当前复盘模型跑一次样例纠错，快速定位权限或模型网关问题。
-            </div>
           </div>
           <button
             type="button"
@@ -892,17 +886,14 @@ function ReviewQueueRow({
   const showScore = session.avg_score != null
   const title = session.title || session.company || '未命名复盘'
   const roleText = session.role || '岗位未填写'
-  const timeText = dayjs.unix(Math.floor(session.started_at)).format('YYYY-MM-DD HH:mm')
-  const durationText = session.ended_at ? `${Math.max(0, Math.floor((session.ended_at - session.started_at) / 60))} 分钟` : null
-  const turnsText = `${session.turn_count} 轮`
+  const timeText = dayjs.unix(Math.floor(session.started_at)).format('MM-DD HH:mm')
+  const turnsText = `${session.turn_count}轮`
   const summary = sessionSummary(session)
   const hasPrimaryTrigger = showTriggerButton
   const linkedApplicationName = `${session.application?.company || '未命名公司'} · ${session.application?.position || '岗位'}`
   const metaParts = [
-    session.source === 'manual' ? '手动导入' : '实时记录',
-    showScore ? `${session.avg_score?.toFixed(1)} 分` : '未出分',
+    showScore ? `${session.avg_score?.toFixed(1)}分` : '未出分',
     timeText,
-    durationText,
     turnsText,
     session.auto_sync_eligible === false ? '短样本' : null,
   ].filter((item): item is string => Boolean(item))
