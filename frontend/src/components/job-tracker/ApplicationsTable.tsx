@@ -509,7 +509,6 @@ export default function ApplicationsTable({
     ? 'border-bg-hover bg-white'
     : 'border-white/[0.08] bg-bg-secondary/40'
   const detailSectionClass = isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/12'
-  const detailSoftInsetClass = isLight ? 'border-bg-hover bg-bg-secondary/25' : 'border-white/[0.08] bg-black/14'
   const hiddenPreviewItems = hiddenApplicationsPreview.slice(0, 2)
   const mainlinePulse = current ? [
     {
@@ -1239,8 +1238,8 @@ export default function ApplicationsTable({
                         </section>
                       ) : null}
 
-                      <div className="grid gap-2.5 xl:grid-cols-[minmax(240px,0.66fr)_minmax(0,1.34fr)]">
-                        <section className={`rounded-md border p-3 ${detailSoftInsetClass}`}>
+                      <div className="grid gap-4 xl:grid-cols-[minmax(220px,0.62fr)_minmax(0,1.38fr)]">
+                        <section className="min-w-0">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -1280,7 +1279,7 @@ export default function ApplicationsTable({
                           </div>
                         </section>
 
-                        <section className={`rounded-md border p-3 ${detailSoftInsetClass}`}>
+                        <section className="min-w-0 border-t border-bg-hover/80 pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
                           <div className="mb-2.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <h5 className="text-sm font-semibold text-text-primary">待办与备注</h5>
