@@ -752,11 +752,11 @@ function TurnCard({
     : 'text-text-muted'
 
   return (
-    <div className="overflow-hidden rounded-lg border border-bg-hover/60 bg-bg-secondary/35">
+    <div className="border-t border-bg-hover/70">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-bg-tertiary/25"
+        className="flex w-full items-start gap-3 py-3 text-left transition-colors hover:bg-bg-tertiary/15"
       >
         <div className="mt-1 flex-shrink-0">
           {expanded ? (
@@ -767,9 +767,9 @@ function TurnCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex items-center gap-2">
-            <span className="rounded-md bg-bg-hover px-2 py-0.5 text-xs font-bold text-text-muted">第 {turn.seq} 题</span>
+            <span className="text-xs font-semibold text-text-muted">第 {turn.seq} 题</span>
             {turn.is_partial && (
-              <span className="rounded-md border border-yellow-500/30 px-2 py-0.5 text-[10px] text-yellow-500">
+              <span className="text-[10px] font-medium text-yellow-500">
                 部分录制
               </span>
             )}
@@ -778,26 +778,24 @@ function TurnCard({
         </div>
         {avgScore !== null && (
           <div className="flex-shrink-0 text-right">
-            <div className={`inline-flex h-8 min-w-10 items-center justify-center rounded-md border border-bg-hover bg-bg-secondary/35 px-2 ${scoreColor}`}>
-              <span className="text-xs font-semibold">{avgScore.toFixed(1)}</span>
-            </div>
+            <span className={`text-xs font-semibold ${scoreColor}`}>{avgScore.toFixed(1)}</span>
           </div>
         )}
       </button>
 
       {expanded && (
-        <div className="space-y-3 border-t border-bg-hover/40 p-3">
+        <div className="space-y-3 border-t border-bg-hover/40 py-3">
           <div>
             <h4 className="mb-2 text-xs font-semibold text-text-muted">候选人回答</h4>
             {hasAsrCorrection && (
-              <div className="mb-2 rounded-md border border-accent-blue/20 bg-accent-blue/[0.06] px-3 py-2">
+              <div className="mb-2 border-l border-bg-hover/80 pl-3">
                 <div className="mb-1 text-[11px] font-semibold text-accent-blue">ASR 已纠错</div>
                 <div className="text-xs leading-relaxed text-text-muted">
                   原始转写：{turn.original_candidate_answer_text}
                 </div>
               </div>
             )}
-            <div className="whitespace-pre-wrap rounded-lg bg-bg-secondary/50 p-3 text-sm leading-relaxed text-text-primary">
+            <div className="whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
               {turn.candidate_answer_text || '(未录制到回答)'}
             </div>
           </div>
@@ -866,7 +864,7 @@ function TurnCard({
           )}
 
           {!hasAnalysis && (
-            <div className="rounded-lg bg-bg-secondary/30 py-3 text-center text-xs text-text-muted">
+            <div className="border-l border-bg-hover/80 pl-3 text-xs text-text-muted">
               {turn.analysis_status === 'pending'
                 ? '等待分析'
                 : turn.analysis_status === 'analyzing'
