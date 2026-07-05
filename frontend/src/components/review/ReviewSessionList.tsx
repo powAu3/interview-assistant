@@ -121,6 +121,22 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     loadSessions(page)
   }, [page, loadSessions])
 
+  const toggleManualImport = useCallback(() => {
+    setShowManualImport((prev) => {
+      const next = !prev
+      if (next) setShowSettings(false)
+      return next
+    })
+  }, [])
+
+  const toggleSettings = useCallback(() => {
+    setShowSettings((prev) => {
+      const next = !prev
+      if (next) setShowManualImport(false)
+      return next
+    })
+  }, [])
+
   const handleToggleReview = async (enabled: boolean) => {
     try {
       const updated = await api.updateConfig({ review_enabled: enabled })
@@ -306,7 +322,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => setShowManualImport((prev) => !prev)}
+              onClick={toggleManualImport}
               aria-expanded={showManualImport}
               className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
                 showManualImport
@@ -319,7 +335,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => setShowSettings((prev) => !prev)}
+              onClick={toggleSettings}
               aria-expanded={showSettings}
               className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
                 showSettings
@@ -419,8 +435,8 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             reviewEnabled={reviewEnabled}
             showManualImport={showManualImport}
             showSettings={showSettings}
-            onManual={() => setShowManualImport((prev) => !prev)}
-            onSettings={() => setShowSettings((prev) => !prev)}
+            onManual={toggleManualImport}
+            onSettings={toggleSettings}
           />
         )}
         {!hasSessions ? configPanels : null}

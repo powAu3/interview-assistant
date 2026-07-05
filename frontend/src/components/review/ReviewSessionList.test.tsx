@@ -170,5 +170,11 @@ describe('ReviewSessionList', () => {
 
     expect(screen.getByRole('button', { name: '收起配置' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('复盘配置')).toBeInTheDocument()
+    expect(screen.queryByText('手动复盘导入')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '手动复盘' })).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: '收起配置' }))
+    expect(screen.getByRole('button', { name: '配置' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('复盘配置')).not.toBeInTheDocument()
   })
 })
