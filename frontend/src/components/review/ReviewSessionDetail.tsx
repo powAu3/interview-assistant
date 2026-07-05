@@ -1028,7 +1028,7 @@ function ApplicationLinkPanel({
             ))}
           </div>
           {applications.length === 0 ? (
-            <div className="rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-4 text-center text-xs text-text-muted">
+            <div className="border-l border-bg-hover/80 py-1 pl-3 text-xs text-text-muted">
               暂无可绑定岗位
             </div>
           ) : null}
