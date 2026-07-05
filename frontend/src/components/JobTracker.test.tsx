@@ -450,7 +450,7 @@ describe('JobTracker', () => {
     expect(screen.getByText('可继续补阶段和跟进时间')).toBeInTheDocument()
     expect(screen.getByText('已创建 OpenAI')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '补进度' }))
-    expect(screen.getByText('现在可以直接改阶段和跟进时间')).toBeInTheDocument()
+    expect(screen.getByText('进度已打开')).toBeInTheDocument()
     expect(screen.queryByText('已创建 OpenAI')).not.toBeInTheDocument()
   })
 

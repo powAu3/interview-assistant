@@ -394,7 +394,7 @@ export default function ApplicationsTable({
     } else {
       setEditCoreOpen(false)
       setExtrasOpen(false)
-      setSaveNotice('现在可以直接改阶段和跟进时间')
+      setSaveNotice('进度已打开')
     }
     onConsumeDetailIntent?.()
   }, [compactDetailLayout, current?.id, detailIntent, onConsumeDetailIntent])
@@ -407,7 +407,7 @@ export default function ApplicationsTable({
         ? pickPatchKeys(patch, EXTRA_PATCH_KEYS)
         : patch
     if (Object.keys(scopedPatch).length === 0) {
-      setSaveNotice(scope === 'core' ? '核心信息没有新的变更' : scope === 'extras' ? '补充信息没有新的变更' : '没有新的变更')
+      setSaveNotice(scope === 'core' ? '核心无变更' : scope === 'extras' ? '补充无变更' : '没有新变更')
       return
     }
     setSaving(true)
@@ -625,10 +625,10 @@ export default function ApplicationsTable({
       ? '核心信息还没保存'
       : '补充信息还没保存'
   const pendingSaveDetail = coreDirty && extrasDirty
-    ? '公司、阶段这些主线字段，以及待办和备注都改过了。确认一次后，列表和详情会一起更新。'
+    ? '核心和补充都有改动。'
     : coreDirty
-      ? '公司、岗位、阶段或时间已经改过了，保存后这条岗位主线和筛选结果才会一起同步。'
-      : '待办和备注已经暂存在当前页面，确认后才会真正挂到这条岗位下面。'
+      ? '阶段、时间或岗位已改。'
+      : '待办或备注已改。'
   const pendingSaveAssistAction = coreDirty && !editCoreOpen
     ? {
         label: '继续改核心信息',
@@ -1278,9 +1278,7 @@ export default function ApplicationsTable({
                           <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                               <div className="text-sm font-semibold text-text-primary">补充信息有未保存修改</div>
-                              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                                待办、备注和 Offer 相关调整已经暂存在当前页面，确认后直接保存即可。
-                              </p>
+                              <p className="mt-1 text-[11px] text-text-secondary">待办、备注或 Offer 已改。</p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <button
