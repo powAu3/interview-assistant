@@ -191,7 +191,7 @@ describe('JobTracker', () => {
     const row = screen.getAllByText('MiniMax')[0].closest('article')
     expect(row).not.toBeNull()
 
-    fireEvent.click(row as HTMLElement)
+    fireEvent.keyDown(row as HTMLElement, { key: 'Enter' })
 
     const updatedRow = screen
       .getAllByText('MiniMax')
@@ -201,7 +201,9 @@ describe('JobTracker', () => {
         within(candidate).queryByRole('button', { name: /查看 MiniMax 的 2 场复盘/ }) != null,
       )
     expect(updatedRow).not.toBeNull()
-    expect(within(updatedRow as HTMLElement).getByRole('button', { name: '已定位详情' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(updatedRow as HTMLElement).getByRole('button', { name: '已定位详情' })).toBeInTheDocument()
+    })
   })
 
   it('keeps search consistent when switching to kanban', async () => {
@@ -212,8 +214,22 @@ describe('JobTracker', () => {
     expect(screen.getByRole('button', { name: '整理模式' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '整理模式' }))
 
-    expect(screen.getByText(/只在你想拖动顺序或批量调整阶段时再用/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '整理模式' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('Acme')).toBeInTheDocument())
+  })
+
+  it('clears search with Escape', async () => {
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+
+    const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市')
+    fireEvent.change(searchInput, { target: { value: 'missing company' } })
+    expect(await screen.findByText('没有匹配记录，试试换个关键词，或者先新增一条岗位。')).toBeInTheDocument()
+
+    fireEvent.keyDown(searchInput, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+    expect(searchInput).toHaveValue('')
   })
 
   it('shows review summary and opens linked reviews', async () => {
@@ -236,10 +252,10 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    expect(screen.getByText('同岗位已串起 2 场复盘')).toBeInTheDocument()
-    expect(screen.getByText('先补一个跟进时间')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '补跟进时间' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '打开复盘时间线' }))
+    expect(screen.getByText('补下次跟进')).toBeInTheDocument()
+    expect(screen.getAllByText(/2 场 · 7\.1/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '补时间' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /查看 Acme 的 2 场复盘/ }))
 
     await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(1))
     expect(await screen.findByText('系统设计复盘')).toBeInTheDocument()
@@ -275,7 +291,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    fireEvent.click(screen.getByRole('button', { name: '打开补充信息' }))
+    fireEvent.click(screen.getByRole('button', { name: '补 1 条待办' }))
     fireEvent.change(
       screen.getByLabelText('待办清单'),
       { target: { value: '周五前跟进 recruiter' } },
@@ -399,7 +415,7 @@ describe('JobTracker', () => {
 
     await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(1))
     expect(await screen.findByText('已定位到 Acme · Frontend')).toBeInTheDocument()
-    expect(screen.getByText(/已经打开这条岗位的复盘时间线/)).toBeInTheDocument()
+    expect(screen.getByText('已打开复盘时间线')).toBeInTheDocument()
     expect(await screen.findByText('系统设计复盘')).toBeInTheDocument()
   })
 
@@ -416,7 +432,7 @@ describe('JobTracker', () => {
     await waitFor(() => expect(apiMock.jobTrackerCreateApplication).toHaveBeenCalled())
     await waitFor(() => expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0))
     expect(screen.getByRole('button', { name: '补进度' })).toBeInTheDocument()
-    expect(screen.getByText('这条岗位已经能继续用了')).toBeInTheDocument()
+    expect(screen.getByText('可继续补阶段和跟进时间')).toBeInTheDocument()
     expect(screen.getByText('已创建 OpenAI')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '补进度' }))
     expect(screen.getByText('现在可以直接改阶段和跟进时间')).toBeInTheDocument()
@@ -452,7 +468,7 @@ describe('JobTracker', () => {
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
     fireEvent.click(screen.getByRole('button', { name: '新增记录' }))
-    const quickAdd = screen.getByText('先记核心进度，后补细节').closest('section')
+    const quickAdd = screen.getByText('快速新增').closest('section')
     expect(quickAdd).not.toBeNull()
     const scoped = within(quickAdd as HTMLElement)
 
@@ -468,9 +484,9 @@ describe('JobTracker', () => {
     })))
     await waitFor(() => expect(screen.getAllByText('Interview Failed Co').length).toBeGreaterThan(0))
     expect(screen.getByText('已归到“挂了”')).toBeInTheDocument()
-    expect(screen.getByText(/复盘时间线会保留/)).toBeInTheDocument()
+    expect(screen.getByText('确认结果后，保留这条时间线就够了')).toBeInTheDocument()
     expect(screen.getAllByText('一面挂').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/该流程已一面挂/).length).toBeGreaterThan(0)
+    expect(screen.getByText('流程已结束')).toBeInTheDocument()
   })
 
   it('treats round-specific rejected applications as closed and avoids follow-up wording in detail', async () => {
@@ -506,12 +522,12 @@ describe('JobTracker', () => {
     fireEvent.click(screen.getByRole('button', { name: '更多状态' }))
     fireEvent.click(screen.getByRole('button', { name: /挂了 · 1/ }))
     await waitFor(() => expect(screen.getAllByText('Rejected Co').length).toBeGreaterThan(0))
-    expect(screen.getAllByText(/该流程已二面挂/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('二面挂').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/不会再进入待跟进提醒/).length).toBeGreaterThan(0)
+    expect(screen.getByText('回看最后一场复盘')).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: '打开复盘时间线' })[0])
-    expect(await screen.findByText(/这条岗位已经二面挂/)).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: '看复盘' })[0])
+    expect(await screen.findByText('1 场复盘')).toBeInTheDocument()
   })
 
   it('keeps desktop primary filters compact and reveals terminal filters from more status', async () => {

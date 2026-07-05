@@ -504,7 +504,7 @@ export function stagePillClass(stage: string, isLight = false): string {
 export function StageBadge({ stage, isLight = false }: { stage: string; isLight?: boolean }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${stagePillClass(stage, isLight)}`}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${stagePillClass(stage, isLight)}`}
     >
       {STAGE_LABELS[stage] ?? stage}
     </span>

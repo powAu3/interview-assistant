@@ -290,43 +290,6 @@ function hiddenPreviewLabel(app: Application) {
   return stageLabel
 }
 
-function describeLowCountGuidance(app: Application, openTodoCount: number) {
-  const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
-  if (isTerminalStage(app.stage)) {
-    return app.review_summary.review_count > 0
-      ? {
-          label: '适合回看',
-          detail: `这条岗位已${stageLabel}，顺着时间线回看最后一场复盘会更有价值。`,
-        }
-      : {
-          label: '适合留档',
-          detail: `这条岗位已${stageLabel}，现在保留阶段结果和少量备注就够了。`,
-        }
-  }
-  if (app.next_followup_at == null) {
-    return {
-      label: '适合补跟进',
-      detail: '先补下一次联系或面试时间，这条岗位的推进节奏才会真正成立。',
-    }
-  }
-  if (openTodoCount === 0) {
-    return {
-      label: '适合补下一步',
-      detail: '现在顺手补 1 条待办，回头再看这条岗位会省很多心智。',
-    }
-  }
-  if (app.review_summary.review_count > 0) {
-    return {
-      label: '适合继续收尾',
-      detail: `这条岗位已经接上复盘，当前还剩 ${openTodoCount} 条待办可以继续推进。`,
-    }
-  }
-  return {
-    label: '适合继续推进',
-    detail: '核心进度已经记住了，后续新的面试和补充信息继续挂回这条记录即可。',
-  }
-}
-
 export default function ApplicationsTable({
   applications,
   offerByAppId,
@@ -502,8 +465,8 @@ export default function ApplicationsTable({
   const detailAction = current ? (() => {
     if (currentOffer && current.stage === 'offer') {
       return {
-        title: '先把 Offer 关键细节补齐',
-        detail: '先把薪资、地点和截止时间补齐，后面做对比或回看就不会只剩一个 Offer 状态。',
+        title: '补 Offer 细节',
+        detail: '薪资、地点、截止时间',
         primaryLabel: '补 Offer',
         primaryClass: 'bg-emerald-500 text-white hover:brightness-110',
         onPrimary: () => onOpenOffer(current),
@@ -515,9 +478,9 @@ export default function ApplicationsTable({
     if (currentIsTerminal) {
       if (currentHasReviewTimeline) {
         return {
-          title: '先回看这条岗位的最后一场复盘',
-          detail: '流程已经结束，最有价值的信息通常在最后一轮复盘里，不必再把它当作活跃跟进项。',
-          primaryLabel: '回看复盘时间线',
+          title: '回看最后一场复盘',
+          detail: '流程已结束',
+          primaryLabel: '看复盘',
           primaryClass: 'bg-accent-blue text-white hover:brightness-110',
           onPrimary: () => onOpenReviews(current),
           secondaryLabel: openTodoCount > 0 ? '看补充信息' : null,
@@ -525,8 +488,8 @@ export default function ApplicationsTable({
         }
       }
       return {
-        title: '这条岗位已经进入终态',
-        detail: '现在保留阶段结果和少量备注就够了；如果以后补录复盘，也会继续挂回这条岗位。',
+        title: '流程已结束',
+        detail: '保留结果和必要备注',
         primaryLabel: '编辑核心信息',
         primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
         onPrimary: () => setEditCoreOpen(true),
@@ -537,9 +500,9 @@ export default function ApplicationsTable({
 
     if (current.next_followup_at == null) {
       return {
-        title: '先补一个跟进时间',
-        detail: '补上下一次联系或面试时间后，“待跟进”筛选和提醒才会真正有用。',
-        primaryLabel: '补跟进时间',
+        title: '补下次跟进',
+        detail: '让提醒和筛选可用',
+        primaryLabel: '补时间',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setEditCoreOpen(true),
         secondaryLabel: openTodoCount === 0 ? '补 1 条待办' : currentHasReviewTimeline ? '看复盘' : null,
@@ -553,8 +516,8 @@ export default function ApplicationsTable({
 
     if (openTodoCount === 0) {
       return {
-        title: '先写 1 条下一步',
-        detail: '哪怕只写一句下一步，回头也比一片空白更容易继续推进。',
+        title: '补 1 条下一步',
+        detail: '避免回头不知道推进什么',
         primaryLabel: '补待办',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setExtrasOpen(true),
@@ -565,9 +528,9 @@ export default function ApplicationsTable({
 
     if (currentHasReviewTimeline) {
       return {
-        title: '同岗位复盘已经串成时间线了',
-        detail: '如果这条岗位走了多轮面试，沿着时间线回看会比在列表里来回找更省心。',
-        primaryLabel: '先看复盘时间线',
+        title: '已有复盘时间线',
+        detail: `${current.review_summary.review_count} 场复盘`,
+        primaryLabel: '看复盘',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => onOpenReviews(current),
         secondaryLabel: '看补充信息',
@@ -576,8 +539,8 @@ export default function ApplicationsTable({
     }
 
     return {
-      title: '这条岗位已经可继续推进',
-      detail: '后面新的面试、待办或 Offer 变化继续挂在这条记录里就够了。',
+      title: '继续推进',
+      detail: '更新阶段或补充待办',
       primaryLabel: '编辑核心信息',
       primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
       onPrimary: () => setEditCoreOpen(true),
@@ -585,67 +548,45 @@ export default function ApplicationsTable({
       onSecondary: () => setExtrasOpen(true),
     }
   })() : null
-  const timelineHeadline = current
-    ? currentHasReviewTimeline
-      ? `同岗位已串起 ${current.review_summary.review_count} 场复盘`
-      : currentIsTerminal
-        ? `${stageLabel}已经记住了`
-        : '先保留这条岗位主线'
-    : ''
-  const timelineDescription = current
-    ? currentHasReviewTimeline
-      ? `${current.review_summary.latest_review_at != null
-          ? `最近一场在 ${dayjs.unix(Math.floor(current.review_summary.latest_review_at)).format('YYYY-MM-DD HH:mm')}。`
-          : '已经有关联复盘，可以直接顺着这条岗位时间线回看。'}${currentIsTerminal ? ' 即使岗位已经结束，这条时间线也会继续保留。' : ' 后续同岗位的新复盘也会继续挂回来。'}`
-      : currentIsTerminal
-        ? '即使这条岗位已经结束，后面补录的复盘、备注和结果原因也会继续保留在这里。'
-        : '现在先把岗位留成一条主线，后面新的面试或复盘都会继续挂回这一条。'
-    : ''
-  const timelineSectionLabel = currentHasReviewTimeline ? '岗位时间线' : currentIsTerminal ? '结果记录' : '同岗位后续会挂回这里'
-  const standalonePanelClass = isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.06] bg-bg-secondary/35'
+  const latestReviewLabel = current?.review_summary.latest_review_at != null
+    ? dayjs.unix(Math.floor(current.review_summary.latest_review_at)).format('MM-DD HH:mm')
+    : null
+  const standalonePanelClass = isLight ? 'border-bg-hover bg-white' : 'border-white/[0.06] bg-bg-secondary/35'
   const stackedDetailShellClass = isLight
-    ? 'border-bg-hover bg-white shadow-[0_18px_44px_rgba(148,163,184,0.14)]'
-    : 'border-white/[0.08] bg-bg-secondary shadow-[0_18px_44px_rgba(0,0,0,0.28)]'
+    ? 'border-bg-hover bg-white'
+    : 'border-white/[0.08] bg-bg-secondary'
   const workspaceShellClass = isLight
-    ? 'border-bg-hover bg-white/95 shadow-[0_18px_52px_rgba(148,163,184,0.14)]'
-    : 'border-white/[0.08] bg-bg-secondary/40 shadow-[0_18px_52px_rgba(0,0,0,0.28)]'
-  const detailSectionClass = isLight ? 'border-bg-hover/80 bg-bg-secondary/42' : 'border-white/[0.08] bg-black/12'
-  const detailInsetClass = isLight ? 'border-bg-hover/75 bg-white/72' : 'border-white/[0.08] bg-black/18'
-  const detailSoftInsetClass = isLight ? 'border-bg-hover/75 bg-white/58' : 'border-white/[0.08] bg-black/14'
+    ? 'border-bg-hover bg-white'
+    : 'border-white/[0.08] bg-bg-secondary/40'
+  const detailSectionClass = isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/12'
+  const detailSoftInsetClass = isLight ? 'border-bg-hover bg-bg-secondary/25' : 'border-white/[0.08] bg-black/14'
   const hiddenPreviewItems = hiddenApplicationsPreview.slice(0, 2)
-  const showLowCountGuidance = desktopSplitLayout && ordered.length > 0 && ordered.length <= 2
   const mainlinePulse = current ? [
     {
       label: currentIsTerminal ? '结果' : '时间',
       value: scheduleMeta?.label ?? '未设置',
-      hint: currentIsTerminal
-        ? '终态记录'
-        : scheduleMeta?.tone === 'text-red-500'
-          ? '已过提醒'
-          : scheduleMeta?.tone === 'text-amber-500'
-            ? '最近要推进'
-            : '当前节奏',
+      hint: currentIsTerminal ? '终态' : '节奏',
       tone: scheduleMeta?.tone ?? 'text-text-secondary',
     },
     {
       label: '复盘',
-      value: currentReview?.label ? `复盘 ${currentReview.label}` : '暂无复盘',
+      value: currentReview?.label ?? '暂无',
       hint: current.review_summary.review_count > 1
-        ? '同岗位时间线'
+        ? latestReviewLabel ?? '时间线'
         : current.review_summary.review_count === 1
-          ? '最近一场'
-          : '后续会挂回这里',
+          ? latestReviewLabel ?? '最近一场'
+          : '未绑定',
       tone: currentReview?.tone ?? 'text-text-secondary',
     },
     {
       label: '待办',
       value: openTodoCount > 0 ? `${openTodoCount} 条` : '暂无',
-      hint: openTodoCount > 0 ? '还有下一步' : '需要时再补',
+      hint: openTodoCount > 0 ? '待推进' : '无待办',
       tone: openTodoCount > 0 ? 'text-accent-blue' : 'text-text-secondary',
     },
   ] : []
   const inputClass =
-    'rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/15'
+    'rounded-lg border border-bg-hover bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/15'
   const textareaClass = `${inputClass} min-h-[104px] resize-y`
   const resetCoreDraft = useCallback(() => {
     if (!current) return
@@ -705,38 +646,31 @@ export default function ApplicationsTable({
     : false
   const quickProgressTitle = currentIsTerminal ? '快速改结果' : '快速更新进度'
   const quickProgressHint = currentIsTerminal
-    ? '这里只改结果阶段；其他低频信息留到补充区。'
-    : '日常最常改的是当前阶段和下次跟进，不需要每次都展开整块表单。'
+    ? '只改结果阶段'
+    : '阶段和下次跟进'
   const headerQuickProgressShellClass = isLight
-    ? 'border-accent-blue/10 bg-accent-blue/[0.04]'
-    : 'border-accent-blue/20 bg-accent-blue/[0.06]'
+    ? 'border-bg-hover bg-bg-secondary/25'
+    : 'border-white/[0.08] bg-black/12'
 
   return (
     <div className={desktopSplitLayout
       ? 'flex min-h-0 flex-col gap-3 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.88fr)] xl:items-start'
-      : 'flex h-full min-h-0 flex-col gap-3'}
+      : 'flex flex-col gap-3'}
     >
       <section
-        className={`overflow-hidden ${desktopSplitLayout ? `min-w-0 rounded-[28px] border ${workspaceShellClass}` : `rounded-2xl border ${standalonePanelClass}`}`}
+        className={`overflow-hidden ${desktopSplitLayout ? `min-w-0 rounded-lg border ${workspaceShellClass}` : `rounded-lg border ${standalonePanelClass}`}`}
       >
-        <div className="border-b border-bg-hover px-4 py-3">
+        <div className="border-b border-bg-hover px-3 py-2.5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-sm font-semibold text-text-primary">进度表</h3>
-              <p className="mt-1 text-xs text-text-secondary">
-                {mobileFocusedList
-                  ? '先把当前这条岗位看完；如果想切别的岗位，先点右侧返回列表。'
-                  : search.trim()
-                  ? `当前命中 ${ordered.length} 条记录。`
-                  : '默认只展示核心列，补充信息放到下方详情。'}
-              </p>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto">
               {mobileFocusedList ? (
                 <button
                   type="button"
                   onClick={() => setMobileDetailOpen(false)}
-                  className="rounded-full border border-bg-hover bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary sm:hidden"
+                  className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary sm:hidden"
                 >
                   返回列表
                 </button>
@@ -762,23 +696,25 @@ export default function ApplicationsTable({
                 return (
                   <article
                     key={app.id}
-                    className={`w-full rounded-2xl border p-3 text-left transition-colors ${
-                      selected
-                        ? 'border-accent-blue/35 bg-accent-blue/8'
-                        : 'border-bg-hover bg-bg-tertiary/20 hover:border-accent-blue/20 hover:bg-bg-tertiary/35'
-                    } ${highlightedId === app.id ? 'ring-2 ring-accent-blue/25' : ''}`}
+                className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                  selected
+                    ? 'border-accent-blue/35 bg-bg-secondary'
+                    : isLight
+                      ? 'border-bg-hover bg-white hover:border-accent-blue/20'
+                      : 'border-white/[0.08] bg-bg-secondary/30 hover:border-accent-blue/20'
+                } ${highlightedId === app.id ? 'ring-2 ring-accent-blue/25' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold text-text-primary">{app.company || '未命名公司'}</span>
                           {highlightedId === app.id ? (
-                            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
+                            <span className="rounded-md border border-accent-blue/20 bg-transparent px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
                               NEW
                             </span>
                           ) : null}
                           {detailOpenForApp ? (
-                            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
+                            <span className="rounded-md border border-accent-blue/20 bg-transparent px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
                               详情已展开
                             </span>
                           ) : null}
@@ -811,7 +747,7 @@ export default function ApplicationsTable({
                       <button
                         type="button"
                         onClick={() => handleSelect(app.id, true)}
-                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                           selected
                             ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
                             : 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
@@ -824,7 +760,7 @@ export default function ApplicationsTable({
                         <button
                           type="button"
                           onClick={() => onOpenReviews(app)}
-                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${reviewShortcutClass(app)}`}
+                          className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${reviewShortcutClass(app)}`}
                           aria-label={`查看 ${app.company || '该岗位'} 的 ${app.review_summary.review_count} 场复盘`}
                         >
                           {reviewShortcutLabel(app)}
@@ -855,8 +791,18 @@ export default function ApplicationsTable({
                     <article
                       key={app.id}
                       onClick={() => handleSelect(app.id)}
-                      className={`grid cursor-pointer gap-3 px-4 py-2.5 transition-colors lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(230px,0.8fr)_auto] xl:items-center ${
-                        selected ? 'bg-accent-blue/7' : 'hover:bg-bg-tertiary/25'
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          handleSelect(app.id)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`查看 ${app.company || '该岗位'} 详情`}
+                      className={`grid cursor-pointer gap-3 px-3 py-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-blue/30 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(230px,0.8fr)_auto] xl:items-center ${
+                        selected ? 'bg-bg-secondary' : 'hover:bg-bg-secondary/55'
                       } ${highlightedId === app.id ? 'ring-2 ring-inset ring-accent-blue/20' : ''}`}
                     >
                       <div className="min-w-0 lg:row-start-1 lg:col-start-1">
@@ -866,7 +812,7 @@ export default function ApplicationsTable({
                             {app.company || '未命名公司'}
                           </div>
                           {selected ? (
-                            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-semibold text-accent-blue">
+                            <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[10px] font-semibold text-accent-blue">
                               当前查看
                             </span>
                           ) : null}
@@ -937,9 +883,9 @@ export default function ApplicationsTable({
                             e.stopPropagation()
                             handleSelect(app.id)
                           }}
-                          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                          className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
                             selected
-                              ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                              ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                               : 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
                           }`}
                         >
@@ -951,109 +897,10 @@ export default function ApplicationsTable({
                 })}
               </div>
 
-              {showLowCountGuidance ? (
-                <section className="border-t border-bg-hover/80 bg-bg-tertiary/[0.12] px-4 py-3.5">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                        当前筛选只剩 {ordered.length} 条
-                      </div>
-                      <div className="mt-1 text-sm font-semibold text-text-primary">
-                        现在更适合顺手把这几条推进掉
-                      </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                        信息已经够少了，不用来回筛。直接挑一条补进度、补待办，或者回看同岗位复盘就行。
-                      </p>
-                    </div>
-                    {hiddenApplicationsCount > 0 && onShowAll ? (
-                      <button
-                        type="button"
-                        onClick={onShowAll}
-                        className="rounded-full border border-bg-hover bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                      >
-                        回到全部
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 grid gap-2 xl:grid-cols-2">
-                    {ordered.map((app) => {
-                      const appOpenTodoCount = app.todos.filter((todo) => !todo.done).length
-                      const reviewLinked = hasReviewTimeline(app)
-                      const guidance = describeLowCountGuidance(app, appOpenTodoCount)
-                      const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
-                      const selected = current?.id === app.id
-                      return (
-                        <article
-                          key={`guidance-${app.id}`}
-                          className={`rounded-2xl border px-3 py-3 ${
-                            selected
-                              ? 'border-accent-blue/25 bg-accent-blue/[0.05]'
-                              : 'border-bg-hover bg-bg-secondary/75'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="truncate text-sm font-semibold text-text-primary">
-                                  {app.company || '未命名公司'}
-                                </div>
-                                <StageBadge stage={app.stage} isLight={isLight} />
-                              </div>
-                              <div className="mt-1 text-[11px] text-text-muted">
-                                {stageLabel} · {app.position || '岗位未填写'}
-                                {app.city ? ` · ${app.city}` : ''}
-                              </div>
-                            </div>
-                            <span className="rounded-full border border-bg-hover bg-bg-tertiary/45 px-2.5 py-1 text-[10px] font-medium text-text-muted">
-                              {guidance.label}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
-                            {guidance.detail}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
-                            <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
-                              {buildRowSupportText(app, appOpenTodoCount)}
-                            </span>
-                            {reviewLinked ? (
-                              <span className="rounded-full border border-accent-blue/15 bg-accent-blue/[0.05] px-2.5 py-1 text-accent-blue">
-                                {app.review_summary.review_count > 1 ? '同岗位多轮时间线已接上' : '同岗位复盘已接上'}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSelect(app.id)}
-                              className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                                selected
-                                  ? 'bg-accent-blue text-white hover:brightness-110'
-                                  : 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {selected ? '继续看当前详情' : '切到这条'}
-                            </button>
-                            {reviewLinked ? (
-                              <button
-                                type="button"
-                                onClick={() => onOpenReviews(app)}
-                                className="rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-2 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
-                              >
-                                看岗位时间线
-                              </button>
-                            ) : null}
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
-                </section>
-              ) : null}
-
               {hiddenApplicationsCount > 0 && onShowAll ? (
                 <div className="border-t border-bg-hover/80 bg-bg-tertiary/12 px-4 py-2.5">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+                    <span className="rounded-md border border-bg-hover bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
                       当前只看 {focusFilterLabel}
                     </span>
                     <span className="text-sm font-semibold text-text-primary">
@@ -1074,7 +921,7 @@ export default function ApplicationsTable({
                     <button
                       type="button"
                       onClick={onShowAll}
-                      className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
+                      className="rounded-md border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
                     >
                       查看全部
                     </button>
@@ -1091,18 +938,13 @@ export default function ApplicationsTable({
         ref={detailRef}
         className={`flex flex-col ${
           desktopSplitLayout
-            ? `overflow-visible rounded-[28px] border ${stackedDetailShellClass} xl:min-h-0 xl:overflow-hidden xl:self-start xl:sticky xl:top-3`
-            : `rounded-2xl border ${standalonePanelClass}`
+            ? `overflow-visible rounded-lg border ${stackedDetailShellClass} xl:min-h-0 xl:overflow-hidden xl:self-start xl:sticky xl:top-3`
+            : `rounded-lg border ${standalonePanelClass}`
         }`}
       >
         {!current || !draft ? (
           <div className="flex flex-1 items-center justify-center px-6 py-16 text-center">
-            <div>
-              <div className="text-sm font-semibold text-text-primary">选一条记录开始编辑</div>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                这里只保留核心字段和少量补充信息，先看岗位主线，再决定要不要展开补充区。
-              </p>
-            </div>
+            <div className="text-sm font-semibold text-text-primary">选一条记录查看详情</div>
           </div>
         ) : (
           <>
@@ -1128,11 +970,8 @@ export default function ApplicationsTable({
                       最近更新 {dayjs.unix(Math.floor(current.updated_at)).format('MM-DD HH:mm')}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                    {scheduleMeta?.detail}
-                  </p>
                   {saveNotice ? (
-                    <div className="mt-2 inline-flex rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[11px] text-accent-blue">
+                    <div className="mt-2 inline-flex rounded-md border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[11px] text-accent-blue">
                       {saveNotice}
                     </div>
                   ) : null}
@@ -1142,35 +981,27 @@ export default function ApplicationsTable({
                   <button
                     type="button"
                     onClick={() => setMobileDetailOpen(false)}
-                    className="whitespace-nowrap rounded-xl border border-bg-hover px-4 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary lg:hidden"
+                    className="whitespace-nowrap rounded-md border border-bg-hover px-4 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary lg:hidden"
                   >
                     收起详情
                   </button>
                 </div>
               </div>
-              <div className={`mt-3 rounded-[22px] border px-3 py-3 ${headerQuickProgressShellClass}`}>
+              <div className={`mt-3 rounded-md border px-3 py-2.5 ${headerQuickProgressShellClass}`}>
                 <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
                         {quickProgressTitle}
                       </div>
-                      <span className="rounded-full border border-bg-hover bg-bg-secondary/80 px-2.5 py-1 text-[10px] font-medium text-text-muted">
-                        日常主操作
-                      </span>
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-text-primary">
-                      先在这里改阶段和时间
-                    </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                      {quickProgressHint}
-                    </p>
+                    <div className="mt-1 text-sm font-semibold text-text-primary">{quickProgressHint}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setEditCoreOpen((prev) => !prev)}
-                      className="rounded-xl border border-bg-hover bg-bg-secondary/75 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                      className="rounded-md border border-bg-hover bg-bg-secondary/75 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                     >
                       {editCoreOpen ? '收起完整编辑' : '编辑核心信息'}
                     </button>
@@ -1178,7 +1009,7 @@ export default function ApplicationsTable({
                       type="button"
                       disabled={!quickProgressDirty || saving}
                       onClick={() => void handleSave('core')}
-                      className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                      className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
                         quickProgressDirty
                           ? 'bg-accent-blue text-white hover:brightness-110'
                           : 'border border-bg-hover bg-bg-tertiary/60 text-text-secondary'
@@ -1188,7 +1019,7 @@ export default function ApplicationsTable({
                     </button>
                   </div>
                 </div>
-                <div className={`mt-3 grid gap-3 ${currentIsTerminal ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
+                <div className={`mt-2.5 grid gap-2.5 ${currentIsTerminal ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
                   <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
                     当前阶段
                     <select
@@ -1225,7 +1056,7 @@ export default function ApplicationsTable({
                   ) : (
                     <div className="flex flex-col gap-1.5 text-xs text-text-secondary">
                       <span>当前状态</span>
-                      <div className="rounded-xl border border-bg-hover bg-bg-secondary/70 px-3 py-2.5 text-sm text-text-muted">
+                      <div className="rounded-md border border-bg-hover bg-bg-secondary/70 px-3 py-2.5 text-sm text-text-muted">
                         终态记录不会再进入待跟进提醒；如果有关联复盘，时间线会继续保留。
                       </div>
                     </div>
@@ -1233,7 +1064,7 @@ export default function ApplicationsTable({
                 </div>
               </div>
               {dirty ? (
-                <div className="mt-2.5 rounded-2xl border border-accent-blue/15 bg-accent-blue/[0.05] px-3 py-2.5">
+                <div className="mt-2.5 rounded-md border border-accent-blue/15 bg-accent-blue/[0.05] px-3 py-2.5">
                   <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-blue">
@@ -1251,7 +1082,7 @@ export default function ApplicationsTable({
                         <button
                           type="button"
                           onClick={pendingSaveAssistAction.onClick}
-                          className="rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                          className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                         >
                           {pendingSaveAssistAction.label}
                         </button>
@@ -1260,7 +1091,7 @@ export default function ApplicationsTable({
                         type="button"
                         disabled={saving}
                         onClick={() => void handleSave(pendingSaveScope)}
-                        className="rounded-xl bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                        className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
                       >
                         {saving ? '保存中...' : pendingSaveLabel}
                       </button>
@@ -1270,116 +1101,60 @@ export default function ApplicationsTable({
               ) : null}
             </div>
 
-            <div className="p-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
-              <div className="space-y-3">
-                <section className={`rounded-[24px] border p-3.5 ${detailSectionClass}`}>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                        岗位主线
+            <div className="p-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+              <div className="space-y-2.5">
+                <section className={`rounded-lg border p-3 ${detailSectionClass}`}>
+                  <div className="flex flex-col gap-2.5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                          当前动作
+                        </div>
+                        <div className="mt-1.5 text-base font-semibold text-text-primary">
+                          {detailAction?.title ?? (currentIsTerminal ? `${stageLabel}回看` : `围绕 ${stageLabel} 继续推进`)}
+                        </div>
+                        <div className="mt-1 text-xs text-text-secondary">
+                          {detailAction?.detail ?? scheduleMeta?.label}
+                        </div>
                       </div>
-                      <span className="rounded-full border border-bg-hover bg-bg-tertiary/45 px-2.5 py-1 text-[10px] font-medium text-text-muted">
-                        当前阶段 · {stageLabel}
-                      </span>
-                    </div>
-
-                    <div className={`mt-2.5 rounded-[22px] border px-3.5 py-3.5 ${detailInsetClass}`}>
-                      <div className="flex flex-col gap-3">
-                        <div>
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                            {currentIsTerminal ? '这条岗位已经结束' : '当前最值得做的一步'}
-                          </div>
-                          <div className="mt-1.5 text-[17px] font-semibold tracking-tight text-text-primary">
-                            {detailAction?.title ?? (currentIsTerminal ? `${stageLabel}回看` : `围绕 ${stageLabel} 继续推进`)}
-                          </div>
-                          <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-                            {detailAction?.detail ?? (
-                              currentIsTerminal
-                                ? '这条岗位已经结束，所以这里优先保留挂在哪一轮、最近一次复盘和还能回看的内容，不再把它当成待跟进任务。'
-                                : '默认先看状态和下一步，确认要改的时候再展开表单。这样小窗口下更稳，也更接近日常使用节奏。'
-                            )}
-                          </p>
-                          {detailAction ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={detailAction.onPrimary}
-                                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${detailAction.primaryClass}`}
-                              >
-                                {detailAction.primaryLabel}
-                              </button>
-                              {detailAction.secondaryLabel && detailAction.onSecondary ? (
-                                <button
-                                  type="button"
-                                  onClick={detailAction.onSecondary}
-                                  className="rounded-xl border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                                >
-                                  {detailAction.secondaryLabel}
-                                </button>
-                              ) : null}
-                            </div>
-                            ) : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {mainlinePulse.map((item) => (
-                            <InlineSummaryPill
-                              key={item.label}
-                              label={item.label}
-                              value={item.value}
-                              hint={item.hint}
-                              tone={item.tone}
-                            />
-                          ))}
-                        </div>
-
-                        <div className="border-t border-bg-hover/80 pt-3">
-                          <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                            currentHasReviewTimeline ? 'text-accent-blue' : 'text-text-muted'
-                          }`}>
-                            {timelineSectionLabel}
-                          </div>
-                          <div className="mt-1 text-base font-semibold text-text-primary">
-                            {timelineHeadline}
-                          </div>
-                          <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
-                            {timelineDescription}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {currentHasReviewTimeline ? (
-                              <button
-                                type="button"
-                                onClick={() => onOpenReviews(current)}
-                                className="rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-2 text-xs font-semibold text-accent-blue transition-colors hover:bg-accent-blue/15"
-                              >
-                                打开复盘时间线
-                              </button>
-                            ) : null}
-                            {!currentHasReviewTimeline && !currentIsTerminal ? (
-                              <button
-                                type="button"
-                                onClick={() => setEditCoreOpen(true)}
-                                className="rounded-xl border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                              >
-                                补核心时间
-                              </button>
-                            ) : null}
+                      {detailAction ? (
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={detailAction.onPrimary}
+                            className={`rounded-md px-3 py-2 text-xs font-semibold transition ${detailAction.primaryClass}`}
+                          >
+                            {detailAction.primaryLabel}
+                          </button>
+                          {detailAction.secondaryLabel && detailAction.onSecondary ? (
                             <button
                               type="button"
-                              onClick={() => setExtrasOpen(true)}
-                              className="rounded-xl border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                              onClick={detailAction.onSecondary}
+                              className="rounded-md border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                             >
-                              打开补充信息
+                              {detailAction.secondaryLabel}
                             </button>
-                          </div>
+                          ) : null}
                         </div>
-                      </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {mainlinePulse.map((item) => (
+                        <InlineSummaryPill
+                          key={item.label}
+                          label={item.label}
+                          value={item.value}
+                          hint={item.hint}
+                          tone={item.tone}
+                        />
+                      ))}
                     </div>
                   </div>
                 </section>
 
                 {editCoreOpen ? (
-                <section className={`rounded-[24px] border p-3.5 ${detailSectionClass}`}>
+                <section className={`rounded-lg border p-3 ${detailSectionClass}`}>
                   <div className="mb-3 flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <h4 className="text-sm font-semibold text-text-primary">编辑核心信息</h4>
@@ -1392,7 +1167,7 @@ export default function ApplicationsTable({
                         <button
                           type="button"
                           onClick={resetCoreDraft}
-                          className="rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                          className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                         >
                           恢复核心信息
                         </button>
@@ -1401,7 +1176,7 @@ export default function ApplicationsTable({
                         type="button"
                         disabled={!coreDirty || saving}
                         onClick={() => void handleSave('core')}
-                        className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                        className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
                           coreDirty
                             ? 'bg-accent-blue text-white hover:brightness-110'
                             : 'border border-bg-hover bg-bg-tertiary/60 text-text-secondary'
@@ -1487,22 +1262,22 @@ export default function ApplicationsTable({
                 </section>
                 ) : null}
 
-                <section className={`rounded-[24px] border ${detailSectionClass}`}>
+                <section className={`rounded-lg border ${detailSectionClass}`}>
                   <button
                     type="button"
                     onClick={() => setExtrasOpen((prev) => !prev)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <h4 className="text-sm font-semibold text-text-primary">补充信息</h4>
-                      <p className="mt-1 text-xs text-text-secondary">{extrasSummary}</p>
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
-                        <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
+                        <span>{extrasSummary}</span>
+                        <span className="rounded-md border border-bg-hover bg-bg-tertiary/35 px-2 py-0.5 text-text-muted">
                           {extrasHeaderSummary}
                         </span>
                       </div>
                     </div>
-                    <span className="rounded-full border border-bg-hover p-2 text-text-muted">
+                    <span className="rounded-md border border-bg-hover p-1.5 text-text-muted">
                       {extrasOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </span>
                   </button>
@@ -1510,7 +1285,7 @@ export default function ApplicationsTable({
                   {extrasOpen ? (
                     <div className="space-y-2.5 border-t border-bg-hover/80 px-3.5 py-3">
                       {extrasDirty ? (
-                        <section className="rounded-xl border border-accent-blue/20 bg-accent-blue/[0.05] px-3 py-2.5">
+                        <section className="rounded-md border border-accent-blue/20 bg-accent-blue/[0.05] px-3 py-2.5">
                           <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                               <div className="text-sm font-semibold text-text-primary">补充信息有未保存修改</div>
@@ -1522,7 +1297,7 @@ export default function ApplicationsTable({
                               <button
                                 type="button"
                                 onClick={resetExtrasDraft}
-                                className="rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                                className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                               >
                                 恢复补充信息
                               </button>
@@ -1530,7 +1305,7 @@ export default function ApplicationsTable({
                                 type="button"
                                 disabled={saving}
                                 onClick={() => void handleSave('extras')}
-                                className="rounded-xl bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                                className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
                               >
                                 {saving ? '保存中...' : '保存补充信息'}
                               </button>
@@ -1540,23 +1315,18 @@ export default function ApplicationsTable({
                       ) : null}
 
                       <div className="grid gap-2.5 xl:grid-cols-[minmax(240px,0.66fr)_minmax(0,1.34fr)]">
-                        <section className={`rounded-xl border p-3 ${detailSoftInsetClass}`}>
+                        <section className={`rounded-md border p-3 ${detailSoftInsetClass}`}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                                 <FileText className="h-4 w-4 text-emerald-500" />
                                 Offer
                               </div>
-                              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                                {currentOffer
-                                  ? '这条岗位的 Offer 已留在这里，需要时继续补薪资、地点和截止时间。'
-                                  : '现在还没有 Offer，走到结果阶段再补也来得及。'}
-                              </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => onOpenOffer(current)}
-                              className="rounded-lg border border-bg-hover px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                              className="rounded-md border border-bg-hover px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                             >
                               {currentOffer ? '编辑 Offer' : '记录 Offer'}
                             </button>
@@ -1567,33 +1337,30 @@ export default function ApplicationsTable({
                                 offerSummaryBits.map((bit) => (
                                   <span
                                     key={bit}
-                                    className="inline-flex items-center rounded-full border border-emerald-500/15 bg-emerald-500/[0.06] px-2.5 py-1 text-[11px] text-emerald-600"
+                                    className="inline-flex items-center rounded-md border border-emerald-500/15 bg-emerald-500/[0.06] px-2.5 py-1 text-[11px] text-emerald-600"
                                   >
                                     {bit}
                                   </span>
                                 ))
                               ) : (
-                                <span className="inline-flex items-center rounded-full border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
                                   已记录 Offer，细节还可以继续补
                                 </span>
                               )
                             ) : (
-                              <span className="inline-flex items-center rounded-full border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
-                                薪资、地点、福利和截止时间都还没记录
+                              <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                暂无 Offer
                               </span>
                             )}
                           </div>
                         </section>
 
-                        <section className={`rounded-xl border p-3 ${detailSoftInsetClass}`}>
+                        <section className={`rounded-md border p-3 ${detailSoftInsetClass}`}>
                           <div className="mb-2.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <h5 className="text-sm font-semibold text-text-primary">待办与备注</h5>
-                              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                                这里适合放下一步动作、JD 重点、薪资预期和过程留痕，不需要写成完整档案。
-                              </p>
                             </div>
-                            <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1 text-[11px] text-text-muted">
+                            <span className="rounded-md border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1 text-[11px] text-text-muted">
                               当前 {draftTodoLines.length} 条待办
                             </span>
                           </div>
@@ -1602,13 +1369,13 @@ export default function ApplicationsTable({
                               {draftTodoPreview.map((todo, index) => (
                                 <span
                                   key={`${todo}-${index}`}
-                                  className="inline-flex items-center rounded-full border border-accent-blue/15 bg-accent-blue/[0.05] px-2.5 py-1 text-[11px] text-accent-blue"
+                                  className="inline-flex items-center rounded-md border border-accent-blue/15 bg-accent-blue/[0.05] px-2.5 py-1 text-[11px] text-accent-blue"
                                 >
                                   {todo}
                                 </span>
                               ))}
                               {draftTodoLines.length > draftTodoPreview.length ? (
-                                <span className="inline-flex items-center rounded-full border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
                                   还有 {draftTodoLines.length - draftTodoPreview.length} 条
                                 </span>
                               ) : null}
@@ -1635,14 +1402,14 @@ export default function ApplicationsTable({
                             </label>
                           </div>
                           {hasDraftNotes ? (
-                            <div className="mt-2.5 rounded-xl border border-bg-hover bg-bg-tertiary/20 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary">
+                            <div className="mt-2.5 rounded-md border border-bg-hover bg-bg-tertiary/20 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary">
                               当前备注预览：{draft?.notes.trim().slice(0, 90)}{draft?.notes.trim().length > 90 ? '...' : ''}
                             </div>
                           ) : null}
                         </section>
                       </div>
 
-                      <section className="rounded-xl border border-red-500/15 bg-red-500/6 px-3 py-2.5">
+                      <section className="rounded-md border border-red-500/15 bg-red-500/6 px-3 py-2.5">
                         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <h5 className="text-sm font-semibold text-text-primary">删除记录</h5>
@@ -1655,7 +1422,7 @@ export default function ApplicationsTable({
                             onClick={() => {
                               if (confirm(`删除「${current.company}」这条记录？`)) onDelete(current.id)
                             }}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-500/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-500/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             删除这条记录
@@ -1696,7 +1463,7 @@ function DesktopSignalChip({
 }) {
   const surface = signalSurfaceTone(tone)
   return (
-    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] ${surface}`}>
+    <div className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${surface}`}>
       <span className="font-medium text-text-muted">{label}</span>
       <span className={`font-semibold ${tone}`}>{value}</span>
       {actionLabel ? (
@@ -1722,7 +1489,7 @@ function DesktopSignalLine({
   actionLabel?: string | null
 }) {
   return (
-    <div className={`rounded-xl border px-3 py-2.5 ${className}`}>
+    <div className={`rounded-md border px-3 py-2.5 ${className}`}>
       <div className="flex items-start gap-3">
         <div className="w-11 shrink-0 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
           {label}
@@ -1758,7 +1525,7 @@ function InlineSummaryPill({
 }) {
   const surface = signalSurfaceTone(tone)
   return (
-    <div className={`rounded-full border px-3 py-1.5 ${surface}`}>
+    <div className={`rounded-md border px-2.5 py-1.5 ${surface}`}>
       <div className="flex items-center gap-1.5 text-[11px]">
         <span className="font-medium text-text-muted">{label}</span>
         <span className={`font-semibold ${tone}`}>{value}</span>

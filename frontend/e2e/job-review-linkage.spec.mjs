@@ -22,9 +22,9 @@ test.describe('job tracker and review linkage', () => {
     await expect(page.getByRole('button', { name: '定位 MiniMax 详情' })).toBeVisible()
     await expect(page.getByRole('button', { name: '返回列表' })).toBeVisible()
     await expect(page.getByText('已聚焦 1 条 · 当前筛选 2 条')).toBeVisible()
-    await expect(page.getByText('同岗位已串起 2 场复盘')).toBeVisible()
+    await expect(page.getByText('已有复盘时间线')).toBeVisible()
 
-    await page.getByRole('button', { name: '打开复盘时间线' }).click()
+    await page.getByRole('button', { name: '看复盘' }).click()
     await expect(page.getByRole('heading', { name: '关联复盘' })).toBeVisible()
     await expect(page.getByText('二面复盘')).toBeVisible()
     await expect(page.getByText('一面复盘')).toBeVisible()

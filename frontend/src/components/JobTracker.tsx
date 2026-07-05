@@ -712,23 +712,20 @@ export default function JobTracker() {
       ] satisfies Array<{ label: string; value: string; hint: string; tone: HeaderSnapshotTone }>
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg-primary">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-bg-primary">
       <div
-        className={`flex-shrink-0 border-b px-4 py-3 md:px-5 ${
-          isLight ? 'border-bg-hover bg-bg-secondary/90' : 'border-white/[0.06] bg-bg-secondary/20'
+        className={`flex-shrink-0 border-b px-3 py-2.5 md:px-4 ${
+          isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.06] bg-bg-secondary/20'
         }`}
       >
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent-blue/10 text-accent-blue ring-1 ring-accent-blue/15">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-bg-hover bg-bg-secondary text-accent-blue">
                 <Briefcase className="h-4.5 w-4.5" strokeWidth={2} />
               </div>
               <div className="space-y-0.5">
                 <h2 className="text-base font-bold tracking-tight text-text-primary">求职进度</h2>
-                <p className="max-w-2xl text-xs text-text-secondary">
-                  默认先看今天该推进什么。低频信息放到详情，整理模式只在你真要批量改时再打开。
-                </p>
               </div>
             </div>
 
@@ -740,7 +737,13 @@ export default function JobTracker() {
                   placeholder="搜索公司 / 岗位 / 城市"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted/70 focus:border-accent-blue/40 focus:outline-none focus:ring-2 focus:ring-accent-blue/15 ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape' && search) {
+                      e.preventDefault()
+                      setSearch('')
+                    }
+                  }}
+                  className={`w-full rounded-lg border py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted/70 focus:border-accent-blue/40 focus:outline-none focus:ring-2 focus:ring-accent-blue/15 ${
                     isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
                   }`}
                 />
@@ -752,7 +755,7 @@ export default function JobTracker() {
                     type="button"
                     onClick={load}
                     disabled={loading}
-                    className={`rounded-xl border p-2.5 text-text-muted transition-colors hover:border-accent-blue/25 hover:text-accent-blue disabled:opacity-50 ${
+                    className={`rounded-lg border p-2 text-text-muted transition-colors hover:border-accent-blue/25 hover:text-accent-blue disabled:opacity-50 ${
                       isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
                     }`}
                     title="刷新"
@@ -763,7 +766,7 @@ export default function JobTracker() {
                   <button
                     type="button"
                     onClick={() => setComposerOpen((prev) => !prev)}
-                    className="flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                    className="flex items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110"
                   >
                     <Plus className="h-4 w-4" strokeWidth={2.2} />
                     {composerOpen ? '收起新增' : '新增记录'}
@@ -775,7 +778,7 @@ export default function JobTracker() {
                     type="button"
                     onClick={load}
                     disabled={loading}
-                    className={`rounded-xl border p-2.5 text-text-muted transition-colors hover:border-accent-blue/25 hover:text-accent-blue disabled:opacity-50 ${
+                    className={`rounded-lg border p-2 text-text-muted transition-colors hover:border-accent-blue/25 hover:text-accent-blue disabled:opacity-50 ${
                       isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
                     }`}
                     title="刷新"
@@ -786,7 +789,7 @@ export default function JobTracker() {
                   <button
                     type="button"
                     onClick={() => setComposerOpen((prev) => !prev)}
-                    className="flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                    className="flex items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110"
                   >
                     <Plus className="h-4 w-4" strokeWidth={2.2} />
                     {composerOpen ? '收起新增' : '新增记录'}
@@ -795,7 +798,7 @@ export default function JobTracker() {
                     <button
                       type="button"
                       onClick={() => setView((prev) => prev === 'table' ? 'kanban' : 'table')}
-                      className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                         isLight
                           ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                           : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -811,7 +814,7 @@ export default function JobTracker() {
 
           <div className="text-[11px] leading-relaxed text-text-muted">
             {applications.length === 0 ? (
-              <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-accent-blue">
+              <span className="rounded-md border border-bg-hover bg-bg-secondary px-2.5 py-1 text-text-secondary">
                 还没有岗位记录，先新建一条最小进度
               </span>
             ) : (
@@ -850,9 +853,9 @@ export default function JobTracker() {
                         setFocusFilter(item.key)
                         setShowSecondaryFilters(false)
                       }}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         focusFilter === item.key
-                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -865,9 +868,9 @@ export default function JobTracker() {
                     <button
                       type="button"
                       onClick={() => setShowSecondaryFilters((prev) => !prev)}
-                      className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         selectedSecondaryFilter
-                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -881,7 +884,7 @@ export default function JobTracker() {
                 </div>
 
                 {showSecondaryFilters ? (
-                  <div className={`grid gap-2 rounded-2xl border p-2 ${
+                  <div className={`grid gap-2 rounded-lg border p-2 ${
                     isLight ? 'border-bg-hover bg-white/90' : 'border-white/[0.08] bg-black/12'
                   }`}>
                     {visibleSecondaryFocusFilterOptions.map((item) => (
@@ -892,9 +895,9 @@ export default function JobTracker() {
                           setFocusFilter(item.key)
                           setShowSecondaryFilters(false)
                         }}
-                        className={`rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                        className={`rounded-md border px-3 py-2 text-left text-xs font-medium transition-colors ${
                           focusFilter === item.key
-                            ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                            ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                             : isLight
                               ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
                               : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -917,9 +920,9 @@ export default function JobTracker() {
                         setFocusFilter(item.key)
                         setShowSecondaryFilters(false)
                       }}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         focusFilter === item.key
-                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -932,9 +935,9 @@ export default function JobTracker() {
                     <button
                       type="button"
                       onClick={() => setShowSecondaryFilters((prev) => !prev)}
-                      className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         selectedSecondaryFilter
-                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -948,7 +951,7 @@ export default function JobTracker() {
                 </div>
 
                 {showSecondaryFilters && visibleSecondaryFocusFilterOptions.length > 0 ? (
-                  <div className={`flex flex-wrap gap-2 rounded-2xl border p-2 ${
+                  <div className={`flex flex-wrap gap-2 rounded-lg border p-2 ${
                     isLight ? 'border-bg-hover bg-white/90' : 'border-white/[0.08] bg-black/12'
                   }`}>
                     {visibleSecondaryFocusFilterOptions.map((item) => (
@@ -959,9 +962,9 @@ export default function JobTracker() {
                           setFocusFilter(item.key)
                           setShowSecondaryFilters(false)
                         }}
-                        className={`rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                        className={`rounded-md border px-3 py-2 text-left text-xs font-medium transition-colors ${
                           focusFilter === item.key
-                            ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                            ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                             : isLight
                               ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
                               : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -1028,11 +1031,11 @@ export default function JobTracker() {
       </div>
 
       <div
-        className={`flex-1 min-h-0 overflow-hidden p-3 md:p-4 ${
+        className={`p-3 md:p-4 ${
           view === 'kanban'
             ? isLight
               ? 'bg-bg-secondary'
-              : 'bg-gradient-to-b from-bg-primary via-[#0f0f16] to-indigo-950/[0.12]'
+              : 'bg-bg-primary'
             : ''
         }`}
       >
@@ -1074,20 +1077,17 @@ export default function JobTracker() {
           />
         ) : (
           <div className="space-y-3">
-            <section className={`rounded-2xl border px-4 py-3 ${
-              isLight ? 'border-bg-hover bg-white/90' : 'border-white/[0.06] bg-black/15'
+            <section className={`rounded-lg border px-4 py-3 ${
+              isLight ? 'border-bg-hover bg-white' : 'border-white/[0.06] bg-black/15'
             }`}>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h3 className="text-sm font-semibold text-text-primary">整理模式</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                    只在你想拖动顺序或批量调整阶段时再用。平时查看、筛选和新增岗位，表格会更轻，也更像日常主视图。
-                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setView('table')}
-                  className={`rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                  className={`rounded-md border px-3.5 py-2 text-xs font-semibold transition-colors ${
                     isLight
                       ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
                       : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -1167,21 +1167,21 @@ function HeaderSnapshotPill({
 
   return (
     <div
-      className={`rounded-2xl border ${toneClass} ${
+      className={`rounded-md border ${toneClass} ${
         compact
-          ? 'inline-flex min-w-[138px] items-center gap-2 px-3 py-2'
-          : 'min-h-[68px] min-w-[156px] flex-1 px-3 py-2.5 sm:w-[210px] sm:flex-none'
+          ? 'inline-flex min-w-[112px] items-center gap-2 px-2.5 py-1'
+          : 'inline-flex min-w-[128px] items-center justify-between gap-3 px-2.5 py-1.5 sm:w-auto'
       }`}
     >
       <div className={compact ? 'min-w-0 flex-1' : undefined}>
         <div className={`font-semibold uppercase text-text-muted ${compact ? 'text-[9px] tracking-[0.16em]' : 'text-[10px] tracking-[0.14em]'}`}>
           {label}
         </div>
-        <div className={`${compact ? 'mt-0.5 line-clamp-1 text-[10px]' : 'mt-1 line-clamp-2 text-[10px] leading-relaxed'} text-text-muted`}>
+        <div className={`${compact ? 'mt-0.5 line-clamp-1 text-[10px]' : 'hidden'} text-text-muted`}>
           {hint}
         </div>
       </div>
-      <div className={`shrink-0 font-semibold text-text-primary ${compact ? 'text-sm' : 'text-[13px]'}`}>
+      <div className={`shrink-0 font-semibold text-text-primary ${compact ? 'text-[13px]' : 'text-[13px]'}`}>
         {value}
       </div>
     </div>
@@ -1198,25 +1198,20 @@ function DesktopOverviewSummary({
   isLight: boolean
 }) {
   return (
-    <div className={`flex flex-col gap-2 rounded-2xl border px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between ${
-      isLight ? 'border-bg-hover bg-white/92' : 'border-white/[0.08] bg-black/10'
-    }`}>
-      <div className="min-w-0">
+    <div className="flex flex-col gap-1.5 border-t border-bg-hover/70 pt-2 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+          <span className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
             isLight ? 'border-bg-hover bg-bg-secondary text-text-muted' : 'border-white/[0.08] bg-bg-secondary/60 text-text-muted'
           }`}>
             {summary.badge}
           </span>
         </div>
-        <div className="mt-1 text-sm font-semibold text-text-primary">
+        <div className="text-sm font-semibold text-text-primary">
           {summary.title}
         </div>
-        <div className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
-          {summary.detail}
-        </div>
       </div>
-      <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1">
         {items.map((item) => (
           <DesktopOverviewInlineStat
             key={item.label}
@@ -1267,60 +1262,32 @@ function JobTrackerZeroState({
 }) {
   return (
     <section
-      className={`rounded-[28px] border px-5 py-6 md:px-7 md:py-7 ${
-        isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.06] bg-bg-secondary/35'
+      className={`rounded-lg border px-4 py-5 md:px-5 ${
+        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.06] bg-bg-secondary/35'
       }`}
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-        <div className="space-y-4">
-          <div className="inline-flex items-center gap-2 rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1 text-xs font-medium text-accent-blue">
-            第一步先建最小记录
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-text-primary">暂无岗位记录</div>
+          <div className="mt-1 text-xs text-text-muted">
+            先记录公司、岗位、城市、阶段和投递日期。
           </div>
-          <div>
-            <h3 className="text-2xl font-bold tracking-tight text-text-primary">把求职进度先记下来，再慢慢补细节</h3>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
-                不需要一开始把所有信息都填满。先记录投递日期、公司、城市、岗位和阶段，就已经足够开始管理节奏了。
-              </p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
-            {['投递日期', '公司', '城市', '岗位', '阶段'].map((item) => (
-              <span key={item} className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5">
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-secondary">
+            {['公司', '岗位', '城市', '阶段', '投递日期'].map((item) => (
+              <span key={item} className="rounded-md border border-bg-hover bg-bg-secondary px-2 py-1">
                 {item}
               </span>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={onCreate}
-              className="inline-flex items-center gap-2 rounded-2xl bg-accent-blue px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-            >
-              <Plus className="h-4 w-4" />
-              新建第一条记录
-            </button>
-            <div className="text-xs text-text-muted">
-              创建后会自动选中，并给你明确的成功确认和撤销入口。
-            </div>
-          </div>
         </div>
-
-        <div className={`rounded-[24px] border p-4 ${isLight ? 'border-bg-hover bg-bg-secondary/70' : 'border-white/[0.06] bg-black/10'}`}>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">使用方式</div>
-          <div className="mt-3 space-y-3">
-            <div className="rounded-2xl border border-bg-hover bg-white/70 p-3 dark:bg-bg-tertiary/20">
-              <div className="text-sm font-semibold text-text-primary">1. 新增最小记录</div>
-              <p className="mt-1 text-xs leading-relaxed text-text-secondary">先记投递日期、公司、城市、岗位和阶段。</p>
-            </div>
-            <div className="rounded-2xl border border-bg-hover bg-white/70 p-3 dark:bg-bg-tertiary/20">
-              <div className="text-sm font-semibold text-text-primary">2. 跟进时只看当前阶段</div>
-              <p className="mt-1 text-xs leading-relaxed text-text-secondary">用“进行中 / 待跟进 / 面试中 / Offer”筛一遍，不被低频字段打断。</p>
-            </div>
-            <div className="rounded-2xl border border-bg-hover bg-white/70 p-3 dark:bg-bg-tertiary/20">
-              <div className="text-sm font-semibold text-text-primary">3. 真有需要再补备注</div>
-              <p className="mt-1 text-xs leading-relaxed text-text-secondary">待办、复盘和 Offer 都留在详情补充区，不抢主视图。</p>
-            </div>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onCreate}
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent-blue px-4 text-sm font-semibold text-white transition hover:brightness-110"
+        >
+          <Plus className="h-4 w-4" />
+          新建记录
+        </button>
       </div>
     </section>
   )
@@ -1344,12 +1311,11 @@ function CreateSuccessBanner({
   const noticeCopy = describeCreateNotice(notice)
   const nextStepCopy = describeCreateNoticeNextStep(notice)
   const identityText = [notice.position || '岗位', notice.city].filter(Boolean).join(' · ')
-  const followupChip = isTerminalStage(notice.stage) ? '复盘时间线会保留' : '后续更新会继续挂回'
 
   return (
     <section
-      className={`flex flex-col gap-3 rounded-2xl border px-4 py-3 lg:flex-row lg:items-center lg:justify-between ${
-        isLight ? 'border-accent-blue/20 bg-accent-blue/6' : 'border-accent-blue/20 bg-accent-blue/10'
+      className={`flex flex-col gap-3 rounded-lg border px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between ${
+        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-bg-secondary/45'
       }`}
     >
       <div className="min-w-0 flex-1">
@@ -1358,44 +1324,31 @@ function CreateSuccessBanner({
             已创建 {notice.company}
           </div>
           {identityText ? (
-            <span className="rounded-full border border-bg-hover bg-bg-secondary/70 px-2 py-0.5 text-[11px] text-text-secondary">
+            <span className="rounded-md border border-bg-hover bg-bg-secondary/70 px-2 py-0.5 text-[11px] text-text-secondary">
               {identityText}
             </span>
           ) : null}
-          <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+          <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue">
             {noticeCopy.rail}
           </span>
         </div>
-        <div className="mt-1 text-sm font-semibold text-text-primary">
-          {nextStepCopy.title}
-        </div>
-        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-          {continueLabel === '补进度' ? '现在就能直接补阶段和跟进时间。' : nextStepCopy.detail}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
-          <span className="rounded-full border border-accent-blue/15 bg-accent-blue/6 px-2.5 py-1 text-accent-blue">
-            下一步 · {continueLabel}
-          </span>
-          <span className="rounded-full border border-bg-hover bg-bg-secondary/60 px-2.5 py-1">
-            已定位详情
-          </span>
-          <span className="rounded-full border border-bg-hover bg-bg-secondary/60 px-2.5 py-1">
-            {followupChip}
-          </span>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+          <span>{continueLabel === '补进度' ? '可继续补阶段和跟进时间' : nextStepCopy.title}</span>
+          <span>已定位详情</span>
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
         <button
           type="button"
           onClick={onContinue}
-          className="rounded-xl bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+          className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110"
         >
           {continueLabel}
         </button>
         <button
           type="button"
           onClick={() => void onUndo()}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+          className="inline-flex items-center gap-1.5 rounded-md border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <Undo2 className="h-3.5 w-3.5" />
           撤销
@@ -1403,7 +1356,7 @@ function CreateSuccessBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+          className="rounded-md border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           收起
         </button>
@@ -1423,25 +1376,21 @@ function FocusArrivalBanner({
 }) {
   return (
     <section
-      className={`flex flex-col gap-3 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
-        isLight ? 'border-emerald-500/18 bg-emerald-500/6' : 'border-emerald-500/20 bg-emerald-500/10'
+      className={`flex flex-col gap-3 rounded-lg border px-3 py-2.5 md:flex-row md:items-center md:justify-between ${
+        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-bg-secondary/45'
       }`}
     >
       <div>
         <div className="text-sm font-semibold text-text-primary">
           已定位到 {notice.company}{notice.position ? ` · ${notice.position}` : ''}
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-          {notice.openReviews
-            ? '已经打开这条岗位的复盘时间线，可以顺着同一条主线继续回看。'
-            : '已经定位到这条岗位详情，后续从右侧就能继续补进度或回看复盘。'}
-        </p>
+        <div className="mt-1 text-xs text-text-muted">{notice.openReviews ? '已打开复盘时间线' : '已选中详情'}</div>
       </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+          className="rounded-md border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           知道了
         </button>
@@ -1465,44 +1414,28 @@ function QuickCreatePanel({
   onCancel: () => void
   onSubmit: () => void
 }) {
-  const inputClass = `rounded-xl border px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/15 ${
+  const inputClass = `rounded-lg border px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/15 ${
     isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
   }`
 
   return (
     <section
-      className={`rounded-2xl border p-3.5 ${
-        isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.08] bg-black/20'
+      className={`rounded-lg border p-3.5 ${
+        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/20'
       }`}
     >
-      <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
+      <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">快速新增</div>
-            <span className="rounded-full border border-bg-hover bg-bg-secondary/70 px-2.5 py-1 text-[10px] font-medium text-text-muted">
-              只填 5 个字段
-            </span>
-          </div>
-          <h3 className="mt-1 text-sm font-semibold text-text-primary">先记核心进度，后补细节</h3>
-          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-            只填日期、公司、城市、岗位和阶段。创建后会自动选中新记录，方便继续补待办或备注。
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
-            {['投递日期', '公司', '城市', '岗位', '阶段'].map((item) => (
-              <span
-                key={item}
-                className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1"
-              >
-                {item}
-              </span>
-            ))}
+            <div className="text-sm font-semibold text-text-primary">快速新增</div>
+            <span className="text-[11px] text-text-muted">只填 5 个字段</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-muted transition-colors hover:text-text-primary"
+            className="rounded-md border border-bg-hover px-3 py-2 text-xs font-medium text-text-muted transition-colors hover:text-text-primary"
           >
             取消
           </button>
@@ -1510,7 +1443,7 @@ function QuickCreatePanel({
             type="button"
             disabled={creating}
             onClick={onSubmit}
-            className="rounded-xl bg-accent-blue px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+            className="rounded-md bg-accent-blue px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
           >
             {creating ? '创建中...' : '创建记录'}
           </button>
@@ -1582,43 +1515,8 @@ function QuickCreatePanel({
           </select>
         </label>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
-        <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1">
-          创建后会自动定位到详情区
-        </span>
-        <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1">
-          记录历史结果时，也可以直接选一面挂、二面挂、HR 挂或已放弃
-        </span>
-      </div>
     </section>
   )
-}
-
-function timelineLeadCopy(app: Application, items: ApplicationReviewItem[]) {
-  const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
-  const latest = items[0]
-  const latestReviewAt = latest?.ended_at ?? latest?.started_at ?? null
-  const latestReviewTime = latestReviewAt != null
-    ? dayjs.unix(Math.floor(latestReviewAt)).format('YYYY-MM-DD HH:mm')
-    : null
-
-  if (isRejectedStage(app.stage)) {
-    return latestReviewTime != null
-      ? `这条岗位已经${stageLabel}，最近一次记录在 ${latestReviewTime}。时间线会继续保留，方便回看是在哪一轮掉下来的。`
-      : `这条岗位已经${stageLabel}。后续不会再进入待跟进，但这条时间线会保留给你回看原因。`
-  }
-
-  if (app.stage === 'withdrawn') {
-    return latestReviewTime != null
-      ? `这条岗位已经放弃，最近一次记录在 ${latestReviewTime}。如果之后重新推进，也还能从这里接着看。`
-      : '这条岗位已经放弃，不会再进入待跟进提醒，但历史复盘会继续保留。'
-  }
-
-  if (latestReviewTime != null) {
-    return `这条岗位当前在${stageLabel}，共关联 ${items.length} 场复盘。最近一次记录在 ${latestReviewTime}。`
-  }
-
-  return `这条岗位当前在${stageLabel}。如果同一岗位走了多轮面试，这里会自然串成一条时间线。`
 }
 
 function ApplicationReviewsModal({
@@ -1646,11 +1544,10 @@ function ApplicationReviewsModal({
     ? dayjs.unix(Math.floor(latestReviewAt)).format('YYYY-MM-DD HH:mm')
     : '--'
   const latestScoreLabel = latestScore != null ? latestScore.toFixed(1) : '未出分'
-  const leadCopy = timelineLeadCopy(app, items)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-0 sm:p-4">
-      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-none border border-bg-hover bg-bg-secondary shadow-2xl sm:h-auto sm:max-h-[82vh] sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-bg-hover px-4 py-4 sm:px-5">
+      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-none border border-bg-hover bg-bg-secondary shadow-xl sm:h-auto sm:max-h-[82vh] sm:rounded-lg">
+        <div className="flex items-start justify-between gap-3 border-b border-bg-hover px-4 py-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-text-primary">关联复盘</h3>
@@ -1664,95 +1561,42 @@ function ApplicationReviewsModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"
+            className="rounded-md p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"
             aria-label="关闭"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
           {loading ? (
             <div className="py-10 text-center text-sm text-text-muted">加载中...</div>
           ) : items.length === 0 ? (
-            <div className="space-y-3">
-              <div className={`rounded-2xl border px-4 py-4 ${
-                closedStage
-                  ? 'border-red-500/20 bg-red-500/8'
-                  : 'border-accent-blue/20 bg-accent-blue/8'
-              }`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StageBadge stage={app.stage} isLight={isLight} />
-                  <span className="text-xs font-medium text-text-secondary">
-                    {closedStage ? '这条岗位已经结束' : '这条岗位还没有关联复盘'}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                  {closedStage
-                    ? `当前阶段是 ${STAGE_LABELS[app.stage] ?? app.stage}，但还没有关联任何复盘记录。`
-                    : '后续同一岗位的多轮面试，会在这里自动串成一条时间线。'}
-                </p>
+            <div className="rounded-lg border border-dashed border-bg-hover bg-bg-secondary/35 px-4 py-8 text-center">
+              <div className="flex justify-center">
+                <StageBadge stage={app.stage} isLight={isLight} />
               </div>
-              <div className="rounded-xl border border-bg-hover bg-bg-tertiary/30 px-4 py-10 text-center text-sm text-text-muted">
-                暂无关联复盘
+              <div className="mt-3 text-sm font-semibold text-text-primary">暂无关联复盘</div>
+              <div className="mt-1 text-xs text-text-muted">
+                {closedStage ? '岗位已结束，后续可从复盘页手动补挂。' : '同岗位面试会自动串到这里。'}
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className={`rounded-2xl border p-4 ${
-                closedStage
-                  ? 'border-red-500/20 bg-gradient-to-br from-red-500/8 via-bg-secondary to-bg-secondary'
-                  : 'border-accent-blue/20 bg-gradient-to-br from-accent-blue/8 via-bg-secondary to-bg-secondary'
-              }`}>
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StageBadge stage={app.stage} isLight={isLight} />
-                      <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1 text-[11px] font-medium text-text-secondary">
-                        {items.length} 场复盘
-                      </span>
-                    </div>
-                    <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
-                      {leadCopy}
-                    </p>
+            <div className="space-y-3">
+              <div className="rounded-lg border border-bg-hover bg-bg-secondary/35 px-3 py-2.5">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StageBadge stage={app.stage} isLight={isLight} />
+                    <span className="text-xs font-medium text-text-primary">{items.length} 场复盘</span>
+                    <span className="text-xs text-text-muted">最近 {latestReviewLabel}</span>
                   </div>
-                  <div className="flex flex-wrap gap-2 sm:hidden">
-                    <span className="rounded-full border border-bg-hover/80 bg-bg-tertiary/35 px-3 py-1.5 text-[11px] text-text-secondary">
-                      最近复盘 · {latestReviewAt != null ? dayjs.unix(Math.floor(latestReviewAt)).format('M/D HH:mm') : '--'}
-                    </span>
-                    <span className="rounded-full border border-bg-hover/80 bg-bg-tertiary/35 px-3 py-1.5 text-[11px] text-text-secondary">
-                      最近得分 · {latestScoreLabel}
-                    </span>
-                    <span className="rounded-full border border-bg-hover/80 bg-bg-tertiary/35 px-3 py-1.5 text-[11px] text-text-secondary">
-                      已出分 · {scoredCount} 场
-                    </span>
-                  </div>
-                  <div className="hidden gap-2 sm:grid sm:grid-cols-3 lg:min-w-[330px] lg:grid-cols-1 xl:grid-cols-3">
-                    <div className="rounded-2xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">最近复盘</div>
-                      <div className="mt-2 text-sm font-semibold text-text-primary">
-                        {latestReviewLabel}
-                      </div>
-                      <div className="mt-1 text-[11px] text-text-muted">最近一次面试记录</div>
-                    </div>
-                    <div className="rounded-2xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">最近得分</div>
-                      <div className="mt-2 text-sm font-semibold text-text-primary">
-                        {latestScoreLabel}
-                      </div>
-                      <div className="mt-1 text-[11px] text-text-muted">最近一场成绩</div>
-                    </div>
-                    <div className="rounded-2xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">复盘概览</div>
-                      <div className="mt-2 text-sm font-semibold text-text-primary">
-                        {scoredCount} 场已出分
-                      </div>
-                      <div className="mt-1 text-[11px] text-text-muted">同岗位多轮趋势回看</div>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
+                    <span>最近得分 <span className="font-semibold text-text-primary">{latestScoreLabel}</span></span>
+                    <span>已出分 <span className="font-semibold text-text-primary">{scoredCount}</span></span>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {items.map((item, index) => {
                   const reviewAt = item.ended_at ?? item.started_at
                   const highlighted = highlightedReviewId != null && item.id === highlightedReviewId
@@ -1764,22 +1608,22 @@ function ApplicationReviewsModal({
                       <div className={`absolute left-0 top-5 h-3 w-3 rounded-full border-2 ${
                         highlighted ? 'border-accent-blue bg-accent-blue/20' : 'border-bg-hover bg-bg-secondary'
                       }`} aria-hidden />
-                      <div className={`rounded-2xl border p-4 ${
+                      <div className={`rounded-lg border p-3 ${
                         highlighted
-                          ? 'border-accent-blue/30 bg-accent-blue/6 shadow-[0_8px_24px_rgba(37,99,235,0.08)]'
+                          ? 'border-accent-blue/35 bg-accent-blue/[0.04]'
                           : 'border-bg-hover bg-bg-tertiary/25'
                       }`}>
-                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="text-sm font-semibold text-text-primary">
                                 {item.title || item.company || item.role || `复盘 #${item.id}`}
                               </div>
-                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${reviewStatusTone(item.status)}`}>
+                              <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${reviewStatusTone(item.status)}`}>
                                 {reviewStatusLabel(item.status)}
                               </span>
                               {highlighted ? (
-                                <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+                                <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue">
                                   当前这场
                                 </span>
                               ) : null}
@@ -1791,18 +1635,16 @@ function ApplicationReviewsModal({
                             </div>
                             {item.summary_preview ? (
                               <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-text-secondary">{item.summary_preview}</p>
-                            ) : (
-                              <p className="mt-3 text-xs leading-relaxed text-text-muted">这场复盘还没有摘要，打开详情后可以继续查看逐题记录或手动生成。</p>
-                            )}
+                            ) : null}
                           </div>
                           <div className="flex shrink-0 flex-col items-stretch gap-2 md:min-w-[120px]">
-                            <div className={`rounded-full px-2.5 py-1 text-center text-xs font-bold ${reviewScoreTone(item.avg_score)}`}>
+                            <div className={`rounded-md px-2.5 py-1 text-center text-xs font-bold ${reviewScoreTone(item.avg_score)}`}>
                               {item.avg_score != null ? item.avg_score.toFixed(1) : '未出分'}
                             </div>
                             <button
                               type="button"
                               onClick={() => onViewDetail(item.id)}
-                              className="rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-2 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
+                              className="rounded-md border border-accent-blue/25 bg-transparent px-3 py-2 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/5"
                             >
                               打开复盘
                             </button>
