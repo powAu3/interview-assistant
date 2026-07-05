@@ -1101,14 +1101,11 @@ export default function ApplicationsTable({
                   <div className="flex flex-col gap-2.5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                          当前动作
+                        <div className="text-xs font-semibold text-text-muted">
+                          下一步
                         </div>
                         <div className="mt-1.5 text-base font-semibold text-text-primary">
                           {detailAction?.title ?? (currentIsTerminal ? `${stageLabel}回看` : `围绕 ${stageLabel} 继续推进`)}
-                        </div>
-                        <div className="mt-1 text-xs text-text-secondary">
-                          {detailAction?.detail ?? scheduleMeta?.label}
                         </div>
                       </div>
                       {detailAction ? (
@@ -1133,13 +1130,12 @@ export default function ApplicationsTable({
                       ) : null}
                     </div>
 
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-bg-hover/70 pt-2">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {mainlinePulse.map((item) => (
                         <InlineSummaryPill
                           key={item.label}
                           label={item.label}
                           value={item.value}
-                          hint={item.hint}
                           tone={item.tone}
                         />
                       ))}
@@ -1493,19 +1489,16 @@ function DesktopSignalLine({
 function InlineSummaryPill({
   label,
   value,
-  hint,
   tone,
 }: {
   label: string
   value: string
-  hint: string
   tone: string
 }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
       <span className="font-medium text-text-muted">{label}</span>
       <span className={`font-semibold ${tone}`}>{value}</span>
-      <span className="text-text-muted">{hint}</span>
     </span>
   )
 }
