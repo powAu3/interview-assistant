@@ -393,19 +393,9 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         valueClass={detail.avg_score != null ? scoreTextClass(detail.avg_score) : 'text-text-primary'}
                       />
                       <HeaderCompactMetric
-                        label="轮次"
-                        value={String(detail.turn_count)}
-                        valueClass="text-accent-blue"
-                      />
-                      <HeaderCompactMetric
                         label="纠错"
                         value={String(correctedCount)}
                         valueClass={correctedCount > 0 ? 'text-blue-500' : 'text-text-secondary'}
-                      />
-                      <HeaderCompactMetric
-                        label="主线"
-                        value={detail.application ? '已绑定' : '未绑定'}
-                        valueClass={detail.application ? 'text-accent-blue' : 'text-text-secondary'}
                       />
                     </div>
                   </div>
