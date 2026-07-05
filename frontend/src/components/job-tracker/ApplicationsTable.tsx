@@ -233,14 +233,6 @@ function reviewShortcutClass(app: Application) {
   return 'border-accent-blue/20 bg-accent-blue/8 text-accent-blue hover:bg-accent-blue/12'
 }
 
-function signalSurfaceTone(tone: string) {
-  if (tone.includes('red-500')) return 'border-red-500/12 bg-red-500/[0.05]'
-  if (tone.includes('yellow-500')) return 'border-yellow-500/12 bg-yellow-500/[0.05]'
-  if (tone.includes('green-500')) return 'border-green-500/12 bg-green-500/[0.05]'
-  if (tone.includes('blue-500') || tone.includes('accent-blue')) return 'border-accent-blue/12 bg-accent-blue/[0.05]'
-  return 'border-bg-hover/80 bg-bg-secondary/55'
-}
-
 function hiddenPreviewLabel(app: Application) {
   const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
   const reviewCount = app.review_summary.review_count
@@ -1319,9 +1311,8 @@ function DesktopSignalChip({
   tone: string
   actionLabel?: string | null
 }) {
-  const surface = signalSurfaceTone(tone)
   return (
-    <div className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] ${surface}`}>
+    <div className="inline-flex items-baseline gap-1.5 text-[11px]">
       <span className="font-medium text-text-muted">{label}</span>
       <span className={`font-semibold ${tone}`}>{value}</span>
       {actionLabel ? (
