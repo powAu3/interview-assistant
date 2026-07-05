@@ -508,7 +508,6 @@ export default function ApplicationsTable({
   const workspaceShellClass = isLight
     ? 'border-bg-hover bg-white'
     : 'border-white/[0.08] bg-bg-secondary/40'
-  const detailSectionClass = isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/12'
   const hiddenPreviewItems = hiddenApplicationsPreview.slice(0, 2)
   const mainlinePulse = current ? [
     {
@@ -1002,7 +1001,7 @@ export default function ApplicationsTable({
 
             <div className="p-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
               <div className="space-y-2.5">
-                <section className={`rounded-lg border p-3 ${detailSectionClass}`}>
+                <section className="border-t border-bg-hover/80 pt-3">
                   <div className="flex flex-col gap-2.5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
@@ -1049,7 +1048,7 @@ export default function ApplicationsTable({
                 </section>
 
                 {editCoreOpen ? (
-                <section className={`rounded-lg border p-3 ${detailSectionClass}`}>
+                <section className="border-t border-bg-hover/80 pt-3">
                   <div className="mb-3 flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <h4 className="text-sm font-semibold text-text-primary">编辑核心信息</h4>
@@ -1152,23 +1151,23 @@ export default function ApplicationsTable({
                 </section>
                 ) : null}
 
-                <section className={`rounded-lg border ${detailSectionClass}`}>
+                <section className="border-t border-bg-hover/80 pt-1">
                   <button
                     type="button"
                     onClick={() => setExtrasOpen((prev) => !prev)}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                    className="flex w-full items-center justify-between gap-3 py-2 text-left"
                   >
                     <div className="min-w-0">
                       <h4 className="text-sm font-semibold text-text-primary">补充信息</h4>
                       <div className="mt-1 text-[11px] text-text-secondary">{extrasSummary}</div>
                     </div>
-                    <span className="rounded-md border border-bg-hover p-1.5 text-text-muted">
+                    <span className="p-1.5 text-text-muted">
                       {extrasOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </span>
                   </button>
 
                   {extrasOpen ? (
-                    <div className="space-y-2.5 border-t border-bg-hover/80 px-3.5 py-3">
+                    <div className="space-y-2.5 border-t border-bg-hover/80 py-3">
                       {extrasDirty ? (
                         <div className="flex flex-col gap-2.5 border-l border-accent-blue/25 pl-3 lg:flex-row lg:items-center lg:justify-between">
                           <div className="text-sm font-semibold text-text-primary">补充待保存</div>
