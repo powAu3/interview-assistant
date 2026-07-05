@@ -258,6 +258,14 @@ def test_update_session_binds_application_and_returns_detail_application():
             interviewer_enabled=True,
             candidate_enabled=True,
         )
+        for idx in range(5):
+            review.add_turn(
+                session_id=session_id,
+                qa_id=f"qa-{idx}",
+                seq=idx + 1,
+                question_text=f"问题 {idx + 1}",
+                candidate_answer_text=f"回答 {idx + 1}",
+            )
 
         resp = client.patch(
             f"/api/review/sessions/{session_id}",
@@ -272,6 +280,34 @@ def test_update_session_binds_application_and_returns_detail_application():
         assert data["application_id"] == app_row["id"]
         assert data["application"]["company"] == "ACME"
         assert data["application"]["position"] == "后端"
+    finally:
+        jt.delete_application(app_row["id"])
+
+
+def test_update_session_binding_short_review_skips_auto_sync():
+    app_row = jt.create_application({"company": "ACME", "position": "后端", "stage": "interview1"})
+    try:
+        session_id = review.create_session(
+            started_at=time.time(),
+            interviewer_enabled=True,
+            candidate_enabled=True,
+        )
+        review.add_turn(
+            session_id=session_id,
+            qa_id="qa-1",
+            seq=1,
+            question_text="测试问题",
+            candidate_answer_text="测试回答",
+        )
+
+        resp = client.patch(
+            f"/api/review/sessions/{session_id}",
+            json={"application_id": app_row["id"]},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["synced_todos"] is False
+        assert resp.json()["auto_sync_eligible"] is False
     finally:
         jt.delete_application(app_row["id"])
 

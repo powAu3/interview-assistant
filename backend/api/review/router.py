@@ -155,7 +155,13 @@ async def update_session(session_id: int, req: UpdateSessionRequest):
         if "application_id" in updates:
             update_kwargs["application_id"] = updates["application_id"]
         review.update_session_info(**update_kwargs)
-        return {"success": True, "synced_todos": "application_id" in updates}
+        detail = review.get_session_detail(session_id)
+        auto_sync_eligible = review.is_auto_sync_eligible_session(detail)
+        return {
+            "success": True,
+            "synced_todos": bool(detail and detail.get("application_id") and auto_sync_eligible),
+            "auto_sync_eligible": auto_sync_eligible,
+        }
     except HTTPException:
         raise
     except Exception as e:

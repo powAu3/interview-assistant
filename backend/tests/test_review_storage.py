@@ -359,13 +359,18 @@ def test_application_link_syncs_review_todos_and_cleans_rebind(tmp_path, monkeyp
         interviewer_enabled=True,
         candidate_enabled=True,
     )
-    turn_id = review.add_turn(
-        session_id=session_id,
-        qa_id="qa-001",
-        seq=1,
-        question_text="SQL 索引失效怎么排查？",
-        candidate_answer_text="我会先看 explain。",
-    )
+    turn_id = None
+    for idx in range(5):
+        created_turn_id = review.add_turn(
+            session_id=session_id,
+            qa_id=f"qa-{idx:03d}",
+            seq=idx + 1,
+            question_text=f"问题 {idx + 1}",
+            candidate_answer_text=f"回答 {idx + 1}",
+        )
+        if idx == 0:
+            turn_id = created_turn_id
+    assert turn_id is not None
     review.update_turn_analysis(
         turn_id=turn_id,
         analysis_status="completed",
@@ -408,6 +413,140 @@ def test_application_link_syncs_review_todos_and_cleans_rebind(tmp_path, monkeyp
     ]
 
 
+def test_short_review_does_not_auto_sync_todos_or_summary(tmp_path, monkeypatch):
+    from services.storage import job_tracker as jt
+
+    monkeypatch.setattr(review, "DB_PATH", str(tmp_path / "review.db"))
+    monkeypatch.setattr(jt, "DB_PATH", str(tmp_path / "job_tracker.db"))
+    review.init_db()
+    jt.init_db()
+
+    app = jt.create_application({"company": "A 公司", "position": "后端"})
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    turn_id = review.add_turn(
+        session_id=session_id,
+        qa_id="qa-001",
+        seq=1,
+        question_text="测试问题",
+        candidate_answer_text="测试回答",
+    )
+    review.update_turn_analysis(
+        turn_id=turn_id,
+        analysis_status="completed",
+        scorecard={"准确性": 4, "深度": 5},
+    )
+    review.update_session_summary(
+        session_id=session_id,
+        summary_markdown="短测试总结",
+        strong_points=[],
+        weak_points=["仅用于测试"],
+        avg_score=4.5,
+    )
+
+    review.update_session_info(session_id, application_id=app["id"])
+
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["auto_sync_eligible"] is False
+    assert jt.get_application(app["id"])["todos"] == []
+    assert review.get_application_review_summaries([app["id"]])[app["id"]]["review_count"] == 0
+
+
+def test_binding_backfills_default_review_info_and_followup_time(tmp_path, monkeypatch):
+    from services.storage import job_tracker as jt
+
+    monkeypatch.setattr(review, "DB_PATH", str(tmp_path / "review.db"))
+    monkeypatch.setattr(jt, "DB_PATH", str(tmp_path / "job_tracker.db"))
+    review.init_db()
+    jt.init_db()
+
+    app = jt.create_application({"company": "ByteDance", "position": "AI Engineer", "stage": "interview1"})
+    started_at = time.time() - 60
+    ended_at = time.time()
+    session_id = review.create_session(
+        started_at=started_at,
+        interviewer_enabled=True,
+        candidate_enabled=True,
+        source="manual",
+        title="手动复盘",
+    )
+    review.end_session(session_id, status="recorded", ended_at=ended_at)
+
+    review.update_session_info(session_id, application_id=app["id"])
+
+    detail = review.get_session_detail(session_id)
+    linked_app = jt.get_application(app["id"])
+    assert detail is not None
+    assert detail["title"] == "ByteDance - AI Engineer"
+    assert detail["company"] == "ByteDance"
+    assert detail["role"] == "AI Engineer"
+    assert linked_app is not None
+    assert linked_app["next_followup_at"] == pytest.approx(ended_at)
+
+
+def test_binding_terminal_application_does_not_backfill_followup_time(tmp_path, monkeypatch):
+    from services.storage import job_tracker as jt
+
+    monkeypatch.setattr(review, "DB_PATH", str(tmp_path / "review.db"))
+    monkeypatch.setattr(jt, "DB_PATH", str(tmp_path / "job_tracker.db"))
+    review.init_db()
+    jt.init_db()
+
+    app = jt.create_application({"company": "ByteDance", "position": "AI Engineer", "stage": "interview2_rejected"})
+    started_at = time.time() - 60
+    ended_at = time.time()
+    session_id = review.create_session(
+        started_at=started_at,
+        interviewer_enabled=True,
+        candidate_enabled=True,
+        source="manual",
+        title="手动复盘",
+    )
+    review.end_session(session_id, status="recorded", ended_at=ended_at)
+
+    review.update_session_info(session_id, application_id=app["id"])
+
+    detail = review.get_session_detail(session_id)
+    linked_app = jt.get_application(app["id"])
+    assert detail is not None
+    assert detail["title"] == "ByteDance - AI Engineer"
+    assert detail["company"] == "ByteDance"
+    assert detail["role"] == "AI Engineer"
+    assert linked_app is not None
+    assert linked_app["next_followup_at"] is None
+
+
+def test_application_patch_backfills_linked_review_defaults(tmp_path, monkeypatch):
+    from services.storage import job_tracker as jt
+
+    monkeypatch.setattr(review, "DB_PATH", str(tmp_path / "review.db"))
+    monkeypatch.setattr(jt, "DB_PATH", str(tmp_path / "job_tracker.db"))
+    review.init_db()
+    jt.init_db()
+
+    app = jt.create_application({"company": "新公司", "position": "岗位"})
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+        source="manual",
+        title="手动复盘",
+        application_id=app["id"],
+    )
+
+    jt.patch_application(app["id"], {"company": "OpenAI", "position": "Research Engineer"})
+
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["title"] == "OpenAI - Research Engineer"
+    assert detail["company"] == "OpenAI"
+    assert detail["role"] == "Research Engineer"
+
+
 def test_application_review_summary_uses_latest_session(tmp_path, monkeypatch):
     from services.storage import job_tracker as jt
 
@@ -418,9 +557,25 @@ def test_application_review_summary_uses_latest_session(tmp_path, monkeypatch):
 
     app = jt.create_application({"company": "A 公司", "position": "后端"})
     old_id = review.create_session(time.time() - 100, True, True, application_id=app["id"])
+    for idx in range(5):
+        review.add_turn(
+            session_id=old_id,
+            qa_id=f"old-{idx}",
+            seq=idx + 1,
+            question_text=f"旧问题 {idx + 1}",
+            candidate_answer_text=f"旧回答 {idx + 1}",
+        )
     review.end_session(old_id, status="completed", ended_at=time.time() - 90)
     review.update_session_summary(old_id, "old", [], [], avg_score=5.0)
     latest_id = review.create_session(time.time() - 10, True, True, application_id=app["id"])
+    for idx in range(5):
+        review.add_turn(
+            session_id=latest_id,
+            qa_id=f"latest-{idx}",
+            seq=idx + 1,
+            question_text=f"新问题 {idx + 1}",
+            candidate_answer_text=f"新回答 {idx + 1}",
+        )
     review.end_session(latest_id, status="completed", ended_at=time.time())
     review.update_session_summary(latest_id, "latest", [], [], avg_score=8.0)
 

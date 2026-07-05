@@ -12,6 +12,52 @@ from services.storage.paths import sqlite_path
 DB_PATH = sqlite_path("review.db")
 _db_lock = threading.Lock()
 _UNSET = object()
+AUTO_REVIEW_SYNC_MIN_TURNS = 5
+_DEFAULT_REVIEW_TITLES = {"", "手动复盘", "面试详情", "复盘"}
+_DEFAULT_COMPANY_VALUES = {"", "新公司", "未命名公司"}
+_DEFAULT_ROLE_VALUES = {"", "岗位", "岗位未填写"}
+_TERMINAL_APPLICATION_STAGES = {
+    "written_rejected",
+    "interview1_rejected",
+    "interview2_rejected",
+    "interview3_rejected",
+    "hr_rejected",
+    "rejected",
+    "withdrawn",
+}
+
+
+def _clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _is_default_review_title(value: Any) -> bool:
+    return _clean_text(value) in _DEFAULT_REVIEW_TITLES
+
+
+def _is_default_company(value: Any) -> bool:
+    return _clean_text(value) in _DEFAULT_COMPANY_VALUES
+
+
+def _is_default_role(value: Any) -> bool:
+    return _clean_text(value) in _DEFAULT_ROLE_VALUES
+
+
+def _build_review_title(company: Any, role: Any) -> str:
+    company_text = _clean_text(company)
+    role_text = _clean_text(role)
+    if company_text and role_text:
+        return f"{company_text} - {role_text}"
+    return company_text or role_text or ""
+
+
+def is_auto_sync_eligible_session(session: Optional[dict[str, Any]]) -> bool:
+    if not session:
+        return False
+    try:
+        return int(session.get("turn_count") or 0) >= AUTO_REVIEW_SYNC_MIN_TURNS
+    except (TypeError, ValueError):
+        return False
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -294,6 +340,10 @@ def list_sessions(page: int = 1, page_size: int = 20) -> dict[str, Any]:
         ).fetchall()
         conn.close()
     items = [dict(row) for row in rows]
+    for item in items:
+        item["auto_sync_eligible"] = is_auto_sync_eligible_session(item)
+        application_id = item.get("application_id")
+        item["application"] = _application_brief(application_id) if application_id else None
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
@@ -314,6 +364,7 @@ def get_session_detail(session_id: int) -> Optional[dict[str, Any]]:
         conn.close()
 
     session = dict(session_row)
+    session["auto_sync_eligible"] = is_auto_sync_eligible_session(session)
     application_id = session.get("application_id")
     session["application"] = _application_brief(application_id) if application_id else None
 
@@ -458,6 +509,34 @@ def update_session_info(
     application_id: Any = _UNSET,
 ):
     """更新会话的标题、公司、岗位信息"""
+    old_application_id = _patch_review_session_fields(
+        session_id,
+        title=title,
+        company=company,
+        role=role,
+        application_id=application_id,
+    )
+    if old_application_id is None and title is None and company is None and role is None and application_id is _UNSET:
+        return
+    detail = get_session_detail(session_id)
+    linked_application_id = int(detail["application_id"]) if detail and detail.get("application_id") else None
+    if application_id is not _UNSET:
+        new_application_id = int(application_id) if application_id is not None else None
+        if old_application_id is not None and old_application_id != new_application_id:
+            _remove_review_todos_from_application(session_id, old_application_id)
+    if linked_application_id is not None:
+        sync_application_link_metadata_for_session(session_id)
+        sync_application_todos_for_session(session_id)
+
+
+def _patch_review_session_fields(
+    session_id: int,
+    *,
+    title: Optional[str] = None,
+    company: Optional[str] = None,
+    role: Optional[str] = None,
+    application_id: Any = _UNSET,
+) -> Optional[int]:
     now = time.time()
     old_application_id: Optional[int] = None
     with _db_lock:
@@ -488,7 +567,7 @@ def update_session_info(
 
         if not updates:
             conn.close()
-            return
+            return old_application_id
 
         updates.append("updated_at = ?")
         params.append(now)
@@ -500,11 +579,7 @@ def update_session_info(
         )
         conn.commit()
         conn.close()
-    if application_id is not _UNSET:
-        new_application_id = int(application_id) if application_id is not None else None
-        if old_application_id is not None and old_application_id != new_application_id:
-            _remove_review_todos_from_application(session_id, old_application_id)
-        sync_application_todos_for_session(session_id)
+    return old_application_id
 
 
 def _application_brief(application_id: Any) -> Optional[dict[str, Any]]:
@@ -522,6 +597,9 @@ def _application_brief(application_id: Any) -> Optional[dict[str, Any]]:
         "position": app.get("position", ""),
         "city": app.get("city", ""),
         "stage": app.get("stage", ""),
+        "applied_at": app.get("applied_at"),
+        "next_followup_at": app.get("next_followup_at"),
+        "updated_at": app.get("updated_at"),
     }
 
 
@@ -536,10 +614,10 @@ def get_application_review_summaries(application_ids: list[int]) -> dict[int, di
             f"""
             SELECT id, application_id, status, started_at, ended_at, avg_score
             FROM review_sessions
-            WHERE application_id IN ({placeholders})
+            WHERE application_id IN ({placeholders}) AND turn_count >= ?
             ORDER BY application_id ASC, COALESCE(ended_at, started_at) DESC, id DESC
             """,
-            ids,
+            [*ids, AUTO_REVIEW_SYNC_MIN_TURNS],
         ).fetchall()
         conn.close()
 
@@ -582,6 +660,7 @@ def list_reviews_for_application(application_id: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for row in rows:
         item = dict(row)
+        item["auto_sync_eligible"] = is_auto_sync_eligible_session(item)
         if item.get("summary_markdown"):
             item["summary_preview"] = str(item["summary_markdown"]).strip()[:180]
         item.pop("summary_markdown", None)
@@ -641,10 +720,14 @@ def sync_application_todos_for_session(session_id: int) -> bool:
     detail = get_session_detail(session_id)
     if not detail or not detail.get("application_id"):
         return False
+    application_id = int(detail["application_id"])
+    if not is_auto_sync_eligible_session(detail):
+        _remove_review_todos_from_application(session_id, application_id)
+        return False
     try:
         from services.storage import job_tracker
 
-        app = job_tracker.get_application(int(detail["application_id"]))
+        app = job_tracker.get_application(application_id)
     except Exception:
         return False
     if not app:
@@ -669,6 +752,96 @@ def sync_application_todos_for_session(session_id: int) -> bool:
         next_todos.append({**todo, "done": bool(old.get("done", False))})
     job_tracker.patch_application(int(app["id"]), {"todos": next_todos})
     return True
+
+
+def sync_application_link_metadata_for_session(session_id: int) -> bool:
+    detail = get_session_detail(session_id)
+    if not detail or not detail.get("application_id"):
+        return False
+    try:
+        from services.storage import job_tracker
+
+        app = job_tracker.get_application(int(detail["application_id"]))
+    except Exception:
+        return False
+    if not app:
+        return False
+
+    session_patch: dict[str, Any] = {}
+    app_patch: dict[str, Any] = {}
+
+    session_company = _clean_text(detail.get("company"))
+    session_role = _clean_text(detail.get("role"))
+    app_company = _clean_text(app.get("company"))
+    app_position = _clean_text(app.get("position"))
+    app_stage = _clean_text(app.get("stage"))
+
+    if _is_default_company(session_company) and not _is_default_company(app_company):
+        session_patch["company"] = app_company
+    if _is_default_role(session_role) and not _is_default_role(app_position):
+        session_patch["role"] = app_position
+    if _is_default_company(app_company) and not _is_default_company(session_company):
+        app_patch["company"] = session_company
+    if _is_default_role(app_position) and not _is_default_role(session_role):
+        app_patch["position"] = session_role
+
+    next_company = session_patch.get("company", session_company)
+    next_role = session_patch.get("role", session_role)
+    if _is_default_review_title(detail.get("title")):
+        next_title = _build_review_title(next_company, next_role)
+        if next_title:
+            session_patch["title"] = next_title
+
+    session_time = detail.get("ended_at") if detail.get("ended_at") is not None else detail.get("started_at")
+    if (
+        session_time is not None
+        and app.get("next_followup_at") is None
+        and app_stage not in _TERMINAL_APPLICATION_STAGES
+    ):
+        app_patch["next_followup_at"] = float(session_time)
+
+    if session_patch:
+        _patch_review_session_fields(session_id, **session_patch)
+    if app_patch:
+        job_tracker.patch_application(int(app["id"]), app_patch)
+    return bool(session_patch or app_patch)
+
+
+def sync_review_metadata_from_application(application_id: int) -> int:
+    try:
+        from services.storage import job_tracker
+
+        app = job_tracker.get_application(int(application_id))
+    except Exception:
+        return 0
+    if not app:
+        return 0
+
+    with _db_lock:
+        conn = _conn()
+        rows = conn.execute(
+            "SELECT id, title, company, role FROM review_sessions WHERE application_id = ?",
+            (int(application_id),),
+        ).fetchall()
+        conn.close()
+
+    updated = 0
+    for row in rows:
+        patch: dict[str, Any] = {}
+        if _is_default_company(row["company"]) and not _is_default_company(app.get("company")):
+            patch["company"] = _clean_text(app.get("company"))
+        if _is_default_role(row["role"]) and not _is_default_role(app.get("position")):
+            patch["role"] = _clean_text(app.get("position"))
+        next_company = patch.get("company", _clean_text(row["company"]))
+        next_role = patch.get("role", _clean_text(row["role"]))
+        if _is_default_review_title(row["title"]):
+            next_title = _build_review_title(next_company, next_role)
+            if next_title:
+                patch["title"] = next_title
+        if patch:
+            _patch_review_session_fields(int(row["id"]), **patch)
+            updated += 1
+    return updated
 
 
 def _remove_review_todos_from_application(session_id: int, application_id: int) -> bool:

@@ -23,6 +23,11 @@ STAGE_VALUES = (
     "interview3",
     "hr",
     "offer",
+    "written_rejected",
+    "interview1_rejected",
+    "interview2_rejected",
+    "interview3_rejected",
+    "hr_rejected",
     "rejected",
     "withdrawn",
 )
@@ -268,7 +273,16 @@ def patch_application(app_id: int, data: dict[str, Any]) -> Optional[dict[str, A
         )
         conn.commit()
         conn.close()
-    return get_application(app_id)
+    row = get_application(app_id)
+    if row and ("company" in data or "position" in data):
+        try:
+            from services.storage import review
+
+            review.sync_review_metadata_from_application(app_id)
+        except Exception:
+            pass
+        row = get_application(app_id)
+    return row
 
 
 def delete_application(app_id: int) -> bool:

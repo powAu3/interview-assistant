@@ -15,6 +15,20 @@ class _FakeConfig:
         self.review_enabled = review_enabled
 
 
+def _make_qa_pairs(count: int) -> list[QAPair]:
+    return [
+        QAPair(
+            id=f"qa{i}",
+            question=f"问题 {i}",
+            answer=f"参考答案 {i}",
+            timestamp=1000.0 + i,
+            source="asr",
+            model_name="gpt-4o",
+        )
+        for i in range(1, count + 1)
+    ]
+
+
 @pytest.fixture(autouse=True)
 def clean_review_db():
     """清理 review 数据库"""
@@ -151,6 +165,9 @@ def test_on_assist_stop_saves_turns(monkeypatch):
             source="asr",
             model_name="gpt-4o",
         ),
+        QAPair(id="qa3", question="什么是 CAP？", answer="CAP 是一致性可用性分区容错。", timestamp=3000.0),
+        QAPair(id="qa4", question="Redis 持久化方案？", answer="RDB 和 AOF。", timestamp=4000.0),
+        QAPair(id="qa5", question="线程和进程区别？", answer="资源隔离与切换开销不同。", timestamp=5000.0),
     ]
 
     # Mock get_candidate_answer_for_qa
@@ -166,8 +183,8 @@ def test_on_assist_stop_saves_turns(monkeypatch):
     detail = review.get_session_detail(session_id)
     assert detail is not None
     assert detail["status"] == "analyzing"
-    assert detail["turn_count"] == 2
-    assert len(detail["turns"]) == 2
+    assert detail["turn_count"] == 5
+    assert len(detail["turns"]) == 5
     assert started_analysis == [session_id]
 
     turn1 = detail["turns"][0]
@@ -214,9 +231,7 @@ def test_full_lifecycle(monkeypatch):
 
     # 3. Stop with data
     mock_session = Session()
-    mock_session.qa_pairs = [
-        QAPair(id="qa1", question="Q1", answer="A1", timestamp=1000.0),
-    ]
+    mock_session.qa_pairs = _make_qa_pairs(5)
     mock_session.get_candidate_answer_for_qa = lambda qa_id, max_chars: "候选人回答"
 
     ended_session_id = review_integration.on_assist_stop(mock_session)
@@ -228,8 +243,40 @@ def test_full_lifecycle(monkeypatch):
     # 5. 验证数据持久化
     detail = review.get_session_detail(session_id)
     assert detail["status"] == "analyzing"
-    assert detail["turn_count"] == 1
+    assert detail["turn_count"] == 5
     assert started_analysis == [session_id]
+
+
+def test_on_assist_stop_records_short_session_without_auto_analysis(monkeypatch):
+    monkeypatch.setattr(
+        review_integration, "get_config", lambda: _FakeConfig(review_enabled=True)
+    )
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_integration.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    session_id = review_integration.on_assist_start(
+        interviewer_device_id=1,
+        candidate_device_id=2,
+        candidate_asr_enabled=True,
+    )
+    assert session_id is not None
+
+    mock_session = Session()
+    mock_session.qa_pairs = _make_qa_pairs(3)
+    mock_session.get_candidate_answer_for_qa = lambda qa_id, max_chars: f"候选人回答 {qa_id}"
+
+    ended_session_id = review_integration.on_assist_stop(mock_session)
+
+    assert ended_session_id == session_id
+    assert started_analysis == []
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["status"] == "recorded"
+    assert detail["turn_count"] == 3
 
 
 def test_on_assist_stop_recorded_when_review_disabled(monkeypatch):

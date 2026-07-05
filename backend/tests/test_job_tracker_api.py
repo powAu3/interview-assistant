@@ -48,6 +48,14 @@ def test_applications_include_review_summary_and_review_list(tmp_path: Path, mon
         application_id=app_row["id"],
         title="ACME 一面",
     )
+    for idx in range(5):
+        review.add_turn(
+            session_id=session_id,
+            qa_id=f"qa-{idx}",
+            seq=idx + 1,
+            question_text=f"问题 {idx + 1}",
+            candidate_answer_text=f"回答 {idx + 1}",
+        )
     review.end_session(session_id, status="completed", ended_at=time.time())
     review.update_session_summary(session_id, "## 总结\n还不错", [], [], avg_score=7.5)
 

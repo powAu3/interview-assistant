@@ -108,7 +108,8 @@ def on_assist_stop(session: Session) -> Optional[int]:
         # 结束录制。review_enabled 控制是否立即进入分析队列; 关闭时只落盘为
         # recorded, 保留 ended_at, 等待前端手动触发 (POST /review/sessions/{id}/generate)。
         # completed 只表示分析结果已经生成。
-        auto_analyze = bool(get_config().review_enabled)
+        turn_count = len(session.qa_pairs)
+        auto_analyze = bool(get_config().review_enabled) and turn_count >= review.AUTO_REVIEW_SYNC_MIN_TURNS
         review.end_session(
             session_id=session_id,
             status="analyzing" if auto_analyze else "recorded",
@@ -118,7 +119,7 @@ def on_assist_stop(session: Session) -> Optional[int]:
         logger.info(
             "Review session ended: session_id=%d, turn_count=%d, auto_analyze=%s",
             session_id,
-            len(session.qa_pairs),
+            turn_count,
             auto_analyze,
         )
 
@@ -127,8 +128,11 @@ def on_assist_stop(session: Session) -> Optional[int]:
             review_async_analysis.analyze_session_async(session_id)
         else:
             logger.info(
-                "Review session %d recorded (auto-analysis disabled, trigger manually)",
+                "Review session %d recorded (auto-analysis skipped; review_enabled=%s, turn_count=%d, min_turns=%d)",
                 session_id,
+                bool(get_config().review_enabled),
+                turn_count,
+                review.AUTO_REVIEW_SYNC_MIN_TURNS,
             )
 
         return session_id
