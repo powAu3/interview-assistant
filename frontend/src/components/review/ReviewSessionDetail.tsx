@@ -964,11 +964,11 @@ function ApplicationLinkPanel({
       ? '已结束'
       : '同步待办'
   return (
-    <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
+    <section className="border-l border-bg-hover/80 pl-3">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <Link2 className="h-4 w-4 text-accent-blue" />
+            <Link2 className="h-4 w-4 text-text-muted" />
             关联求职记录
           </h3>
         </div>
@@ -976,7 +976,7 @@ function ApplicationLinkPanel({
           <button
             type="button"
             onClick={() => onGoJobTracker(linked.id)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-blue/25 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
+            className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-accent-blue hover:underline"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             去求职看板
@@ -1004,13 +1004,13 @@ function ApplicationLinkPanel({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-x-3 gap-y-2 text-[11px]">
             {linkedReviewSummary && linkedReviewSummary.review_count > 0 ? (
               <button
                 type="button"
                 disabled={binding}
                 onClick={() => onOpenReviewTimeline(linked.id)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-[11px] font-semibold text-accent-blue hover:bg-accent-blue/15 disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 font-semibold text-accent-blue hover:underline disabled:opacity-60"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 全部复盘
@@ -1020,7 +1020,7 @@ function ApplicationLinkPanel({
               type="button"
               disabled={binding}
               onClick={() => setChanging(true)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 font-medium text-text-secondary hover:text-text-primary disabled:opacity-60"
             >
               <Link2 className="h-3.5 w-3.5" />
               改绑
@@ -1029,7 +1029,7 @@ function ApplicationLinkPanel({
               type="button"
               disabled={binding}
               onClick={() => onBind(null)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-500/15 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 font-medium text-red-400 hover:underline disabled:opacity-60"
             >
               <Unlink className="h-3.5 w-3.5" />
               解绑

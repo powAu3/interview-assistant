@@ -283,13 +283,9 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 p-5 lg:p-6">
         <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-xl font-semibold text-text-primary">面试复盘</h2>
-              <span className={`rounded-md border px-2.5 py-1 text-[11px] ${
-                reviewEnabled
-                  ? 'border-green-500/25 bg-green-500/10 text-green-500'
-                  : 'border-bg-hover bg-bg-tertiary text-text-muted'
-              }`}>
+              <span className="text-xs text-text-muted">
                 {reviewEnabled ? '自动记录已启用' : '自动记录未启用'}
               </span>
             </div>
@@ -338,13 +334,10 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
               <section className="border-b border-bg-hover/80 px-1 pb-3">
                 <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                       <h3 className="text-sm font-semibold text-text-primary">复盘队列</h3>
-                      <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue">
-                        {currentFocusOption.label}
-                      </span>
                       <span className="text-[11px] text-text-muted">
-                        {total} 场
+                        {currentFocusOption.label} · {total} 场
                       </span>
                     </div>
                   </div>
@@ -361,11 +354,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                         }`}
                       >
                         <span>{item.label}</span>
-                        <span
-                          className={`rounded-md px-1.5 py-0.5 text-[10px] ${
-                            focusFilter === item.key ? 'bg-transparent text-accent-blue' : 'bg-bg-tertiary text-text-muted'
-                          }`}
-                        >
+                        <span className={`text-[10px] ${focusFilter === item.key ? 'text-accent-blue' : 'text-text-muted'}`}>
                           {item.count}
                         </span>
                       </button>
