@@ -969,28 +969,7 @@ export default function JobTracker() {
             onShowAll={() => setFocusFilter('all')}
           />
         ) : (
-          <div className="space-y-3">
-            <section className={`rounded-lg border px-4 py-3 ${
-              isLight ? 'border-bg-hover bg-white' : 'border-white/[0.06] bg-black/15'
-            }`}>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary">整理模式</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setView('table')}
-                  className={`rounded-md border px-3.5 py-2 text-xs font-semibold transition-colors ${
-                    isLight
-                      ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
-                      : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  返回表格
-                </button>
-              </div>
-            </section>
-
+          <div>
             <Suspense fallback={<div className="flex h-48 items-center justify-center text-sm text-text-muted">加载看板中…</div>}>
               <KanbanBoard
                 applications={filteredApplications}

@@ -751,11 +751,6 @@ export default function ApplicationsTable({
                           <div className="truncate text-base font-semibold tracking-tight text-text-primary">
                             {app.company || '未命名公司'}
                           </div>
-                          {selected ? (
-                            <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[10px] font-semibold text-accent-blue">
-                              当前查看
-                            </span>
-                          ) : null}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-text-secondary">
                           <span>{app.position || '岗位未填写'}</span>

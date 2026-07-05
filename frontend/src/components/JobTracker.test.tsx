@@ -214,7 +214,7 @@ describe('JobTracker', () => {
     expect(screen.getByRole('button', { name: '整理模式' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '整理模式' }))
 
-    expect(screen.getByRole('heading', { name: '整理模式' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '返回表格' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('Acme')).toBeInTheDocument())
   })
 
