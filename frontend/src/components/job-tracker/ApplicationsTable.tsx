@@ -165,24 +165,17 @@ function getScheduleMeta(app: Application) {
       return {
         label: `复盘 ${target.format('MM-DD')}`,
         tone,
-        detail: isRejected
-          ? `该流程已${stageLabel}，最近一次复盘在 ${target.format('YYYY-MM-DD HH:mm')}，不会再进入待跟进提醒。`
-          : `该流程已放弃，最近一次复盘在 ${target.format('YYYY-MM-DD HH:mm')}。`,
       }
     }
     return {
       label: isRejected ? stageLabel : '已放弃',
       tone,
-      detail: isRejected
-        ? `该流程已${stageLabel}，不再进入待跟进提醒。`
-        : '该流程已放弃，不再进入待跟进提醒。',
     }
   }
   if (app.next_followup_at == null) {
     return {
       label: '跟进 未设',
       tone: 'text-text-muted',
-      detail: '还没有设置下一次提醒',
     }
   }
   const target = dayjs.unix(Math.floor(app.next_followup_at))
@@ -191,20 +184,17 @@ function getScheduleMeta(app: Application) {
     return {
       label: `跟进 ${target.format('MM-DD')}`,
       tone: 'text-red-500',
-      detail: '提醒已过期，建议尽快跟进',
     }
   }
   if (target.isBefore(now.add(3, 'day').endOf('day'))) {
     return {
       label: `跟进 ${target.format('MM-DD')}`,
       tone: 'text-amber-500',
-      detail: '最近 3 天内需要推进',
     }
   }
   return {
     label: `跟进 ${target.format('MM-DD')}`,
     tone: 'text-text-secondary',
-    detail: `计划在 ${target.format('YYYY-MM-DD')} 跟进`,
   }
 }
 
@@ -433,7 +423,6 @@ export default function ApplicationsTable({
     if (currentOffer && current.stage === 'offer') {
       return {
         title: '补 Offer 细节',
-        detail: '薪资、地点、截止时间',
         primaryLabel: '补 Offer',
         primaryClass: 'bg-emerald-500 text-white hover:brightness-110',
         onPrimary: () => onOpenOffer(current),
@@ -446,7 +435,6 @@ export default function ApplicationsTable({
       if (currentHasReviewTimeline) {
         return {
           title: '回看最后一场复盘',
-          detail: '流程已结束',
           primaryLabel: '看复盘',
           primaryClass: 'bg-accent-blue text-white hover:brightness-110',
           onPrimary: () => onOpenReviews(current),
@@ -456,7 +444,6 @@ export default function ApplicationsTable({
       }
       return {
         title: '流程已结束',
-        detail: '结果归档',
         primaryLabel: '编辑核心信息',
         primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
         onPrimary: () => setEditCoreOpen(true),
@@ -468,7 +455,6 @@ export default function ApplicationsTable({
     if (current.next_followup_at == null) {
       return {
         title: '补下次跟进',
-        detail: '未设跟进',
         primaryLabel: '补时间',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setEditCoreOpen(true),
@@ -484,7 +470,6 @@ export default function ApplicationsTable({
     if (openTodoCount === 0) {
       return {
         title: '补 1 条下一步',
-        detail: '待办为空',
         primaryLabel: '补待办',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setExtrasOpen(true),
@@ -496,7 +481,6 @@ export default function ApplicationsTable({
     if (currentHasReviewTimeline) {
       return {
         title: '已有复盘时间线',
-        detail: `${current.review_summary.review_count} 场复盘`,
         primaryLabel: '看复盘',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => onOpenReviews(current),
@@ -507,7 +491,6 @@ export default function ApplicationsTable({
 
     return {
       title: '继续推进',
-      detail: '阶段 / 待办',
       primaryLabel: '编辑核心信息',
       primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
       onPrimary: () => setEditCoreOpen(true),
