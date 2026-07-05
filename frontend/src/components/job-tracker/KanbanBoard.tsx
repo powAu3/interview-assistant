@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type WheelEvent } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -379,7 +379,7 @@ function KanbanColumn({
       </div>
 
       {/* Cards */}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2.5 [scrollbar-width:thin]">
+      <div data-kanban-column-scroll className="flex flex-1 flex-col gap-2 overflow-y-auto p-2.5 [scrollbar-width:thin]">
         <SortableContext items={list.map((a) => a.id)} strategy={verticalListSortingStrategy} id={stage}>
           {list.map((app, i) => (
             <SortableKanbanCard
@@ -518,6 +518,23 @@ export default function KanbanBoard({
 
   const scrollBy = (dx: number) => scrollRef.current?.scrollBy({ left: dx, behavior: 'smooth' })
 
+  const handleBoardWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (event.shiftKey || event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+    const board = scrollRef.current
+    if (!board || board.scrollWidth <= board.clientWidth) return
+
+    const target = event.target instanceof HTMLElement ? event.target : null
+    const columnScroller = target?.closest('[data-kanban-column-scroll]') as HTMLElement | null
+    if (columnScroller && columnScroller.scrollHeight > columnScroller.clientHeight) {
+      const canScrollDown = event.deltaY > 0 && columnScroller.scrollTop + columnScroller.clientHeight < columnScroller.scrollHeight - 1
+      const canScrollUp = event.deltaY < 0 && columnScroller.scrollTop > 0
+      if (canScrollDown || canScrollUp) return
+    }
+
+    event.preventDefault()
+    board.scrollLeft += event.deltaY
+  }, [])
+
   const scrollToStage = (stage: string) => {
     const run = () =>
       document.querySelector(`[data-kanban-stage="${stage}"]`)?.scrollIntoView({
@@ -597,7 +614,7 @@ export default function KanbanBoard({
                 {'\u6C42\u804C\u7BA1\u9053'}
               </h2>
               <p className={`text-[10px] mt-0.5 ${isLight ? 'text-gray-400' : 'text-text-muted'}`}>
-                {totalApps}{' \u6761\u8BB0\u5F55 \u00B7 '}{sortDisabled ? '\u641C\u7D22\u65F6\u4E0D\u8FDB\u884C\u6392\u5E8F' : '\u62D6\u62FD\u53EA\u7528\u4E8E\u6392\u5E8F'}{' \u00B7 \u63A8\u8FDB\u9636\u6BB5\u4F18\u5148\u7528\u5361\u7247\u4E0B\u62C9\u6216\u201C\u63A8\u8FDB\u201D\u6309\u94AE'}
+                {totalApps}{' \u6761 \u00B7 '}{sortDisabled ? '\u641C\u7D22\u4E2D' : '\u53EF\u6392\u5E8F'}
               </p>
             </div>
           </div>
@@ -683,6 +700,8 @@ export default function KanbanBoard({
         >
           <div
             ref={scrollRef}
+            data-kanban-board-scroll
+            onWheel={handleBoardWheel}
             className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-1 scroll-smooth snap-x snap-mandatory [scrollbar-width:thin]"
           >
             {visibleStages.map((stage) => (
