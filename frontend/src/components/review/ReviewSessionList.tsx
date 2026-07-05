@@ -198,19 +198,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const sessions = data?.items ?? []
   const total = data?.total ?? 0
   const groups = useMemo(() => buildSessionGroups(sessions, hasGeneratedAnalysis), [sessions])
-  const activeCount = sessions.filter((session) => session.status === 'analyzing' || session.status === 'recording').length
-  const actionRequiredCount = sessions.filter((session) =>
-    session.status === 'recorded' ||
-    session.status === 'analysis_failed' ||
-    session.status === 'partial_capture' ||
-    (session.status === 'completed' && !hasGeneratedAnalysis(session)),
-  ).length
   const hasSessions = total > 0
-  const linkedApplicationCount = new Set(
-    sessions
-      .map((session) => session.application?.id ?? null)
-      .filter((applicationId): applicationId is number => applicationId != null),
-  ).size
   const linkedReviewCounts = useMemo(() => {
     const counts = new Map<number, number>()
     for (const session of sessions) {
@@ -238,24 +226,21 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     return labels
   }, [sessions])
   const focusOptions = [
-    { key: 'all' as ReviewListFocus, label: '全部', count: sessions.length, hint: '按时间查看全部复盘' },
+    { key: 'all' as ReviewListFocus, label: '全部', count: sessions.length },
     {
       key: 'attention' as ReviewListFocus,
       label: '先处理',
       count: groups.find((group) => group.key === 'attention')?.items.length ?? 0,
-      hint: '失败、短样本和待生成',
     },
     {
       key: 'active' as ReviewListFocus,
       label: '进行中',
       count: groups.find((group) => group.key === 'active')?.items.length ?? 0,
-      hint: '还在录制或后台分析',
     },
     {
       key: 'done' as ReviewListFocus,
       label: '已完成',
       count: groups.find((group) => group.key === 'done')?.items.length ?? 0,
-      hint: '可回看并跳回岗位',
     },
   ].filter((item) => item.key === 'all' || item.count > 0 || item.key === focusFilter)
   const currentFocusOption = focusOptions.find((item) => item.key === focusFilter) ?? focusOptions[0]
@@ -361,7 +346,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                         {currentFocusOption.label}
                       </span>
                       <span className="text-[11px] text-text-muted">
-                        共 {total} 场 · 先处理 {actionRequiredCount} · 进行中 {activeCount} · 已绑定 {linkedApplicationCount} 个岗位
+                        {total} 场
                       </span>
                     </div>
                   </div>

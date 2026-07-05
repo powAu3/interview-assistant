@@ -88,11 +88,6 @@ type DetailIntent = {
 
 type HeaderSnapshotTone = 'neutral' | 'blue' | 'amber' | 'green' | 'red'
 
-type DesktopHeaderFocus = {
-  badge: string
-  title: string
-}
-
 const PRIMARY_FOCUS_FILTERS: FocusFilter[] = ['active', 'due', 'interview', 'all']
 const COMPACT_PRIMARY_FILTERS_WITH_REJECTED: FocusFilter[] = ['active', 'due', 'rejected', 'all']
 const INTERVIEW_FOCUS_STAGES = new Set<string>(['written', 'interview1', 'interview2', 'interview3', 'hr'])
@@ -230,66 +225,6 @@ function describeCreateContinueAction(notice: CreateNotice): { label: string; mo
     return { label: '查看详情', mode: 'quick_progress' }
   }
   return { label: '补进度', mode: 'quick_progress' }
-}
-
-function describeDesktopHeaderFocus({
-  focusFilter,
-  focusLabel,
-  visibleCount,
-  dueSoonCount,
-  interviewCount,
-  ongoingCount,
-  offerCount,
-  terminalCount,
-}: {
-  focusFilter: FocusFilter
-  focusLabel: string
-  visibleCount: number
-  dueSoonCount: number
-  interviewCount: number
-  ongoingCount: number
-  offerCount: number
-  terminalCount: number
-}): DesktopHeaderFocus {
-  if (focusFilter !== 'all') {
-    return {
-      badge: '当前筛选',
-      title: `现在只看 ${focusLabel} · ${visibleCount} 条`,
-    }
-  }
-
-  if (dueSoonCount > 0) {
-    return {
-      badge: '今日焦点',
-      title: `今天先推 ${dueSoonCount} 条待跟进`,
-    }
-  }
-
-  if (interviewCount > 0) {
-    return {
-      badge: '今日焦点',
-      title: `当前有 ${interviewCount} 条在面试流程里`,
-    }
-  }
-
-  if (ongoingCount > 0) {
-    return {
-      badge: '当前主线',
-      title: `还有 ${ongoingCount} 条在推进`,
-    }
-  }
-
-  if (offerCount > 0) {
-    return {
-      badge: '当前主线',
-      title: `已有 ${offerCount} 条进入 Offer`,
-    }
-  }
-
-  return {
-    badge: '当前主线',
-    title: terminalCount > 0 ? `最近主要是结果归档和复盘回看` : `现在可以继续补第一条岗位主线`,
-  }
 }
 
 export default function JobTracker() {
@@ -639,16 +574,6 @@ export default function JobTracker() {
   const visibleSecondaryFocusFilterOptions = secondaryFocusFilterOptions.filter((item) => item.count > 0 || item.key === focusFilter)
   const selectedSecondaryFilter = secondaryFocusFilterOptions.find((item) => item.key === focusFilter) ?? null
   const currentFocusOption = focusFilterOptions.find((item) => item.key === focusFilter) ?? focusFilterOptions[focusFilterOptions.length - 1]
-  const desktopHeaderFocus = describeDesktopHeaderFocus({
-    focusFilter,
-    focusLabel: currentFocusOption.label,
-    visibleCount,
-    dueSoonCount,
-    interviewCount,
-    ongoingCount: ongoingApplicationsCount,
-    offerCount,
-    terminalCount: terminalApplicationsCount,
-  })
   const snapshotItems = applications.length === 0
     ? []
     : [
@@ -811,7 +736,6 @@ export default function JobTracker() {
                 </div>
               ) : (
                 <DesktopOverviewSummary
-                  summary={desktopHeaderFocus}
                   items={snapshotItems}
                   isLight={isLight}
                 />
@@ -1167,29 +1091,14 @@ function HeaderSnapshotPill({
 }
 
 function DesktopOverviewSummary({
-  summary,
   items,
   isLight,
 }: {
-  summary: DesktopHeaderFocus
   items: Array<{ label: string; value: string; hint: string; tone: HeaderSnapshotTone }>
   isLight: boolean
 }) {
   return (
-    <div className="flex flex-col gap-1.5 border-t border-bg-hover/70 pt-2 xl:flex-row xl:items-center xl:justify-between">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-            isLight ? 'border-bg-hover bg-bg-secondary text-text-muted' : 'border-white/[0.08] bg-bg-secondary/60 text-text-muted'
-          }`}>
-            {summary.badge}
-          </span>
-        </div>
-        <div className="text-sm font-semibold text-text-primary">
-          {summary.title}
-        </div>
-      </div>
-      <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1">
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 border-t border-bg-hover/70 pt-2">
         {items.map((item) => (
           <DesktopOverviewInlineStat
             key={item.label}
@@ -1199,7 +1108,6 @@ function DesktopOverviewSummary({
             isLight={isLight}
           />
         ))}
-      </div>
     </div>
   )
 }
