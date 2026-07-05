@@ -31,30 +31,24 @@ type InlineNotice = {
   message: string
 }
 
-const REVIEW_STATUS_META: Record<ReviewSessionDetail['status'], { label: string; className: string }> = {
+const REVIEW_STATUS_META: Record<ReviewSessionDetail['status'], { label: string }> = {
   recording: {
     label: '录制中',
-    className: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-500',
   },
   recorded: {
     label: '已记录',
-    className: 'border-zinc-500/25 bg-bg-tertiary/70 text-text-secondary',
   },
   analyzing: {
     label: '分析中',
-    className: 'border-blue-500/25 bg-blue-500/10 text-blue-500',
   },
   completed: {
     label: '已完成',
-    className: 'border-green-500/25 bg-green-500/10 text-green-500',
   },
   partial_capture: {
     label: '采集不完整',
-    className: 'border-yellow-500/25 bg-yellow-500/10 text-yellow-500',
   },
   analysis_failed: {
     label: '分析失败',
-    className: 'border-red-500/25 bg-red-500/10 text-red-500',
   },
 }
 
@@ -256,33 +250,19 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   return (
     <div className="flex-1 overflow-auto p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-4">
-        <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
+        <section className="border-b border-bg-hover/80 pb-4">
           <div className="flex items-start gap-3">
             <button
               type="button"
               onClick={onBack}
-              className="mt-0.5 rounded-xl border border-bg-hover bg-bg-tertiary/30 p-2 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              className="mt-1 rounded-md p-1.5 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
               title="返回列表"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
 
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge className={reviewStatusMeta.className}>
-                  {reviewStatusMeta.label}
-                </StatusBadge>
-                <StatusBadge className={detail.application ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue' : 'border-bg-hover bg-bg-tertiary/60 text-text-secondary'}>
-                  {detail.application ? '已绑定求职记录' : '未绑定求职记录'}
-                </StatusBadge>
-                {detail.auto_sync_eligible === false ? (
-                  <StatusBadge className="border-yellow-500/25 bg-yellow-500/10 text-yellow-500">
-                    测试片段
-                  </StatusBadge>
-                ) : null}
-              </div>
-
-              <div className="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.78fr)]">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.78fr)]">
                 <div className="min-w-0">
                   {editing ? (
                     <div className="space-y-3">
@@ -335,10 +315,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                     </div>
                   ) : (
                     <>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-                        复盘详情
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-2xl font-bold tracking-tight text-text-primary md:text-[28px]">
                           {titleText}
                         </h2>
@@ -356,7 +333,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                           {subtitleText}
                         </div>
                       ) : null}
-                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-text-muted">
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-text-muted">
+                        <span>{reviewStatusMeta.label}</span>
+                        <span>{detail.application ? '已绑定求职记录' : '未绑定求职记录'}</span>
+                        {detail.auto_sync_eligible === false ? <span>测试片段</span> : null}
                         <span>{dayjs.unix(Math.floor(detail.started_at)).format('YYYY-MM-DD HH:mm')}</span>
                         {sessionDurationMinutes != null ? <span>时长 {sessionDurationMinutes} 分钟</span> : null}
                         <span>{detail.turn_count} 轮问答</span>
@@ -670,20 +650,6 @@ function TakeawaysPanel({
         ) : null}
       </div>
     </SectionPanel>
-  )
-}
-
-function StatusBadge({
-  className,
-  children,
-}: {
-  className: string
-  children: ReactNode
-}) {
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${className}`}>
-      {children}
-    </span>
   )
 }
 
