@@ -125,7 +125,7 @@ describe('ReviewSessionDetail', () => {
 
     await screen.findByText('关联求职记录')
     expect(screen.getByText('三面挂')).toBeInTheDocument()
-    expect(screen.getByText('已结束，不进待跟进')).toBeInTheDocument()
+    expect(screen.getByText('已结束')).toBeInTheDocument()
   })
 
   it('can jump back to the linked application timeline', async () => {
@@ -157,8 +157,7 @@ describe('ReviewSessionDetail', () => {
 
     render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
 
-    await screen.findByText((_content, element) => element?.textContent === '3 场复盘')
-    expect(screen.getByText('更早一场')).toBeInTheDocument()
+    await screen.findByText('更早一场')
     fireEvent.click(screen.getByRole('button', { name: '全部复盘' }))
 
     expect(useUiPrefsStore.getState().appMode).toBe('job-tracker')

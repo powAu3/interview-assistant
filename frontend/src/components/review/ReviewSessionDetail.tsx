@@ -973,10 +973,10 @@ function ApplicationLinkPanel({
       ? '最近一场'
       : '更早一场'
   const syncNote = detail.auto_sync_eligible === false
-    ? '短样本，不回写看板'
+    ? '短样本'
     : isClosedStage
-      ? '已结束，不进待跟进'
-      : '弱项可同步待办'
+      ? '已结束'
+      : '同步待办'
   return (
     <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -999,56 +999,55 @@ function ApplicationLinkPanel({
       </div>
 
       {linked && !changing ? (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-accent-blue/15 bg-accent-blue/[0.035] p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-text-primary">
-                  {linked.company || '未命名公司'} · {linked.position || '岗位'}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
-                  <span>{linkedStageLabel}</span>
-                  {linked.city ? <span>{linked.city}</span> : null}
-                  <span>{syncNote}</span>
-                </div>
+        <div className="space-y-3 border-t border-bg-hover/70 pt-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-text-primary">
+                {linked.company || '未命名公司'} · {linked.position || '岗位'}
               </div>
-              <div className="text-right text-xs text-text-muted">
-                <div><span className="font-semibold text-text-primary">{linkedReviewCount}</span> 场复盘</div>
-                <div className="mt-0.5">{reviewRelationshipLabel}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                <span>{linkedStageLabel}</span>
+                {linked.city ? <span>{linked.city}</span> : null}
+                <span>{syncNote}</span>
               </div>
             </div>
+            <div className="flex shrink-0 items-baseline gap-1.5 text-xs text-text-muted">
+              <span className="font-semibold text-text-primary">{linkedReviewCount}</span>
+              <span>场复盘</span>
+              <span>{reviewRelationshipLabel}</span>
+            </div>
+          </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              {linkedReviewSummary && linkedReviewSummary.review_count > 0 ? (
-                <button
-                  type="button"
-                  disabled={binding}
-                  onClick={() => onOpenReviewTimeline(linked.id)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-[11px] font-semibold text-accent-blue hover:bg-accent-blue/15 disabled:opacity-60"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  全部复盘
-                </button>
-              ) : null}
+          <div className="flex flex-wrap gap-2">
+            {linkedReviewSummary && linkedReviewSummary.review_count > 0 ? (
               <button
                 type="button"
                 disabled={binding}
-                onClick={() => setChanging(true)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-60"
+                onClick={() => onOpenReviewTimeline(linked.id)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-[11px] font-semibold text-accent-blue hover:bg-accent-blue/15 disabled:opacity-60"
               >
-                <Link2 className="h-3.5 w-3.5" />
-                改绑
+                <ExternalLink className="h-3.5 w-3.5" />
+                全部复盘
               </button>
-              <button
-                type="button"
-                disabled={binding}
-                onClick={() => onBind(null)}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-500/15 disabled:opacity-60"
-              >
-                <Unlink className="h-3.5 w-3.5" />
-                解绑
-              </button>
-            </div>
+            ) : null}
+            <button
+              type="button"
+              disabled={binding}
+              onClick={() => setChanging(true)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-60"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              改绑
+            </button>
+            <button
+              type="button"
+              disabled={binding}
+              onClick={() => onBind(null)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-500/15 disabled:opacity-60"
+            >
+              <Unlink className="h-3.5 w-3.5" />
+              解绑
+            </button>
           </div>
         </div>
       ) : null}
