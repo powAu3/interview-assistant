@@ -466,13 +466,14 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
 
             {nextActions.length > 0 ? (
               <SectionPanel title="下一轮补强">
-                <div className="grid gap-2 md:grid-cols-2">
+                <ol className="divide-y divide-bg-hover/70">
                   {nextActions.map((item, idx) => (
-                    <div key={`${item}-${idx}`} className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-2.5 text-sm leading-relaxed text-text-primary">
-                      {item}
-                    </div>
+                    <li key={`${item}-${idx}`} className="grid gap-2 py-2 text-sm leading-relaxed text-text-primary sm:grid-cols-[2rem_minmax(0,1fr)]">
+                      <span className="text-xs font-semibold text-text-muted">{idx + 1}</span>
+                      <span>{item}</span>
+                    </li>
                   ))}
-                </div>
+                </ol>
               </SectionPanel>
             ) : null}
 
