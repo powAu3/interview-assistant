@@ -907,12 +907,12 @@ function ReviewQueueRow({
                   <span className="font-medium text-text-primary">{linkedApplicationName}</span>
                   <StageBadge stage={session.application?.stage || 'applied'} />
                   {linkedReviewCount != null && linkedReviewCount > 1 ? (
-                    <span className="rounded-md border border-bg-hover bg-bg-secondary/70 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+                    <span className="font-medium text-text-muted">
                       {linkedReviewCount} 场
                     </span>
                   ) : null}
                   {timelineLabel ? (
-                    <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[10px] font-medium text-accent-blue">
+                    <span className="font-medium text-accent-blue">
                       {timelineLabel}
                     </span>
                   ) : null}
