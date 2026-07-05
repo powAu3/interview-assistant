@@ -412,30 +412,26 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                       ) : null}
                     </div>
 
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-bg-hover/60 pt-3">
                       <HeaderCompactMetric
                         label="评分"
                         value={avgScoreDisplay}
-                        hint="平均分"
-                        tone={detail.avg_score != null ? scoreBadgeClass(detail.avg_score) : 'border-bg-hover bg-bg-tertiary/50 text-text-primary'}
+                        valueClass={detail.avg_score != null ? scoreTextClass(detail.avg_score) : 'text-text-primary'}
                       />
                       <HeaderCompactMetric
                         label="轮次"
                         value={String(detail.turn_count)}
-                        hint={`${scoredTurns.length} 轮已评分`}
-                        tone="border-accent-blue/20 bg-accent-blue/8 text-accent-blue"
+                        valueClass="text-accent-blue"
                       />
                       <HeaderCompactMetric
                         label="纠错"
                         value={String(correctedCount)}
-                        hint="ASR 修正"
-                        tone={correctedCount > 0 ? 'border-blue-500/20 bg-blue-500/8 text-blue-500' : 'border-bg-hover bg-bg-tertiary/50 text-text-secondary'}
+                        valueClass={correctedCount > 0 ? 'text-blue-500' : 'text-text-secondary'}
                       />
                       <HeaderCompactMetric
                         label="主线"
                         value={detail.application ? '已绑定' : '未绑定'}
-                        hint={detail.application ? '可直接跳回岗位主线' : '还没挂到岗位时间线'}
-                        tone={detail.application ? 'border-accent-blue/20 bg-accent-blue/8 text-accent-blue' : 'border-bg-hover bg-bg-tertiary/50 text-text-secondary'}
+                        valueClass={detail.application ? 'text-accent-blue' : 'text-text-secondary'}
                       />
                     </div>
                   </div>
@@ -706,32 +702,25 @@ function StatusBadge({
 function HeaderCompactMetric({
   label,
   value,
-  hint,
-  tone,
+  valueClass,
 }: {
   label: string
   value: string
-  hint: string
-  tone: string
+  valueClass: string
 }) {
   return (
-    <div className={`rounded-lg border px-3 py-2 ${tone}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-75">{label}</div>
-          <div className="mt-1 line-clamp-2 text-[11px] text-text-muted">{hint}</div>
-        </div>
-        <div className="shrink-0 text-lg font-semibold leading-none text-text-primary">{value}</div>
-      </div>
-    </div>
+    <span className="inline-flex min-w-0 items-baseline gap-1.5 text-xs">
+      <span className="font-medium text-text-muted">{label}</span>
+      <span className={`font-semibold ${valueClass}`}>{value}</span>
+    </span>
   )
 }
 
-function scoreBadgeClass(score: number): string {
-  if (score >= 8) return 'border-green-500/25 bg-green-500/10 text-green-500'
-  if (score >= 6) return 'border-blue-500/25 bg-blue-500/10 text-blue-500'
-  if (score >= 4) return 'border-yellow-500/25 bg-yellow-500/10 text-yellow-500'
-  return 'border-red-500/25 bg-red-500/10 text-red-500'
+function scoreTextClass(score: number): string {
+  if (score >= 8) return 'text-green-500'
+  if (score >= 6) return 'text-blue-500'
+  if (score >= 4) return 'text-yellow-500'
+  return 'text-red-500'
 }
 
 function normalizeCompareText(value: string | null | undefined): string {
