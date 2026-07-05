@@ -7,6 +7,7 @@ export interface ReviewSession {
   title?: string | null
   company?: string | null
   role?: string | null
+  auto_sync_eligible?: boolean
   application_id?: number | null
   application?: {
     id: number
@@ -14,6 +15,9 @@ export interface ReviewSession {
     position: string
     city: string
     stage: string
+    applied_at?: number | null
+    next_followup_at?: number | null
+    updated_at?: number | null
   } | null
   jd_snapshot?: string | null
   resume_snapshot?: string | null

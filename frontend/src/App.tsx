@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X } from 'lucide-react'
+import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X, ChevronDown } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
@@ -24,6 +24,14 @@ const ReviewMode = lazy(() => import('@/components/ReviewMode'))
 const KnowledgeMap = lazy(() => import('@/components/KnowledgeMap'))
 const ResumeOptimizer = lazy(() => import('@/components/ResumeOptimizer'))
 const JobTracker = lazy(() => import('@/components/JobTracker'))
+
+const APP_MODE_TABS = [
+  ['assist', '实时辅助'],
+  ['review', '面试复盘'],
+  ['knowledge', '能力分析'],
+  ['resume-opt', '简历优化'],
+  ['job-tracker', '求职看板'],
+] as const
 
 export default function App() {
   useInterviewWS()
@@ -51,7 +59,9 @@ export default function App() {
 
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
+  const [moduleMenuOpen, setModuleMenuOpen] = useState(false)
   const sessionAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const moduleMenuRef = useRef<HTMLDivElement | null>(null)
 
   const {
     assistSplitContainerRef,
@@ -62,6 +72,21 @@ export default function App() {
   } = useAssistSplit()
 
   const { initError } = useAppBootstrap()
+
+  useEffect(() => {
+    if (!moduleMenuOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!moduleMenuRef.current?.contains(event.target as Node)) {
+        setModuleMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', onPointerDown)
+    return () => window.removeEventListener('mousedown', onPointerDown)
+  }, [moduleMenuOpen])
+
+  useEffect(() => {
+    setModuleMenuOpen(false)
+  }, [appMode])
 
   useEffect(() => {
     if (!window.electronAPI?.getShortcuts) return
@@ -131,6 +156,7 @@ export default function App() {
   const toasts = useInterviewStore((s) => s.toasts)
   const dismissToast = useInterviewStore((s) => s.dismissToast)
   const wsIsLeader = useInterviewStore((s) => s.wsIsLeader)
+  const currentAppModeLabel = APP_MODE_TABS.find(([key]) => key === appMode)?.[1] ?? '模块'
 
   useEffect(() => {
     if (!fallbackToast) return
@@ -177,16 +203,57 @@ export default function App() {
             <h1 className="text-sm font-bold hidden lg:block flex-shrink-0 tracking-tight">学习助手</h1>
           </div>
 
-          <div className="flex overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none" role="tablist" aria-label="功能模块">
-            {(
-              [
-                ['assist', '实时辅助'],
-                ['review', '面试复盘'],
-                ['knowledge', '能力分析'],
-                ['resume-opt', '简历优化'],
-                ['job-tracker', '\u6C42\u804C\u770B\u677F'] as const,
-              ] as const
-            ).map(([key, label]) => (
+          <div className="relative ml-1 md:hidden" ref={moduleMenuRef}>
+            <button
+              type="button"
+              onClick={() => setModuleMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={moduleMenuOpen}
+              aria-label="切换功能模块"
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                moduleMenuOpen
+                  ? 'border-accent-blue/40 bg-accent-blue/10 text-accent-blue'
+                  : 'border-bg-hover/30 bg-bg-tertiary/60 text-text-primary'
+              }`}
+            >
+              <MonitorSmartphone className="h-3.5 w-3.5" />
+              <span className="max-w-[88px] truncate">{currentAppModeLabel}</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${moduleMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {moduleMenuOpen ? (
+              <div
+                role="menu"
+                aria-label="功能模块"
+                className="absolute left-0 top-[calc(100%+0.5rem)] z-40 min-w-[180px] rounded-2xl border border-bg-hover/50 bg-bg-secondary/95 p-2 shadow-2xl shadow-black/10 backdrop-blur"
+              >
+                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">模块</div>
+                <div className="mt-1 space-y-1">
+                  {APP_MODE_TABS.map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAppMode(key)
+                        setModuleMenuOpen(false)
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                        appMode === key
+                          ? 'bg-accent-blue text-white'
+                          : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+                      }`}
+                    >
+                      <span>{label}</span>
+                      {appMode === key ? <span className="text-[11px] font-semibold">当前</span> : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none md:flex" role="tablist" aria-label="功能模块">
+            {APP_MODE_TABS.map(([key, label]) => (
               <button key={key} role="tab" aria-selected={appMode === key} onClick={() => setAppMode(key)}
                 className={`px-2.5 md:px-3 py-1.5 text-xs rounded-[10px] transition-all duration-200 whitespace-nowrap flex-shrink-0 font-medium ${appMode === key ? 'bg-accent-blue text-white shadow-sm shadow-accent-blue/20' : 'text-text-muted hover:text-text-primary hover:bg-bg-hover/50'}`}>
                 {label}

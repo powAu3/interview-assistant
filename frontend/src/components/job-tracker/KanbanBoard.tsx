@@ -39,13 +39,16 @@ import type { Application } from './types'
 import { filterApplicationsBySearch } from './search'
 import {
   STAGE_LABELS,
-  STAGE_ORDER,
+  STAGE_COLUMN_ORDER,
   STAGE_HEADER_ICON,
   STAGE_EMOJI,
   ONGOING_STAGES,
   TERMINAL_STAGES,
+  getStageColumnStage,
   getStageTheme,
   getCardLeftBorder,
+  isRejectedStage,
+  isTerminalStage,
   nextStageAfter,
 } from './stageConfig'
 
@@ -70,10 +73,9 @@ function sortAppsInColumn(apps: Application[]): Application[] {
 
 function buildColumnIds(apps: Application[], visibleStages: string[]): Record<string, number[]> {
   const byStage = new Map<string, Application[]>()
-  for (const s of STAGE_ORDER) byStage.set(s, [])
+  for (const s of STAGE_COLUMN_ORDER) byStage.set(s, [])
   for (const a of apps) {
-    let k = a.stage
-    if (!STAGE_ORDER.includes(k as (typeof STAGE_ORDER)[number])) k = 'applied'
+    const k = getStageColumnStage(a.stage)
     byStage.get(k)!.push(a)
   }
   const out: Record<string, number[]> = {}
@@ -85,13 +87,13 @@ function buildColumnIds(apps: Application[], visibleStages: string[]): Record<st
 
 const RAIL_LABEL: Record<string, string> = {
   applied: '\u6295\u9012',
-  written: '\u7B14\u8BD5',
+  written: '\u6D4B\u8BC4',
   interview1: '\u4E00\u9762',
   interview2: '\u4E8C\u9762',
   interview3: '\u4E09\u9762',
-  hr: 'HR',
+  hr: 'HR\u9762',
   offer: 'Offer',
-  rejected: '\u6302',
+  rejected: '\u6302\u4E86',
   withdrawn: '\u5F03',
 }
 
@@ -167,6 +169,28 @@ function SortableKanbanCard({
   const nextStage = nextStageAfter(app.stage)
   const reviewSummary = app.review_summary
   const reviewScore = reviewSummary?.latest_avg_score
+  const terminalStage = isTerminalStage(app.stage)
+  const rejectedStage = isRejectedStage(app.stage)
+  const timeBadgeLabel = terminalStage
+    ? reviewSummary?.latest_review_at != null
+      ? `复盘 ${dayjs.unix(Math.floor(reviewSummary.latest_review_at)).format('M/D')}`
+      : rejectedStage
+        ? STAGE_LABELS[app.stage] ?? app.stage
+        : '已放弃'
+    : fu != null
+      ? dayjs.unix(Math.floor(fu)).format('M/D')
+      : null
+  const timeBadgeClass = terminalStage
+    ? rejectedStage
+      ? isLight
+        ? 'bg-red-50 text-red-700 border border-red-200'
+        : 'bg-red-500/15 text-red-200'
+      : isLight
+        ? 'bg-zinc-100 text-zinc-600 border border-zinc-200'
+        : 'bg-white/[0.06] text-text-muted'
+    : isLight
+      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+      : 'bg-amber-500/15 text-amber-100/90'
 
   return (
     <div
@@ -225,14 +249,12 @@ function SortableKanbanCard({
                 {app.city}
               </span>
             ) : null}
-            {fu != null ? (
+            {timeBadgeLabel ? (
               <span
-                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-                  isLight ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-amber-500/15 text-amber-100/90'
-                }`}
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${timeBadgeClass}`}
               >
                 <Calendar className="w-3 h-3 opacity-80" />
-                {dayjs.unix(Math.floor(fu)).format('M/D')}
+                {timeBadgeLabel}
               </span>
             ) : null}
             {reviewSummary?.review_count > 0 ? (
@@ -265,13 +287,14 @@ function SortableKanbanCard({
                 type="button"
                 title={`\u79FB\u81F3 ${STAGE_LABELS[nextStage]}`}
                 onClick={() => onStageChange(app.id, nextStage)}
-                className={`mt-2 flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg border transition-all opacity-0 group-hover/card:opacity-100 ${
+                className={`mt-2 inline-flex h-[30px] shrink-0 items-center justify-center gap-1 rounded-lg border px-2 transition-all ${
                   isLight
                     ? 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
                     : 'border-white/10 bg-white/[0.04] text-text-muted hover:bg-accent-blue/15 hover:text-accent-blue hover:border-accent-blue/30'
                 }`}
               >
                 <ArrowRight className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-medium">推进</span>
               </button>
             )}
           </div>
@@ -432,7 +455,7 @@ export default function KanbanBoard({
   const [busyId, setBusyId] = useState<number | null>(null)
 
   const visibleStages = useMemo(
-    () => (showTerminalStages ? [...STAGE_ORDER] : [...ONGOING_STAGES]),
+    () => (showTerminalStages ? [...STAGE_COLUMN_ORDER] : [...ONGOING_STAGES]),
     [showTerminalStages],
   )
 
@@ -574,7 +597,7 @@ export default function KanbanBoard({
                 {'\u6C42\u804C\u7BA1\u9053'}
               </h2>
               <p className={`text-[10px] mt-0.5 ${isLight ? 'text-gray-400' : 'text-text-muted'}`}>
-                {totalApps}{' \u6761\u8BB0\u5F55 \u00B7 '}{sortDisabled ? '\u641C\u7D22\u65F6\u5DF2\u7981\u7528\u6392\u5E8F' : '\u62D6\u52A8\u6392\u5E8F\u5DF2\u542F\u7528'}{' \u00B7 \u4E0B\u62C9\u6846\u5FEB\u901F\u6539\u9636\u6BB5'}
+                {totalApps}{' \u6761\u8BB0\u5F55 \u00B7 '}{sortDisabled ? '\u641C\u7D22\u65F6\u4E0D\u8FDB\u884C\u6392\u5E8F' : '\u62D6\u62FD\u53EA\u7528\u4E8E\u6392\u5E8F'}{' \u00B7 \u63A8\u8FDB\u9636\u6BB5\u4F18\u5148\u7528\u5361\u7247\u4E0B\u62C9\u6216\u201C\u63A8\u8FDB\u201D\u6309\u94AE'}
               </p>
             </div>
           </div>

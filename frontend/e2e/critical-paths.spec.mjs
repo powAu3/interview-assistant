@@ -36,7 +36,7 @@ test.describe('app shell', () => {
 
     await reviewTab.click()
     await expect(reviewTab).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByText('面试复盘').first()).toBeVisible({ timeout: 8000 })
+    await expect(page.getByRole('heading', { name: '已完成', exact: true })).toBeVisible({ timeout: 8000 })
 
     await knowledgeTab.click()
     await expect(knowledgeTab).toHaveAttribute('aria-selected', 'true')
@@ -48,6 +48,7 @@ test.describe('app shell', () => {
 
     await jobTab.click()
     await expect(jobTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('heading', { name: '求职进度', exact: true })).toBeVisible({ timeout: 8000 })
   })
 
   test('does not log uncaught errors during initial render', async ({ page }) => {

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewSessionDetail from './ReviewSessionDetail'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 const apiMock = vi.hoisted(() => ({
   reviewSessionDetail: vi.fn(),
@@ -69,7 +70,11 @@ describe('ReviewSessionDetail', () => {
     apiMock.reviewUpdateSession.mockReset()
     apiMock.jobTrackerApplications.mockReset()
     apiMock.reviewTriggerAnalysis.mockReset()
-    vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+    useUiPrefsStore.setState({
+      appMode: 'review',
+      jobTrackerDeepLink: null,
+      reviewDeepLinkSessionId: null,
+    } as any)
     apiMock.jobTrackerApplications.mockResolvedValue({ items: [application] })
     apiMock.reviewUpdateSession.mockResolvedValue({ success: true, synced_todos: true })
   })
@@ -98,6 +103,176 @@ describe('ReviewSessionDetail', () => {
       expect(apiMock.reviewUpdateSession).toHaveBeenCalledWith(7, { application_id: 2 })
     })
     expect(await screen.findByText(/ByteDance · AI Engineer/)).toBeInTheDocument()
-    expect(window.alert).toHaveBeenCalledWith('已关联求职记录，并同步复盘待办')
+    expect(await screen.findByText('已关联求职记录，并同步复盘待办')).toBeInTheDocument()
+  })
+
+  it('shows closed-stage copy for rejected linked applications', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      application_id: application.id,
+      application: {
+        id: application.id,
+        company: application.company,
+        position: application.position,
+        city: application.city,
+        stage: 'interview3_rejected',
+        applied_at: null,
+        next_followup_at: null,
+      },
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('关联求职记录')
+    expect(screen.getByText(/这条岗位当前已三面挂/)).toBeInTheDocument()
+    expect(screen.getByText(/不会作为待跟进提醒/)).toBeInTheDocument()
+  })
+
+  it('can jump back to the linked application timeline', async () => {
+    apiMock.jobTrackerApplications.mockResolvedValueOnce({
+      items: [{
+        ...application,
+        review_summary: {
+          review_count: 3,
+          latest_review_id: 9,
+          latest_avg_score: 7.6,
+          latest_review_at: 1710003600,
+          latest_status: 'completed',
+        },
+      }],
+    })
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      application_id: application.id,
+      application: {
+        id: application.id,
+        company: application.company,
+        position: application.position,
+        city: application.city,
+        stage: application.stage,
+        applied_at: null,
+        next_followup_at: null,
+      },
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText(/这条岗位当前共 3 场复盘/)
+    expect(screen.getByText('当前这场是更早的一场')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看这条岗位的全部复盘' }))
+
+    expect(useUiPrefsStore.getState().appMode).toBe('job-tracker')
+    expect(useUiPrefsStore.getState().jobTrackerDeepLink).toEqual({
+      applicationId: 2,
+      openReviews: true,
+      highlightReviewId: 7,
+    })
+  })
+
+  it('can jump to the linked application detail without forcing the review timeline open', async () => {
+    apiMock.jobTrackerApplications.mockResolvedValueOnce({
+      items: [{
+        ...application,
+        review_summary: {
+          review_count: 2,
+          latest_review_id: 7,
+          latest_avg_score: 7.4,
+          latest_review_at: 1710003600,
+          latest_status: 'completed',
+        },
+      }],
+    })
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      application_id: application.id,
+      application: {
+        id: application.id,
+        company: application.company,
+        position: application.position,
+        city: application.city,
+        stage: application.stage,
+        applied_at: null,
+        next_followup_at: null,
+      },
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByRole('button', { name: '去求职看板' })
+    expect(screen.getByText('当前这场是最近一场')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '去求职看板' }))
+
+    expect(useUiPrefsStore.getState().appMode).toBe('job-tracker')
+    expect(useUiPrefsStore.getState().jobTrackerDeepLink).toEqual({
+      applicationId: 2,
+      openReviews: false,
+    })
+  })
+
+  it('shows a guided desktop workspace for sparse test-fragment reviews and auto-expands short turn records', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      status: 'recorded',
+      title: '临时 mock 复盘',
+      company: '手动测试',
+      role: '后端开发工程师',
+      turn_count: 3,
+      avg_score: null,
+      summary_markdown: null,
+      strong_points: [],
+      weak_points: [],
+      auto_sync_eligible: false,
+      turns: [
+        {
+          id: 71,
+          session_id: 7,
+          qa_id: 'qa-1',
+          seq: 1,
+          question_text: '请讲讲你最熟悉的项目。',
+          candidate_answer_text: '我先介绍了项目背景、目标和我负责的核心链路。',
+          original_candidate_answer_text: null,
+          reference_answer_text: '按背景、挑战、决策、结果展开。',
+          code_text: null,
+          duration_ms: 30000,
+          is_partial: false,
+          analysis_status: 'pending',
+          strengths: [],
+          risks: [],
+          evidence: null,
+          scorecard: {},
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+        {
+          id: 72,
+          session_id: 7,
+          qa_id: 'qa-2',
+          seq: 2,
+          question_text: '如果再追问一轮，你最想补哪块？',
+          candidate_answer_text: '我会补 trade-off 和容量估算。',
+          original_candidate_answer_text: null,
+          reference_answer_text: '明确最弱环节和补强计划。',
+          code_text: null,
+          duration_ms: 24000,
+          is_partial: false,
+          analysis_status: 'pending',
+          strengths: [],
+          risks: [],
+          evidence: null,
+          scorecard: {},
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+      ],
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('当前状态')
+    expect(screen.getByText('这场记录更适合当测试片段')).toBeInTheDocument()
+    expect(screen.getByText('挂到岗位主线')).toBeInTheDocument()
+    expect(screen.getByText('回看逐题记录')).toBeInTheDocument()
+    expect(screen.getByText('请讲讲你最熟悉的项目。')).toBeInTheDocument()
+    expect(screen.getByText('这场记录比较短，已经直接展开原始问答，方便排错或快速回看。')).toBeInTheDocument()
   })
 })

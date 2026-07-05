@@ -1,17 +1,24 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import dayjs from 'dayjs'
 import {
-  LayoutGrid,
-  Plus,
-  Search,
-  Scale,
-  Table2,
-  Rows3,
-  RefreshCw,
   Briefcase,
-  Sparkles,
+  CalendarDays,
+  ChevronDown,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Undo2,
   X,
-  MessageSquareText,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useInterviewStore } from '@/stores/configStore'
@@ -19,12 +26,18 @@ import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import ApplicationsTable from './job-tracker/ApplicationsTable'
 
 const KanbanBoard = lazy(() => import('./job-tracker/KanbanBoard'))
-const OfferCompareModal = lazy(() => import('./job-tracker/OfferCompareModal'))
 const OfferEditModal = lazy(() => import('./job-tracker/OfferEditModal'))
 import type { Application, Offer, Stage } from './job-tracker/types'
 import { parseApplication, parseOffer } from './job-tracker/types'
 import { isLightColorScheme } from '@/lib/colorScheme'
-import { STAGE_LABELS, TERMINAL_STAGES } from './job-tracker/stageConfig'
+import {
+  ONGOING_STAGES,
+  STAGE_LABELS,
+  StageBadge,
+  isRejectedStage,
+  isTerminalStage,
+  TERMINAL_STAGES,
+} from './job-tracker/stageConfig'
 
 const SHOW_TERMINAL_STORAGE_KEY = 'ia-jobtracker-show-terminal'
 
@@ -42,23 +55,307 @@ type ApplicationReviewItem = {
   updated_at: number
 }
 
+type CreateApplicationDraft = {
+  appliedAtInput: string
+  company: string
+  city: string
+  position: string
+  stage: Stage
+}
+
+type FocusFilter = 'all' | 'active' | 'interview' | 'offer' | 'due' | 'rejected' | 'withdrawn'
+
+type CreateNotice = {
+  id: number
+  company: string
+  position: string
+  city: string
+  appliedAt: number | null
+  stage: string
+}
+
+type FocusNotice = {
+  applicationId: number
+  company: string
+  position: string
+  openReviews: boolean
+}
+
+type DetailIntent = {
+  applicationId: number
+  mode: 'edit_core' | 'extras' | 'quick_progress'
+}
+
+type HeaderSnapshotTone = 'neutral' | 'blue' | 'amber' | 'green' | 'red'
+
+type DesktopHeaderFocus = {
+  badge: string
+  title: string
+  detail: string
+}
+
+const PRIMARY_FOCUS_FILTERS: FocusFilter[] = ['active', 'due', 'interview', 'all']
+const COMPACT_PRIMARY_FILTERS_WITH_REJECTED: FocusFilter[] = ['active', 'due', 'rejected', 'all']
+const INTERVIEW_FOCUS_STAGES = new Set<string>(['written', 'interview1', 'interview2', 'interview3', 'hr'])
+
+function createInitialDraft(): CreateApplicationDraft {
+  return {
+    appliedAtInput: dayjs().format('YYYY-MM-DD'),
+    company: '',
+    city: '',
+    position: '',
+    stage: 'applied',
+  }
+}
+
+function useCompactLayout(maxWidth = 640) {
+  const read = () => (typeof window !== 'undefined' ? window.innerWidth < maxWidth : false)
+  const [compact, setCompact] = useState(read)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const onResize = () => setCompact(window.innerWidth < maxWidth)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [maxWidth])
+
+  return compact
+}
+
+function fromDateInput(value: string): number | null {
+  return value ? dayjs(value).startOf('day').unix() : null
+}
+
+function matchesFocusFilter(
+  app: Application,
+  focusFilter: FocusFilter,
+  offerByAppId: Map<number, Offer>,
+  dueSoonCutoff: number,
+): boolean {
+  const hasOffer = app.stage === 'offer' || offerByAppId.has(app.id)
+  switch (focusFilter) {
+    case 'active':
+      return !isTerminalStage(app.stage) && !hasOffer
+    case 'interview':
+      return ['written', 'interview1', 'interview2', 'interview3', 'hr'].includes(app.stage)
+    case 'offer':
+      return hasOffer
+    case 'due':
+      return !isTerminalStage(app.stage) && !hasOffer && app.next_followup_at != null && app.next_followup_at <= dueSoonCutoff
+    case 'rejected':
+      return isRejectedStage(app.stage)
+    case 'withdrawn':
+      return app.stage === 'withdrawn'
+    case 'all':
+    default:
+      return true
+  }
+}
+
+function getFocusFilterForStage(stage: string): FocusFilter {
+  if (isRejectedStage(stage)) return 'rejected'
+  if (stage === 'withdrawn') return 'withdrawn'
+  if (stage === 'offer') return 'offer'
+  if (INTERVIEW_FOCUS_STAGES.has(stage)) return 'interview'
+  return 'active'
+}
+
+function describeCreateNotice(notice: CreateNotice): { rail: string; detail: string } {
+  const stageLabel = STAGE_LABELS[notice.stage] ?? notice.stage
+  const appliedText = notice.appliedAt != null
+    ? `投递日期已记录为 ${dayjs.unix(Math.floor(notice.appliedAt)).format('YYYY-MM-DD')}。`
+    : ''
+
+  if (isRejectedStage(notice.stage)) {
+    return {
+      rail: '已归到“挂了”',
+      detail: `${appliedText}${appliedText ? ' ' : ''}阶段会保留为 ${stageLabel}，后续如果补复盘，时间线也会继续挂在这条岗位下面。`,
+    }
+  }
+
+  if (notice.stage === 'withdrawn') {
+    return {
+      rail: '已归到“已放弃”',
+      detail: `${appliedText}${appliedText ? ' ' : ''}这条记录不会再进入待跟进提醒，但历史复盘、备注和 Offer 信息仍然会保留。`,
+    }
+  }
+
+  if (notice.stage === 'offer') {
+    return {
+      rail: '已归到“Offer”',
+      detail: `${appliedText}${appliedText ? ' ' : ''}你可以下一步补薪资、福利和截止日期，不需要先把别的字段都填满。`,
+    }
+  }
+
+  if (INTERVIEW_FOCUS_STAGES.has(notice.stage)) {
+    return {
+      rail: '已归到“面试中”',
+      detail: `${appliedText}${appliedText ? ' ' : ''}建议下一步补一个跟进日期，或者先记 1-2 条面试准备待办。`,
+    }
+  }
+
+  return {
+    rail: '已归到“进行中”',
+    detail: `${appliedText}${appliedText ? ' ' : ''}你可以下一步补一个跟进日期，或者写 1-2 条待办。`,
+  }
+}
+
+function describeCreateNoticeNextStep(notice: CreateNotice): { title: string; detail: string } {
+  if (isRejectedStage(notice.stage)) {
+    return {
+      title: '确认结果后，保留这条时间线就够了',
+      detail: '如果后面补录复盘，它会继续挂回这条岗位，不需要再建一条新记录。',
+    }
+  }
+
+  if (notice.stage === 'withdrawn') {
+    return {
+      title: '这条记录已经进入已放弃',
+      detail: '后面只在你想补备注、结果原因或历史复盘时再回来就行。',
+    }
+  }
+
+  if (notice.stage === 'offer') {
+    return {
+      title: '下一步最值得补的是 Offer 细节',
+      detail: '把薪资、地点和截止时间补齐，后面做对比会轻很多。',
+    }
+  }
+
+  if (INTERVIEW_FOCUS_STAGES.has(notice.stage)) {
+    return {
+      title: '下一步先补跟进时间或面试待办',
+      detail: '这样“待跟进”和后续复盘时间线才会更像真实面试流程，而不是只存一条记录。',
+    }
+  }
+
+  return {
+    title: '这条岗位已经能继续用了',
+    detail: '继续往下补跟进、待办或后续复盘时，都会自然挂回这一条岗位。',
+  }
+}
+
+function describeCreateContinueAction(notice: CreateNotice): { label: string; mode: DetailIntent['mode'] } {
+  if (notice.stage === 'offer') {
+    return { label: '补 Offer', mode: 'extras' }
+  }
+  if (isTerminalStage(notice.stage)) {
+    return { label: '查看详情', mode: 'quick_progress' }
+  }
+  return { label: '补进度', mode: 'quick_progress' }
+}
+
+function describeDesktopHeaderFocus({
+  focusFilter,
+  focusLabel,
+  visibleCount,
+  dueSoonCount,
+  interviewCount,
+  ongoingCount,
+  offerCount,
+  terminalCount,
+}: {
+  focusFilter: FocusFilter
+  focusLabel: string
+  visibleCount: number
+  dueSoonCount: number
+  interviewCount: number
+  ongoingCount: number
+  offerCount: number
+  terminalCount: number
+}): DesktopHeaderFocus {
+  if (focusFilter !== 'all') {
+    return {
+      badge: '当前筛选',
+      title: `现在只看 ${focusLabel} · ${visibleCount} 条`,
+      detail: focusFilter === 'due'
+        ? '直接从下方详情补跟进时间或下一步，不用在列表里来回切。'
+        : focusFilter === 'interview'
+          ? '同岗位后续复盘会继续挂回这些岗位主线，适合顺着当前阶段继续推进。'
+          : focusFilter === 'offer'
+            ? '这时更适合回到详情补 Offer 细节，而不是再整理别的字段。'
+            : focusFilter === 'rejected' || focusFilter === 'withdrawn'
+              ? '这些记录更适合保留结果和回看复盘，不再当作待跟进任务。'
+              : '当前视图已经收窄，可以直接挑一条继续推进。',
+    }
+  }
+
+  if (dueSoonCount > 0) {
+    return {
+      badge: '今日焦点',
+      title: `今天先推 ${dueSoonCount} 条待跟进`,
+      detail: interviewCount > 0
+        ? `其中 ${interviewCount} 条还在面试流程里，直接回到详情改阶段和跟进时间就行。`
+        : '直接回到详情补跟进时间和下一步，不用先整理低频字段。',
+    }
+  }
+
+  if (interviewCount > 0) {
+    return {
+      badge: '今日焦点',
+      title: `当前有 ${interviewCount} 条在面试流程里`,
+      detail: '如果同岗位后面继续走轮次，复盘和待办都会自然挂回同一条岗位主线。',
+    }
+  }
+
+  if (ongoingCount > 0) {
+    return {
+      badge: '当前主线',
+      title: `还有 ${ongoingCount} 条在推进`,
+      detail: '现在更适合逐条补跟进和待办，而不是先切到整理模式。',
+    }
+  }
+
+  if (offerCount > 0) {
+    return {
+      badge: '当前主线',
+      title: `已有 ${offerCount} 条进入 Offer`,
+      detail: '可以优先补薪资、地点和截止时间，后面做对比会轻很多。',
+    }
+  }
+
+  return {
+    badge: '当前主线',
+    title: terminalCount > 0 ? `最近主要是结果归档和复盘回看` : `现在可以继续补第一条岗位主线`,
+    detail: terminalCount > 0
+      ? '进行中压力不大时，更适合把终态岗位的复盘时间线和结果原因留清楚。'
+      : '把阶段、跟进和少量待办记住就够了，低频信息都可以后补。',
+  }
+}
+
 export default function JobTracker() {
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
   const colorScheme = useUiPrefsStore((s) => s.colorScheme)
+  const appMode = useUiPrefsStore((s) => s.appMode)
+  const setAppMode = useUiPrefsStore((s) => s.setAppMode)
+  const jobTrackerDeepLink = useUiPrefsStore((s) => s.jobTrackerDeepLink)
+  const clearJobTrackerDeepLink = useUiPrefsStore((s) => s.clearJobTrackerDeepLink)
+  const setReviewDeepLinkSessionId = useUiPrefsStore((s) => s.setReviewDeepLinkSessionId)
   const isLight = isLightColorScheme(colorScheme)
   const [applications, setApplications] = useState<Application[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'table' | 'kanban'>('table')
-  const [dense, setDense] = useState(false)
   const [search, setSearch] = useState('')
-  const [selectedOfferIds, setSelectedOfferIds] = useState<Set<number>>(new Set())
-  const [compareOpen, setCompareOpen] = useState(false)
-  const [compareItems, setCompareItems] = useState<Offer[]>([])
+  const deferredSearch = useDeferredValue(search)
+  const [focusFilter, setFocusFilter] = useState<FocusFilter>('active')
+  const [selectedAppId, setSelectedAppId] = useState<number | null>(null)
+  const [highlightedAppId, setHighlightedAppId] = useState<number | null>(null)
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createDraft, setCreateDraft] = useState<CreateApplicationDraft>(createInitialDraft)
+  const [createNotice, setCreateNotice] = useState<CreateNotice | null>(null)
+  const [focusNotice, setFocusNotice] = useState<FocusNotice | null>(null)
+  const [detailIntent, setDetailIntent] = useState<DetailIntent | null>(null)
   const [offerModalApp, setOfferModalApp] = useState<Application | null>(null)
   const [reviewModalApp, setReviewModalApp] = useState<Application | null>(null)
   const [reviewItems, setReviewItems] = useState<ApplicationReviewItem[]>([])
   const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewModalHighlightId, setReviewModalHighlightId] = useState<number | null>(null)
+  const [showSecondaryFilters, setShowSecondaryFilters] = useState(false)
+  const isCompactLayout = useCompactLayout()
+  const isNarrowDetailLayout = useCompactLayout(1024)
   const [showTerminalStages, setShowTerminalStages] = useState(() => {
     try {
       const v = localStorage.getItem(SHOW_TERMINAL_STORAGE_KEY)
@@ -77,6 +374,23 @@ export default function JobTracker() {
     }
   }, [showTerminalStages])
 
+  useEffect(() => {
+    if (highlightedAppId == null) return undefined
+    const timer = window.setTimeout(() => setHighlightedAppId(null), 2400)
+    return () => window.clearTimeout(timer)
+  }, [highlightedAppId])
+
+  useEffect(() => {
+    if (focusNotice == null) return undefined
+    const timer = window.setTimeout(() => setFocusNotice(null), 3600)
+    return () => window.clearTimeout(timer)
+  }, [focusNotice])
+
+  useEffect(() => {
+    if (!isCompactLayout) return
+    if (view !== 'table') setView('table')
+  }, [isCompactLayout, view])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -84,8 +398,12 @@ export default function JobTracker() {
         api.jobTrackerApplications(),
         api.jobTrackerListOffers(),
       ])
-      setApplications((aRes.items as Record<string, unknown>[]).map(parseApplication))
-      setOffers((oRes.items as Record<string, unknown>[]).map(parseOffer))
+      const nextApplications = (aRes.items as Record<string, unknown>[]).map(parseApplication)
+      const nextOffers = (oRes.items as Record<string, unknown>[]).map(parseOffer)
+      startTransition(() => {
+        setApplications(nextApplications)
+        setOffers(nextOffers)
+      })
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : '加载失败')
     } finally {
@@ -97,27 +415,30 @@ export default function JobTracker() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (applications.length === 0) {
+      setSelectedAppId(null)
+      return
+    }
+    if (selectedAppId == null || !applications.some((app) => app.id === selectedAppId)) {
+      setSelectedAppId(applications[0].id)
+    }
+  }, [applications, selectedAppId])
+
   const offerByAppId = useMemo(() => {
     const m = new Map<number, Offer>()
-    for (const o of offers) m.set(o.application_id, o)
+    for (const offer of offers) m.set(offer.application_id, offer)
     return m
   }, [offers])
-
-  const toggleOfferSelect = useCallback((offerId: number) => {
-    setSelectedOfferIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(offerId)) next.delete(offerId)
-      else next.add(offerId)
-      return next
-    })
-  }, [])
 
   const onPatch = useCallback(
     async (id: number, patch: Partial<Application>) => {
       try {
         const raw = await api.jobTrackerPatchApplication(id, patch as Record<string, unknown>)
         const next = parseApplication(raw as Record<string, unknown>)
-        setApplications((prev) => prev.map((x) => (x.id === id ? next : x)))
+        startTransition(() => {
+          setApplications((prev) => prev.map((item) => (item.id === id ? next : item)))
+        })
         return true
       } catch (e) {
         setToastMessage(e instanceof Error ? e.message : '保存失败')
@@ -132,17 +453,9 @@ export default function JobTracker() {
     async (id: number) => {
       try {
         await api.jobTrackerDeleteApplication(id)
-        setApplications((prev) => prev.filter((x) => x.id !== id))
-        setOffers((prev) => {
-          const removedIds = prev.filter((o) => o.application_id === id).map((o) => o.id)
-          if (removedIds.length) {
-            setSelectedOfferIds((s) => {
-              const n = new Set(s)
-              removedIds.forEach((oid) => n.delete(oid))
-              return n
-            })
-          }
-          return prev.filter((o) => o.application_id !== id)
+        startTransition(() => {
+          setApplications((prev) => prev.filter((item) => item.id !== id))
+          setOffers((prev) => prev.filter((offer) => offer.application_id !== id))
         })
       } catch (e) {
         setToastMessage(e instanceof Error ? e.message : '删除失败')
@@ -164,10 +477,10 @@ export default function JobTracker() {
   const onReorderInStage = useCallback(
     async (stage: string, orderedIds: number[]) => {
       setApplications((prev) =>
-        prev.map((a) => {
-          const i = orderedIds.indexOf(a.id)
-          if (i < 0 || a.stage !== stage) return a
-          return { ...a, sort_order: i }
+        prev.map((app) => {
+          const index = orderedIds.indexOf(app.id)
+          if (index < 0 || app.stage !== stage) return app
+          return { ...app, sort_order: index }
         }),
       )
       try {
@@ -180,33 +493,88 @@ export default function JobTracker() {
     [load, setToastMessage],
   )
 
-  const terminalApplicationsCount = useMemo(
-    () => applications.filter((a) => TERMINAL_STAGES.includes(a.stage as Stage)).length,
+  const terminalApplicationsCount = useMemo(() => applications.filter((app) => isTerminalStage(app.stage)).length, [applications])
+  const rejectedCount = useMemo(() => applications.filter((app) => isRejectedStage(app.stage)).length, [applications])
+  const withdrawnCount = useMemo(() => applications.filter((app) => app.stage === 'withdrawn').length, [applications])
+  const dueSoonCutoff = useMemo(() => dayjs().add(3, 'day').endOf('day').unix(), [])
+  const offerCount = useMemo(
+    () => applications.filter((app) => app.stage === 'offer' || offerByAppId.has(app.id)).length,
+    [applications, offerByAppId],
+  )
+  const ongoingApplicationsCount = useMemo(
+    () => applications.filter((app) => !isTerminalStage(app.stage) && app.stage !== 'offer' && !offerByAppId.has(app.id)).length,
+    [applications, offerByAppId],
+  )
+  const dueSoonCount = useMemo(
+    () =>
+      applications.filter(
+        (app) =>
+          !isTerminalStage(app.stage) &&
+          app.stage !== 'offer' &&
+          !offerByAppId.has(app.id) &&
+          app.next_followup_at != null &&
+          app.next_followup_at <= dueSoonCutoff,
+      ).length,
+    [applications, dueSoonCutoff, offerByAppId],
+  )
+  const interviewCount = useMemo(
+    () => applications.filter((app) => ['written', 'interview1', 'interview2', 'interview3', 'hr'].includes(app.stage)).length,
     [applications],
   )
+  const filteredApplications = useMemo(
+    () => applications.filter((app) => matchesFocusFilter(app, focusFilter, offerByAppId, dueSoonCutoff)),
+    [applications, dueSoonCutoff, focusFilter, offerByAppId],
+  )
 
-  const addRow = useCallback(async () => {
+  const createApplication = useCallback(async () => {
+    const company = createDraft.company.trim()
+    if (!company) {
+      setToastMessage('先填公司名，再创建记录')
+      return
+    }
+    setCreating(true)
     try {
       const raw = await api.jobTrackerCreateApplication({
-        company: '新公司',
-        position: '岗位',
-        stage: 'applied',
+        company,
+        city: createDraft.city.trim(),
+        position: createDraft.position.trim() || '岗位',
+        stage: createDraft.stage,
+        applied_at: fromDateInput(createDraft.appliedAtInput),
       })
       const row = parseApplication(raw as Record<string, unknown>)
       setApplications((prev) => [row, ...prev])
-      setToastMessage('已新增一行，可直接编辑')
+      setSearch('')
+      setSelectedAppId(row.id)
+      setHighlightedAppId(row.id)
+      setFocusFilter(getFocusFilterForStage(row.stage))
+      setShowSecondaryFilters(false)
+      setView('table')
+      setComposerOpen(false)
+      setCreateDraft(createInitialDraft())
+      setCreateNotice({
+        id: row.id,
+        company: row.company,
+        position: row.position,
+        city: row.city,
+        appliedAt: row.applied_at,
+        stage: row.stage,
+      })
+      setToastMessage(`已新建 ${row.company}`)
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : '新增失败')
+    } finally {
+      setCreating(false)
     }
-  }, [setToastMessage])
+  }, [createDraft, setToastMessage])
 
   const openOfferModal = useCallback((app: Application) => {
     setOfferModalApp(app)
   }, [])
 
   const openReviewsModal = useCallback(
-    async (app: Application) => {
+    async (app: Application, highlightedReviewId: number | null = null) => {
       setReviewModalApp(app)
+      setReviewModalHighlightId(highlightedReviewId)
       setReviewItems([])
       setReviewLoading(true)
       try {
@@ -233,162 +601,429 @@ export default function JobTracker() {
     [setToastMessage],
   )
 
+  const openReviewDetail = useCallback((sessionId: number) => {
+    setReviewDeepLinkSessionId(sessionId)
+    if (reviewModalApp) {
+      setToastMessage(`已打开 ${reviewModalApp.company}${reviewModalApp.position ? ` · ${reviewModalApp.position}` : ''} 的复盘详情`)
+    } else {
+      setToastMessage('已打开复盘详情')
+    }
+    setAppMode('review')
+  }, [reviewModalApp, setAppMode, setReviewDeepLinkSessionId, setToastMessage])
+
+  useEffect(() => {
+    if (appMode !== 'job-tracker' || !jobTrackerDeepLink || applications.length === 0) return
+    const targetApp = applications.find((app) => app.id === jobTrackerDeepLink.applicationId)
+    if (!targetApp) return
+    setSelectedAppId(targetApp.id)
+    setHighlightedAppId(targetApp.id)
+    setFocusFilter(getFocusFilterForStage(targetApp.stage))
+    setShowSecondaryFilters(false)
+    setView('table')
+    setFocusNotice({
+      applicationId: targetApp.id,
+      company: targetApp.company,
+      position: targetApp.position,
+      openReviews: Boolean(jobTrackerDeepLink.openReviews),
+    })
+    clearJobTrackerDeepLink()
+    if (jobTrackerDeepLink.openReviews) {
+      void openReviewsModal(targetApp, jobTrackerDeepLink.highlightReviewId ?? null)
+    }
+  }, [appMode, applications, clearJobTrackerDeepLink, jobTrackerDeepLink, openReviewsModal])
+
   const saveOffer = useCallback(
     async (payload: Record<string, unknown>) => {
       const raw = await api.jobTrackerUpsertOffer(payload)
-      const o = parseOffer(raw as Record<string, unknown>)
-      setOffers((prev) => {
-        const i = prev.findIndex((x) => x.application_id === o.application_id)
-        if (i < 0) return [...prev, o]
-        const next = [...prev]
-        next[i] = o
-        return next
+      const offer = parseOffer(raw as Record<string, unknown>)
+      startTransition(() => {
+        setOffers((prev) => {
+          const index = prev.findIndex((item) => item.application_id === offer.application_id)
+          if (index < 0) return [...prev, offer]
+          const next = [...prev]
+          next[index] = offer
+          return next
+        })
       })
       setToastMessage('Offer 已保存')
     },
     [setToastMessage],
   )
 
-  const runCompare = useCallback(async () => {
-    const ids = [...selectedOfferIds]
-    if (ids.length < 2) {
-      setToastMessage('请至少勾选 2 个 Offer')
-      return
-    }
-    try {
-      const res = await api.jobTrackerCompare(ids)
-      setCompareItems((res.items as Record<string, unknown>[]).map(parseOffer))
-      setCompareOpen(true)
-    } catch (e) {
-      setToastMessage(e instanceof Error ? e.message : '对比失败')
-    }
-  }, [selectedOfferIds, setToastMessage])
-
   const offerForModal = offerModalApp ? offerByAppId.get(offerModalApp.id) ?? null : null
+  const visibleCount = filteredApplications.length
+  const focusFilterOptions: { key: FocusFilter; label: string; count: number }[] = [
+    { key: 'active', label: '进行中', count: ongoingApplicationsCount },
+    { key: 'due', label: '待跟进', count: dueSoonCount },
+    { key: 'interview', label: '面试中', count: interviewCount },
+    { key: 'offer', label: 'Offer', count: offerCount },
+    { key: 'rejected', label: '挂了', count: rejectedCount },
+    ...(withdrawnCount > 0
+      ? [{ key: 'withdrawn' as FocusFilter, label: '已放弃', count: withdrawnCount }]
+      : []),
+    { key: 'all', label: '全部', count: applications.length },
+  ]
+  const primaryFocusFilterKeys = isCompactLayout && rejectedCount > 0
+    ? COMPACT_PRIMARY_FILTERS_WITH_REJECTED
+    : PRIMARY_FOCUS_FILTERS
+  const primaryFocusFilterOptions = focusFilterOptions.filter((item) => primaryFocusFilterKeys.includes(item.key))
+  const secondaryFocusFilterOptions = focusFilterOptions.filter((item) => !primaryFocusFilterKeys.includes(item.key))
+  const visibleSecondaryFocusFilterOptions = secondaryFocusFilterOptions.filter((item) => item.count > 0 || item.key === focusFilter)
+  const selectedSecondaryFilter = secondaryFocusFilterOptions.find((item) => item.key === focusFilter) ?? null
+  const currentFocusOption = focusFilterOptions.find((item) => item.key === focusFilter) ?? focusFilterOptions[focusFilterOptions.length - 1]
+  const desktopHeaderFocus = describeDesktopHeaderFocus({
+    focusFilter,
+    focusLabel: currentFocusOption.label,
+    visibleCount,
+    dueSoonCount,
+    interviewCount,
+    ongoingCount: ongoingApplicationsCount,
+    offerCount,
+    terminalCount: terminalApplicationsCount,
+  })
+  const snapshotItems = applications.length === 0
+    ? []
+    : [
+        {
+          label: focusFilter === 'all' ? '当前' : currentFocusOption.label,
+          value: `${visibleCount} 条`,
+          hint: focusFilter === 'all' ? '当前可见岗位' : '当前筛选结果',
+          tone: focusFilter === 'all' ? 'blue' : 'green',
+        },
+        {
+          label: '待跟进',
+          value: dueSoonCount > 0 ? `${dueSoonCount} 条` : '已清空',
+          hint: dueSoonCount > 0 ? '最近 3 天内要推进' : '最近 3 天没有催办',
+          tone: dueSoonCount > 0 ? 'amber' : 'neutral',
+        },
+        terminalApplicationsCount > 0
+          ? {
+              label: '已结束',
+              value: `${terminalApplicationsCount} 条`,
+              hint: rejectedCount > 0 ? `挂了 ${rejectedCount} · 已放弃 ${withdrawnCount}` : '已放弃记录',
+              tone: rejectedCount > 0 ? 'red' : 'neutral',
+            }
+          : {
+              label: 'Offer',
+              value: offerCount > 0 ? `${offerCount} 条` : '暂无',
+              hint: offerCount > 0 ? '有结果可继续比对' : '还没有拿到 offer',
+              tone: offerCount > 0 ? 'green' : 'neutral',
+            },
+      ] satisfies Array<{ label: string; value: string; hint: string; tone: HeaderSnapshotTone }>
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-bg-primary">
+    <div className="flex h-full min-h-0 flex-col bg-bg-primary">
       <div
-        className={`relative flex-shrink-0 overflow-hidden border-b px-4 py-3.5 md:px-5 ${
-          isLight ? 'border-bg-hover bg-bg-secondary' : 'border-white/[0.06]'
+        className={`flex-shrink-0 border-b px-4 py-3 md:px-5 ${
+          isLight ? 'border-bg-hover bg-bg-secondary/90' : 'border-white/[0.06] bg-bg-secondary/20'
         }`}
       >
-        {!isLight && (
-          <>
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-indigo-950/40 via-bg-secondary/90 to-violet-950/25" />
-            <div className="pointer-events-none absolute -top-20 right-0 h-40 w-40 rounded-full bg-accent-blue/15 blur-3xl" />
-            <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-64 rounded-full bg-violet-500/10 blur-2xl" />
-          </>
-        )}
-        <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-blue/25 to-indigo-600/20 text-accent-blue ring-1 ring-accent-blue/25 shadow-lg shadow-accent-blue/10">
-              <Briefcase className="w-5 h-5" strokeWidth={2} />
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent-blue/10 text-accent-blue ring-1 ring-accent-blue/15">
+                <Briefcase className="h-4.5 w-4.5" strokeWidth={2} />
+              </div>
+              <div className="space-y-0.5">
+                <h2 className="text-base font-bold tracking-tight text-text-primary">求职进度</h2>
+                <p className="max-w-2xl text-xs text-text-secondary">
+                  默认先看今天该推进什么。低频信息放到详情，整理模式只在你真要批量改时再打开。
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-text-primary tracking-tight flex items-center gap-2">
-                求职进度
-                <Sparkles className="w-3.5 h-3.5 text-amber-400/90" strokeWidth={2} />
-              </h2>
-              <p className="text-[11px] text-text-muted/90 mt-0.5 leading-relaxed max-w-md">
-                本地保存 · 表格 / 看板 · Offer 对比 · 拖拽排序
-              </p>
+
+            <div className="flex w-full flex-col gap-2 lg:max-w-3xl">
+              <div className="relative w-full lg:ml-auto lg:max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="search"
+                  placeholder="搜索公司 / 岗位 / 城市"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted/70 focus:border-accent-blue/40 focus:outline-none focus:ring-2 focus:ring-accent-blue/15 ${
+                    isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
+                  }`}
+                />
+              </div>
+
+              {isCompactLayout ? (
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={load}
+                    disabled={loading}
+                    className={`rounded-xl border p-2.5 text-text-muted transition-colors hover:border-accent-blue/25 hover:text-accent-blue disabled:opacity-50 ${
+                      isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
+                    }`}
+                    title="刷新"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setComposerOpen((prev) => !prev)}
+                    className="flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.2} />
+                    {composerOpen ? '收起新增' : '新增记录'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={load}
+                    disabled={loading}
+                    className={`rounded-xl border p-2.5 text-text-muted transition-colors hover:border-accent-blue/25 hover:text-accent-blue disabled:opacity-50 ${
+                      isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
+                    }`}
+                    title="刷新"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setComposerOpen((prev) => !prev)}
+                    className="flex items-center gap-1.5 rounded-xl bg-accent-blue px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.2} />
+                    {composerOpen ? '收起新增' : '新增记录'}
+                  </button>
+                  {applications.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setView((prev) => prev === 'table' ? 'kanban' : 'table')}
+                      className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                        isLight
+                          ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
+                          : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {view === 'table' ? '整理模式' : '返回表格'}
+                    </button>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[160px] max-w-xs group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted group-focus-within:text-accent-blue/80 transition-colors" />
-              <input
-                type="search"
-                placeholder="搜索公司、岗位、城市…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className={`w-full pl-9 pr-3 py-2.5 rounded-xl text-xs text-text-primary placeholder:text-text-muted/60 focus:border-accent-blue/50 focus:ring-2 focus:ring-accent-blue/20 focus:outline-none transition-shadow shadow-inner ${
-                  isLight ? 'bg-bg-tertiary border border-bg-hover' : 'bg-black/20 border border-white/[0.08]'
-                }`}
-              />
-            </div>
-            <div
-              className={`flex rounded-2xl border p-1 shadow-inner backdrop-blur-sm ${
-                isLight ? 'border-bg-hover bg-bg-tertiary/80' : 'border-white/[0.08] bg-black/15'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setView('table')}
-                className={`px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 rounded-xl transition-all ${
-                  view === 'table'
-                    ? 'bg-gradient-to-b from-accent-blue to-blue-600 text-white shadow-md shadow-accent-blue/25'
-                    : isLight
-                      ? 'text-text-muted hover:text-text-primary hover:bg-bg-hover'
-                      : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
-                }`}
-              >
-                <Table2 className="w-3.5 h-3.5" />
-                表格
-              </button>
-              <button
-                type="button"
-                onClick={() => setView('kanban')}
-                className={`px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 rounded-xl transition-all ${
-                  view === 'kanban'
-                    ? 'bg-gradient-to-b from-violet-600 to-indigo-700 text-white shadow-md shadow-violet-500/25'
-                    : isLight
-                      ? 'text-text-muted hover:text-text-primary hover:bg-bg-hover'
-                      : 'text-text-muted hover:text-text-primary hover:bg-white/[0.04]'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                看板
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDense(!dense)}
-              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-all ${
-                dense
-                  ? 'border-accent-blue/40 bg-accent-blue/12 text-accent-blue shadow-sm shadow-accent-blue/10'
-                  : isLight
-                    ? 'border-bg-hover bg-bg-tertiary text-text-muted hover:border-bg-hover hover:text-text-primary'
-                    : 'border-white/[0.08] bg-black/10 text-text-muted hover:border-white/15 hover:text-text-primary'
-              }`}
-              title="行高"
-            >
-              <Rows3 className="w-3.5 h-3.5" />
-              {dense ? '紧凑' : '舒适'}
-            </button>
-            <button
-              type="button"
-              onClick={runCompare}
-              className={`px-3 py-2 rounded-xl border text-xs font-medium text-text-secondary hover:border-amber-500/30 hover:bg-amber-500/5 flex items-center gap-1.5 transition-colors ${
-                isLight
-                  ? 'border-bg-hover bg-bg-tertiary hover:text-amber-800'
-                  : 'border-white/[0.08] bg-black/10 hover:text-amber-200/90'
-              }`}
-            >
-              <Scale className="w-3.5 h-3.5" />
-              对比 Offer
-            </button>
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className={`p-2.5 rounded-xl border text-text-muted hover:text-accent-blue hover:border-accent-blue/25 disabled:opacity-50 transition-colors ${
-                isLight ? 'border-bg-hover bg-bg-tertiary' : 'border-white/[0.08] bg-black/10'
-              }`}
-              title="刷新"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={addRow}
-              className="px-4 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-accent-blue via-blue-600 to-indigo-600 shadow-lg shadow-accent-blue/30 hover:brightness-110 active:scale-[0.98] transition-all"
-            >
-              <Plus className="w-4 h-4" strokeWidth={2.5} />
-              新增记录
-            </button>
+
+          <div className="text-[11px] leading-relaxed text-text-muted">
+            {applications.length === 0 ? (
+              <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-accent-blue">
+                还没有岗位记录，先新建一条最小进度
+              </span>
+            ) : (
+              isCompactLayout ? (
+                <div className="flex flex-wrap gap-2">
+                  {snapshotItems.map((item) => (
+                    <HeaderSnapshotPill
+                      key={item.label}
+                      label={item.label}
+                      value={item.value}
+                      hint={item.hint}
+                      tone={item.tone}
+                      isLight={isLight}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <DesktopOverviewSummary
+                  summary={desktopHeaderFocus}
+                  items={snapshotItems}
+                  isLight={isLight}
+                />
+              )
+            )}
           </div>
+
+          {applications.length > 0 ? (
+            isCompactLayout ? (
+              <div className="space-y-2">
+                <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                  {primaryFocusFilterOptions.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setFocusFilter(item.key)
+                        setShowSecondaryFilters(false)
+                      }}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        focusFilter === item.key
+                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          : isLight
+                            ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
+                            : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {item.label} · {item.count}
+                    </button>
+                  ))}
+                  {visibleSecondaryFocusFilterOptions.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowSecondaryFilters((prev) => !prev)}
+                      className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selectedSecondaryFilter
+                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          : isLight
+                            ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
+                            : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      {selectedSecondaryFilter ? `${selectedSecondaryFilter.label} · ${selectedSecondaryFilter.count}` : '更多状态'}
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showSecondaryFilters ? 'rotate-180' : ''}`} />
+                    </button>
+                  ) : null}
+                </div>
+
+                {showSecondaryFilters ? (
+                  <div className={`grid gap-2 rounded-2xl border p-2 ${
+                    isLight ? 'border-bg-hover bg-white/90' : 'border-white/[0.08] bg-black/12'
+                  }`}>
+                    {visibleSecondaryFocusFilterOptions.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setFocusFilter(item.key)
+                          setShowSecondaryFilters(false)
+                        }}
+                        className={`rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                          focusFilter === item.key
+                            ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                            : isLight
+                              ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+                              : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                        }`}
+                      >
+                        {item.label} · {item.count}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] sm:flex-wrap">
+                  {primaryFocusFilterOptions.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setFocusFilter(item.key)
+                        setShowSecondaryFilters(false)
+                      }}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        focusFilter === item.key
+                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          : isLight
+                            ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
+                            : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {item.label} · {item.count}
+                    </button>
+                  ))}
+                  {visibleSecondaryFocusFilterOptions.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowSecondaryFilters((prev) => !prev)}
+                      className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selectedSecondaryFilter
+                          ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                          : isLight
+                            ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
+                            : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      {selectedSecondaryFilter ? `${selectedSecondaryFilter.label} · ${selectedSecondaryFilter.count}` : '更多状态'}
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showSecondaryFilters ? 'rotate-180' : ''}`} />
+                    </button>
+                  ) : null}
+                </div>
+
+                {showSecondaryFilters && visibleSecondaryFocusFilterOptions.length > 0 ? (
+                  <div className={`flex flex-wrap gap-2 rounded-2xl border p-2 ${
+                    isLight ? 'border-bg-hover bg-white/90' : 'border-white/[0.08] bg-black/12'
+                  }`}>
+                    {visibleSecondaryFocusFilterOptions.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setFocusFilter(item.key)
+                          setShowSecondaryFilters(false)
+                        }}
+                        className={`rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors ${
+                          focusFilter === item.key
+                            ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                            : isLight
+                              ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+                              : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                        }`}
+                      >
+                        {item.label} · {item.count}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )
+          ) : null}
+
+          {composerOpen && (
+            <QuickCreatePanel
+              draft={createDraft}
+              creating={creating}
+              isLight={isLight}
+              onChange={setCreateDraft}
+              onCancel={() => {
+                setComposerOpen(false)
+                setCreateDraft(createInitialDraft())
+              }}
+              onSubmit={createApplication}
+            />
+          )}
+
+          {createNotice != null && (
+            <CreateSuccessBanner
+              notice={createNotice}
+              continueLabel={describeCreateContinueAction(createNotice).label}
+              isLight={isLight}
+              onDismiss={() => setCreateNotice(null)}
+              onContinue={() => {
+                const continueAction = describeCreateContinueAction(createNotice)
+                setView('table')
+                setSelectedAppId(createNotice.id)
+                setHighlightedAppId(createNotice.id)
+                setFocusFilter(getFocusFilterForStage(createNotice.stage))
+                setShowSecondaryFilters(false)
+                setDetailIntent({ applicationId: createNotice.id, mode: continueAction.mode })
+                setCreateNotice(null)
+              }}
+              onUndo={async () => {
+                await onDelete(createNotice.id)
+                if (selectedAppId === createNotice.id) {
+                  setSelectedAppId(null)
+                }
+                setCreateNotice(null)
+                setToastMessage(`已撤销 ${createNotice.company}`)
+              }}
+            />
+          )}
+
+          {focusNotice != null && (
+            <FocusArrivalBanner
+              notice={focusNotice}
+              isLight={isLight}
+              onDismiss={() => setFocusNotice(null)}
+            />
+          )}
         </div>
       </div>
 
@@ -402,41 +1037,79 @@ export default function JobTracker() {
         }`}
       >
         {loading && applications.length === 0 ? (
-          <div className="px-3 py-3 space-y-2" aria-busy="true" aria-live="polite">
-            <span className="sr-only">正在加载求职看板数据…</span>
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="space-y-2 px-1 py-2" aria-busy="true" aria-live="polite">
+            <span className="sr-only">正在加载求职数据…</span>
+            {Array.from({ length: 6 }).map((_, index) => (
               <div
-                key={i}
-                className="h-10 rounded-lg bg-bg-tertiary/50 animate-pulse"
-                style={{ animationDelay: `${i * 80}ms`, opacity: 1 - i * 0.08 }}
+                key={index}
+                className="h-12 animate-pulse rounded-xl bg-bg-tertiary/50"
+                style={{ animationDelay: `${index * 70}ms`, opacity: 1 - index * 0.08 }}
               />
             ))}
           </div>
+        ) : view === 'table' && applications.length === 0 ? (
+          <JobTrackerZeroState
+            isLight={isLight}
+            onCreate={() => setComposerOpen(true)}
+          />
         ) : view === 'table' ? (
           <ApplicationsTable
-            applications={applications}
+            applications={filteredApplications}
             offerByAppId={offerByAppId}
-            selectedOfferIds={selectedOfferIds}
-            toggleOfferSelect={toggleOfferSelect}
             onPatch={onPatch}
             onDelete={onDelete}
             onOpenOffer={openOfferModal}
             onOpenReviews={openReviewsModal}
-            dense={dense}
-            search={search}
+            search={deferredSearch}
+            selectedId={selectedAppId}
+            onSelect={setSelectedAppId}
+            highlightedId={highlightedAppId}
+            compactDetailLayout={isNarrowDetailLayout}
+            detailIntent={detailIntent}
+            onConsumeDetailIntent={() => setDetailIntent(null)}
+            hiddenApplicationsCount={Math.max(0, applications.length - filteredApplications.length)}
+            hiddenApplicationsPreview={applications.filter((app) => !matchesFocusFilter(app, focusFilter, offerByAppId, dueSoonCutoff)).slice(0, 3)}
+            focusFilterLabel={currentFocusOption.label}
+            onShowAll={() => setFocusFilter('all')}
           />
         ) : (
-          <Suspense fallback={<div className="flex items-center justify-center h-48 text-text-muted text-sm">加载看板中…</div>}>
-            <KanbanBoard
-              applications={applications}
-              onStageChange={onStageChange}
-              onReorderInStage={onReorderInStage}
-              search={search}
-              showTerminalStages={showTerminalStages}
-              onShowTerminalStagesChange={setShowTerminalStages}
-              terminalApplicationsCount={terminalApplicationsCount}
-            />
-          </Suspense>
+          <div className="space-y-3">
+            <section className={`rounded-2xl border px-4 py-3 ${
+              isLight ? 'border-bg-hover bg-white/90' : 'border-white/[0.06] bg-black/15'
+            }`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-text-primary">整理模式</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                    只在你想拖动顺序或批量调整阶段时再用。平时查看、筛选和新增岗位，表格会更轻，也更像日常主视图。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setView('table')}
+                  className={`rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                    isLight
+                      ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+                      : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  返回表格
+                </button>
+              </div>
+            </section>
+
+            <Suspense fallback={<div className="flex h-48 items-center justify-center text-sm text-text-muted">加载看板中…</div>}>
+              <KanbanBoard
+                applications={filteredApplications}
+                onStageChange={onStageChange}
+                onReorderInStage={onReorderInStage}
+                search={deferredSearch}
+                showTerminalStages={showTerminalStages}
+                onShowTerminalStagesChange={setShowTerminalStages}
+                terminalApplicationsCount={terminalApplicationsCount}
+              />
+            </Suspense>
+          </div>
         )}
       </div>
 
@@ -452,45 +1125,541 @@ export default function JobTracker() {
         </Suspense>
       )}
 
-      {compareOpen && (
-        <Suspense fallback={null}>
-          <OfferCompareModal open={compareOpen} items={compareItems} onClose={() => setCompareOpen(false)} />
-        </Suspense>
-      )}
-
       {reviewModalApp != null && (
         <ApplicationReviewsModal
           app={reviewModalApp}
           items={reviewItems}
           loading={reviewLoading}
-          onClose={() => setReviewModalApp(null)}
+          highlightedReviewId={reviewModalHighlightId}
+          onClose={() => {
+            setReviewModalApp(null)
+            setReviewModalHighlightId(null)
+          }}
+          onViewDetail={openReviewDetail}
         />
       )}
     </div>
   )
 }
 
+function HeaderSnapshotPill({
+  label,
+  value,
+  hint,
+  tone,
+  isLight,
+  compact = false,
+}: {
+  label: string
+  value: string
+  hint: string
+  tone: HeaderSnapshotTone
+  isLight: boolean
+  compact?: boolean
+}) {
+  const toneClass = {
+    neutral: isLight ? 'border-bg-hover bg-white text-text-secondary' : 'border-white/[0.08] bg-black/15 text-text-secondary',
+    blue: isLight ? 'border-accent-blue/20 bg-accent-blue/6 text-accent-blue' : 'border-accent-blue/20 bg-accent-blue/10 text-accent-blue',
+    amber: isLight ? 'border-yellow-500/20 bg-yellow-500/8 text-yellow-600' : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',
+    green: isLight ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-600' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+    red: isLight ? 'border-red-500/20 bg-red-500/8 text-red-600' : 'border-red-500/20 bg-red-500/10 text-red-400',
+  }[tone]
+
+  return (
+    <div
+      className={`rounded-2xl border ${toneClass} ${
+        compact
+          ? 'inline-flex min-w-[138px] items-center gap-2 px-3 py-2'
+          : 'min-h-[68px] min-w-[156px] flex-1 px-3 py-2.5 sm:w-[210px] sm:flex-none'
+      }`}
+    >
+      <div className={compact ? 'min-w-0 flex-1' : undefined}>
+        <div className={`font-semibold uppercase text-text-muted ${compact ? 'text-[9px] tracking-[0.16em]' : 'text-[10px] tracking-[0.14em]'}`}>
+          {label}
+        </div>
+        <div className={`${compact ? 'mt-0.5 line-clamp-1 text-[10px]' : 'mt-1 line-clamp-2 text-[10px] leading-relaxed'} text-text-muted`}>
+          {hint}
+        </div>
+      </div>
+      <div className={`shrink-0 font-semibold text-text-primary ${compact ? 'text-sm' : 'text-[13px]'}`}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function DesktopOverviewSummary({
+  summary,
+  items,
+  isLight,
+}: {
+  summary: DesktopHeaderFocus
+  items: Array<{ label: string; value: string; hint: string; tone: HeaderSnapshotTone }>
+  isLight: boolean
+}) {
+  return (
+    <div className={`flex flex-col gap-2 rounded-2xl border px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between ${
+      isLight ? 'border-bg-hover bg-white/92' : 'border-white/[0.08] bg-black/10'
+    }`}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+            isLight ? 'border-bg-hover bg-bg-secondary text-text-muted' : 'border-white/[0.08] bg-bg-secondary/60 text-text-muted'
+          }`}>
+            {summary.badge}
+          </span>
+        </div>
+        <div className="mt-1 text-sm font-semibold text-text-primary">
+          {summary.title}
+        </div>
+        <div className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
+          {summary.detail}
+        </div>
+      </div>
+      <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2">
+        {items.map((item) => (
+          <DesktopOverviewInlineStat
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            tone={item.tone}
+            isLight={isLight}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DesktopOverviewInlineStat({
+  label,
+  value,
+  tone,
+  isLight,
+}: {
+  label: string
+  value: string
+  tone: HeaderSnapshotTone
+  isLight: boolean
+}) {
+  const toneClass = {
+    neutral: isLight ? 'text-text-secondary' : 'text-text-secondary',
+    blue: isLight ? 'text-accent-blue' : 'text-accent-blue',
+    amber: isLight ? 'text-yellow-600' : 'text-yellow-400',
+    green: isLight ? 'text-emerald-600' : 'text-emerald-400',
+    red: isLight ? 'text-red-600' : 'text-red-400',
+  }[tone]
+
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
+      <span className="shrink-0 text-text-muted">{label}</span>
+      <span className={`shrink-0 font-semibold ${toneClass}`}>{value}</span>
+    </span>
+  )
+}
+
+function JobTrackerZeroState({
+  isLight,
+  onCreate,
+}: {
+  isLight: boolean
+  onCreate: () => void
+}) {
+  return (
+    <section
+      className={`rounded-[28px] border px-5 py-6 md:px-7 md:py-7 ${
+        isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.06] bg-bg-secondary/35'
+      }`}
+    >
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+        <div className="space-y-4">
+          <div className="inline-flex items-center gap-2 rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1 text-xs font-medium text-accent-blue">
+            第一步先建最小记录
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold tracking-tight text-text-primary">把求职进度先记下来，再慢慢补细节</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+                不需要一开始把所有信息都填满。先记录投递日期、公司、城市、岗位和阶段，就已经足够开始管理节奏了。
+              </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
+            {['投递日期', '公司', '城市', '岗位', '阶段'].map((item) => (
+              <span key={item} className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5">
+                {item}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={onCreate}
+              className="inline-flex items-center gap-2 rounded-2xl bg-accent-blue px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+            >
+              <Plus className="h-4 w-4" />
+              新建第一条记录
+            </button>
+            <div className="text-xs text-text-muted">
+              创建后会自动选中，并给你明确的成功确认和撤销入口。
+            </div>
+          </div>
+        </div>
+
+        <div className={`rounded-[24px] border p-4 ${isLight ? 'border-bg-hover bg-bg-secondary/70' : 'border-white/[0.06] bg-black/10'}`}>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">使用方式</div>
+          <div className="mt-3 space-y-3">
+            <div className="rounded-2xl border border-bg-hover bg-white/70 p-3 dark:bg-bg-tertiary/20">
+              <div className="text-sm font-semibold text-text-primary">1. 新增最小记录</div>
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary">先记投递日期、公司、城市、岗位和阶段。</p>
+            </div>
+            <div className="rounded-2xl border border-bg-hover bg-white/70 p-3 dark:bg-bg-tertiary/20">
+              <div className="text-sm font-semibold text-text-primary">2. 跟进时只看当前阶段</div>
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary">用“进行中 / 待跟进 / 面试中 / Offer”筛一遍，不被低频字段打断。</p>
+            </div>
+            <div className="rounded-2xl border border-bg-hover bg-white/70 p-3 dark:bg-bg-tertiary/20">
+              <div className="text-sm font-semibold text-text-primary">3. 真有需要再补备注</div>
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary">待办、复盘和 Offer 都留在详情补充区，不抢主视图。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function CreateSuccessBanner({
+  notice,
+  continueLabel,
+  isLight,
+  onContinue,
+  onDismiss,
+  onUndo,
+}: {
+  notice: CreateNotice
+  continueLabel: string
+  isLight: boolean
+  onContinue: () => void
+  onDismiss: () => void
+  onUndo: () => void | Promise<void>
+}) {
+  const noticeCopy = describeCreateNotice(notice)
+  const nextStepCopy = describeCreateNoticeNextStep(notice)
+  const identityText = [notice.position || '岗位', notice.city].filter(Boolean).join(' · ')
+  const followupChip = isTerminalStage(notice.stage) ? '复盘时间线会保留' : '后续更新会继续挂回'
+
+  return (
+    <section
+      className={`flex flex-col gap-3 rounded-2xl border px-4 py-3 lg:flex-row lg:items-center lg:justify-between ${
+        isLight ? 'border-accent-blue/20 bg-accent-blue/6' : 'border-accent-blue/20 bg-accent-blue/10'
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-sm font-semibold text-text-primary">
+            已创建 {notice.company}
+          </div>
+          {identityText ? (
+            <span className="rounded-full border border-bg-hover bg-bg-secondary/70 px-2 py-0.5 text-[11px] text-text-secondary">
+              {identityText}
+            </span>
+          ) : null}
+          <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+            {noticeCopy.rail}
+          </span>
+        </div>
+        <div className="mt-1 text-sm font-semibold text-text-primary">
+          {nextStepCopy.title}
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+          {continueLabel === '补进度' ? '现在就能直接补阶段和跟进时间。' : nextStepCopy.detail}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
+          <span className="rounded-full border border-accent-blue/15 bg-accent-blue/6 px-2.5 py-1 text-accent-blue">
+            下一步 · {continueLabel}
+          </span>
+          <span className="rounded-full border border-bg-hover bg-bg-secondary/60 px-2.5 py-1">
+            已定位详情
+          </span>
+          <span className="rounded-full border border-bg-hover bg-bg-secondary/60 px-2.5 py-1">
+            {followupChip}
+          </span>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+        <button
+          type="button"
+          onClick={onContinue}
+          className="rounded-xl bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+        >
+          {continueLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => void onUndo()}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+          撤销
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          收起
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function FocusArrivalBanner({
+  notice,
+  isLight,
+  onDismiss,
+}: {
+  notice: FocusNotice
+  isLight: boolean
+  onDismiss: () => void
+}) {
+  return (
+    <section
+      className={`flex flex-col gap-3 rounded-2xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
+        isLight ? 'border-emerald-500/18 bg-emerald-500/6' : 'border-emerald-500/20 bg-emerald-500/10'
+      }`}
+    >
+      <div>
+        <div className="text-sm font-semibold text-text-primary">
+          已定位到 {notice.company}{notice.position ? ` · ${notice.position}` : ''}
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+          {notice.openReviews
+            ? '已经打开这条岗位的复盘时间线，可以顺着同一条主线继续回看。'
+            : '已经定位到这条岗位详情，后续从右侧就能继续补进度或回看复盘。'}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          知道了
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function QuickCreatePanel({
+  draft,
+  creating,
+  isLight,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  draft: CreateApplicationDraft
+  creating: boolean
+  isLight: boolean
+  onChange: (draft: CreateApplicationDraft) => void
+  onCancel: () => void
+  onSubmit: () => void
+}) {
+  const inputClass = `rounded-xl border px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/15 ${
+    isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
+  }`
+
+  return (
+    <section
+      className={`rounded-2xl border p-3.5 ${
+        isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.08] bg-black/20'
+      }`}
+    >
+      <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">快速新增</div>
+            <span className="rounded-full border border-bg-hover bg-bg-secondary/70 px-2.5 py-1 text-[10px] font-medium text-text-muted">
+              只填 5 个字段
+            </span>
+          </div>
+          <h3 className="mt-1 text-sm font-semibold text-text-primary">先记核心进度，后补细节</h3>
+          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+            只填日期、公司、城市、岗位和阶段。创建后会自动选中新记录，方便继续补待办或备注。
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+            {['投递日期', '公司', '城市', '岗位', '阶段'].map((item) => (
+              <span
+                key={item}
+                className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border border-bg-hover px-3 py-2 text-xs font-medium text-text-muted transition-colors hover:text-text-primary"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={creating}
+            onClick={onSubmit}
+            className="rounded-xl bg-accent-blue px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+          >
+            {creating ? '创建中...' : '创建记录'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3.5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          投递日期
+          <div className="relative">
+            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+            <input
+              type="date"
+              value={draft.appliedAtInput}
+              onChange={(e) => onChange({ ...draft, appliedAtInput: e.target.value })}
+              className={`${inputClass} w-full pl-9`}
+            />
+          </div>
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          公司名称
+          <input
+            autoFocus
+            value={draft.company}
+            onChange={(e) => onChange({ ...draft, company: e.target.value })}
+            placeholder="例如 OpenAI"
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          城市
+          <input
+            value={draft.city}
+            onChange={(e) => onChange({ ...draft, city: e.target.value })}
+            placeholder="例如 上海 / Remote"
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          岗位名称
+          <input
+            value={draft.position}
+            onChange={(e) => onChange({ ...draft, position: e.target.value })}
+            placeholder="例如 Frontend Engineer"
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+          阶段
+          <select
+            value={draft.stage}
+            onChange={(e) => onChange({ ...draft, stage: e.target.value as Stage })}
+            className={inputClass}
+          >
+            <optgroup label="进行中">
+              {ONGOING_STAGES.map((stage) => (
+                <option key={stage} value={stage}>
+                  {STAGE_LABELS[stage] ?? stage}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="已结束">
+              {TERMINAL_STAGES.map((stage) => (
+                <option key={stage} value={stage}>
+                  {STAGE_LABELS[stage] ?? stage}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-muted">
+        <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1">
+          创建后会自动定位到详情区
+        </span>
+        <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1">
+          记录历史结果时，也可以直接选一面挂、二面挂、HR 挂或已放弃
+        </span>
+      </div>
+    </section>
+  )
+}
+
+function timelineLeadCopy(app: Application, items: ApplicationReviewItem[]) {
+  const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
+  const latest = items[0]
+  const latestReviewAt = latest?.ended_at ?? latest?.started_at ?? null
+  const latestReviewTime = latestReviewAt != null
+    ? dayjs.unix(Math.floor(latestReviewAt)).format('YYYY-MM-DD HH:mm')
+    : null
+
+  if (isRejectedStage(app.stage)) {
+    return latestReviewTime != null
+      ? `这条岗位已经${stageLabel}，最近一次记录在 ${latestReviewTime}。时间线会继续保留，方便回看是在哪一轮掉下来的。`
+      : `这条岗位已经${stageLabel}。后续不会再进入待跟进，但这条时间线会保留给你回看原因。`
+  }
+
+  if (app.stage === 'withdrawn') {
+    return latestReviewTime != null
+      ? `这条岗位已经放弃，最近一次记录在 ${latestReviewTime}。如果之后重新推进，也还能从这里接着看。`
+      : '这条岗位已经放弃，不会再进入待跟进提醒，但历史复盘会继续保留。'
+  }
+
+  if (latestReviewTime != null) {
+    return `这条岗位当前在${stageLabel}，共关联 ${items.length} 场复盘。最近一次记录在 ${latestReviewTime}。`
+  }
+
+  return `这条岗位当前在${stageLabel}。如果同一岗位走了多轮面试，这里会自然串成一条时间线。`
+}
+
 function ApplicationReviewsModal({
   app,
   items,
   loading,
+  highlightedReviewId,
   onClose,
+  onViewDetail,
 }: {
   app: Application
   items: ApplicationReviewItem[]
   loading: boolean
+  highlightedReviewId?: number | null
   onClose: () => void
+  onViewDetail: (sessionId: number) => void
 }) {
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
+  const isLight = isLightColorScheme(colorScheme)
+  const latestReviewAt = items[0]?.ended_at ?? items[0]?.started_at ?? null
+  const latestScore = items[0]?.avg_score ?? null
+  const scoredCount = items.filter((item) => item.avg_score != null).length
+  const closedStage = isTerminalStage(app.stage)
+  const latestReviewLabel = latestReviewAt != null
+    ? dayjs.unix(Math.floor(latestReviewAt)).format('YYYY-MM-DD HH:mm')
+    : '--'
+  const latestScoreLabel = latestScore != null ? latestScore.toFixed(1) : '未出分'
+  const leadCopy = timelineLeadCopy(app, items)
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-bg-hover bg-bg-secondary shadow-2xl">
-        <div className="flex items-center justify-between border-b border-bg-hover px-5 py-4">
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">
-              <MessageSquareText className="h-4 w-4 text-accent-blue" />
-              关联复盘
-            </h3>
-            <p className="mt-1 text-xs text-text-muted">{app.company} · {app.position || '岗位'}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-0 sm:p-4">
+      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-none border border-bg-hover bg-bg-secondary shadow-2xl sm:h-auto sm:max-h-[82vh] sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-bg-hover px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-bold text-text-primary">关联复盘</h3>
+              <StageBadge stage={app.stage} isLight={isLight} />
+            </div>
+            <p className="mt-1 truncate text-xs text-text-muted">
+              {app.company} · {app.position || '岗位'}
+              {app.city ? ` · ${app.city}` : ''}
+            </p>
           </div>
           <button
             type="button"
@@ -501,47 +1670,196 @@ function ApplicationReviewsModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[65vh] overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {loading ? (
             <div className="py-10 text-center text-sm text-text-muted">加载中...</div>
           ) : items.length === 0 ? (
-            <div className="rounded-xl border border-bg-hover bg-bg-tertiary/30 px-4 py-10 text-center text-sm text-text-muted">
-              暂无关联复盘
+            <div className="space-y-3">
+              <div className={`rounded-2xl border px-4 py-4 ${
+                closedStage
+                  ? 'border-red-500/20 bg-red-500/8'
+                  : 'border-accent-blue/20 bg-accent-blue/8'
+              }`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StageBadge stage={app.stage} isLight={isLight} />
+                  <span className="text-xs font-medium text-text-secondary">
+                    {closedStage ? '这条岗位已经结束' : '这条岗位还没有关联复盘'}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                  {closedStage
+                    ? `当前阶段是 ${STAGE_LABELS[app.stage] ?? app.stage}，但还没有关联任何复盘记录。`
+                    : '后续同一岗位的多轮面试，会在这里自动串成一条时间线。'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-bg-hover bg-bg-tertiary/30 px-4 py-10 text-center text-sm text-text-muted">
+                暂无关联复盘
+              </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              {items.map((item) => (
-                <div key={item.id} className="rounded-xl border border-bg-hover bg-bg-tertiary/30 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-text-primary">
-                        {item.title || item.company || item.role || `复盘 #${item.id}`}
-                      </div>
-                      <div className="mt-1 text-xs text-text-muted">
-                        {dayjs.unix(Math.floor(item.ended_at ?? item.started_at)).format('YYYY-MM-DD HH:mm')} · {item.turn_count} 轮 · {item.status}
-                      </div>
+            <div className="space-y-4">
+              <div className={`rounded-2xl border p-4 ${
+                closedStage
+                  ? 'border-red-500/20 bg-gradient-to-br from-red-500/8 via-bg-secondary to-bg-secondary'
+                  : 'border-accent-blue/20 bg-gradient-to-br from-accent-blue/8 via-bg-secondary to-bg-secondary'
+              }`}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StageBadge stage={app.stage} isLight={isLight} />
+                      <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+                        {items.length} 场复盘
+                      </span>
                     </div>
-                    <div className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                      item.avg_score == null
-                        ? 'bg-bg-hover text-text-muted'
-                        : item.avg_score < 6
-                          ? 'bg-yellow-500/15 text-yellow-500'
-                          : item.avg_score >= 8
-                            ? 'bg-green-500/15 text-green-500'
-                            : 'bg-blue-500/15 text-blue-500'
-                    }`}>
-                      {item.avg_score != null ? item.avg_score.toFixed(1) : '--'}
+                    <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
+                      {leadCopy}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 sm:hidden">
+                    <span className="rounded-full border border-bg-hover/80 bg-bg-tertiary/35 px-3 py-1.5 text-[11px] text-text-secondary">
+                      最近复盘 · {latestReviewAt != null ? dayjs.unix(Math.floor(latestReviewAt)).format('M/D HH:mm') : '--'}
+                    </span>
+                    <span className="rounded-full border border-bg-hover/80 bg-bg-tertiary/35 px-3 py-1.5 text-[11px] text-text-secondary">
+                      最近得分 · {latestScoreLabel}
+                    </span>
+                    <span className="rounded-full border border-bg-hover/80 bg-bg-tertiary/35 px-3 py-1.5 text-[11px] text-text-secondary">
+                      已出分 · {scoredCount} 场
+                    </span>
+                  </div>
+                  <div className="hidden gap-2 sm:grid sm:grid-cols-3 lg:min-w-[330px] lg:grid-cols-1 xl:grid-cols-3">
+                    <div className="rounded-2xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">最近复盘</div>
+                      <div className="mt-2 text-sm font-semibold text-text-primary">
+                        {latestReviewLabel}
+                      </div>
+                      <div className="mt-1 text-[11px] text-text-muted">最近一次面试记录</div>
+                    </div>
+                    <div className="rounded-2xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">最近得分</div>
+                      <div className="mt-2 text-sm font-semibold text-text-primary">
+                        {latestScoreLabel}
+                      </div>
+                      <div className="mt-1 text-[11px] text-text-muted">最近一场成绩</div>
+                    </div>
+                    <div className="rounded-2xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">复盘概览</div>
+                      <div className="mt-2 text-sm font-semibold text-text-primary">
+                        {scoredCount} 场已出分
+                      </div>
+                      <div className="mt-1 text-[11px] text-text-muted">同岗位多轮趋势回看</div>
                     </div>
                   </div>
-                  {item.summary_preview ? (
-                    <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-text-secondary">{item.summary_preview}</p>
-                  ) : null}
                 </div>
-              ))}
+              </div>
+
+              <div className="space-y-3">
+                {items.map((item, index) => {
+                  const reviewAt = item.ended_at ?? item.started_at
+                  const highlighted = highlightedReviewId != null && item.id === highlightedReviewId
+                  return (
+                    <div key={item.id} className="relative pl-6">
+                      {index < items.length - 1 ? (
+                        <div className="absolute left-[11px] top-8 h-[calc(100%+0.5rem)] w-px bg-bg-hover" aria-hidden />
+                      ) : null}
+                      <div className={`absolute left-0 top-5 h-3 w-3 rounded-full border-2 ${
+                        highlighted ? 'border-accent-blue bg-accent-blue/20' : 'border-bg-hover bg-bg-secondary'
+                      }`} aria-hidden />
+                      <div className={`rounded-2xl border p-4 ${
+                        highlighted
+                          ? 'border-accent-blue/30 bg-accent-blue/6 shadow-[0_8px_24px_rgba(37,99,235,0.08)]'
+                          : 'border-bg-hover bg-bg-tertiary/25'
+                      }`}>
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-sm font-semibold text-text-primary">
+                                {item.title || item.company || item.role || `复盘 #${item.id}`}
+                              </div>
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${reviewStatusTone(item.status)}`}>
+                                {reviewStatusLabel(item.status)}
+                              </span>
+                              {highlighted ? (
+                                <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+                                  当前这场
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                              <span>{reviewAt != null ? dayjs.unix(Math.floor(reviewAt)).format('YYYY-MM-DD HH:mm') : '--'}</span>
+                              <span>{item.turn_count} 轮</span>
+                              <span>{item.role || app.position || '岗位未填写'}</span>
+                            </div>
+                            {item.summary_preview ? (
+                              <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-text-secondary">{item.summary_preview}</p>
+                            ) : (
+                              <p className="mt-3 text-xs leading-relaxed text-text-muted">这场复盘还没有摘要，打开详情后可以继续查看逐题记录或手动生成。</p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-stretch gap-2 md:min-w-[120px]">
+                            <div className={`rounded-full px-2.5 py-1 text-center text-xs font-bold ${reviewScoreTone(item.avg_score)}`}>
+                              {item.avg_score != null ? item.avg_score.toFixed(1) : '未出分'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onViewDetail(item.id)}
+                              className="rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-2 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
+                            >
+                              打开复盘
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+function reviewScoreTone(score: number | null) {
+  if (score == null) return 'bg-bg-hover text-text-muted'
+  if (score < 6) return 'bg-yellow-500/15 text-yellow-500'
+  if (score >= 8) return 'bg-green-500/15 text-green-500'
+  return 'bg-blue-500/15 text-blue-500'
+}
+
+function reviewStatusLabel(status: string) {
+  switch (status) {
+    case 'recording':
+      return '录制中'
+    case 'recorded':
+      return '待生成'
+    case 'analyzing':
+      return '分析中'
+    case 'completed':
+      return '已完成'
+    case 'partial_capture':
+      return '部分录制'
+    case 'analysis_failed':
+      return '分析失败'
+    default:
+      return status
+  }
+}
+
+function reviewStatusTone(status: string) {
+  switch (status) {
+    case 'completed':
+      return 'bg-green-500/10 text-green-500'
+    case 'analysis_failed':
+      return 'bg-red-500/10 text-red-500'
+    case 'analyzing':
+      return 'bg-blue-500/10 text-blue-500'
+    case 'partial_capture':
+      return 'bg-yellow-500/10 text-yellow-500'
+    case 'recorded':
+      return 'bg-amber-500/10 text-amber-500'
+    default:
+      return 'bg-bg-hover text-text-muted'
+  }
 }

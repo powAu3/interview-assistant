@@ -21,6 +21,11 @@ const ASSIST_TRANSCRIPT_COLLAPSED_KEY = 'ia_assist_transcript_collapsed'
 const APP_MODE_KEY = 'ia_app_mode'
 
 export type AppMode = 'assist' | 'review' | 'knowledge' | 'resume-opt' | 'job-tracker'
+export type JobTrackerDeepLink = {
+  applicationId: number
+  openReviews?: boolean
+  highlightReviewId?: number | null
+}
 
 export const __UI_PREFS_TEST_KEYS = {
   overlayEnabled: INTERVIEW_OVERLAY_STORAGE_KEYS.enabled,
@@ -260,7 +265,13 @@ function persistOverlayPrefSilently(key: string, value: string) {
 
 interface UiPrefsState {
   appMode: AppMode
+  jobTrackerDeepLink: JobTrackerDeepLink | null
+  reviewDeepLinkSessionId: number | null
   setAppMode: (mode: AppMode) => void
+  setJobTrackerDeepLink: (payload: JobTrackerDeepLink | null) => void
+  clearJobTrackerDeepLink: () => void
+  setReviewDeepLinkSessionId: (sessionId: number | null) => void
+  clearReviewDeepLinkSessionId: () => void
   answerPanelLayout: 'cards' | 'stream'
   colorScheme: ColorSchemeId
   assistSplitPct: number
@@ -302,6 +313,8 @@ interface UiPrefsState {
 
 export const useUiPrefsStore = create<UiPrefsState>((set) => ({
   appMode: readAppMode(),
+  jobTrackerDeepLink: null,
+  reviewDeepLinkSessionId: null,
   setAppMode: (mode) => {
     if (!APP_MODE_VALUES.has(mode)) return
     try {
@@ -311,6 +324,10 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     }
     set({ appMode: mode })
   },
+  setJobTrackerDeepLink: (payload) => set({ jobTrackerDeepLink: payload }),
+  clearJobTrackerDeepLink: () => set({ jobTrackerDeepLink: null }),
+  setReviewDeepLinkSessionId: (sessionId) => set({ reviewDeepLinkSessionId: sessionId }),
+  clearReviewDeepLinkSessionId: () => set({ reviewDeepLinkSessionId: null }),
   answerPanelLayout: readAnswerPanelLayout(),
   colorScheme: readStoredColorScheme(),
   assistSplitPct: readAssistSplitPct(),

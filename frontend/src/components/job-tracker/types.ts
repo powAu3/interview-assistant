@@ -6,6 +6,11 @@ export type Stage =
   | 'interview3'
   | 'hr'
   | 'offer'
+  | 'written_rejected'
+  | 'interview1_rejected'
+  | 'interview2_rejected'
+  | 'interview3_rejected'
+  | 'hr_rejected'
   | 'rejected'
   | 'withdrawn'
 

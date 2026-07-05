@@ -1,515 +1,1769 @@
-import { useMemo, useState, useEffect, useCallback } from 'react'
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type SortingState,
-  type ColumnPinningState,
-} from '@tanstack/react-table'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dayjs from 'dayjs'
-import { Trash2, Briefcase, MessageSquareText } from 'lucide-react'
-import type { Application, Offer } from './types'
-import { ONGOING_STAGES, STAGE_LABELS, STAGE_ORDER, TERMINAL_STAGES } from './stageConfig'
+import {
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  FileText,
+  MapPin,
+  Trash2,
+} from 'lucide-react'
+import type { Application, Offer, Stage, TodoItem } from './types'
 import { filterApplicationsBySearch } from './search'
+import {
+  getStageOrderIndex,
+  isRejectedStage,
+  isTerminalStage,
+  ONGOING_STAGES,
+  STAGE_LABELS,
+  StageBadge,
+  TERMINAL_STAGES,
+} from './stageConfig'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
+import { isLightColorScheme } from '@/lib/colorScheme'
 
-const columnHelper = createColumnHelper<Application>()
-
-function EditableText({
-  value,
-  onCommit,
-  multiline,
-  dense,
-}: {
-  value: string
-  onCommit: (v: string) => void
-  multiline?: boolean
-  dense?: boolean
-}) {
-  const [v, setV] = useState(value)
-  useEffect(() => setV(value), [value])
-  const cls = dense
-    ? 'w-full min-w-[4rem] bg-transparent text-xs text-text-primary border border-transparent hover:border-bg-hover rounded px-1.5 py-0.5 focus:border-accent-blue focus:outline-none'
-    : 'w-full min-w-[4rem] bg-transparent text-sm text-text-primary border border-transparent hover:border-bg-hover rounded px-2 py-1 focus:border-accent-blue focus:outline-none'
-  if (multiline) {
-    return (
-      <textarea
-        value={v}
-        rows={2}
-        className={`${cls} resize-y min-h-[2.5rem]`}
-        onChange={(e) => setV(e.target.value)}
-        onBlur={() => {
-          if (v !== value) onCommit(v)
-        }}
-      />
-    )
-  }
-  return (
-    <input
-      type="text"
-      value={v}
-      className={cls}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => {
-        if (v !== value) onCommit(v)
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-      }}
-    />
-  )
-}
-
-function DateCell({
-  unix,
-  onCommit,
-  dense,
-}: {
-  unix: number | null
-  onCommit: (v: number | null) => void
-  dense?: boolean
-}) {
-  const s = unix != null ? dayjs.unix(Math.floor(unix)).format('YYYY-MM-DD') : ''
-  return (
-    <input
-      type="date"
-      value={s}
-      className={
-        dense
-          ? 'w-[9.5rem] bg-bg-tertiary/40 text-xs rounded px-1.5 py-0.5 border border-bg-hover'
-          : 'w-[10rem] bg-bg-tertiary/40 text-sm rounded px-2 py-1 border border-bg-hover'
-      }
-      onChange={(e) => {
-        const d = e.target.value
-        onCommit(d ? dayjs(d).unix() : null)
-      }}
-    />
-  )
-}
-
-function TodosCell({
-  todos,
-  onCommit,
-  dense,
-}: {
-  todos: Application['todos']
-  onCommit: (todos: Application['todos']) => void
-  dense?: boolean
-}) {
-  const text = todos.map((t) => t.title).join(' | ')
-  const [v, setV] = useState(text)
-  useEffect(() => setV(todos.map((t) => t.title).join(' | ')), [todos])
-  return (
-    <input
-      type="text"
-      title="多条用 | 分隔"
-      placeholder="待办1 | 待办2"
-      value={v}
-      className={
-        dense
-          ? 'w-full min-w-[6rem] bg-transparent text-xs text-text-secondary border border-transparent hover:border-bg-hover rounded px-1.5 py-0.5'
-          : 'w-full min-w-[8rem] bg-transparent text-sm text-text-secondary border border-transparent hover:border-bg-hover rounded px-2 py-1'
-      }
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => {
-        const parts = v
-          .split('|')
-          .map((x) => x.trim())
-          .filter(Boolean)
-        const next = parts.map((title) => ({
-          id: crypto.randomUUID(),
-          title,
-          done: false,
-        }))
-        const same =
-          next.length === todos.length && next.every((n, i) => n.title === todos[i]?.title)
-        if (!same) onCommit(next)
-      }}
-    />
-  )
-}
-
-function ReviewSummaryCell({
-  app,
-  dense,
-  onOpenReviews,
-}: {
-  app: Application
-  dense?: boolean
-  onOpenReviews: (app: Application) => void
-}) {
-  const summary = app.review_summary
-  if (!summary || summary.review_count <= 0) {
-    return <span className="text-text-muted/50 text-[10px]">—</span>
-  }
-  const score = summary.latest_avg_score
-  const tone = score == null
-    ? 'border-bg-hover bg-bg-tertiary text-text-muted'
-    : score < 6
-      ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
-      : score >= 8
-        ? 'border-green-500/30 bg-green-500/10 text-green-500'
-        : 'border-blue-500/30 bg-blue-500/10 text-blue-500'
-  return (
-    <button
-      type="button"
-      onClick={() => onOpenReviews(app)}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-left ${tone} hover:brightness-110 ${dense ? 'text-[10px]' : 'text-xs'}`}
-      title="查看关联复盘"
-    >
-      <MessageSquareText className="h-3.5 w-3.5" />
-      <span>复盘 {summary.review_count}</span>
-      {score != null ? <span>· {score.toFixed(1)}</span> : null}
-      {summary.latest_review_at != null ? (
-        <span className="text-text-muted">{dayjs.unix(Math.floor(summary.latest_review_at)).format('M/D')}</span>
-      ) : null}
-    </button>
-  )
+type EditorDraft = {
+  company: string
+  position: string
+  city: string
+  stage: string
+  appliedAtInput: string
+  nextFollowupInput: string
+  notes: string
+  todoText: string
 }
 
 type Props = {
   applications: Application[]
   offerByAppId: Map<number, Offer>
-  selectedOfferIds: Set<number>
-  toggleOfferSelect: (offerId: number) => void
   onPatch: (id: number, patch: Partial<Application>) => void | Promise<boolean>
   onDelete: (id: number) => void
   onOpenOffer: (app: Application) => void
   onOpenReviews: (app: Application) => void
-  dense: boolean
   search: string
+  selectedId: number | null
+  onSelect: (id: number | null) => void
+  highlightedId?: number | null
+  compactDetailLayout: boolean
+  detailIntent?: { applicationId: number; mode: 'edit_core' | 'extras' | 'quick_progress' } | null
+  onConsumeDetailIntent?: () => void
+  hiddenApplicationsCount?: number
+  hiddenApplicationsPreview?: Application[]
+  focusFilterLabel?: string
+  onShowAll?: () => void
+}
+
+const CORE_PATCH_KEYS = ['company', 'position', 'city', 'stage', 'applied_at', 'next_followup_at'] as const
+const EXTRA_PATCH_KEYS = ['notes', 'todos'] as const
+
+function toDateInput(unix: number | null): string {
+  return unix != null ? dayjs.unix(Math.floor(unix)).format('YYYY-MM-DD') : ''
+}
+
+function fromDateInput(value: string): number | null {
+  return value ? dayjs(value).startOf('day').unix() : null
+}
+
+function createDraft(app: Application): EditorDraft {
+  return {
+    company: app.company,
+    position: app.position,
+    city: app.city,
+    stage: app.stage,
+    appliedAtInput: toDateInput(app.applied_at),
+    nextFollowupInput: toDateInput(app.next_followup_at),
+    notes: app.notes,
+    todoText: app.todos.map((todo) => todo.title).join('\n'),
+  }
+}
+
+function todosFromText(text: string, currentTodos: TodoItem[]): TodoItem[] {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const existingByTitle = new Map(currentTodos.map((todo) => [todo.title, todo]))
+  return lines.map((title, index) => {
+    const indexed = currentTodos[index]
+    const matched = indexed?.title === title ? indexed : existingByTitle.get(title)
+    return {
+      id: matched?.id ?? crypto.randomUUID(),
+      title,
+      done: matched?.done ?? false,
+      due: matched?.due,
+    }
+  })
+}
+
+function serializeTodos(todos: TodoItem[]): string {
+  return JSON.stringify(
+    todos.map((todo) => ({
+      title: todo.title,
+      done: Boolean(todo.done),
+      due: todo.due ?? null,
+    })),
+  )
+}
+
+function buildPatch(app: Application, draft: EditorDraft): Partial<Application> {
+  const nextTodos = todosFromText(draft.todoText, app.todos)
+  const patch: Partial<Application> = {}
+  if (draft.company !== app.company) patch.company = draft.company
+  if (draft.position !== app.position) patch.position = draft.position
+  if (draft.city !== app.city) patch.city = draft.city
+  if (draft.stage !== app.stage) patch.stage = draft.stage
+
+  const appliedAt = fromDateInput(draft.appliedAtInput)
+  if (draft.appliedAtInput !== toDateInput(app.applied_at)) patch.applied_at = appliedAt
+
+  const nextFollowupAt = fromDateInput(draft.nextFollowupInput)
+  if (draft.nextFollowupInput !== toDateInput(app.next_followup_at)) patch.next_followup_at = nextFollowupAt
+
+  if (draft.notes !== app.notes) patch.notes = draft.notes
+  if (serializeTodos(nextTodos) !== serializeTodos(app.todos)) patch.todos = nextTodos
+  return patch
+}
+
+function pickPatchKeys(
+  patch: Partial<Application>,
+  keys: readonly (keyof Partial<Application>)[],
+): Partial<Application> {
+  const next: Partial<Application> = {}
+  for (const key of keys) {
+    if (key in patch) {
+      ;(next as Record<string, unknown>)[String(key)] = patch[key] as unknown
+    }
+  }
+  return next
+}
+
+function compareApplications(a: Application, b: Application): number {
+  const rankA = getStageOrderIndex(a.stage)
+  const rankB = getStageOrderIndex(b.stage)
+  if (rankA !== rankB) return rankA - rankB
+
+  const appliedA = a.applied_at ?? 0
+  const appliedB = b.applied_at ?? 0
+  if (appliedA !== appliedB) return appliedB - appliedA
+
+  return (b.updated_at ?? 0) - (a.updated_at ?? 0)
+}
+
+function formatDate(unix: number | null, fallback = '--') {
+  return unix != null ? dayjs.unix(Math.floor(unix)).format('YYYY-MM-DD') : fallback
+}
+
+function getScheduleMeta(app: Application) {
+  if (isTerminalStage(app.stage)) {
+    const reviewAt = app.review_summary.latest_review_at
+    const isRejected = isRejectedStage(app.stage)
+    const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
+    const tone = isRejected ? 'text-red-500' : 'text-text-muted'
+    if (reviewAt != null) {
+      const target = dayjs.unix(Math.floor(reviewAt))
+      return {
+        label: `复盘 ${target.format('MM-DD')}`,
+        tone,
+        detail: isRejected
+          ? `该流程已${stageLabel}，最近一次复盘在 ${target.format('YYYY-MM-DD HH:mm')}，不会再进入待跟进提醒。`
+          : `该流程已放弃，最近一次复盘在 ${target.format('YYYY-MM-DD HH:mm')}。`,
+      }
+    }
+    return {
+      label: isRejected ? stageLabel : '已放弃',
+      tone,
+      detail: isRejected
+        ? `该流程已${stageLabel}，不再进入待跟进提醒。`
+        : '该流程已放弃，不再进入待跟进提醒。',
+    }
+  }
+  if (app.next_followup_at == null) {
+    return {
+      label: '跟进 未设',
+      tone: 'text-text-muted',
+      detail: '还没有设置下一次提醒',
+    }
+  }
+  const target = dayjs.unix(Math.floor(app.next_followup_at))
+  const now = dayjs()
+  if (target.isBefore(now.startOf('day'))) {
+    return {
+      label: `跟进 ${target.format('MM-DD')}`,
+      tone: 'text-red-500',
+      detail: '提醒已过期，建议尽快跟进',
+    }
+  }
+  if (target.isBefore(now.add(3, 'day').endOf('day'))) {
+    return {
+      label: `跟进 ${target.format('MM-DD')}`,
+      tone: 'text-amber-500',
+      detail: '最近 3 天内需要推进',
+    }
+  }
+  return {
+    label: `跟进 ${target.format('MM-DD')}`,
+    tone: 'text-text-secondary',
+    detail: `计划在 ${target.format('YYYY-MM-DD')} 跟进`,
+  }
+}
+
+function reviewSummaryText(app: Application) {
+  const summary = app.review_summary
+  if (summary.review_count <= 0) {
+    return { label: '暂无', tone: 'text-text-muted' }
+  }
+  if (summary.latest_avg_score == null) {
+    return { label: `${summary.review_count} 场`, tone: 'text-text-secondary' }
+  }
+  if (summary.latest_avg_score < 6) {
+    return { label: `${summary.review_count} 场 · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-yellow-500' }
+  }
+  if (summary.latest_avg_score >= 8) {
+    return { label: `${summary.review_count} 场 · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-green-500' }
+  }
+  return { label: `${summary.review_count} 场 · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-blue-500' }
+}
+
+function hasReviewTimeline(app: Application) {
+  return app.review_summary.review_count > 0
+}
+
+function reviewShortcutLabel(app: Application) {
+  const count = app.review_summary.review_count
+  if (count <= 0) return '暂无复盘'
+  return count > 1 ? `看 ${count} 场复盘` : '看复盘'
+}
+
+function reviewShortcutClass(app: Application) {
+  const latestScore = app.review_summary.latest_avg_score
+  if (latestScore == null) return 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+  if (latestScore < 6) return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/15'
+  if (latestScore >= 8) return 'border-green-500/20 bg-green-500/10 text-green-500 hover:bg-green-500/15'
+  return 'border-accent-blue/20 bg-accent-blue/8 text-accent-blue hover:bg-accent-blue/12'
+}
+
+function signalSurfaceTone(tone: string) {
+  if (tone.includes('red-500')) return 'border-red-500/12 bg-red-500/[0.05]'
+  if (tone.includes('yellow-500')) return 'border-yellow-500/12 bg-yellow-500/[0.05]'
+  if (tone.includes('green-500')) return 'border-green-500/12 bg-green-500/[0.05]'
+  if (tone.includes('blue-500') || tone.includes('accent-blue')) return 'border-accent-blue/12 bg-accent-blue/[0.05]'
+  return 'border-bg-hover/80 bg-bg-secondary/55'
+}
+
+function buildRowSupportText(app: Application, openTodoCount: number) {
+  const reviewCount = app.review_summary.review_count
+  const latestReviewAt = app.review_summary.latest_review_at
+  const latestReviewLabel = latestReviewAt != null
+    ? dayjs.unix(Math.floor(latestReviewAt)).format('MM-DD HH:mm')
+    : null
+
+  if (reviewCount > 0) {
+    const timelineLead = isTerminalStage(app.stage)
+      ? '岗位时间线会保留'
+      : reviewCount > 1
+        ? `岗位时间线已串 ${reviewCount} 场`
+        : '岗位时间线已接上'
+    return latestReviewLabel ? `${timelineLead} · 最近 ${latestReviewLabel}` : timelineLead
+  }
+
+  if (isTerminalStage(app.stage)) {
+    return '结果已记住 · 后补复盘还会挂回这里'
+  }
+
+  if (app.next_followup_at == null) {
+    return '先补跟进时间'
+  }
+
+  if (openTodoCount > 0) {
+    return `还剩 ${openTodoCount} 条待办`
+  }
+
+  return '后续新面试会继续挂回这里'
+}
+
+function hiddenPreviewLabel(app: Application) {
+  const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
+  const reviewCount = app.review_summary.review_count
+  if (reviewCount > 1) return `${stageLabel} · ${reviewCount} 场复盘`
+  if (reviewCount === 1) return `${stageLabel} · 1 场复盘`
+  return stageLabel
+}
+
+function describeLowCountGuidance(app: Application, openTodoCount: number) {
+  const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
+  if (isTerminalStage(app.stage)) {
+    return app.review_summary.review_count > 0
+      ? {
+          label: '适合回看',
+          detail: `这条岗位已${stageLabel}，顺着时间线回看最后一场复盘会更有价值。`,
+        }
+      : {
+          label: '适合留档',
+          detail: `这条岗位已${stageLabel}，现在保留阶段结果和少量备注就够了。`,
+        }
+  }
+  if (app.next_followup_at == null) {
+    return {
+      label: '适合补跟进',
+      detail: '先补下一次联系或面试时间，这条岗位的推进节奏才会真正成立。',
+    }
+  }
+  if (openTodoCount === 0) {
+    return {
+      label: '适合补下一步',
+      detail: '现在顺手补 1 条待办，回头再看这条岗位会省很多心智。',
+    }
+  }
+  if (app.review_summary.review_count > 0) {
+    return {
+      label: '适合继续收尾',
+      detail: `这条岗位已经接上复盘，当前还剩 ${openTodoCount} 条待办可以继续推进。`,
+    }
+  }
+  return {
+    label: '适合继续推进',
+    detail: '核心进度已经记住了，后续新的面试和补充信息继续挂回这条记录即可。',
+  }
 }
 
 export default function ApplicationsTable({
   applications,
   offerByAppId,
-  selectedOfferIds,
-  toggleOfferSelect,
   onPatch,
   onDelete,
   onOpenOffer,
   onOpenReviews,
-  dense,
   search,
+  selectedId,
+  onSelect,
+  highlightedId,
+  compactDetailLayout,
+  detailIntent,
+  onConsumeDetailIntent,
+  hiddenApplicationsCount = 0,
+  hiddenApplicationsPreview = [],
+  focusFilterLabel = '当前筛选',
+  onShowAll,
 }: Props) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'updated_at', desc: true }])
-  const [pinning] = useState<ColumnPinningState>({ left: ['company'] })
-
+  const colorScheme = useUiPrefsStore((s) => s.colorScheme)
+  const isLight = isLightColorScheme(colorScheme)
   const filtered = useMemo(() => filterApplicationsBySearch(applications, search), [applications, search])
+  const ordered = useMemo(() => [...filtered].sort(compareApplications), [filtered])
+  const current = ordered.find((app) => app.id === selectedId) ?? ordered[0] ?? null
 
-  const patch = useCallback(
-    (id: number, p: Partial<Application>) => {
-      onPatch(id, p)
+  useEffect(() => {
+    if (ordered.length === 0) return
+    const nextId = current?.id ?? null
+    if (nextId !== selectedId) onSelect(nextId)
+  }, [current?.id, onSelect, ordered.length, selectedId])
+
+  const [draft, setDraft] = useState<EditorDraft | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
+  const [editCoreOpen, setEditCoreOpen] = useState(false)
+  const [extrasOpen, setExtrasOpen] = useState(false)
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
+  const [pendingDetailFocusId, setPendingDetailFocusId] = useState<number | null>(null)
+  const detailRef = useRef<HTMLElement | null>(null)
+  const patch = useMemo(
+    () => (current && draft ? buildPatch(current, draft) : {}),
+    [current, draft],
+  )
+
+  useEffect(() => {
+    setDraft(current ? createDraft(current) : null)
+    setSaveNotice(null)
+    setEditCoreOpen(false)
+    setExtrasOpen(false)
+  }, [current?.id, current?.updated_at])
+
+  useEffect(() => {
+    if (!compactDetailLayout) {
+      setMobileDetailOpen(true)
+      return
+    }
+    if (!current) {
+      setMobileDetailOpen(false)
+    }
+  }, [compactDetailLayout, current])
+
+  useEffect(() => {
+    if (!saveNotice) return undefined
+    const timer = window.setTimeout(() => setSaveNotice(null), 2200)
+    return () => window.clearTimeout(timer)
+  }, [saveNotice])
+
+  useEffect(() => {
+    if (pendingDetailFocusId == null || current?.id !== pendingDetailFocusId) return
+    if (!compactDetailLayout) {
+      setPendingDetailFocusId(null)
+      return
+    }
+    const node = detailRef.current
+    if (!node) return
+    const raf = window.requestAnimationFrame(() => {
+      if (typeof node.scrollIntoView === 'function') {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      setPendingDetailFocusId(null)
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [compactDetailLayout, current?.id, pendingDetailFocusId])
+
+  useEffect(() => {
+    if (!compactDetailLayout) return
+    if (highlightedId == null || current?.id !== highlightedId) return
+    setMobileDetailOpen(true)
+  }, [compactDetailLayout, current?.id, highlightedId])
+
+  useEffect(() => {
+    if (!detailIntent || current?.id !== detailIntent.applicationId) return
+    if (compactDetailLayout) {
+      setMobileDetailOpen(true)
+      setPendingDetailFocusId(detailIntent.applicationId)
+    }
+    if (detailIntent.mode === 'edit_core') {
+      setEditCoreOpen(true)
+      setExtrasOpen(false)
+    } else if (detailIntent.mode === 'extras') {
+      setExtrasOpen(true)
+    } else {
+      setEditCoreOpen(false)
+      setExtrasOpen(false)
+      setSaveNotice('现在可以直接改阶段和跟进时间')
+    }
+    onConsumeDetailIntent?.()
+  }, [compactDetailLayout, current?.id, detailIntent, onConsumeDetailIntent])
+
+  const handleSave = useCallback(async (scope: 'all' | 'core' | 'extras' = 'all') => {
+    if (!current || !draft) return
+    const scopedPatch = scope === 'core'
+      ? pickPatchKeys(patch, CORE_PATCH_KEYS)
+      : scope === 'extras'
+        ? pickPatchKeys(patch, EXTRA_PATCH_KEYS)
+        : patch
+    if (Object.keys(scopedPatch).length === 0) {
+      setSaveNotice(scope === 'core' ? '核心信息没有新的变更' : scope === 'extras' ? '补充信息没有新的变更' : '没有新的变更')
+      return
+    }
+    setSaving(true)
+    const result = await Promise.resolve(onPatch(current.id, scopedPatch))
+    setSaving(false)
+    if (result !== false) {
+      setSaveNotice(scope === 'core' ? '已保存核心信息' : scope === 'extras' ? '已保存补充信息' : '已保存')
+      if (scope === 'core' || scope === 'all') setEditCoreOpen(false)
+    }
+  }, [current, draft, onPatch, patch])
+
+  const handleSelect = useCallback((id: number, focusDetail = false) => {
+    if (focusDetail && compactDetailLayout) {
+      setMobileDetailOpen(true)
+    }
+    if (focusDetail) setPendingDetailFocusId(id)
+    onSelect(id)
+  }, [compactDetailLayout, onSelect])
+
+  const currentOffer = current ? offerByAppId.get(current.id) : undefined
+  const corePatch = useMemo(() => pickPatchKeys(patch, CORE_PATCH_KEYS), [patch])
+  const extrasPatch = useMemo(() => pickPatchKeys(patch, EXTRA_PATCH_KEYS), [patch])
+  const coreDirty = Object.keys(corePatch).length > 0
+  const extrasDirty = Object.keys(extrasPatch).length > 0
+  const dirty = coreDirty || extrasDirty
+  const openTodoCount = current?.todos.filter((todo) => !todo.done).length ?? 0
+  const draftTodoLines = draft?.todoText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean) ?? []
+  const draftTodoPreview = draftTodoLines.slice(0, 3)
+  const hasDraftNotes = Boolean(draft?.notes.trim())
+  const offerSummaryBits = currentOffer
+    ? [
+        currentOffer.base_salary || null,
+        currentOffer.location || null,
+        currentOffer.deadline != null ? `截止 ${dayjs.unix(Math.floor(currentOffer.deadline)).format('MM-DD')}` : null,
+      ].filter((item): item is string => Boolean(item))
+    : []
+  const scheduleMeta = current ? getScheduleMeta(current) : null
+  const currentReview = current ? reviewSummaryText(current) : null
+  const currentHasReviewTimeline = current ? hasReviewTimeline(current) : false
+  const stageLabel = current ? STAGE_LABELS[current.stage] ?? current.stage : ''
+  const currentIsTerminal = current ? isTerminalStage(current.stage) : false
+  const desktopSplitLayout = !compactDetailLayout
+  const mobileFocusedList = compactDetailLayout && mobileDetailOpen && current != null
+  const mobileVisibleApps = mobileFocusedList && current
+    ? ordered.filter((app) => app.id === current.id)
+    : ordered
+  const mobileFocusedSummary = mobileFocusedList
+    ? `已聚焦 1 条 · 当前筛选 ${ordered.length} 条`
+    : `${ordered.length} / ${applications.length}`
+  const extrasSummary = `复盘 ${current?.review_summary.review_count ?? 0} · 待办 ${openTodoCount} · ${currentOffer ? 'Offer 已记录' : 'Offer 暂无'}`
+  const extrasHeaderSummary = `待办 ${draftTodoLines.length} · 备注 ${hasDraftNotes ? '已写' : '暂无'} · ${currentOffer ? 'Offer 已记录' : 'Offer 暂无'}`
+  const detailAction = current ? (() => {
+    if (currentOffer && current.stage === 'offer') {
+      return {
+        title: '先把 Offer 关键细节补齐',
+        detail: '先把薪资、地点和截止时间补齐，后面做对比或回看就不会只剩一个 Offer 状态。',
+        primaryLabel: '补 Offer',
+        primaryClass: 'bg-emerald-500 text-white hover:brightness-110',
+        onPrimary: () => onOpenOffer(current),
+        secondaryLabel: currentHasReviewTimeline ? '看复盘' : null,
+        onSecondary: currentHasReviewTimeline ? () => onOpenReviews(current) : null,
+      }
+    }
+
+    if (currentIsTerminal) {
+      if (currentHasReviewTimeline) {
+        return {
+          title: '先回看这条岗位的最后一场复盘',
+          detail: '流程已经结束，最有价值的信息通常在最后一轮复盘里，不必再把它当作活跃跟进项。',
+          primaryLabel: '回看复盘时间线',
+          primaryClass: 'bg-accent-blue text-white hover:brightness-110',
+          onPrimary: () => onOpenReviews(current),
+          secondaryLabel: openTodoCount > 0 ? '看补充信息' : null,
+          onSecondary: openTodoCount > 0 ? () => setExtrasOpen(true) : null,
+        }
+      }
+      return {
+        title: '这条岗位已经进入终态',
+        detail: '现在保留阶段结果和少量备注就够了；如果以后补录复盘，也会继续挂回这条岗位。',
+        primaryLabel: '编辑核心信息',
+        primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
+        onPrimary: () => setEditCoreOpen(true),
+        secondaryLabel: null,
+        onSecondary: null,
+      }
+    }
+
+    if (current.next_followup_at == null) {
+      return {
+        title: '先补一个跟进时间',
+        detail: '补上下一次联系或面试时间后，“待跟进”筛选和提醒才会真正有用。',
+        primaryLabel: '补跟进时间',
+        primaryClass: 'bg-accent-blue text-white hover:brightness-110',
+        onPrimary: () => setEditCoreOpen(true),
+        secondaryLabel: openTodoCount === 0 ? '补 1 条待办' : currentHasReviewTimeline ? '看复盘' : null,
+        onSecondary: openTodoCount === 0
+          ? () => setExtrasOpen(true)
+          : currentHasReviewTimeline
+            ? () => onOpenReviews(current)
+            : null,
+      }
+    }
+
+    if (openTodoCount === 0) {
+      return {
+        title: '先写 1 条下一步',
+        detail: '哪怕只写一句下一步，回头也比一片空白更容易继续推进。',
+        primaryLabel: '补待办',
+        primaryClass: 'bg-accent-blue text-white hover:brightness-110',
+        onPrimary: () => setExtrasOpen(true),
+        secondaryLabel: currentHasReviewTimeline ? '看复盘' : '编辑核心信息',
+        onSecondary: currentHasReviewTimeline ? () => onOpenReviews(current) : () => setEditCoreOpen(true),
+      }
+    }
+
+    if (currentHasReviewTimeline) {
+      return {
+        title: '同岗位复盘已经串成时间线了',
+        detail: '如果这条岗位走了多轮面试，沿着时间线回看会比在列表里来回找更省心。',
+        primaryLabel: '先看复盘时间线',
+        primaryClass: 'bg-accent-blue text-white hover:brightness-110',
+        onPrimary: () => onOpenReviews(current),
+        secondaryLabel: '看补充信息',
+        onSecondary: () => setExtrasOpen(true),
+      }
+    }
+
+    return {
+      title: '这条岗位已经可继续推进',
+      detail: '后面新的面试、待办或 Offer 变化继续挂在这条记录里就够了。',
+      primaryLabel: '编辑核心信息',
+      primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
+      onPrimary: () => setEditCoreOpen(true),
+      secondaryLabel: '看补充信息',
+      onSecondary: () => setExtrasOpen(true),
+    }
+  })() : null
+  const timelineHeadline = current
+    ? currentHasReviewTimeline
+      ? `同岗位已串起 ${current.review_summary.review_count} 场复盘`
+      : currentIsTerminal
+        ? `${stageLabel}已经记住了`
+        : '先保留这条岗位主线'
+    : ''
+  const timelineDescription = current
+    ? currentHasReviewTimeline
+      ? `${current.review_summary.latest_review_at != null
+          ? `最近一场在 ${dayjs.unix(Math.floor(current.review_summary.latest_review_at)).format('YYYY-MM-DD HH:mm')}。`
+          : '已经有关联复盘，可以直接顺着这条岗位时间线回看。'}${currentIsTerminal ? ' 即使岗位已经结束，这条时间线也会继续保留。' : ' 后续同岗位的新复盘也会继续挂回来。'}`
+      : currentIsTerminal
+        ? '即使这条岗位已经结束，后面补录的复盘、备注和结果原因也会继续保留在这里。'
+        : '现在先把岗位留成一条主线，后面新的面试或复盘都会继续挂回这一条。'
+    : ''
+  const timelineSectionLabel = currentHasReviewTimeline ? '岗位时间线' : currentIsTerminal ? '结果记录' : '同岗位后续会挂回这里'
+  const standalonePanelClass = isLight ? 'border-bg-hover bg-white/95' : 'border-white/[0.06] bg-bg-secondary/35'
+  const stackedDetailShellClass = isLight
+    ? 'border-bg-hover bg-white shadow-[0_18px_44px_rgba(148,163,184,0.14)]'
+    : 'border-white/[0.08] bg-bg-secondary shadow-[0_18px_44px_rgba(0,0,0,0.28)]'
+  const workspaceShellClass = isLight
+    ? 'border-bg-hover bg-white/95 shadow-[0_18px_52px_rgba(148,163,184,0.14)]'
+    : 'border-white/[0.08] bg-bg-secondary/40 shadow-[0_18px_52px_rgba(0,0,0,0.28)]'
+  const detailSectionClass = isLight ? 'border-bg-hover/80 bg-bg-secondary/42' : 'border-white/[0.08] bg-black/12'
+  const detailInsetClass = isLight ? 'border-bg-hover/75 bg-white/72' : 'border-white/[0.08] bg-black/18'
+  const detailSoftInsetClass = isLight ? 'border-bg-hover/75 bg-white/58' : 'border-white/[0.08] bg-black/14'
+  const hiddenPreviewItems = hiddenApplicationsPreview.slice(0, 2)
+  const showLowCountGuidance = desktopSplitLayout && ordered.length > 0 && ordered.length <= 2
+  const mainlinePulse = current ? [
+    {
+      label: currentIsTerminal ? '结果' : '时间',
+      value: scheduleMeta?.label ?? '未设置',
+      hint: currentIsTerminal
+        ? '终态记录'
+        : scheduleMeta?.tone === 'text-red-500'
+          ? '已过提醒'
+          : scheduleMeta?.tone === 'text-amber-500'
+            ? '最近要推进'
+            : '当前节奏',
+      tone: scheduleMeta?.tone ?? 'text-text-secondary',
     },
-    [onPatch],
-  )
-
-  const columns = useMemo(
-    () => [
-      columnHelper.display({
-        id: 'compare',
-        header: () => <span title="加入 Offer 对比">对比</span>,
-        size: 52,
-        cell: ({ row }) => {
-          const o = offerByAppId.get(row.original.id)
-          if (!o)
-            return <span className="text-text-muted/50 text-[10px] text-center block">—</span>
-          return (
-            <div className="flex justify-center">
-              <input
-                type="checkbox"
-                className="w-3.5 h-3.5 rounded border-bg-hover"
-                checked={selectedOfferIds.has(o.id)}
-                onChange={() => toggleOfferSelect(o.id)}
-                title="选中以对比 Offer"
-              />
-            </div>
-          )
-        },
-      }),
-      columnHelper.accessor('company', {
-        header: '公司',
-        size: 160,
-        cell: ({ row }) => (
-          <EditableText
-            dense={dense}
-            value={row.original.company}
-            onCommit={(v) => patch(row.original.id, { company: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('position', {
-        header: '岗位',
-        size: 140,
-        cell: ({ row }) => (
-          <EditableText
-            dense={dense}
-            value={row.original.position}
-            onCommit={(v) => patch(row.original.id, { position: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('city', {
-        header: '城市',
-        size: 88,
-        cell: ({ row }) => (
-          <EditableText
-            dense={dense}
-            value={row.original.city}
-            onCommit={(v) => patch(row.original.id, { city: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('stage', {
-        header: '阶段',
-        size: 120,
-        cell: ({ row }) => {
-          const st = row.original.stage
-          const opts = STAGE_ORDER.includes(st as (typeof STAGE_ORDER)[number])
-            ? STAGE_ORDER
-            : ([st, ...STAGE_ORDER.filter((x) => x !== st)] as typeof STAGE_ORDER)
-          const ongoingOpts = opts.filter((s) => ONGOING_STAGES.includes(s as (typeof ONGOING_STAGES)[number]))
-          const terminalOpts = opts.filter((s) => TERMINAL_STAGES.includes(s as (typeof TERMINAL_STAGES)[number]))
-          const inGrouped = new Set([...ongoingOpts, ...terminalOpts])
-          const otherOpts = opts.filter((s) => !inGrouped.has(s))
-          return (
-            <select
-              value={st}
-              className={
-                dense
-                  ? 'max-w-[7.5rem] bg-bg-tertiary/60 text-xs rounded-md border border-bg-hover px-1.5 py-0.5'
-                  : 'max-w-[8rem] bg-bg-tertiary/60 text-sm rounded-md border border-bg-hover px-2 py-1'
-              }
-              onChange={(e) => patch(row.original.id, { stage: e.target.value })}
-            >
-              {ongoingOpts.length > 0 ? (
-                <optgroup label="进行中">
-                  {ongoingOpts.map((s) => (
-                    <option key={s} value={s}>
-                      {STAGE_LABELS[s] ?? s}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {terminalOpts.length > 0 ? (
-                <optgroup label="已结束">
-                  {terminalOpts.map((s) => (
-                    <option key={s} value={s}>
-                      {STAGE_LABELS[s] ?? s}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {otherOpts.map((s) => (
-                <option key={s} value={s}>
-                  {STAGE_LABELS[s] ?? s}
-                </option>
-              ))}
-            </select>
-          )
-        },
-      }),
-      columnHelper.accessor('applied_at', {
-        header: '投递日',
-        size: 118,
-        cell: ({ row }) => (
-          <DateCell
-            dense={dense}
-            unix={row.original.applied_at}
-            onCommit={(v) => patch(row.original.id, { applied_at: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('next_followup_at', {
-        header: '下次跟进',
-        size: 118,
-        cell: ({ row }) => (
-          <DateCell
-            dense={dense}
-            unix={row.original.next_followup_at}
-            onCommit={(v) => patch(row.original.id, { next_followup_at: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('interviewer_info', {
-        header: '面试官/联系人',
-        size: 160,
-        cell: ({ row }) => (
-          <EditableText
-            dense={dense}
-            multiline
-            value={row.original.interviewer_info}
-            onCommit={(v) => patch(row.original.id, { interviewer_info: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('feedback', {
-        header: '面经/反馈',
-        size: 200,
-        cell: ({ row }) => (
-          <EditableText
-            dense={dense}
-            multiline
-            value={row.original.feedback}
-            onCommit={(v) => patch(row.original.id, { feedback: v })}
-          />
-        ),
-      }),
-      columnHelper.display({
-        id: 'review_summary',
-        header: '复盘',
-        size: 132,
-        cell: ({ row }) => (
-          <ReviewSummaryCell
-            app={row.original}
-            dense={dense}
-            onOpenReviews={onOpenReviews}
-          />
-        ),
-      }),
-      columnHelper.accessor('todos', {
-        header: '待办',
-        size: 160,
-        cell: ({ row }) => (
-          <TodosCell
-            dense={dense}
-            todos={row.original.todos}
-            onCommit={(todos) => patch(row.original.id, { todos })}
-          />
-        ),
-      }),
-      columnHelper.accessor('notes', {
-        header: '备注',
-        size: 180,
-        cell: ({ row }) => (
-          <EditableText
-            dense={dense}
-            multiline
-            value={row.original.notes}
-            onCommit={(v) => patch(row.original.id, { notes: v })}
-          />
-        ),
-      }),
-      columnHelper.accessor('updated_at', {
-        id: 'updated_at',
-        header: '更新',
-        size: 88,
-        cell: ({ row }) => (
-          <span className="text-[10px] text-text-muted whitespace-nowrap font-mono">
-            {dayjs.unix(Math.floor(row.original.updated_at)).format('MM-DD HH:mm')}
-          </span>
-        ),
-      }),
-      columnHelper.display({
-        id: 'actions',
-        header: '',
-        size: 88,
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              title="编辑 Offer"
-              onClick={() => onOpenOffer(row.original)}
-              className="p-1.5 rounded-lg text-accent-blue hover:bg-accent-blue/10"
-            >
-              <Briefcase className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              title="删除"
-              onClick={() => {
-                if (confirm(`删除「${row.original.company}」这条记录？`)) onDelete(row.original.id)
-              }}
-              className="p-1.5 rounded-lg text-text-muted hover:text-accent-red hover:bg-accent-red/10"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ),
-      }),
-    ],
-    [dense, offerByAppId, onDelete, onOpenOffer, onOpenReviews, patch, selectedOfferIds, toggleOfferSelect],
-  )
-
-  const table = useReactTable({
-    data: filtered,
-    columns,
-    state: { sorting, columnPinning: pinning },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    enableColumnPinning: true,
-    columnResizeMode: 'onChange',
-  })
-
-  const cellPad = dense ? 'px-2 py-1' : 'px-3 py-2'
-  const headerPad = dense ? 'px-2 py-2' : 'px-3 py-2.5'
+    {
+      label: '复盘',
+      value: currentReview?.label ? `复盘 ${currentReview.label}` : '暂无复盘',
+      hint: current.review_summary.review_count > 1
+        ? '同岗位时间线'
+        : current.review_summary.review_count === 1
+          ? '最近一场'
+          : '后续会挂回这里',
+      tone: currentReview?.tone ?? 'text-text-secondary',
+    },
+    {
+      label: '待办',
+      value: openTodoCount > 0 ? `${openTodoCount} 条` : '暂无',
+      hint: openTodoCount > 0 ? '还有下一步' : '需要时再补',
+      tone: openTodoCount > 0 ? 'text-accent-blue' : 'text-text-secondary',
+    },
+  ] : []
+  const inputClass =
+    'rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent-blue/40 focus:ring-2 focus:ring-accent-blue/15'
+  const textareaClass = `${inputClass} min-h-[104px] resize-y`
+  const resetCoreDraft = useCallback(() => {
+    if (!current) return
+    const source = createDraft(current)
+    setDraft((prev) => prev ? ({
+      ...prev,
+      company: source.company,
+      position: source.position,
+      city: source.city,
+      stage: source.stage,
+      appliedAtInput: source.appliedAtInput,
+      nextFollowupInput: source.nextFollowupInput,
+    }) : source)
+  }, [current])
+  const resetExtrasDraft = useCallback(() => {
+    if (!current) return
+    const source = createDraft(current)
+    setDraft((prev) => prev ? ({
+      ...prev,
+      notes: source.notes,
+      todoText: source.todoText,
+    }) : source)
+  }, [current])
+  const pendingSaveScope = coreDirty && !extrasDirty
+    ? 'core'
+    : extrasDirty && !coreDirty
+      ? 'extras'
+      : 'all'
+  const pendingSaveLabel = coreDirty && extrasDirty
+    ? '保存全部'
+    : coreDirty
+      ? '保存核心信息'
+      : '保存补充信息'
+  const pendingSaveTitle = coreDirty && extrasDirty
+    ? '这条岗位还有 2 处未保存修改'
+    : coreDirty
+      ? '核心信息还没保存'
+      : '补充信息还没保存'
+  const pendingSaveDetail = coreDirty && extrasDirty
+    ? '公司、阶段这些主线字段，以及待办和备注都改过了。确认一次后，列表和详情会一起更新。'
+    : coreDirty
+      ? '公司、岗位、阶段或时间已经改过了，保存后这条岗位主线和筛选结果才会一起同步。'
+      : '待办和备注已经暂存在当前页面，确认后才会真正挂到这条岗位下面。'
+  const pendingSaveAssistAction = coreDirty && !editCoreOpen
+    ? {
+        label: '继续改核心信息',
+        onClick: () => setEditCoreOpen(true),
+      }
+    : extrasDirty && !extrasOpen
+      ? {
+          label: '去补充信息',
+          onClick: () => setExtrasOpen(true),
+        }
+      : null
+  const quickProgressDirty = current != null && draft != null
+    ? draft.stage !== current.stage || draft.nextFollowupInput !== toDateInput(current.next_followup_at)
+    : false
+  const quickProgressTitle = currentIsTerminal ? '快速改结果' : '快速更新进度'
+  const quickProgressHint = currentIsTerminal
+    ? '这里只改结果阶段；其他低频信息留到补充区。'
+    : '日常最常改的是当前阶段和下次跟进，不需要每次都展开整块表单。'
+  const headerQuickProgressShellClass = isLight
+    ? 'border-accent-blue/10 bg-accent-blue/[0.04]'
+    : 'border-accent-blue/20 bg-accent-blue/[0.06]'
 
   return (
-    <div className="rounded-xl border border-bg-hover/80 bg-bg-secondary/40 overflow-hidden shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
-      <div className="overflow-x-auto max-h-[calc(100vh-220px)] overflow-y-auto">
-        <table className="w-full border-collapse text-left min-w-[1100px]">
-          <thead className="sticky top-0 z-20 bg-bg-tertiary shadow-sm border-b border-bg-hover">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((header) => {
-                  const pinned = header.column.getIsPinned()
-                  const isCompany = header.column.id === 'company'
+    <div className={desktopSplitLayout
+      ? 'flex min-h-0 flex-col gap-3 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.88fr)] xl:items-start'
+      : 'flex h-full min-h-0 flex-col gap-3'}
+    >
+      <section
+        className={`overflow-hidden ${desktopSplitLayout ? `min-w-0 rounded-[28px] border ${workspaceShellClass}` : `rounded-2xl border ${standalonePanelClass}`}`}
+      >
+        <div className="border-b border-bg-hover px-4 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">进度表</h3>
+              <p className="mt-1 text-xs text-text-secondary">
+                {mobileFocusedList
+                  ? '先把当前这条岗位看完；如果想切别的岗位，先点右侧返回列表。'
+                  : search.trim()
+                  ? `当前命中 ${ordered.length} 条记录。`
+                  : '默认只展示核心列，补充信息放到下方详情。'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {mobileFocusedList ? (
+                <button
+                  type="button"
+                  onClick={() => setMobileDetailOpen(false)}
+                  className="rounded-full border border-bg-hover bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary sm:hidden"
+                >
+                  返回列表
+                </button>
+              ) : null}
+              <div className="text-xs text-text-muted">
+                {mobileFocusedSummary}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {compactDetailLayout ? (
+          mobileVisibleApps.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <div className="space-y-2 p-3">
+              {mobileVisibleApps.map((app) => {
+                const selected = current?.id === app.id
+                const detailOpenForApp = compactDetailLayout && mobileDetailOpen && selected
+                const schedule = getScheduleMeta(app)
+                const review = reviewSummaryText(app)
+                const reviewLinked = hasReviewTimeline(app)
+                return (
+                  <article
+                    key={app.id}
+                    className={`w-full rounded-2xl border p-3 text-left transition-colors ${
+                      selected
+                        ? 'border-accent-blue/35 bg-accent-blue/8'
+                        : 'border-bg-hover bg-bg-tertiary/20 hover:border-accent-blue/20 hover:bg-bg-tertiary/35'
+                    } ${highlightedId === app.id ? 'ring-2 ring-accent-blue/25' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-text-primary">{app.company || '未命名公司'}</span>
+                          {highlightedId === app.id ? (
+                            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
+                              NEW
+                            </span>
+                          ) : null}
+                          {detailOpenForApp ? (
+                            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
+                              详情已展开
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 text-xs text-text-secondary">{app.position || '岗位未填写'}</div>
+                      </div>
+                      <ChevronRight className={`h-4 w-4 shrink-0 ${selected ? 'text-accent-blue' : 'text-text-muted'}`} />
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <StageBadge stage={app.stage} isLight={isLight} />
+                      <span className={`text-xs ${schedule.tone}`}>{schedule.label}</span>
+                      <span className={`text-xs ${review.tone}`}>复盘 {review.label}</span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                      {app.city ? (
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5" />
+                          {app.city}
+                        </span>
+                      ) : null}
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        投递 {formatDate(app.applied_at)}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSelect(app.id, true)}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          selected
+                            ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                            : 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+                        }`}
+                        aria-label={`${detailOpenForApp ? '定位' : '查看'} ${app.company || '该岗位'} 详情`}
+                      >
+                        {detailOpenForApp ? '定位详情' : '查看详情'}
+                      </button>
+                      {reviewLinked ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenReviews(app)}
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${reviewShortcutClass(app)}`}
+                          aria-label={`查看 ${app.company || '该岗位'} 的 ${app.review_summary.review_count} 场复盘`}
+                        >
+                          {reviewShortcutLabel(app)}
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-text-muted">后续同岗位复盘会自动串到这里</span>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )
+        ) : (
+          ordered.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <div>
+              <div className="divide-y divide-bg-hover/80">
+                {ordered.map((app) => {
+                  const selected = current?.id === app.id
+                  const schedule = getScheduleMeta(app)
+                  const review = reviewSummaryText(app)
+                  const reviewLinked = hasReviewTimeline(app)
+                  const appOpenTodoCount = app.todos.filter((todo) => !todo.done).length
+                  const rowHint = buildRowSupportText(app, appOpenTodoCount)
                   return (
-                    <th
-                      key={header.id}
-                      className={`${headerPad} text-[10px] font-bold uppercase tracking-wider text-text-muted border-b border-bg-hover whitespace-nowrap ${
-                        pinned === 'left'
-                          ? 'sticky z-30 bg-bg-tertiary shadow-[4px_0_12px_rgba(0,0,0,0.2)]'
-                          : ''
-                      } ${isCompany ? 'left-0 min-w-[140px]' : ''}`}
-                      style={
-                        pinned === 'left'
-                          ? { left: `${header.column.getStart('left')}px` }
-                          : undefined
-                      }
+                    <article
+                      key={app.id}
+                      onClick={() => handleSelect(app.id)}
+                      className={`grid cursor-pointer gap-3 px-4 py-2.5 transition-colors lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(230px,0.8fr)_auto] xl:items-center ${
+                        selected ? 'bg-accent-blue/7' : 'hover:bg-bg-tertiary/25'
+                      } ${highlightedId === app.id ? 'ring-2 ring-inset ring-accent-blue/20' : ''}`}
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
+                      <div className="min-w-0 lg:row-start-1 lg:col-start-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StageBadge stage={app.stage} isLight={isLight} />
+                          <div className="truncate text-base font-semibold tracking-tight text-text-primary">
+                            {app.company || '未命名公司'}
+                          </div>
+                          {selected ? (
+                            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-semibold text-accent-blue">
+                              当前查看
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-text-secondary">
+                          <span>{app.position || '岗位未填写'}</span>
+                          {app.city ? (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-3.5 w-3.5" />
+                              {app.city}
+                            </span>
+                          ) : null}
+                          <span className="inline-flex items-center gap-1 text-text-muted">
+                            <Calendar className="h-3.5 w-3.5" />
+                            投递 {formatDate(app.applied_at)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 lg:col-span-2 lg:row-start-2 xl:col-span-1 xl:row-auto">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <DesktopSignalChip
+                            label={isTerminalStage(app.stage) ? '结果' : '时间'}
+                            value={schedule.label}
+                            tone={schedule.tone}
+                          />
+                          {reviewLinked ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onOpenReviews(app)
+                              }}
+                              className="inline-flex"
+                              aria-label={`查看 ${app.company || '该岗位'} 的 ${app.review_summary.review_count} 场复盘`}
+                            >
+                              <DesktopSignalChip
+                                label="复盘"
+                                value={review.label}
+                                tone={review.tone}
+                                actionLabel={app.review_summary.review_count > 1 ? '看时间线' : '看复盘'}
+                              />
+                            </button>
+                          ) : (
+                            <DesktopSignalChip
+                              label="复盘"
+                              value={review.label}
+                              tone={review.tone}
+                            />
+                          )}
+                          {appOpenTodoCount > 0 ? (
+                            <DesktopSignalChip
+                              label="待办"
+                              value={`${appOpenTodoCount} 条`}
+                              tone="text-accent-blue"
+                            />
+                          ) : null}
+                        </div>
+                        <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-text-muted">
+                          {rowHint}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-start justify-start gap-2 lg:col-start-2 lg:row-start-1 lg:justify-end xl:col-auto xl:row-auto xl:flex-col xl:items-end xl:justify-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSelect(app.id)
+                          }}
+                          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                            selected
+                              ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                              : 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          {selected ? '已定位详情' : '查看详情'}
+                        </button>
+                      </div>
+                    </article>
                   )
                 })}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-bg-tertiary/50 hover:bg-bg-tertiary/25 transition-colors"
-              >
-                {row.getVisibleCells().map((cell) => {
-                  const pinned = cell.column.getIsPinned()
-                  const isCompany = cell.column.id === 'company'
-                  return (
-                    <td
-                      key={cell.id}
-                      className={`${cellPad} align-top ${pinned === 'left' ? 'sticky z-10 bg-bg-secondary shadow-[4px_0_12px_rgba(0,0,0,0.15)]' : 'bg-bg-secondary/30'} ${isCompany ? 'left-0' : ''}`}
-                      style={
-                        pinned === 'left'
-                          ? { left: `${cell.column.getStart('left')}px` }
-                          : undefined
-                      }
+              </div>
+
+              {showLowCountGuidance ? (
+                <section className="border-t border-bg-hover/80 bg-bg-tertiary/[0.12] px-4 py-3.5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                        当前筛选只剩 {ordered.length} 条
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-text-primary">
+                        现在更适合顺手把这几条推进掉
+                      </div>
+                      <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                        信息已经够少了，不用来回筛。直接挑一条补进度、补待办，或者回看同岗位复盘就行。
+                      </p>
+                    </div>
+                    {hiddenApplicationsCount > 0 && onShowAll ? (
+                      <button
+                        type="button"
+                        onClick={onShowAll}
+                        className="rounded-full border border-bg-hover bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                      >
+                        回到全部
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                    {ordered.map((app) => {
+                      const appOpenTodoCount = app.todos.filter((todo) => !todo.done).length
+                      const reviewLinked = hasReviewTimeline(app)
+                      const guidance = describeLowCountGuidance(app, appOpenTodoCount)
+                      const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
+                      const selected = current?.id === app.id
+                      return (
+                        <article
+                          key={`guidance-${app.id}`}
+                          className={`rounded-2xl border px-3 py-3 ${
+                            selected
+                              ? 'border-accent-blue/25 bg-accent-blue/[0.05]'
+                              : 'border-bg-hover bg-bg-secondary/75'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="truncate text-sm font-semibold text-text-primary">
+                                  {app.company || '未命名公司'}
+                                </div>
+                                <StageBadge stage={app.stage} isLight={isLight} />
+                              </div>
+                              <div className="mt-1 text-[11px] text-text-muted">
+                                {stageLabel} · {app.position || '岗位未填写'}
+                                {app.city ? ` · ${app.city}` : ''}
+                              </div>
+                            </div>
+                            <span className="rounded-full border border-bg-hover bg-bg-tertiary/45 px-2.5 py-1 text-[10px] font-medium text-text-muted">
+                              {guidance.label}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
+                            {guidance.detail}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
+                            <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
+                              {buildRowSupportText(app, appOpenTodoCount)}
+                            </span>
+                            {reviewLinked ? (
+                              <span className="rounded-full border border-accent-blue/15 bg-accent-blue/[0.05] px-2.5 py-1 text-accent-blue">
+                                {app.review_summary.review_count > 1 ? '同岗位多轮时间线已接上' : '同岗位复盘已接上'}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSelect(app.id)}
+                              className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                                selected
+                                  ? 'bg-accent-blue text-white hover:brightness-110'
+                                  : 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
+                              }`}
+                            >
+                              {selected ? '继续看当前详情' : '切到这条'}
+                            </button>
+                            {reviewLinked ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenReviews(app)}
+                                className="rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-2 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
+                              >
+                                看岗位时间线
+                              </button>
+                            ) : null}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
+              {hiddenApplicationsCount > 0 && onShowAll ? (
+                <div className="border-t border-bg-hover/80 bg-bg-tertiary/12 px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+                      当前只看 {focusFilterLabel}
+                    </span>
+                    <span className="text-sm font-semibold text-text-primary">
+                      另外还有 {hiddenApplicationsCount} 条记录
+                    </span>
+                    {hiddenPreviewItems.map((app) => (
+                      <span
+                        key={app.id}
+                        className="text-[11px] text-text-muted"
+                      >
+                        <span className="font-medium text-text-secondary">{app.company || '未命名公司'}</span>
+                        <span> · {hiddenPreviewLabel(app)}</span>
+                      </span>
+                    ))}
+                    {hiddenApplicationsCount > hiddenPreviewItems.length ? (
+                      <span className="text-[11px] text-text-muted">等</span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={onShowAll}
+                      className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      查看全部
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
+        )}
+      </section>
+
+      {!compactDetailLayout || mobileDetailOpen ? (
+      <section
+        ref={detailRef}
+        className={`flex flex-col ${
+          desktopSplitLayout
+            ? `overflow-visible rounded-[28px] border ${stackedDetailShellClass} xl:min-h-0 xl:overflow-hidden xl:self-start xl:sticky xl:top-3`
+            : `rounded-2xl border ${standalonePanelClass}`
+        }`}
+      >
+        {!current || !draft ? (
+          <div className="flex flex-1 items-center justify-center px-6 py-16 text-center">
+            <div>
+              <div className="text-sm font-semibold text-text-primary">选一条记录开始编辑</div>
+              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                这里只保留核心字段和少量补充信息，先看岗位主线，再决定要不要展开补充区。
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="border-b border-bg-hover px-4 py-3">
+              <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate text-lg font-bold tracking-tight text-text-primary">
+                      {current.company || '未命名公司'}
+                    </h3>
+                    <StageBadge stage={current.stage} isLight={isLight} />
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
+                    <span>{current.position || '岗位未填写'}</span>
+                    {current.city ? (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {current.city}
+                      </span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-1 text-text-muted">
+                      <Calendar className="h-3.5 w-3.5" />
+                      最近更新 {dayjs.unix(Math.floor(current.updated_at)).format('MM-DD HH:mm')}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                    {scheduleMeta?.detail}
+                  </p>
+                  {saveNotice ? (
+                    <div className="mt-2 inline-flex rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[11px] text-accent-blue">
+                      {saveNotice}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setMobileDetailOpen(false)}
+                    className="whitespace-nowrap rounded-xl border border-bg-hover px-4 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary lg:hidden"
+                  >
+                    收起详情
+                  </button>
+                </div>
+              </div>
+              <div className={`mt-3 rounded-[22px] border px-3 py-3 ${headerQuickProgressShellClass}`}>
+                <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        {quickProgressTitle}
+                      </div>
+                      <span className="rounded-full border border-bg-hover bg-bg-secondary/80 px-2.5 py-1 text-[10px] font-medium text-text-muted">
+                        日常主操作
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-text-primary">
+                      先在这里改阶段和时间
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                      {quickProgressHint}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditCoreOpen((prev) => !prev)}
+                      className="rounded-xl border border-bg-hover bg-bg-secondary/75 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    >
+                      {editCoreOpen ? '收起完整编辑' : '编辑核心信息'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!quickProgressDirty || saving}
+                      onClick={() => void handleSave('core')}
+                      className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                        quickProgressDirty
+                          ? 'bg-accent-blue text-white hover:brightness-110'
+                          : 'border border-bg-hover bg-bg-tertiary/60 text-text-secondary'
+                      } disabled:opacity-60`}
+                    >
+                      {saving ? '保存中...' : '保存进度'}
+                    </button>
+                  </div>
+                </div>
+                <div className={`mt-3 grid gap-3 ${currentIsTerminal ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
+                  <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                    当前阶段
+                    <select
+                      value={draft.stage}
+                      onChange={(e) => setDraft({ ...draft, stage: e.target.value })}
+                      className={inputClass}
+                    >
+                      <optgroup label="进行中">
+                        {ONGOING_STAGES.map((stage) => (
+                          <option key={stage} value={stage}>
+                            {STAGE_LABELS[stage] ?? stage}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="已结束">
+                        {TERMINAL_STAGES.map((stage) => (
+                          <option key={stage} value={stage}>
+                            {STAGE_LABELS[stage] ?? stage}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </label>
+                  {!currentIsTerminal ? (
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      下次跟进
+                      <input
+                        type="date"
+                        value={draft.nextFollowupInput}
+                        onChange={(e) => setDraft({ ...draft, nextFollowupInput: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                  ) : (
+                    <div className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      <span>当前状态</span>
+                      <div className="rounded-xl border border-bg-hover bg-bg-secondary/70 px-3 py-2.5 text-sm text-text-muted">
+                        终态记录不会再进入待跟进提醒；如果有关联复盘，时间线会继续保留。
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {dirty ? (
+                <div className="mt-2.5 rounded-2xl border border-accent-blue/15 bg-accent-blue/[0.05] px-3 py-2.5">
+                  <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-blue">
+                        待确认修改
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-text-primary">
+                        {pendingSaveTitle}
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                        {pendingSaveDetail}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {pendingSaveAssistAction ? (
+                        <button
+                          type="button"
+                          onClick={pendingSaveAssistAction.onClick}
+                          className="rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                        >
+                          {pendingSaveAssistAction.label}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void handleSave(pendingSaveScope)}
+                        className="rounded-xl bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                      >
+                        {saving ? '保存中...' : pendingSaveLabel}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="p-3 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+              <div className="space-y-3">
+                <section className={`rounded-[24px] border p-3.5 ${detailSectionClass}`}>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                        岗位主线
+                      </div>
+                      <span className="rounded-full border border-bg-hover bg-bg-tertiary/45 px-2.5 py-1 text-[10px] font-medium text-text-muted">
+                        当前阶段 · {stageLabel}
+                      </span>
+                    </div>
+
+                    <div className={`mt-2.5 rounded-[22px] border px-3.5 py-3.5 ${detailInsetClass}`}>
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                            {currentIsTerminal ? '这条岗位已经结束' : '当前最值得做的一步'}
+                          </div>
+                          <div className="mt-1.5 text-[17px] font-semibold tracking-tight text-text-primary">
+                            {detailAction?.title ?? (currentIsTerminal ? `${stageLabel}回看` : `围绕 ${stageLabel} 继续推进`)}
+                          </div>
+                          <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                            {detailAction?.detail ?? (
+                              currentIsTerminal
+                                ? '这条岗位已经结束，所以这里优先保留挂在哪一轮、最近一次复盘和还能回看的内容，不再把它当成待跟进任务。'
+                                : '默认先看状态和下一步，确认要改的时候再展开表单。这样小窗口下更稳，也更接近日常使用节奏。'
+                            )}
+                          </p>
+                          {detailAction ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={detailAction.onPrimary}
+                                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${detailAction.primaryClass}`}
+                              >
+                                {detailAction.primaryLabel}
+                              </button>
+                              {detailAction.secondaryLabel && detailAction.onSecondary ? (
+                                <button
+                                  type="button"
+                                  onClick={detailAction.onSecondary}
+                                  className="rounded-xl border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                                >
+                                  {detailAction.secondaryLabel}
+                                </button>
+                              ) : null}
+                            </div>
+                            ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {mainlinePulse.map((item) => (
+                            <InlineSummaryPill
+                              key={item.label}
+                              label={item.label}
+                              value={item.value}
+                              hint={item.hint}
+                              tone={item.tone}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="border-t border-bg-hover/80 pt-3">
+                          <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                            currentHasReviewTimeline ? 'text-accent-blue' : 'text-text-muted'
+                          }`}>
+                            {timelineSectionLabel}
+                          </div>
+                          <div className="mt-1 text-base font-semibold text-text-primary">
+                            {timelineHeadline}
+                          </div>
+                          <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+                            {timelineDescription}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {currentHasReviewTimeline ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenReviews(current)}
+                                className="rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-2 text-xs font-semibold text-accent-blue transition-colors hover:bg-accent-blue/15"
+                              >
+                                打开复盘时间线
+                              </button>
+                            ) : null}
+                            {!currentHasReviewTimeline && !currentIsTerminal ? (
+                              <button
+                                type="button"
+                                onClick={() => setEditCoreOpen(true)}
+                                className="rounded-xl border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                              >
+                                补核心时间
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => setExtrasOpen(true)}
+                              className="rounded-xl border border-bg-hover bg-bg-tertiary/60 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                            >
+                              打开补充信息
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {editCoreOpen ? (
+                <section className={`rounded-[24px] border p-3.5 ${detailSectionClass}`}>
+                  <div className="mb-3 flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-text-primary">编辑核心信息</h4>
+                      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                        这里只放高频字段：公司、岗位、城市、阶段和时间。
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {coreDirty ? (
+                        <button
+                          type="button"
+                          onClick={resetCoreDraft}
+                          className="rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                        >
+                          恢复核心信息
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={!coreDirty || saving}
+                        onClick={() => void handleSave('core')}
+                        className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                          coreDirty
+                            ? 'bg-accent-blue text-white hover:brightness-110'
+                            : 'border border-bg-hover bg-bg-tertiary/60 text-text-secondary'
+                        } disabled:opacity-60`}
+                      >
+                        {saving ? '保存中...' : '保存核心信息'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      公司名称
+                      <input
+                        value={draft.company}
+                        onChange={(e) => setDraft({ ...draft, company: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      岗位名称
+                      <input
+                        value={draft.position}
+                        onChange={(e) => setDraft({ ...draft, position: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      城市
+                      <input
+                        value={draft.city}
+                        onChange={(e) => setDraft({ ...draft, city: e.target.value })}
+                        placeholder="Remote / 上海"
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      当前阶段
+                      <select
+                        value={draft.stage}
+                        onChange={(e) => setDraft({ ...draft, stage: e.target.value })}
+                        className={inputClass}
+                      >
+                        <optgroup label="进行中">
+                          {ONGOING_STAGES.map((stage) => (
+                            <option key={stage} value={stage}>
+                              {STAGE_LABELS[stage] ?? stage}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="已结束">
+                          {TERMINAL_STAGES.map((stage) => (
+                            <option key={stage} value={stage}>
+                              {STAGE_LABELS[stage] ?? stage}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      投递日期
+                      <input
+                        type="date"
+                        value={draft.appliedAtInput}
+                        onChange={(e) => setDraft({ ...draft, appliedAtInput: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                      下次跟进
+                      <input
+                        type="date"
+                        value={draft.nextFollowupInput}
+                        onChange={(e) => setDraft({ ...draft, nextFollowupInput: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                  </div>
+                  {isTerminalStage(draft.stage) ? (
+                    <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
+                      当前阶段已结束，这条记录不会进入待跟进统计；如果有关联复盘，会优先显示最近一次复盘时间。
+                    </p>
+                  ) : null}
+                </section>
+                ) : null}
+
+                <section className={`rounded-[24px] border ${detailSectionClass}`}>
+                  <button
+                    type="button"
+                    onClick={() => setExtrasOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
+                  >
+                    <div>
+                      <h4 className="text-sm font-semibold text-text-primary">补充信息</h4>
+                      <p className="mt-1 text-xs text-text-secondary">{extrasSummary}</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-text-muted">
+                        <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
+                          {extrasHeaderSummary}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="rounded-full border border-bg-hover p-2 text-text-muted">
+                      {extrasOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </span>
+                  </button>
+
+                  {extrasOpen ? (
+                    <div className="space-y-2.5 border-t border-bg-hover/80 px-3.5 py-3">
+                      {extrasDirty ? (
+                        <section className="rounded-xl border border-accent-blue/20 bg-accent-blue/[0.05] px-3 py-2.5">
+                          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                              <div className="text-sm font-semibold text-text-primary">补充信息有未保存修改</div>
+                              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                                待办、备注和 Offer 相关调整已经暂存在当前页面，确认后直接保存即可。
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={resetExtrasDraft}
+                                className="rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                              >
+                                恢复补充信息
+                              </button>
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => void handleSave('extras')}
+                                className="rounded-xl bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                              >
+                                {saving ? '保存中...' : '保存补充信息'}
+                              </button>
+                            </div>
+                          </div>
+                        </section>
+                      ) : null}
+
+                      <div className="grid gap-2.5 xl:grid-cols-[minmax(240px,0.66fr)_minmax(0,1.34fr)]">
+                        <section className={`rounded-xl border p-3 ${detailSoftInsetClass}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                                <FileText className="h-4 w-4 text-emerald-500" />
+                                Offer
+                              </div>
+                              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                                {currentOffer
+                                  ? '这条岗位的 Offer 已留在这里，需要时继续补薪资、地点和截止时间。'
+                                  : '现在还没有 Offer，走到结果阶段再补也来得及。'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onOpenOffer(current)}
+                              className="rounded-lg border border-bg-hover px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                            >
+                              {currentOffer ? '编辑 Offer' : '记录 Offer'}
+                            </button>
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap gap-2">
+                            {currentOffer ? (
+                              offerSummaryBits.length > 0 ? (
+                                offerSummaryBits.map((bit) => (
+                                  <span
+                                    key={bit}
+                                    className="inline-flex items-center rounded-full border border-emerald-500/15 bg-emerald-500/[0.06] px-2.5 py-1 text-[11px] text-emerald-600"
+                                  >
+                                    {bit}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="inline-flex items-center rounded-full border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                  已记录 Offer，细节还可以继续补
+                                </span>
+                              )
+                            ) : (
+                              <span className="inline-flex items-center rounded-full border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                薪资、地点、福利和截止时间都还没记录
+                              </span>
+                            )}
+                          </div>
+                        </section>
+
+                        <section className={`rounded-xl border p-3 ${detailSoftInsetClass}`}>
+                          <div className="mb-2.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <h5 className="text-sm font-semibold text-text-primary">待办与备注</h5>
+                              <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                                这里适合放下一步动作、JD 重点、薪资预期和过程留痕，不需要写成完整档案。
+                              </p>
+                            </div>
+                            <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1 text-[11px] text-text-muted">
+                              当前 {draftTodoLines.length} 条待办
+                            </span>
+                          </div>
+                          {draftTodoPreview.length > 0 ? (
+                            <div className="mb-2.5 flex flex-wrap gap-2">
+                              {draftTodoPreview.map((todo, index) => (
+                                <span
+                                  key={`${todo}-${index}`}
+                                  className="inline-flex items-center rounded-full border border-accent-blue/15 bg-accent-blue/[0.05] px-2.5 py-1 text-[11px] text-accent-blue"
+                                >
+                                  {todo}
+                                </span>
+                              ))}
+                              {draftTodoLines.length > draftTodoPreview.length ? (
+                                <span className="inline-flex items-center rounded-full border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                  还有 {draftTodoLines.length - draftTodoPreview.length} 条
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <div className="grid gap-3">
+                            <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                              待办清单
+                              <textarea
+                                value={draft.todoText}
+                                onChange={(e) => setDraft({ ...draft, todoText: e.target.value })}
+                                placeholder={'每行一条，例如：\n补做系统设计容量估算\n周五前跟进 recruiter'}
+                                className={textareaClass}
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1.5 text-xs text-text-secondary">
+                              备注
+                              <textarea
+                                value={draft.notes}
+                                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                                placeholder="补充 JD 重点、薪资预期或内部推荐等信息"
+                                className={textareaClass}
+                              />
+                            </label>
+                          </div>
+                          {hasDraftNotes ? (
+                            <div className="mt-2.5 rounded-xl border border-bg-hover bg-bg-tertiary/20 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary">
+                              当前备注预览：{draft?.notes.trim().slice(0, 90)}{draft?.notes.trim().length > 90 ? '...' : ''}
+                            </div>
+                          ) : null}
+                        </section>
+                      </div>
+
+                      <section className="rounded-xl border border-red-500/15 bg-red-500/6 px-3 py-2.5">
+                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h5 className="text-sm font-semibold text-text-primary">删除记录</h5>
+                            <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                              确认这条岗位不再需要保留时再删，避免把复盘、待办和 Offer 一起清掉。
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`删除「${current.company}」这条记录？`)) onDelete(current.id)
+                            }}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-500/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            删除这条记录
+                          </button>
+                        </div>
+                      </section>
+                    </div>
+                  ) : null}
+                </section>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+      ) : null}
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="px-4 py-12 text-center text-sm text-text-muted">
+      没有匹配记录，试试换个关键词，或者先新增一条岗位。
+    </div>
+  )
+}
+
+function DesktopSignalChip({
+  label,
+  value,
+  tone,
+  actionLabel,
+}: {
+  label: string
+  value: string
+  tone: string
+  actionLabel?: string | null
+}) {
+  const surface = signalSurfaceTone(tone)
+  return (
+    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] ${surface}`}>
+      <span className="font-medium text-text-muted">{label}</span>
+      <span className={`font-semibold ${tone}`}>{value}</span>
+      {actionLabel ? (
+        <span className="font-medium text-accent-blue">{actionLabel}</span>
+      ) : null}
+    </div>
+  )
+}
+
+function DesktopSignalLine({
+  label,
+  value,
+  hint,
+  tone,
+  className,
+  actionLabel,
+}: {
+  label: string
+  value: string
+  hint: string
+  tone: string
+  className: string
+  actionLabel?: string | null
+}) {
+  return (
+    <div className={`rounded-xl border px-3 py-2.5 ${className}`}>
+      <div className="flex items-start gap-3">
+        <div className="w-11 shrink-0 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+          {label}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className={`min-w-0 text-[14px] font-semibold ${tone}`}>
+              {value}
+            </div>
+            {actionLabel ? (
+              <div className="shrink-0 text-[11px] font-medium text-accent-blue">{actionLabel}</div>
+            ) : null}
+          </div>
+          <div className="mt-0.5 line-clamp-1 text-[11px] leading-relaxed text-text-muted">
+            {hint}
+          </div>
+        </div>
       </div>
-      {filtered.length === 0 && (
-        <div className="py-16 text-center text-text-muted text-sm">暂无数据，点击「新增记录」开始</div>
-      )}
+    </div>
+  )
+}
+
+function InlineSummaryPill({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string
+  value: string
+  hint: string
+  tone: string
+}) {
+  const surface = signalSurfaceTone(tone)
+  return (
+    <div className={`rounded-full border px-3 py-1.5 ${surface}`}>
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <span className="font-medium text-text-muted">{label}</span>
+        <span className={`font-semibold ${tone}`}>{value}</span>
+        <span className="text-text-muted">{hint}</span>
+      </div>
     </div>
   )
 }

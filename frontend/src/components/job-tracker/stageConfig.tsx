@@ -20,6 +20,11 @@ export const STAGE_HEADER_ICON: Record<string, LucideIcon> = {
   interview3: Layers,
   hr: HeartHandshake,
   offer: Trophy,
+  written_rejected: XCircle,
+  interview1_rejected: XCircle,
+  interview2_rejected: XCircle,
+  interview3_rejected: XCircle,
+  hr_rejected: XCircle,
   rejected: XCircle,
   withdrawn: LogOut,
 }
@@ -32,6 +37,11 @@ export const STAGE_EMOJI: Record<string, string> = {
   interview3: '\u{1F3AF}',
   hr: '\u{1F91D}',
   offer: '\u{1F389}',
+  written_rejected: '\u{274C}',
+  interview1_rejected: '\u{274C}',
+  interview2_rejected: '\u{274C}',
+  interview3_rejected: '\u{274C}',
+  hr_rejected: '\u{274C}',
   rejected: '\u{274C}',
   withdrawn: '\u{1F6AA}',
 }
@@ -172,6 +182,96 @@ export const STAGE_COLUMN_THEME: Record<string, { dark: StageTheme; light: Stage
       cardGlow: 'hover:shadow-emerald-200/50',
     },
   },
+  written_rejected: {
+    dark: {
+      bar: 'from-red-400 to-rose-600/70',
+      iconBg: 'bg-red-500/20',
+      iconText: 'text-red-300',
+      headerBg: 'from-red-950/25 via-bg-secondary/80 to-transparent',
+      dotColor: 'bg-red-400',
+      cardGlow: 'hover:shadow-red-500/8',
+    },
+    light: {
+      bar: 'from-red-500 to-rose-500',
+      iconBg: 'bg-red-500/12',
+      iconText: 'text-red-600',
+      headerBg: 'from-red-50 via-white to-transparent',
+      dotColor: 'bg-red-500',
+      cardGlow: 'hover:shadow-red-200/40',
+    },
+  },
+  interview1_rejected: {
+    dark: {
+      bar: 'from-red-400 to-rose-600/70',
+      iconBg: 'bg-red-500/20',
+      iconText: 'text-red-300',
+      headerBg: 'from-red-950/25 via-bg-secondary/80 to-transparent',
+      dotColor: 'bg-red-400',
+      cardGlow: 'hover:shadow-red-500/8',
+    },
+    light: {
+      bar: 'from-red-500 to-rose-500',
+      iconBg: 'bg-red-500/12',
+      iconText: 'text-red-600',
+      headerBg: 'from-red-50 via-white to-transparent',
+      dotColor: 'bg-red-500',
+      cardGlow: 'hover:shadow-red-200/40',
+    },
+  },
+  interview2_rejected: {
+    dark: {
+      bar: 'from-red-400 to-rose-600/70',
+      iconBg: 'bg-red-500/20',
+      iconText: 'text-red-300',
+      headerBg: 'from-red-950/25 via-bg-secondary/80 to-transparent',
+      dotColor: 'bg-red-400',
+      cardGlow: 'hover:shadow-red-500/8',
+    },
+    light: {
+      bar: 'from-red-500 to-rose-500',
+      iconBg: 'bg-red-500/12',
+      iconText: 'text-red-600',
+      headerBg: 'from-red-50 via-white to-transparent',
+      dotColor: 'bg-red-500',
+      cardGlow: 'hover:shadow-red-200/40',
+    },
+  },
+  interview3_rejected: {
+    dark: {
+      bar: 'from-red-400 to-rose-600/70',
+      iconBg: 'bg-red-500/20',
+      iconText: 'text-red-300',
+      headerBg: 'from-red-950/25 via-bg-secondary/80 to-transparent',
+      dotColor: 'bg-red-400',
+      cardGlow: 'hover:shadow-red-500/8',
+    },
+    light: {
+      bar: 'from-red-500 to-rose-500',
+      iconBg: 'bg-red-500/12',
+      iconText: 'text-red-600',
+      headerBg: 'from-red-50 via-white to-transparent',
+      dotColor: 'bg-red-500',
+      cardGlow: 'hover:shadow-red-200/40',
+    },
+  },
+  hr_rejected: {
+    dark: {
+      bar: 'from-red-400 to-rose-600/70',
+      iconBg: 'bg-red-500/20',
+      iconText: 'text-red-300',
+      headerBg: 'from-red-950/25 via-bg-secondary/80 to-transparent',
+      dotColor: 'bg-red-400',
+      cardGlow: 'hover:shadow-red-500/8',
+    },
+    light: {
+      bar: 'from-red-500 to-rose-500',
+      iconBg: 'bg-red-500/12',
+      iconText: 'text-red-600',
+      headerBg: 'from-red-50 via-white to-transparent',
+      dotColor: 'bg-red-500',
+      cardGlow: 'hover:shadow-red-200/40',
+    },
+  },
   rejected: {
     dark: {
       bar: 'from-red-400 to-rose-600/70',
@@ -240,6 +340,11 @@ export const STAGE_CARD_LEFT_BORDER: Record<string, { dark: string; light: strin
   interview3: { dark: 'border-l-cyan-400/60', light: 'border-l-cyan-500' },
   hr: { dark: 'border-l-amber-400/60', light: 'border-l-amber-500' },
   offer: { dark: 'border-l-emerald-400/70', light: 'border-l-emerald-500' },
+  written_rejected: { dark: 'border-l-red-400/55', light: 'border-l-red-500' },
+  interview1_rejected: { dark: 'border-l-red-400/55', light: 'border-l-red-500' },
+  interview2_rejected: { dark: 'border-l-red-400/55', light: 'border-l-red-500' },
+  interview3_rejected: { dark: 'border-l-red-400/55', light: 'border-l-red-500' },
+  hr_rejected: { dark: 'border-l-red-400/55', light: 'border-l-red-500' },
   rejected: { dark: 'border-l-red-400/55', light: 'border-l-red-500' },
   withdrawn: { dark: 'border-l-zinc-500/45', light: 'border-l-zinc-400' },
 }
@@ -250,7 +355,7 @@ export function getCardLeftBorder(stage: string, isLight: boolean): string {
   return isLight ? entry.light : entry.dark
 }
 
-export const STAGE_ORDER: Stage[] = [
+export const ONGOING_STAGES: Stage[] = [
   'applied',
   'written',
   'interview1',
@@ -258,30 +363,74 @@ export const STAGE_ORDER: Stage[] = [
   'interview3',
   'hr',
   'offer',
+]
+
+export const TERMINAL_STAGES: Stage[] = [
+  'written_rejected',
+  'interview1_rejected',
+  'interview2_rejected',
+  'interview3_rejected',
+  'hr_rejected',
   'rejected',
   'withdrawn',
 ]
 
-export const TERMINAL_STAGES: Stage[] = ['rejected', 'withdrawn']
-export const ONGOING_STAGES: Stage[] = STAGE_ORDER.filter((s) => !TERMINAL_STAGES.includes(s))
+export const STAGE_ORDER: Stage[] = [...ONGOING_STAGES, ...TERMINAL_STAGES]
+export const STAGE_COLUMN_ORDER: Stage[] = [...ONGOING_STAGES, 'rejected', 'withdrawn']
+
+const TERMINAL_STAGE_SET = new Set<string>(TERMINAL_STAGES)
+const REJECTED_STAGE_SET = new Set<string>([
+  'written_rejected',
+  'interview1_rejected',
+  'interview2_rejected',
+  'interview3_rejected',
+  'hr_rejected',
+  'rejected',
+])
+const ONGOING_STAGE_SET = new Set<string>(ONGOING_STAGES)
+const STAGE_ORDER_INDEX = new Map(STAGE_ORDER.map((stage, index) => [stage, index]))
+
+export function isTerminalStage(stage: string): stage is Stage {
+  return TERMINAL_STAGE_SET.has(stage)
+}
+
+export function isRejectedStage(stage: string): boolean {
+  return REJECTED_STAGE_SET.has(stage)
+}
+
+export function getStageColumnStage(stage: string): Stage {
+  if (isRejectedStage(stage)) return 'rejected'
+  if (stage === 'withdrawn') return 'withdrawn'
+  if (ONGOING_STAGE_SET.has(stage)) return stage as Stage
+  return 'applied'
+}
+
+export function getStageOrderIndex(stage: string): number {
+  return STAGE_ORDER_INDEX.get(stage as Stage) ?? STAGE_ORDER_INDEX.get(getStageColumnStage(stage)) ?? Number.MAX_SAFE_INTEGER
+}
 
 export function nextStageAfter(current: string): string | null {
-  const i = STAGE_ORDER.indexOf(current as Stage)
+  const i = ONGOING_STAGES.indexOf(current as Stage)
   if (i < 0) return null
-  const next = STAGE_ORDER[i + 1]
-  if (!next || TERMINAL_STAGES.includes(next)) return null
+  const next = ONGOING_STAGES[i + 1]
+  if (!next) return null
   return next
 }
 
 export const STAGE_LABELS: Record<string, string> = {
   applied: '\u5DF2\u6295\u9012',
-  written: '\u7B14\u8BD5',
+  written: '\u6D4B\u8BC4',
   interview1: '\u4E00\u9762',
   interview2: '\u4E8C\u9762',
-  interview3: '\u4E09\u9762+',
-  hr: 'HR \u9762',
+  interview3: '\u4E09\u9762',
+  hr: 'HR\u9762',
   offer: 'Offer',
-  rejected: '\u5DF2\u62D2/\u6302',
+  written_rejected: '\u6D4B\u8BC4\u6302',
+  interview1_rejected: '\u4E00\u9762\u6302',
+  interview2_rejected: '\u4E8C\u9762\u6302',
+  interview3_rejected: '\u4E09\u9762\u6302',
+  hr_rejected: 'HR\u6302',
+  rejected: '\u6302\u4E86',
   withdrawn: '\u5DF2\u653E\u5F03',
 }
 
@@ -316,6 +465,26 @@ const STAGE_PILL_MAP: Record<string, PillColors> = {
     dark: 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30',
     light: 'bg-emerald-50 text-emerald-700 border-emerald-300',
   },
+  written_rejected: {
+    dark: 'bg-red-500/15 text-red-200 border-red-500/25',
+    light: 'bg-red-50 text-red-600 border-red-200',
+  },
+  interview1_rejected: {
+    dark: 'bg-red-500/15 text-red-200 border-red-500/25',
+    light: 'bg-red-50 text-red-600 border-red-200',
+  },
+  interview2_rejected: {
+    dark: 'bg-red-500/15 text-red-200 border-red-500/25',
+    light: 'bg-red-50 text-red-600 border-red-200',
+  },
+  interview3_rejected: {
+    dark: 'bg-red-500/15 text-red-200 border-red-500/25',
+    light: 'bg-red-50 text-red-600 border-red-200',
+  },
+  hr_rejected: {
+    dark: 'bg-red-500/15 text-red-200 border-red-500/25',
+    light: 'bg-red-50 text-red-600 border-red-200',
+  },
   rejected: {
     dark: 'bg-red-500/15 text-red-200 border-red-500/25',
     light: 'bg-red-50 text-red-600 border-red-200',
@@ -333,12 +502,10 @@ export function stagePillClass(stage: string, isLight = false): string {
 }
 
 export function StageBadge({ stage, isLight = false }: { stage: string; isLight?: boolean }) {
-  const emoji = STAGE_EMOJI[stage] ?? ''
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${stagePillClass(stage, isLight)}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${stagePillClass(stage, isLight)}`}
     >
-      <span className="text-[9px]">{emoji}</span>
       {STAGE_LABELS[stage] ?? stage}
     </span>
   )
