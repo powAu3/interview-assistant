@@ -8,10 +8,7 @@ import {
   Sparkles,
   RotateCw,
   Loader2,
-  BarChart3,
-  ListTodo,
   MessageSquareQuote,
-  ShieldCheck,
   Tags,
   Link2,
   Unlink,
@@ -230,7 +227,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const scoredTurns = detail.turns
     ?.map((turn) => ({ turn, avg: getTurnAvgScore(turn) }))
     .filter((item): item is { turn: ReviewTurn; avg: number } => item.avg !== null) ?? []
-  const lowScoreTurns = scoredTurns.filter((item) => item.avg < 6).length
   const nextActions = buildNextActions(detail)
   const scoreDimensions = buildScoreDimensions(detail)
   const followUpDrills = buildFollowUpDrills(detail)
@@ -459,9 +455,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
           <div className="space-y-4">
             <SectionPanel
               title={summaryMissing ? '当前状态' : '整体评价'}
-              subtitle={summaryMissing
-                ? '看状态，选下一步。'
-                : '先看结论，需要证据时再下钻。'}
             >
               {detail.summary_markdown ? (
                 <div className="prose prose-sm prose-invert max-w-none text-text-primary leading-relaxed">
@@ -479,10 +472,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             </SectionPanel>
 
             {nextActions.length > 0 ? (
-              <SectionPanel
-                title="下一轮补强"
-                subtitle="只列最该练的几项。"
-              >
+              <SectionPanel title="下一轮补强">
                 <div className="grid gap-2 md:grid-cols-2">
                   {nextActions.map((item, idx) => (
                     <div key={`${item}-${idx}`} className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-2.5 text-sm leading-relaxed text-text-primary">
@@ -496,9 +486,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             {detail.turns.length > 0 ? (
               <CollapsibleSection
                 title={`逐题分析 · ${detail.turns.length} 题`}
-                subtitle={autoExpandTurns
-                  ? '短记录，已展开。'
-                  : '需要证据时再展开。'}
+                subtitle={autoExpandTurns ? '短记录，已展开。' : undefined}
                 defaultOpen={autoExpandTurns}
               >
                 <div className="space-y-3">
@@ -513,10 +501,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                 </div>
               </CollapsibleSection>
             ) : (
-              <SectionPanel
-                title="逐题分析"
-                subtitle="暂无问答。"
-              >
+              <SectionPanel title="逐题分析">
                 <div className="rounded-lg border border-dashed border-bg-hover bg-bg-tertiary/20 px-4 py-5 text-sm text-text-secondary">
                   有问答后会显示原文、纠错和评分。
                 </div>
@@ -550,18 +535,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
               }}
             />
 
-            <SectionPanel
-              title="本场速览"
-              subtitle="分数、低分题和纠错量。"
-            >
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <DetailMetric icon={BarChart3} label="综合评分" value={avgScoreDisplay} hint="满分 10.0" tone={scoreTone(detail.avg_score)} />
-                <DetailMetric icon={ListTodo} label="问答轮次" value={String(detail.turn_count)} hint={`${scoredTurns.length} 轮已评分`} tone="blue" />
-                <DetailMetric icon={ShieldCheck} label="低分题" value={String(lowScoreTurns)} hint="低于 6 分需优先补强" tone={lowScoreTurns > 0 ? 'amber' : 'green'} />
-                <DetailMetric icon={MessageSquareQuote} label="ASR 纠错" value={String(correctedCount)} hint="保留原文可回看" tone={correctedCount > 0 ? 'blue' : 'neutral'} />
-              </div>
-            </SectionPanel>
-
             {hasTakeaways ? (
               <TakeawaysPanel
                 strongPoints={detail.strong_points ?? []}
@@ -570,10 +543,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             ) : null}
 
             {scoreDimensions.length > 0 ? (
-              <CollapsibleSection
-                title="能力维度"
-                subtitle="评分结构。"
-              >
+              <CollapsibleSection title="能力维度">
                 <div className="space-y-3">
                   {scoreDimensions.map((item) => (
                     <div key={item.name}>
@@ -597,7 +567,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             {followUpDrills.length > 0 ? (
               <CollapsibleSection
                 title={`追问训练 · ${followUpDrills.length}`}
-                subtitle="练答法时再展开。"
               >
                 <div className="space-y-3">
                   {followUpDrills.map((item) => (
@@ -690,7 +659,6 @@ function TakeawaysPanel({
   return (
     <SectionPanel
       title="亮点与风险"
-      subtitle="把“值得保留”与“最该修正”的信号放在一张卡里，不用来回切视线。"
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
         {strongPoints.length > 0 ? (
@@ -1235,43 +1203,6 @@ function ApplicationLinkPanel({
   )
 }
 
-function DetailMetric({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: ComponentType<{ className?: string }>
-  label: string
-  value: string
-  hint: string
-  tone: 'blue' | 'green' | 'amber' | 'red' | 'neutral'
-}) {
-  const toneClass = {
-    blue: 'border-blue-500/20 bg-blue-500/10 text-blue-500',
-    green: 'border-green-500/20 bg-green-500/10 text-green-500',
-    amber: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-500',
-    red: 'border-red-500/20 bg-red-500/10 text-red-500',
-    neutral: 'border-bg-hover bg-bg-tertiary text-text-secondary',
-  }[tone]
-
-  return (
-    <div className="rounded-lg border border-bg-hover/70 bg-bg-secondary/45 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-text-muted">{label}</div>
-          <div className="mt-2 text-2xl font-semibold text-text-primary">{value}</div>
-        </div>
-        <div className={`rounded-md border p-2 ${toneClass}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <div className="mt-2 text-xs text-text-muted">{hint}</div>
-    </div>
-  )
-}
-
 function InlineNoticeBanner({ notice }: { notice: InlineNotice }) {
   const toneClass = {
     success: 'border-green-500/20 bg-green-500/8 text-green-500',
@@ -1291,14 +1222,6 @@ function getTurnAvgScore(turn: ReviewTurn): number | null {
   if (!turn.scorecard || Object.keys(turn.scorecard).length === 0) return null
   const values = Object.values(turn.scorecard)
   return values.reduce((a, b) => a + b, 0) / values.length
-}
-
-function scoreTone(score: number | null | undefined): 'blue' | 'green' | 'amber' | 'red' | 'neutral' {
-  if (score == null) return 'neutral'
-  if (score >= 8) return 'green'
-  if (score >= 6) return 'blue'
-  if (score >= 4) return 'amber'
-  return 'red'
 }
 
 function buildScoreDimensions(detail: ReviewSessionDetail) {
