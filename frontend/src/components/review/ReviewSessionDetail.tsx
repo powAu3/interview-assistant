@@ -8,7 +8,6 @@ import {
   Sparkles,
   RotateCw,
   Loader2,
-  Tags,
   Link2,
   Unlink,
   ExternalLink,
@@ -562,25 +561,20 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
               <CollapsibleSection
                 title={`追问训练 · ${followUpDrills.length}`}
               >
-                <div className="space-y-3">
+                <ol className="divide-y divide-bg-hover/70">
                   {followUpDrills.map((item) => (
-                    <div key={`${item.seq}-${item.question}`} className="rounded-lg border border-bg-hover bg-bg-tertiary/30 p-3">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-bg-hover px-2 py-1 text-[10px] font-medium text-text-muted">第 {item.seq} 题</span>
-                        {item.tags.map((tag) => (
-                          <span key={tag} className="inline-flex items-center gap-1 rounded-md border border-accent-blue/20 bg-accent-blue/10 px-2 py-1 text-[10px] text-accent-blue">
-                            <Tags className="h-3 w-3" />
-                            {tag}
-                          </span>
-                        ))}
+                    <li key={`${item.seq}-${item.question}`} className="py-2.5">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+                        <span className="font-semibold">第 {item.seq} 题</span>
+                        {item.tags.length > 0 ? <span>{item.tags.join(' / ')}</span> : null}
                       </div>
                       <div className="text-sm leading-relaxed text-text-primary">{item.question}</div>
                       {item.advice ? (
                         <div className="mt-2 text-xs leading-relaxed text-text-muted">{item.advice}</div>
                       ) : null}
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ol>
               </CollapsibleSection>
             ) : null}
           </div>
