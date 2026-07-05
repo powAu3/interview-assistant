@@ -100,10 +100,12 @@ describe('ReviewSessionList', () => {
   })
 
   it('can jump from a review card back to the linked application timeline', async () => {
-    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+    const onViewDetail = vi.fn()
+    render(<ReviewSessionList onViewDetail={onViewDetail} />)
 
     await screen.findByText('OpenAI 一面')
-    fireEvent.click(screen.getAllByRole('button', { name: '岗位时间线' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: '查看岗位' })[0])
+    expect(onViewDetail).not.toHaveBeenCalled()
 
     await waitFor(() => {
       expect(useUiPrefsStore.getState().appMode).toBe('job-tracker')
@@ -115,13 +117,30 @@ describe('ReviewSessionList', () => {
     })
   })
 
+  it('opens detail from the review row body by click or keyboard', async () => {
+    const onViewDetail = vi.fn()
+    render(<ReviewSessionList onViewDetail={onViewDetail} />)
+
+    const title = await screen.findByText('米哈游二面')
+    const row = title.closest('article')
+    expect(row).not.toBeNull()
+
+    fireEvent.click(row as HTMLElement)
+
+    expect(onViewDetail).toHaveBeenCalledWith(39)
+
+    onViewDetail.mockClear()
+    fireEvent.keyDown(row as HTMLElement, { key: 'Enter' })
+
+    expect(onViewDetail).toHaveBeenCalledWith(39)
+  })
+
   it('shows linked application stages and supports focus filtering', async () => {
     render(<ReviewSessionList onViewDetail={vi.fn()} />)
 
     await screen.findByText('OpenAI 一面')
     expect(screen.getAllByText('一面挂').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/这条岗位已一面挂/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('同岗位 2 场复盘').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('2 场').length).toBeGreaterThan(0)
     expect(screen.getByText('当前这场是最近一场')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /已完成/ }))

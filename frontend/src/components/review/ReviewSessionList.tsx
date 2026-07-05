@@ -13,17 +13,13 @@ import {
   Sparkles,
   RotateCw,
   Loader2,
-  FileText,
   Upload,
-  TrendingUp,
-  ListChecks,
   RefreshCw,
-  Link2,
 } from 'lucide-react'
 import { api, getErrorMessage } from '../../lib/api'
 import { useInterviewStore } from '../../stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
-import { STAGE_LABELS, StageBadge, isRejectedStage } from '@/components/job-tracker/stageConfig'
+import { StageBadge } from '@/components/job-tracker/stageConfig'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import type { ReviewSession, ReviewSessionsResponse } from './types'
 
@@ -71,7 +67,6 @@ type ReviewListFocus = 'all' | 'attention' | 'active' | 'done'
 type SessionGroup = {
   key: Exclude<ReviewListFocus, 'all'>
   title: string
-  subtitle: string
   items: ReviewSession[]
 }
 
@@ -187,7 +182,6 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const sessions = data?.items ?? []
   const total = data?.total ?? 0
   const groups = useMemo(() => buildSessionGroups(sessions, hasGeneratedAnalysis), [sessions])
-  const completedSessions = sessions.filter((session) => session.status === 'completed' && hasGeneratedAnalysis(session))
   const activeCount = sessions.filter((session) => session.status === 'analyzing' || session.status === 'recording').length
   const actionRequiredCount = sessions.filter((session) =>
     session.status === 'recorded' ||
@@ -195,12 +189,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     session.status === 'partial_capture' ||
     (session.status === 'completed' && !hasGeneratedAnalysis(session)),
   ).length
-  const avgScore = completedSessions.length
-    ? completedSessions.reduce((sum, session) => sum + (session.avg_score ?? 0), 0) / completedSessions.length
-    : null
-  const latest = sessions[0]
   const hasSessions = total > 0
-  const linkedReviewCount = sessions.filter((session) => session.application?.id != null).length
   const linkedApplicationCount = new Set(
     sessions
       .map((session) => session.application?.id ?? null)
@@ -215,24 +204,6 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     }
     return counts
   }, [sessions])
-  const timelineApplicationCount = useMemo(
-    () => [...linkedReviewCounts.values()].filter((count) => count > 1).length,
-    [linkedReviewCounts],
-  )
-  const terminalLinkedApplicationCount = useMemo(
-    () => new Set(
-      sessions
-        .filter((session) => {
-          const stage = session.application?.stage
-          return stage != null && (stage === 'withdrawn' || isRejectedStage(stage))
-        })
-        .map((session) => session.application?.id)
-        .filter((applicationId): applicationId is number => applicationId != null),
-    ).size,
-    [sessions],
-  )
-  const manualSessionCount = sessions.filter((session) => session.source === 'manual').length
-  const liveSessionCount = sessions.length - manualSessionCount
   const linkedTimelineLabels = useMemo(() => {
     const grouped = new Map<number, ReviewSession[]>()
     for (const session of sessions) {
@@ -272,27 +243,6 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     },
   ].filter((item) => item.key === 'all' || item.count > 0 || item.key === focusFilter)
   const currentFocusOption = focusOptions.find((item) => item.key === focusFilter) ?? focusOptions[0]
-  const focusLens = describeFocusLens({
-    focusFilter,
-    actionRequiredCount,
-    activeCount,
-    completedCount: completedSessions.length,
-    total,
-    latest,
-    timelineApplicationCount,
-  })
-  const focusEntryGroup = useMemo(() => {
-    if (focusFilter === 'all') {
-      return groups.find((group) => group.items.length > 0) ?? null
-    }
-    return groups.find((group) => group.key === focusFilter) ?? null
-  }, [focusFilter, groups])
-  const focusEntrySession = focusEntryGroup?.items[0] ?? latest ?? null
-  const focusEntryMeta = describeFocusEntry({
-    focusFilter,
-    groupKey: focusEntryGroup?.key ?? null,
-    session: focusEntrySession,
-  })
   const configPanels = (showManualImport || showSettings) ? (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
       {showManualImport && (
@@ -318,10 +268,8 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     </section>
   ) : null
   const reviewWorkspaceShellClass = isLight
-    ? 'border-bg-hover/80 bg-white/95 shadow-[0_18px_52px_rgba(148,163,184,0.12)]'
-    : 'border-white/[0.08] bg-bg-secondary/42 shadow-[0_18px_52px_rgba(0,0,0,0.28)]'
-  const reviewWorkspaceDividerClass = isLight ? 'border-bg-hover/80' : 'border-white/[0.08]'
-  const reviewSurfaceClass = isLight ? 'border-bg-hover/75 bg-bg-secondary/32' : 'border-white/[0.08] bg-black/12'
+    ? 'border-bg-hover bg-white'
+    : 'border-white/[0.08] bg-bg-secondary/42'
 
   if (loading && !data) {
     return (
@@ -338,7 +286,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-semibold text-text-primary">面试复盘</h2>
-              <span className={`rounded-full border px-2.5 py-1 text-[11px] ${
+              <span className={`rounded-md border px-2.5 py-1 text-[11px] ${
                 reviewEnabled
                   ? 'border-green-500/25 bg-green-500/10 text-green-500'
                   : 'border-bg-hover bg-bg-tertiary text-text-muted'
@@ -346,15 +294,12 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                 {reviewEnabled ? '自动记录已启用' : '自动记录未启用'}
               </span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-text-muted">
-              从真实回答里提取薄弱点、纠错痕迹和下一轮补强重点。{hasSessions ? ` 当前共 ${total} 场，已绑定 ${linkedApplicationCount} 个岗位，形成 ${timelineApplicationCount} 条多轮时间线。` : ''}
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => void loadSessions(page)}
-              className="inline-flex h-8 items-center gap-2 rounded-full border border-bg-hover bg-bg-secondary px-3 text-xs font-medium text-text-secondary hover:bg-bg-hover"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-bg-hover bg-bg-secondary px-3 text-xs font-medium text-text-secondary hover:bg-bg-hover"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               刷新
@@ -362,7 +307,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             <button
               type="button"
               onClick={() => setShowManualImport((prev) => !prev)}
-              className="inline-flex h-8 items-center gap-2 rounded-full border border-accent-blue/30 bg-accent-blue/10 px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-accent-blue/30 bg-accent-blue/10 px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
             >
               <Upload className="h-3.5 w-3.5" />
               手动复盘
@@ -370,7 +315,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             <button
               type="button"
               onClick={() => setShowSettings((prev) => !prev)}
-              className="inline-flex h-8 items-center gap-2 rounded-full border border-bg-hover bg-bg-secondary px-3 text-xs font-medium text-text-primary hover:bg-bg-hover"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-bg-hover bg-bg-secondary px-3 text-xs font-medium text-text-primary hover:bg-bg-hover"
             >
               <Settings className="h-3.5 w-3.5" />
               配置
@@ -379,23 +324,20 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
         </header>
 
         {hasSessions ? (
-          <div className={`grid gap-0 rounded-[28px] border ${reviewWorkspaceShellClass} xl:grid-cols-[minmax(0,1fr)_272px]`}>
-            <div className="min-w-0 space-y-4 p-4 lg:p-5">
-              <section className={`rounded-[24px] border p-3.5 ${reviewSurfaceClass}`}>
-                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
+          <div className={`rounded-lg border ${reviewWorkspaceShellClass}`}>
+            <div className="min-w-0 space-y-3 p-3 lg:p-4">
+              <section className="border-b border-bg-hover/80 px-1 pb-3">
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-text-primary">复盘队列</h3>
-                      <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[11px] font-medium text-accent-blue">
+                      <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue">
                         {currentFocusOption.label}
                       </span>
                       <span className="text-[11px] text-text-muted">
-                        {latest ? `最近一场 ${formatRelativeDate(latest.started_at)}` : '暂无记录'}{hasSessions ? ` · 已绑定 ${linkedApplicationCount} 个岗位` : ''}
+                        共 {total} 场 · 先处理 {actionRequiredCount} · 进行中 {activeCount} · 已绑定 {linkedApplicationCount} 个岗位
                       </span>
                     </div>
-                    <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-text-secondary">
-                      {focusLens.detail}
-                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:max-w-[420px] lg:justify-end">
                     {focusOptions.map((item) => (
@@ -403,16 +345,16 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                         key={item.key}
                         type="button"
                         onClick={() => setFocusFilter(item.key)}
-                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                           focusFilter === item.key
-                            ? 'border-accent-blue/25 bg-accent-blue/10 text-accent-blue'
+                            ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                             : 'border-bg-hover bg-bg-secondary/50 text-text-secondary hover:bg-bg-hover'
                         }`}
                       >
                         <span>{item.label}</span>
                         <span
-                          className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                            focusFilter === item.key ? 'bg-accent-blue/10 text-accent-blue' : 'bg-bg-tertiary text-text-muted'
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+                            focusFilter === item.key ? 'bg-transparent text-accent-blue' : 'bg-bg-tertiary text-text-muted'
                           }`}
                         >
                           {item.count}
@@ -421,40 +363,6 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                     ))}
                   </div>
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-text-muted">
-                  <span>{currentFocusOption.hint}</span>
-                  <span className="hidden sm:inline">同岗位多轮复盘会继续挂回一条主线。</span>
-                </div>
-                <section className="mt-3 grid grid-cols-2 gap-2 xl:hidden">
-                  <SummaryStatPill
-                    icon={FileText}
-                    label="复盘"
-                    value={`${total} 场`}
-                    hint={latest ? `最近一场 ${formatRelativeDate(latest.started_at)}` : '暂无记录'}
-                    tone="blue"
-                  />
-                  <SummaryStatPill
-                    icon={Link2}
-                    label="已绑定岗位"
-                    value={`${linkedApplicationCount} 个`}
-                    hint={linkedReviewCount > 0 ? `${linkedReviewCount} 场复盘已挂到岗位时间线` : '还没有关联岗位'}
-                    tone={linkedReviewCount > 0 ? 'green' : 'neutral'}
-                  />
-                  <SummaryStatPill
-                    icon={ListChecks}
-                    label="先处理"
-                    value={`${actionRequiredCount} 场`}
-                    hint={actionRequiredCount > 0 ? '失败、待生成和短样本会优先堆在前面' : '当前没有需要优先处理的记录'}
-                    tone={actionRequiredCount > 0 ? 'amber' : 'green'}
-                  />
-                  <SummaryStatPill
-                    icon={TrendingUp}
-                    label="均分 / 队列"
-                    value={avgScore == null ? '--' : avgScore.toFixed(1)}
-                    hint={activeCount > 0 ? `另有 ${activeCount} 场还在进行中` : `${completedSessions.length} 场已出复盘`}
-                    tone={avgScore != null && avgScore >= 7 ? 'green' : avgScore == null ? 'neutral' : 'amber'}
-                  />
-                </section>
               </section>
 
               {configPanels}
@@ -493,40 +401,12 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                     下一页
                   </button>
                 </div>
-              )}
+                )}
             </div>
-
-            <ReviewWorkspaceSidebar
-              embedded
-              isLight={isLight}
-              dividerClass={reviewWorkspaceDividerClass}
-              surfaceClass={reviewSurfaceClass}
-              focusLabel={currentFocusOption.label}
-              focusTitle={focusLens.title}
-              focusDetail={focusLens.detail}
-              latest={latest ?? null}
-              total={total}
-              focusEntrySession={focusEntrySession}
-              focusEntryMeta={focusEntryMeta}
-              linkedApplicationCount={linkedApplicationCount}
-              linkedReviewCount={linkedReviewCount}
-              timelineApplicationCount={timelineApplicationCount}
-              terminalLinkedApplicationCount={terminalLinkedApplicationCount}
-              actionRequiredCount={actionRequiredCount}
-              avgScore={avgScore}
-              activeCount={activeCount}
-              completedCount={completedSessions.length}
-              manualSessionCount={manualSessionCount}
-              liveSessionCount={liveSessionCount}
-              onViewDetail={onViewDetail}
-              onOpenApplication={handleOpenApplication}
-            />
           </div>
         ) : (
           <ReviewZeroState
             reviewEnabled={reviewEnabled}
-            showManualImport={showManualImport}
-            showSettings={showSettings}
             onManual={() => setShowManualImport(true)}
             onSettings={() => setShowSettings(true)}
           />
@@ -540,334 +420,43 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
 
 function ReviewZeroState({
   reviewEnabled,
-  showManualImport,
-  showSettings,
   onManual,
   onSettings,
 }: {
   reviewEnabled: boolean
-  showManualImport: boolean
-  showSettings: boolean
   onManual: () => void
   onSettings: () => void
 }) {
   return (
-    <section className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-      <div className="rounded-[28px] border border-bg-hover/70 bg-bg-secondary/50 p-5">
-        <div className="inline-flex items-center gap-2 rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 py-1 text-xs font-medium text-accent-blue">
-          先留下面试，再开始复盘
+    <section className="rounded-lg border border-bg-hover bg-bg-secondary/35 px-4 py-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-text-primary">暂无复盘记录</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+            <span>自动记录 {reviewEnabled ? '已启用' : '未启用'}</span>
+            <span>可手动导入历史面试</span>
+          </div>
         </div>
-        <h3 className="mt-4 text-2xl font-bold tracking-tight text-text-primary">复盘的目标不是堆信息，而是快速提炼下一轮动作</h3>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
-          自动记录适合真实面试过程，手动复盘适合你把已有逐字稿直接丢进来。先把记录建立起来，后面再补分析和求职看板绑定。
-        </p>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onManual}
-            className="inline-flex h-10 items-center gap-2 rounded-2xl bg-accent-blue px-4 text-sm font-semibold text-white hover:bg-accent-blue/90"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-accent-blue px-3.5 text-sm font-semibold text-white hover:bg-accent-blue/90"
           >
             <Upload className="h-4 w-4" />
-            开始手动复盘
+            手动复盘
           </button>
           <button
             type="button"
             onClick={onSettings}
-            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-bg-hover bg-bg-secondary px-4 text-sm font-medium text-text-primary hover:bg-bg-hover"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-bg-hover bg-bg-secondary px-3.5 text-sm font-medium text-text-primary hover:bg-bg-hover"
           >
             <Settings className="h-4 w-4" />
-            调整自动记录
+            配置
           </button>
         </div>
       </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-        <div className="rounded-2xl border border-bg-hover/70 bg-bg-secondary/45 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <Power className={`h-4 w-4 ${reviewEnabled ? 'text-green-500' : 'text-text-muted'}`} />
-            自动记录
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-            {reviewEnabled
-              ? '当前已启用。面试结束后会把记录送进复盘队列。'
-              : '当前未启用。适合先手动导入已有逐字稿，后面再决定是否全程自动记录。'}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-bg-hover/70 bg-bg-secondary/45 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <Link2 className="h-4 w-4 text-accent-blue" />
-            后续联动
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-            复盘完成后可以回绑求职看板，把弱项和低分题同步成下一轮待办。
-          </p>
-        </div>
-        {(showManualImport || showSettings) && (
-          <div className="rounded-2xl border border-accent-blue/20 bg-accent-blue/5 p-4 text-xs leading-relaxed text-text-secondary sm:col-span-2 lg:col-span-1">
-            当前已展开下方配置区，你可以直接继续填写，不需要再跳走。
-          </div>
-        )}
-      </div>
     </section>
-  )
-}
-
-function SummaryStatPill({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: ComponentType<{ className?: string }>
-  label: string
-  value: string
-  hint: string
-  tone: 'blue' | 'green' | 'amber' | 'neutral'
-}) {
-  const toneClass = {
-    blue: 'border-blue-500/15 bg-blue-500/[0.07] text-blue-500',
-    green: 'border-green-500/15 bg-green-500/[0.07] text-green-500',
-    amber: 'border-yellow-500/15 bg-yellow-500/[0.07] text-yellow-500',
-    neutral: 'border-bg-hover bg-bg-tertiary/60 text-text-secondary',
-  }[tone]
-
-  return (
-    <div className="min-w-0 rounded-xl border border-bg-hover/70 bg-bg-secondary/45 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <div className={`rounded-lg border p-1.5 ${toneClass}`}>
-          <Icon className="h-3.5 w-3.5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">{label}</div>
-            <div className="text-sm font-semibold text-text-primary">{value}</div>
-          </div>
-          <div className="mt-0.5 line-clamp-1 text-[11px] leading-relaxed text-text-muted">{hint}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ReviewWorkspaceSidebar({
-  embedded = false,
-  isLight,
-  dividerClass,
-  surfaceClass,
-  focusLabel,
-  focusTitle,
-  focusDetail,
-  latest,
-  total,
-  focusEntrySession,
-  focusEntryMeta,
-  linkedApplicationCount,
-  linkedReviewCount,
-  timelineApplicationCount,
-  terminalLinkedApplicationCount,
-  actionRequiredCount,
-  avgScore,
-  activeCount,
-  completedCount,
-  manualSessionCount,
-  liveSessionCount,
-  onViewDetail,
-  onOpenApplication,
-}: {
-  embedded?: boolean
-  isLight: boolean
-  dividerClass: string
-  surfaceClass: string
-  focusLabel: string
-  focusTitle: string
-  focusDetail: string
-  latest: ReviewSession | null
-  total: number
-  focusEntrySession: ReviewSession | null
-  focusEntryMeta: { label: string; title: string; detail: string }
-  linkedApplicationCount: number
-  linkedReviewCount: number
-  timelineApplicationCount: number
-  terminalLinkedApplicationCount: number
-  actionRequiredCount: number
-  avgScore: number | null
-  activeCount: number
-  completedCount: number
-  manualSessionCount: number
-  liveSessionCount: number
-  onViewDetail: (sessionId: number) => void
-  onOpenApplication: (session: ReviewSession) => void
-}) {
-  const focusSession = focusEntrySession ?? latest
-  const focusSessionStatusLabel = focusSession ? STATUS_LABELS[focusSession.status] : null
-  const focusSessionTitle = focusSession?.title || focusSession?.company || '未命名复盘'
-  const focusSessionHint = focusSession?.application
-    ? describeApplicationMainlineHint(focusSession.application, null)
-    : '还没有关联岗位主线，打开详情后可以补绑定。'
-  const linkedApplicationHint = linkedReviewCount > 0
-    ? `${linkedReviewCount} 场复盘已挂回岗位主线`
-    : '还没有关联岗位'
-  const sourceMixLabel = `${liveSessionCount} / ${manualSessionCount}`
-  const statusQueueHint = activeCount > 0 ? `另有 ${activeCount} 场进行中` : `${completedCount} 场已出复盘`
-  const compactFocusTitle = focusSession ? `${focusEntryMeta.title} · ${focusSessionTitle}` : focusTitle
-  const workspaceInnerClass = embedded
-    ? 'space-y-2.5 p-3.5'
-    : `rounded-[24px] border p-4 ${surfaceClass}`
-  const focusCardClass = isLight ? 'border-bg-hover/70 bg-white/62' : 'border-white/[0.08] bg-black/16'
-  const mutedCardClass = isLight ? 'border-bg-hover/70 bg-bg-secondary/26' : 'border-white/[0.08] bg-black/10'
-
-  return (
-    <aside className={`hidden xl:block ${embedded ? `border-t ${dividerClass} xl:border-l xl:border-t-0` : ''}`}>
-      <div className="sticky top-3">
-        <section className={workspaceInnerClass}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-blue">
-              复盘工作台
-            </span>
-            <span className="rounded-full border border-bg-hover bg-bg-tertiary/60 px-2.5 py-1 text-[11px] font-medium text-text-muted">
-              {focusLabel}
-            </span>
-            <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-muted">
-              共 {total} 场
-            </span>
-          </div>
-          <h3 className="mt-2 text-base font-semibold tracking-tight text-text-primary">{focusTitle}</h3>
-          <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
-            {focusDetail}
-          </p>
-
-          {focusSession ? (
-            <div className={`rounded-2xl border p-3 ${focusCardClass}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">{focusEntryMeta.label}</div>
-                  <span className="rounded-full border border-bg-hover bg-bg-secondary px-2 py-0.5 text-[10px] font-medium text-text-muted">
-                    {dayjs.unix(Math.floor(focusSession.started_at)).format('MM-DD HH:mm')}
-                  </span>
-                </div>
-                {focusSessionStatusLabel ? (
-                  <span className="rounded-full border border-bg-hover bg-bg-secondary px-2 py-0.5 text-[10px] font-medium text-text-muted">
-                    {focusSessionStatusLabel}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-2 text-sm font-semibold text-text-primary">
-                {compactFocusTitle}
-              </div>
-              <div className="mt-1 text-[11px] text-text-muted">
-                {focusSession.application?.company ? `${focusSession.application.company} · ` : ''}{focusSession.application?.position ?? focusSession.role ?? '未绑定岗位'}
-              </div>
-              <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-text-secondary">
-                {focusEntryMeta.detail}
-              </p>
-              <div className="mt-2 rounded-xl border border-bg-hover/70 bg-bg-secondary/55 px-3 py-2 text-[11px] leading-relaxed text-text-muted">
-                {focusSessionHint}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onViewDetail(focusSession.id)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-accent-blue/20 bg-accent-blue/10 px-3 text-[11px] font-medium text-accent-blue hover:bg-accent-blue/15"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  打开复盘
-                </button>
-                {focusSession.application?.id ? (
-                  <button
-                    type="button"
-                    onClick={() => onOpenApplication(focusSession)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-bg-hover bg-bg-secondary px-3 text-[11px] font-medium text-text-secondary hover:bg-bg-hover"
-                  >
-                    <Link2 className="h-3.5 w-3.5" />
-                    岗位时间线
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <div className={`rounded-2xl border px-3 py-3 ${mutedCardClass}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">岗位联动</div>
-                <div className="mt-1 text-sm font-semibold text-text-primary">岗位和复盘保持 1 对多关系</div>
-                <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                  同岗位多轮复盘会继续挂回一条主线，终态岗位也不会断。
-                </p>
-              </div>
-              <span className="rounded-full border border-bg-hover bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-muted">
-                {timelineApplicationCount} 条时间线
-              </span>
-            </div>
-            <div className="mt-3 grid gap-2">
-              <SidebarInlineStat
-                icon={Link2}
-                label="已绑定岗位"
-                value={`${linkedApplicationCount} 个`}
-                detail={linkedApplicationHint}
-                tone={linkedReviewCount > 0 ? 'green' : 'neutral'}
-              />
-              <SidebarInlineStat
-                icon={ListChecks}
-                label="先处理"
-                value={`${actionRequiredCount} 场`}
-                detail={actionRequiredCount > 0 ? '失败、待生成和短样本优先' : '当前没有明显阻塞项'}
-                tone={actionRequiredCount > 0 ? 'amber' : 'green'}
-              />
-              <SidebarInlineStat
-                icon={TrendingUp}
-                label="均分 / 队列"
-                value={avgScore == null ? '--' : avgScore.toFixed(1)}
-                detail={statusQueueHint}
-                tone={avgScore != null && avgScore >= 7 ? 'green' : avgScore == null ? 'neutral' : 'amber'}
-              />
-            </div>
-            <div className="mt-3 rounded-xl border border-bg-hover/70 bg-bg-secondary/55 px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
-              实时记录和手动导入共用同一条岗位主线。终态岗位 {terminalLinkedApplicationCount} 个 · 来源混合 {sourceMixLabel}。
-            </div>
-          </div>
-        </section>
-      </div>
-    </aside>
-  )
-}
-
-function SidebarInlineStat({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  icon: ComponentType<{ className?: string }>
-  label: string
-  value: string
-  detail: string
-  tone: 'blue' | 'green' | 'amber' | 'neutral'
-}) {
-  const toneClass = {
-    blue: 'border-blue-500/15 bg-blue-500/[0.07] text-blue-500',
-    green: 'border-green-500/15 bg-green-500/[0.07] text-green-500',
-    amber: 'border-yellow-500/15 bg-yellow-500/[0.07] text-yellow-500',
-    neutral: 'border-bg-hover bg-bg-tertiary/60 text-text-secondary',
-  }[tone]
-
-  return (
-    <div className="min-w-0 rounded-xl border border-bg-hover/70 bg-bg-tertiary/18 px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <span className={`rounded-full border p-1 ${toneClass}`}>
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2 text-[11px]">
-            <span className="font-medium text-text-muted">{label}</span>
-            <span className="font-semibold text-text-primary">{value}</span>
-          </div>
-          <div className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-text-muted">{detail}</div>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -916,9 +505,7 @@ function ManualImportPanel({
         </div>
         <div>
           <h3 className="text-sm font-semibold text-text-primary">手动复盘导入</h3>
-          <p className="mt-1 text-xs leading-relaxed text-text-muted">
-            支持 Q/A、问/答、面试官/候选人格式；提交后走同一套纠错和复盘分析。
-          </p>
+          <p className="mt-1 text-xs leading-relaxed text-text-muted">粘贴问答文本，提交后生成复盘。</p>
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -1128,7 +715,7 @@ function SessionTable({
 
   if (visibleGroups.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-bg-hover bg-bg-secondary/30 px-4 py-6 text-sm text-text-muted">
+      <div className="rounded-lg border border-dashed border-bg-hover bg-bg-secondary/30 px-4 py-6 text-sm text-text-muted">
         当前筛选下还没有复盘记录。
       </div>
     )
@@ -1139,15 +726,12 @@ function SessionTable({
       {visibleGroups.map((group) => (
         <section key={group.key} className="space-y-2">
           <div className="flex items-start justify-between gap-3 px-1">
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold text-text-primary">{group.title}</h3>
-              <p className="mt-0.5 text-[11px] text-text-muted">{group.subtitle}</p>
-            </div>
-            <div className="inline-flex min-w-[34px] items-center justify-center rounded-full border border-bg-hover bg-bg-secondary px-2 py-1 text-xs font-semibold text-text-secondary">
-              {group.items.length}
+              <span className="text-[11px] text-text-muted">{group.items.length} 场</span>
             </div>
           </div>
-          <div className="overflow-hidden rounded-[22px] border border-bg-hover/75 bg-bg-secondary/24">
+          <div className="overflow-hidden rounded-lg border border-bg-hover/75 bg-bg-secondary/15">
             <div className="divide-y divide-bg-hover/70">
               {buildSessionClusters(group.items).map((cluster) => (
                 <ReviewTimelineCluster
@@ -1191,32 +775,25 @@ function ReviewTimelineCluster({
 }) {
   const timelineCount = cluster.application?.id != null ? linkedReviewCounts.get(cluster.application.id) ?? cluster.items.length : cluster.items.length
   const showTimelineHeader = Boolean(cluster.application?.id) && cluster.items.length > 1
-  const latestSession = cluster.items[0]
-  const earliestSession = cluster.items[cluster.items.length - 1]
 
   return (
-    <section className={showTimelineHeader ? 'bg-accent-blue/[0.012]' : ''}>
+    <section>
       {showTimelineHeader ? (
-        <div className="border-b border-accent-blue/10 bg-accent-blue/[0.035] px-4 py-2.5">
+        <div className="border-b border-bg-hover bg-bg-secondary/35 px-3 py-2.5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-blue">
+                <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-blue">
                   岗位时间线
                 </span>
                 <h4 className="text-sm font-semibold text-text-primary">
                   {cluster.application?.company || '未命名公司'} · {cluster.application?.position || '岗位未填写'}
                 </h4>
                 <StageBadge stage={cluster.application?.stage || 'applied'} />
-                <span className="rounded-full border border-bg-hover bg-bg-secondary/75 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+                <span className="rounded-md border border-bg-hover bg-bg-secondary/75 px-2 py-0.5 text-[10px] font-medium text-text-muted">
                   同岗位 {timelineCount} 场复盘
                 </span>
               </div>
-                <p className="mt-1 text-[11px] text-text-secondary">
-                  最近一场 {formatSessionStamp(latestSession.started_at)}
-                  {earliestSession.id !== latestSession.id ? ` · 更早一场 ${formatSessionStamp(earliestSession.started_at)}` : ''}
-                  。后续同岗位复盘会继续挂回这条时间线。
-                </p>
               </div>
           </div>
         </div>
@@ -1282,78 +859,81 @@ function ReviewQueueRow({
   const summary = sessionSummary(session)
   const hasPrimaryTrigger = showTriggerButton
   const linkedApplicationName = `${session.application?.company || '未命名公司'} · ${session.application?.position || '岗位'}`
-  const applicationHint = showLinkedApplication
-    ? describeApplicationMainlineHint(session.application ?? null, linkedReviewCount)
-    : null
 
   return (
-    <article className={`px-4 py-2.5 transition-colors hover:bg-bg-tertiary/18 ${sessionRowTone(session.status)}`}>
+    <article
+      onClick={() => onViewDetail(session.id)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onViewDetail(session.id)
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      className={`cursor-pointer px-4 py-2 outline-none transition-colors hover:bg-bg-tertiary/18 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-blue/30 ${sessionRowTone(session.status)}`}
+      aria-label={`打开 ${title} 复盘详情`}
+    >
       <div className="flex gap-3">
-        <div className={`hidden w-1.5 shrink-0 rounded-full md:block ${sessionRailTone(session.status)}`} />
+        <div className={`hidden w-1 shrink-0 rounded-sm md:block ${sessionRailTone(session.status)}`} />
         <div className="min-w-0 flex-1">
           <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(session.status)}`}>
-                  <StatusIcon className={`h-3.5 w-3.5 ${session.status === 'analyzing' ? 'animate-spin' : ''} ${statusColor}`} />
-                  {STATUS_LABELS[session.status]}
-                </span>
-                <span className="rounded-full border border-bg-hover bg-bg-tertiary/50 px-2.5 py-1 text-[11px] font-medium text-text-secondary">
-                  {session.source === 'manual' ? '手动导入' : '实时记录'}
-                </span>
-                {session.auto_sync_eligible === false ? (
-                  <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-500">
-                    短样本
-                  </span>
-                ) : null}
-                {showScore ? (
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${scoreTone(session.avg_score as number)}`}>
-                    {session.avg_score?.toFixed(1)}
-                  </span>
-                ) : (
-                  <span className="rounded-full border border-bg-hover px-2.5 py-1 text-[11px] text-text-muted">未出分</span>
-                )}
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h4 className="text-base font-semibold tracking-tight text-text-primary">{title}</h4>
                 <span className="text-sm text-text-secondary">{roleText}</span>
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${statusTone(session.status)}`}>
+                  <StatusIcon className={`h-3.5 w-3.5 ${session.status === 'analyzing' ? 'animate-spin' : ''} ${statusColor}`} />
+                  {STATUS_LABELS[session.status]}
+                </span>
+                <span className="rounded-md border border-bg-hover bg-bg-tertiary/50 px-2 py-0.5 text-[11px] font-medium text-text-secondary">
+                  {session.source === 'manual' ? '手动导入' : '实时记录'}
+                </span>
+                {session.auto_sync_eligible === false ? (
+                  <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
+                    短样本
+                  </span>
+                ) : null}
+                {showScore ? (
+                  <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${scoreTone(session.avg_score as number)}`}>
+                    {session.avg_score?.toFixed(1)}
+                  </span>
+                ) : (
+                  <span className="rounded-md border border-bg-hover px-2 py-0.5 text-[11px] text-text-muted">未出分</span>
+                )}
                 <span>{timeText}</span>
                 {durationText ? <span>{durationText}</span> : null}
                 <span>{turnsText}</span>
               </div>
               {showLinkedApplication ? (
-                <div className="mt-2 rounded-xl border border-accent-blue/15 bg-accent-blue/[0.035] px-3 py-2 text-[11px] text-text-secondary">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-accent-blue">{compactLinkedApplication ? '同岗位主线' : '岗位主线'}</span>
-                    <span className="font-medium text-text-primary">{linkedApplicationName}</span>
-                    <StageBadge stage={session.application?.stage || 'applied'} />
-                    {linkedReviewCount != null && linkedReviewCount > 1 ? (
-                      <span className="rounded-full border border-bg-hover bg-bg-secondary/80 px-2 py-0.5 text-[10px] font-medium text-text-muted">
-                        同岗位 {linkedReviewCount} 场复盘
-                      </span>
-                    ) : null}
-                    {timelineLabel ? (
-                      <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[10px] font-medium text-accent-blue">
-                        {timelineLabel}
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => onOpenApplication(session)}
-                      className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2 py-0.5 text-[11px] font-medium text-accent-blue hover:bg-accent-blue/15"
-                    >
-                      岗位时间线
-                    </button>
-                  </div>
-                  {applicationHint ? (
-                    <p className="mt-1.5 line-clamp-1 text-[10px] leading-relaxed text-text-muted">
-                      {applicationHint}
-                    </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
+                  <span className="font-medium text-accent-blue">{compactLinkedApplication ? '同岗位' : '岗位'}</span>
+                  <span className="font-medium text-text-primary">{linkedApplicationName}</span>
+                  <StageBadge stage={session.application?.stage || 'applied'} />
+                  {linkedReviewCount != null && linkedReviewCount > 1 ? (
+                    <span className="rounded-md border border-bg-hover bg-bg-secondary/70 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+                      {linkedReviewCount} 场
+                    </span>
                   ) : null}
+                  {timelineLabel ? (
+                    <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[10px] font-medium text-accent-blue">
+                      {timelineLabel}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onOpenApplication(session)
+                    }}
+                    className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue hover:bg-accent-blue/5"
+                  >
+                    查看岗位
+                  </button>
                 </div>
               ) : null}
 
@@ -1366,8 +946,11 @@ function ReviewQueueRow({
               {hasPrimaryTrigger ? (
                 <button
                   type="button"
-                  onClick={() => onTriggerAnalysis(session.id)}
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium ${
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onTriggerAnalysis(session.id)
+                  }}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium ${
                     session.status === 'analysis_failed'
                       ? 'border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/15'
                       : 'border-green-500/20 bg-green-500/10 text-green-500 hover:bg-green-500/15'
@@ -1379,8 +962,11 @@ function ReviewQueueRow({
               ) : (
                 <button
                   type="button"
-                  onClick={() => onViewDetail(session.id)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onViewDetail(session.id)
+                  }}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-blue/25 bg-transparent px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/5"
                 >
                   <Eye className="h-3.5 w-3.5" />
                   查看详情
@@ -1390,8 +976,11 @@ function ReviewQueueRow({
               {hasPrimaryTrigger ? (
                 <button
                   type="button"
-                  onClick={() => onViewDetail(session.id)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onViewDetail(session.id)
+                  }}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-blue/25 bg-transparent px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/5"
                 >
                   <Eye className="h-3.5 w-3.5" />
                   查看详情
@@ -1477,18 +1066,7 @@ function sessionRailTone(status: ReviewSession['status']) {
 }
 
 function sessionRowTone(status: ReviewSession['status']) {
-  switch (status) {
-    case 'analysis_failed':
-      return 'bg-red-500/[0.015]'
-    case 'partial_capture':
-    case 'recorded':
-      return 'bg-yellow-500/[0.015]'
-    case 'analyzing':
-    case 'recording':
-      return 'bg-blue-500/[0.015]'
-    default:
-      return ''
-  }
+  return ''
 }
 
 function sessionSummary(session: ReviewSession) {
@@ -1550,87 +1128,6 @@ function buildSessionClusters(sessions: ReviewSession[]): SessionCluster[] {
   return ordered
 }
 
-function describeApplicationMainlineHint(
-  application: ReviewSession['application'] | null,
-  linkedReviewCount: number | null,
-) {
-  if (!application) return null
-  const stageLabel = STAGE_LABELS[application.stage] ?? application.stage
-  if (application.stage === 'withdrawn') {
-    return '这条岗位已经放弃，但历史复盘和后续补录仍会继续留在这条主线里。'
-  }
-  if (isRejectedStage(application.stage)) {
-    return `这条岗位已${stageLabel}，复盘不会消失，后面补录也会继续挂回这条时间线。`
-  }
-  if ((linkedReviewCount ?? 0) > 1) {
-    return '这条岗位已经形成连续时间线，后面的同岗位面试会继续接在后面。'
-  }
-  return '这条岗位还在主流程推进中，后续同岗位面试会继续挂回这条主线。'
-}
-
-function describeFocusEntry({
-  focusFilter,
-  groupKey,
-  session,
-}: {
-  focusFilter: ReviewListFocus
-  groupKey: SessionGroup['key'] | null
-  session: ReviewSession | null
-}) {
-  if (!session) {
-    return {
-      label: '当前入口',
-      title: '先从最新复盘开始',
-      detail: '这里会优先指向当前最值得先打开的一场复盘。',
-    }
-  }
-  switch (focusFilter) {
-    case 'attention':
-      return {
-        label: '现在先处理',
-        title: '这一场会影响后续联动',
-        detail: session.auto_sync_eligible === false
-          ? '这场当前被识别为测试片段，默认不会自动同步到岗位主线。'
-          : '先把它补生成或确认结果，后面的岗位时间线和待办同步才会更干净。',
-      }
-    case 'active':
-      return {
-        label: '当前进行中',
-        title: '后台还在推进这一场',
-        detail: '不用一直盯着这里，等它出结果后再回来看逐题分析和岗位联动即可。',
-      }
-    case 'done':
-      return {
-        label: '现在回看',
-        title: '从这场开始回看最顺',
-        detail: session.application
-          ? '如果是同岗位多轮面试，直接从这里跳回岗位时间线会比翻列表更省心。'
-          : '这场已经有完整结论，适合直接打开详情回看答题和薄弱点。',
-      }
-    case 'all':
-    default:
-      if (groupKey === 'attention') {
-        return {
-          label: '当前入口',
-          title: '先清掉前面的阻塞项',
-          detail: '这场排在最前面，是因为它最容易卡住后面的岗位主线和待办联动。',
-        }
-      }
-      if (groupKey === 'active') {
-        return {
-          label: '当前入口',
-          title: '后台正在推进这一场',
-          detail: '可以先去处理别的记录，等它分析完成后再回到这里。',
-        }
-      }
-      return {
-        label: '当前入口',
-        title: '从这场开始回看复盘',
-        detail: '当前没有明显阻塞项时，直接从最近的已完成复盘开始回顾最省心。',
-      }
-  }
-}
-
 function describeTimelinePosition(index: number, total: number) {
   if (total <= 1) return '当前这场'
   if (index === 0) return '当前这场是最近一场'
@@ -1638,65 +1135,11 @@ function describeTimelinePosition(index: number, total: number) {
   return '当前这场在中间'
 }
 
-function formatSessionStamp(ts: number) {
-  return dayjs.unix(Math.floor(ts)).format('MM-DD HH:mm')
-}
-
 function formatRelativeDate(ts: number) {
   const diffDays = Math.floor((Date.now() / 1000 - ts) / 86400)
   if (diffDays <= 0) return '今天'
   if (diffDays === 1) return '昨天'
   return `${diffDays} 天前`
-}
-
-function describeFocusLens({
-  focusFilter,
-  actionRequiredCount,
-  activeCount,
-  completedCount,
-  total,
-  latest,
-  timelineApplicationCount,
-}: {
-  focusFilter: ReviewListFocus
-  actionRequiredCount: number
-  activeCount: number
-  completedCount: number
-  total: number
-  latest?: ReviewSession
-  timelineApplicationCount: number
-}) {
-  switch (focusFilter) {
-    case 'attention':
-      return {
-        title: actionRequiredCount > 0 ? '先把会卡住后续联动的记录清掉' : '需要优先处理的记录已经清空',
-        detail: actionRequiredCount > 0
-          ? `失败、短样本和待生成会先堆在这里。先把这 ${actionRequiredCount} 场清掉，后面的岗位时间线和待办同步才会更干净。`
-          : '当前没有失败、短样本或待生成的复盘，继续保持即可。',
-      }
-    case 'active':
-      return {
-        title: activeCount > 0 ? '后台还在跑，不用一直盯着这页' : '进行中的复盘不多，可以随时切回全局',
-        detail: activeCount > 0
-          ? `现在有 ${activeCount} 场还在录制或分析。你可以先去处理前面的记录，等它们出结果后再回来看。`
-          : '当前没有明显堆积的后台任务，复盘队列比较轻。',
-      }
-    case 'done':
-      return {
-        title: '已经出结论的，直接沿岗位主线回看',
-        detail: timelineApplicationCount > 0
-          ? `这页主要是已完成复盘。已经有 ${timelineApplicationCount} 条岗位时间线串起多场复盘，适合按轮次回看同一岗位。`
-          : `这页主要是已完成复盘。当前共有 ${completedCount} 场已经出结论，可以按时间快速回顾。`,
-      }
-    case 'all':
-    default:
-      return {
-        title: '把复盘当队列看，而不是当档案库',
-        detail: total <= 0
-          ? '先留下一场真实面试或手动导入逐字稿，复盘才会慢慢形成主线。'
-          : `这页按时间汇总全部复盘${latest ? `，最近一场在 ${formatRelativeDate(latest.started_at)}` : ''}。优先清掉前面的阻塞项，再回看同岗位时间线会更省心。`,
-      }
-  }
 }
 
 function buildSessionGroups(
@@ -1707,7 +1150,6 @@ function buildSessionGroups(
     {
       key: 'attention' as const,
       title: '先处理',
-      subtitle: '失败、部分录制、短样本和待生成的记录先放前面。',
       items: sessions.filter((session) =>
         session.status === 'analysis_failed' ||
         session.status === 'partial_capture' ||
@@ -1718,7 +1160,6 @@ function buildSessionGroups(
     {
       key: 'active' as const,
       title: '进行中',
-      subtitle: '还在录制，或者后台正在分析。',
       items: sessions.filter((session) =>
         session.status === 'analyzing' || session.status === 'recording',
       ),
@@ -1726,7 +1167,6 @@ function buildSessionGroups(
     {
       key: 'done' as const,
       title: '已完成',
-      subtitle: '已经生成结论，可直接回看或跳回岗位时间线。',
       items: sessions.filter((session) =>
         session.status === 'completed' && hasGeneratedAnalysis(session),
       ),
