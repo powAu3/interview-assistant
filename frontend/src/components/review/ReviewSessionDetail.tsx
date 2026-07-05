@@ -653,32 +653,30 @@ function TakeawaysPanel({
     <SectionPanel
       title="亮点与风险"
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-1">
         {strongPoints.length > 0 ? (
-          <div className="rounded-lg border border-green-500/20 bg-green-500/6 p-3">
+          <section className="min-w-0">
             <div className="text-sm font-semibold text-green-500">高频亮点</div>
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-2 space-y-1.5 border-l border-green-500/25 pl-3">
               {strongPoints.map((point, idx) => (
-                <li key={`${point}-${idx}`} className="flex items-start gap-2 text-sm leading-relaxed text-text-primary">
-                  <span className="mt-1 text-green-500">•</span>
-                  <span>{point}</span>
+                <li key={`${point}-${idx}`} className="text-sm leading-relaxed text-text-primary">
+                  {point}
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         ) : null}
         {weakPoints.length > 0 ? (
-          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/6 p-3">
+          <section className="min-w-0">
             <div className="text-sm font-semibold text-yellow-500">待改进点</div>
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-2 space-y-1.5 border-l border-yellow-500/25 pl-3">
               {weakPoints.map((point, idx) => (
-                <li key={`${point}-${idx}`} className="flex items-start gap-2 text-sm leading-relaxed text-text-primary">
-                  <span className="mt-1 text-yellow-500">•</span>
-                  <span>{point}</span>
+                <li key={`${point}-${idx}`} className="text-sm leading-relaxed text-text-primary">
+                  {point}
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         ) : null}
       </div>
     </SectionPanel>
