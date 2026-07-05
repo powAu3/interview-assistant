@@ -251,37 +251,6 @@ function signalSurfaceTone(tone: string) {
   return 'border-bg-hover/80 bg-bg-secondary/55'
 }
 
-function buildRowSupportText(app: Application, openTodoCount: number) {
-  const reviewCount = app.review_summary.review_count
-  const latestReviewAt = app.review_summary.latest_review_at
-  const latestReviewLabel = latestReviewAt != null
-    ? dayjs.unix(Math.floor(latestReviewAt)).format('MM-DD HH:mm')
-    : null
-
-  if (reviewCount > 0) {
-    const timelineLead = isTerminalStage(app.stage)
-      ? '时间线保留'
-      : reviewCount > 1
-        ? `岗位时间线已串 ${reviewCount} 场`
-        : '岗位时间线已接上'
-    return latestReviewLabel ? `${timelineLead} · 最近 ${latestReviewLabel}` : timelineLead
-  }
-
-  if (isTerminalStage(app.stage)) {
-    return '结果已记录'
-  }
-
-  if (app.next_followup_at == null) {
-    return '先补跟进时间'
-  }
-
-  if (openTodoCount > 0) {
-    return `还剩 ${openTodoCount} 条待办`
-  }
-
-  return '待复盘'
-}
-
 function hiddenPreviewLabel(app: Application) {
   const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
   const reviewCount = app.review_summary.review_count
@@ -781,7 +750,6 @@ export default function ApplicationsTable({
                   const review = reviewSummaryText(app)
                   const reviewLinked = hasReviewTimeline(app)
                   const appOpenTodoCount = app.todos.filter((todo) => !todo.done).length
-                  const rowHint = buildRowSupportText(app, appOpenTodoCount)
                   return (
                     <article
                       key={app.id}
@@ -866,9 +834,6 @@ export default function ApplicationsTable({
                             />
                           ) : null}
                         </div>
-                        <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-text-muted">
-                          {rowHint}
-                        </p>
                       </div>
 
                       <div className="flex flex-wrap items-start justify-start gap-2 lg:col-start-2 lg:row-start-1 lg:justify-end xl:col-auto xl:row-auto xl:flex-col xl:items-end xl:justify-center">

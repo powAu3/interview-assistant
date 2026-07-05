@@ -968,10 +968,10 @@ function ApplicationLinkPanel({
   const isLatestLinkedReview = linkedReviewSummary?.latest_review_id != null && linkedReviewSummary.latest_review_id === detail.id
   const linkedStageLabel = linked ? STAGE_LABELS[linked.stage] ?? linked.stage : ''
   const reviewRelationshipLabel = linkedReviewCount <= 1
-    ? '当前只有这一场'
+    ? '唯一一场'
     : isLatestLinkedReview
-      ? '当前这场是最近一场'
-      : '当前这场是更早的一场'
+      ? '最近一场'
+      : '更早一场'
   const syncNote = detail.auto_sync_eligible === false
     ? '短样本，不回写看板'
     : isClosedStage

@@ -158,7 +158,7 @@ describe('ReviewSessionDetail', () => {
     render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
 
     await screen.findByText((_content, element) => element?.textContent === '3 场复盘')
-    expect(screen.getByText('当前这场是更早的一场')).toBeInTheDocument()
+    expect(screen.getByText('更早一场')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '全部复盘' }))
 
     expect(useUiPrefsStore.getState().appMode).toBe('job-tracker')
@@ -199,7 +199,7 @@ describe('ReviewSessionDetail', () => {
     render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
 
     await screen.findByRole('button', { name: '去求职看板' })
-    expect(screen.getByText('当前这场是最近一场')).toBeInTheDocument()
+    expect(screen.getByText('最近一场')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '去求职看板' }))
 
     expect(useUiPrefsStore.getState().appMode).toBe('job-tracker')

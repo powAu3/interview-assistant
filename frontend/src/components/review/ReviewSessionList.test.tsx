@@ -143,7 +143,7 @@ describe('ReviewSessionList', () => {
     await screen.findByText('OpenAI 一面')
     expect(screen.getAllByText('一面挂').length).toBeGreaterThan(0)
     expect(screen.getAllByText('2 场').length).toBeGreaterThan(0)
-    expect(screen.getByText('当前这场是最近一场')).toBeInTheDocument()
+    expect(screen.getByText('最近一场')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /已完成/ }))
 

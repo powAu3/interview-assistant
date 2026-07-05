@@ -1131,10 +1131,10 @@ function buildSessionClusters(sessions: ReviewSession[]): SessionCluster[] {
 }
 
 function describeTimelinePosition(index: number, total: number) {
-  if (total <= 1) return '当前这场'
-  if (index === 0) return '当前这场是最近一场'
-  if (index === total - 1) return '当前这场是更早一场'
-  return '当前这场在中间'
+  if (total <= 1) return '唯一一场'
+  if (index === 0) return '最近一场'
+  if (index === total - 1) return '更早一场'
+  return '中间场'
 }
 
 function formatRelativeDate(ts: number) {
