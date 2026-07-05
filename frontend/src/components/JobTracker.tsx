@@ -1409,59 +1409,49 @@ function ApplicationReviewsModal({
           {loading ? (
             <div className="py-10 text-center text-sm text-text-muted">加载中...</div>
           ) : items.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-bg-hover bg-bg-secondary/35 px-4 py-8 text-center">
-              <div className="flex justify-center">
-                <StageBadge stage={app.stage} isLight={isLight} />
-              </div>
-              <div className="mt-3 text-sm font-semibold text-text-primary">暂无关联复盘</div>
+            <div className="border-l border-bg-hover/80 py-2 pl-3">
+              <div className="text-sm font-semibold text-text-primary">暂无关联复盘</div>
               <div className="mt-1 text-xs text-text-muted">
                 {closedStage ? '已结束，可手动补挂。' : '暂无复盘。'}
               </div>
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-lg border border-bg-hover bg-bg-secondary/35 px-3 py-2.5">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <StageBadge stage={app.stage} isLight={isLight} />
-                    <span className="text-xs font-medium text-text-primary">{items.length} 场复盘</span>
-                    <span className="text-xs text-text-muted">最近 {latestReviewLabel}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
-                    <span>最近得分 <span className="font-semibold text-text-primary">{latestScoreLabel}</span></span>
-                    <span>已出分 <span className="font-semibold text-text-primary">{scoredCount}</span></span>
-                  </div>
+              <div className="flex flex-col gap-1.5 border-b border-bg-hover/80 pb-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                  <span className="font-medium text-text-primary">{items.length} 场复盘</span>
+                  <span>最近 {latestReviewLabel}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
+                  <span>最近得分 <span className="font-semibold text-text-primary">{latestScoreLabel}</span></span>
+                  <span>已出分 <span className="font-semibold text-text-primary">{scoredCount}</span></span>
                 </div>
               </div>
 
-              <div className="space-y-2.5">
+              <div>
                 {items.map((item, index) => {
                   const reviewAt = item.ended_at ?? item.started_at
                   const highlighted = highlightedReviewId != null && item.id === highlightedReviewId
                   return (
                     <div key={item.id} className="relative pl-6">
                       {index < items.length - 1 ? (
-                        <div className="absolute left-[11px] top-8 h-[calc(100%+0.5rem)] w-px bg-bg-hover" aria-hidden />
+                        <div className="absolute left-[11px] top-8 h-[calc(100%-0.5rem)] w-px bg-bg-hover" aria-hidden />
                       ) : null}
-                      <div className={`absolute left-0 top-5 h-3 w-3 rounded-full border-2 ${
-                        highlighted ? 'border-accent-blue bg-accent-blue/20' : 'border-bg-hover bg-bg-secondary'
+                      <div className={`absolute left-0 top-5 h-3 w-3 rounded-full border-2 bg-bg-secondary ${
+                        highlighted ? 'border-accent-blue' : 'border-bg-hover'
                       }`} aria-hidden />
-                      <div className={`rounded-lg border p-3 ${
-                        highlighted
-                          ? 'border-accent-blue/35 bg-accent-blue/[0.04]'
-                          : 'border-bg-hover bg-bg-tertiary/25'
-                      }`}>
+                      <div className="border-b border-bg-hover/70 py-3">
                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="text-sm font-semibold text-text-primary">
                                 {item.title || item.company || item.role || `复盘 #${item.id}`}
                               </div>
-                              <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${reviewStatusTone(item.status)}`}>
+                              <span className={`text-[11px] font-medium ${reviewStatusTone(item.status)}`}>
                                 {reviewStatusLabel(item.status)}
                               </span>
                               {highlighted ? (
-                                <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+                                <span className="text-[11px] font-medium text-accent-blue">
                                   当前这场
                                 </span>
                               ) : null}
@@ -1475,8 +1465,8 @@ function ApplicationReviewsModal({
                               <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-text-secondary">{item.summary_preview}</p>
                             ) : null}
                           </div>
-                          <div className="flex shrink-0 flex-col items-stretch gap-2 md:min-w-[120px]">
-                            <div className={`rounded-md px-2.5 py-1 text-center text-xs font-bold ${reviewScoreTone(item.avg_score)}`}>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <div className={`text-xs font-bold ${reviewScoreTone(item.avg_score)}`}>
                               {item.avg_score != null ? item.avg_score.toFixed(1) : '未出分'}
                             </div>
                             <button
@@ -1502,10 +1492,10 @@ function ApplicationReviewsModal({
 }
 
 function reviewScoreTone(score: number | null) {
-  if (score == null) return 'bg-bg-hover text-text-muted'
-  if (score < 6) return 'bg-yellow-500/15 text-yellow-500'
-  if (score >= 8) return 'bg-green-500/15 text-green-500'
-  return 'bg-blue-500/15 text-blue-500'
+  if (score == null) return 'text-text-muted'
+  if (score < 6) return 'text-yellow-500'
+  if (score >= 8) return 'text-green-500'
+  return 'text-blue-500'
 }
 
 function reviewStatusLabel(status: string) {
@@ -1530,16 +1520,16 @@ function reviewStatusLabel(status: string) {
 function reviewStatusTone(status: string) {
   switch (status) {
     case 'completed':
-      return 'bg-green-500/10 text-green-500'
+      return 'text-green-500'
     case 'analysis_failed':
-      return 'bg-red-500/10 text-red-500'
+      return 'text-red-500'
     case 'analyzing':
-      return 'bg-blue-500/10 text-blue-500'
+      return 'text-blue-500'
     case 'partial_capture':
-      return 'bg-yellow-500/10 text-yellow-500'
+      return 'text-yellow-500'
     case 'recorded':
-      return 'bg-amber-500/10 text-amber-500'
+      return 'text-amber-500'
     default:
-      return 'bg-bg-hover text-text-muted'
+      return 'text-text-muted'
   }
 }
