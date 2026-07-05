@@ -649,16 +649,6 @@ export default function ApplicationsTable({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold text-text-primary">{app.company || '未命名公司'}</span>
-                          {highlightedId === app.id ? (
-                            <span className="rounded-md border border-accent-blue/20 bg-transparent px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
-                              NEW
-                            </span>
-                          ) : null}
-                          {detailOpenForApp ? (
-                            <span className="rounded-md border border-accent-blue/20 bg-transparent px-1.5 py-0.5 text-[10px] font-semibold text-accent-blue">
-                              详情已展开
-                            </span>
-                          ) : null}
                         </div>
                         <div className="mt-1 text-xs text-text-secondary">{app.position || '岗位未填写'}</div>
                       </div>
@@ -832,11 +822,9 @@ export default function ApplicationsTable({
               {hiddenApplicationsCount > 0 && onShowAll ? (
                 <div className="border-t border-bg-hover/80 bg-bg-tertiary/12 px-4 py-2.5">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="rounded-md border border-bg-hover bg-bg-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
-                      当前只看 {focusFilterLabel}
-                    </span>
+                    <span className="text-[11px] font-medium text-text-secondary">当前只看 {focusFilterLabel}</span>
                     <span className="text-sm font-semibold text-text-primary">
-                      另外还有 {hiddenApplicationsCount} 条记录
+                      还有 {hiddenApplicationsCount} 条记录
                     </span>
                     {hiddenPreviewItems.map((app) => (
                       <span

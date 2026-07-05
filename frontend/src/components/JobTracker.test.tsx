@@ -663,7 +663,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
 
     await waitFor(() => expect(screen.getAllByText('MiniMax').length).toBeGreaterThan(0))
-    expect(screen.getByText(/另外还有 2 条记录/)).toBeInTheDocument()
+    expect(screen.getByText(/还有 2 条记录/)).toBeInTheDocument()
     expect(screen.getByText('Moonshot AI')).toBeInTheDocument()
     expect(screen.getAllByText('二面挂').length).toBeGreaterThan(0)
     expect(screen.getByText('Teal')).toBeInTheDocument()
@@ -749,9 +749,8 @@ describe('JobTracker', () => {
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
     fireEvent.click(screen.getByRole('button', { name: '查看 Acme 详情' }))
 
-    expect(await screen.findByText('详情已展开')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '定位 Acme 详情' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '收起详情' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '定位 Acme 详情' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '返回列表' })).toBeInTheDocument()
   })
 

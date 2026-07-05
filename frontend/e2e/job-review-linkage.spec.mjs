@@ -18,7 +18,6 @@ test.describe('job tracker and review linkage', () => {
     await expect(page.getByRole('heading', { name: '求职进度', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '查看 MiniMax 详情' }).click()
 
-    await expect(page.getByText('详情已展开')).toBeVisible()
     await expect(page.getByRole('button', { name: '定位 MiniMax 详情' })).toBeVisible()
     await expect(page.getByRole('button', { name: '返回列表' })).toBeVisible()
     await expect(page.getByText('已聚焦 1 条 · 当前筛选 2 条')).toBeVisible()
