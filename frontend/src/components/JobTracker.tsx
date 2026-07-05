@@ -160,78 +160,65 @@ function getFocusFilterForStage(stage: string): FocusFilter {
   return 'active'
 }
 
-function describeCreateNotice(notice: CreateNotice): { rail: string; detail: string } {
+function describeCreateNotice(notice: CreateNotice): { rail: string } {
   const stageLabel = STAGE_LABELS[notice.stage] ?? notice.stage
-  const appliedText = notice.appliedAt != null
-    ? `投递日期已记录为 ${dayjs.unix(Math.floor(notice.appliedAt)).format('YYYY-MM-DD')}。`
-    : ''
 
   if (isRejectedStage(notice.stage)) {
     return {
       rail: '已归到“挂了”',
-      detail: `${appliedText}${appliedText ? ' ' : ''}阶段会保留为 ${stageLabel}，后续如果补复盘，时间线也会继续挂在这条岗位下面。`,
     }
   }
 
   if (notice.stage === 'withdrawn') {
     return {
       rail: '已归到“已放弃”',
-      detail: `${appliedText}${appliedText ? ' ' : ''}这条记录不会再进入待跟进提醒，但历史复盘、备注和 Offer 信息仍然会保留。`,
     }
   }
 
   if (notice.stage === 'offer') {
     return {
       rail: '已归到“Offer”',
-      detail: `${appliedText}${appliedText ? ' ' : ''}你可以下一步补薪资、福利和截止日期，不需要先把别的字段都填满。`,
     }
   }
 
   if (INTERVIEW_FOCUS_STAGES.has(notice.stage)) {
     return {
       rail: '已归到“面试中”',
-      detail: `${appliedText}${appliedText ? ' ' : ''}建议下一步补一个跟进日期，或者先记 1-2 条面试准备待办。`,
     }
   }
 
   return {
     rail: '已归到“进行中”',
-    detail: `${appliedText}${appliedText ? ' ' : ''}你可以下一步补一个跟进日期，或者写 1-2 条待办。`,
   }
 }
 
-function describeCreateNoticeNextStep(notice: CreateNotice): { title: string; detail: string } {
+function describeCreateNoticeNextStep(notice: CreateNotice): { title: string } {
   if (isRejectedStage(notice.stage)) {
     return {
-      title: '确认结果后，保留这条时间线就够了',
-      detail: '如果后面补录复盘，它会继续挂回这条岗位，不需要再建一条新记录。',
+      title: '结果已记录',
     }
   }
 
   if (notice.stage === 'withdrawn') {
     return {
-      title: '这条记录已经进入已放弃',
-      detail: '后面只在你想补备注、结果原因或历史复盘时再回来就行。',
+      title: '已放弃',
     }
   }
 
   if (notice.stage === 'offer') {
     return {
-      title: '下一步最值得补的是 Offer 细节',
-      detail: '把薪资、地点和截止时间补齐，后面做对比会轻很多。',
+      title: '补 Offer 细节',
     }
   }
 
   if (INTERVIEW_FOCUS_STAGES.has(notice.stage)) {
     return {
-      title: '下一步先补跟进时间或面试待办',
-      detail: '这样“待跟进”和后续复盘时间线才会更像真实面试流程，而不是只存一条记录。',
+      title: '补跟进/待办',
     }
   }
 
   return {
-    title: '这条岗位已经能继续用了',
-    detail: '继续往下补跟进、待办或后续复盘时，都会自然挂回这一条岗位。',
+    title: '补进度',
   }
 }
 
@@ -1324,7 +1311,7 @@ function CreateSuccessBanner({
           </span>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
-          <span>{continueLabel === '补进度' ? '可继续补阶段和跟进时间' : nextStepCopy.title}</span>
+          <span>{continueLabel === '补进度' ? '补阶段/跟进' : nextStepCopy.title}</span>
           <span>已定位详情</span>
         </div>
       </div>
