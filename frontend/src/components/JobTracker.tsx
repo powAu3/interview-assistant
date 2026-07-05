@@ -1155,21 +1155,21 @@ function CreateSuccessBanner({
 
   return (
     <section
-      className={`flex flex-col gap-3 rounded-lg border px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between ${
-        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-bg-secondary/45'
+      className={`flex flex-col gap-3 border-l pl-3 lg:flex-row lg:items-center lg:justify-between ${
+        isLight ? 'border-bg-hover' : 'border-white/[0.12]'
       }`}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <div className="text-sm font-semibold text-text-primary">
             已创建 {notice.company}
           </div>
           {identityText ? (
-            <span className="rounded-md border border-bg-hover bg-bg-secondary/70 px-2 py-0.5 text-[11px] text-text-secondary">
+            <span className="text-[11px] text-text-secondary">
               {identityText}
             </span>
           ) : null}
-          <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+          <span className="text-[11px] font-medium text-accent-blue">
             {noticeCopy.rail}
           </span>
         </div>
@@ -1217,8 +1217,8 @@ function FocusArrivalBanner({
 }) {
   return (
     <section
-      className={`flex flex-col gap-3 rounded-lg border px-3 py-2.5 md:flex-row md:items-center md:justify-between ${
-        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-bg-secondary/45'
+      className={`flex flex-col gap-3 border-l pl-3 md:flex-row md:items-center md:justify-between ${
+        isLight ? 'border-bg-hover' : 'border-white/[0.12]'
       }`}
     >
       <div>
