@@ -1437,7 +1437,7 @@ export default function ApplicationsTable({
 function EmptyState() {
   return (
     <div className="px-4 py-12 text-center text-sm text-text-muted">
-      没有匹配记录，试试换个关键词，或者先新增一条岗位。
+      没有匹配记录。
     </div>
   )
 }

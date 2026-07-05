@@ -224,7 +224,7 @@ describe('JobTracker', () => {
 
     const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市')
     fireEvent.change(searchInput, { target: { value: 'missing company' } })
-    expect(await screen.findByText('没有匹配记录，试试换个关键词，或者先新增一条岗位。')).toBeInTheDocument()
+    expect(await screen.findByText('没有匹配记录。')).toBeInTheDocument()
 
     fireEvent.keyDown(searchInput, { key: 'Escape' })
 
@@ -238,7 +238,7 @@ describe('JobTracker', () => {
 
     const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市')
     fireEvent.change(searchInput, { target: { value: 'missing company' } })
-    expect(await screen.findByText('没有匹配记录，试试换个关键词，或者先新增一条岗位。')).toBeInTheDocument()
+    expect(await screen.findByText('没有匹配记录。')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '清空搜索' }))
 

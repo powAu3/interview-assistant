@@ -91,7 +91,6 @@ type HeaderSnapshotTone = 'neutral' | 'blue' | 'amber' | 'green' | 'red'
 type DesktopHeaderFocus = {
   badge: string
   title: string
-  detail: string
 }
 
 const PRIMARY_FOCUS_FILTERS: FocusFilter[] = ['active', 'due', 'interview', 'all']
@@ -269,15 +268,6 @@ function describeDesktopHeaderFocus({
     return {
       badge: '当前筛选',
       title: `现在只看 ${focusLabel} · ${visibleCount} 条`,
-      detail: focusFilter === 'due'
-        ? '直接从下方详情补跟进时间或下一步，不用在列表里来回切。'
-        : focusFilter === 'interview'
-          ? '同岗位后续复盘会继续挂回这些岗位主线，适合顺着当前阶段继续推进。'
-          : focusFilter === 'offer'
-            ? '这时更适合回到详情补 Offer 细节，而不是再整理别的字段。'
-            : focusFilter === 'rejected' || focusFilter === 'withdrawn'
-              ? '这些记录更适合保留结果和回看复盘，不再当作待跟进任务。'
-              : '当前视图已经收窄，可以直接挑一条继续推进。',
     }
   }
 
@@ -285,9 +275,6 @@ function describeDesktopHeaderFocus({
     return {
       badge: '今日焦点',
       title: `今天先推 ${dueSoonCount} 条待跟进`,
-      detail: interviewCount > 0
-        ? `其中 ${interviewCount} 条还在面试流程里，直接回到详情改阶段和跟进时间就行。`
-        : '直接回到详情补跟进时间和下一步，不用先整理低频字段。',
     }
   }
 
@@ -295,7 +282,6 @@ function describeDesktopHeaderFocus({
     return {
       badge: '今日焦点',
       title: `当前有 ${interviewCount} 条在面试流程里`,
-      detail: '如果同岗位后面继续走轮次，复盘和待办都会自然挂回同一条岗位主线。',
     }
   }
 
@@ -303,7 +289,6 @@ function describeDesktopHeaderFocus({
     return {
       badge: '当前主线',
       title: `还有 ${ongoingCount} 条在推进`,
-      detail: '现在更适合逐条补跟进和待办，而不是先切到整理模式。',
     }
   }
 
@@ -311,16 +296,12 @@ function describeDesktopHeaderFocus({
     return {
       badge: '当前主线',
       title: `已有 ${offerCount} 条进入 Offer`,
-      detail: '可以优先补薪资、地点和截止时间，后面做对比会轻很多。',
     }
   }
 
   return {
     badge: '当前主线',
     title: terminalCount > 0 ? `最近主要是结果归档和复盘回看` : `现在可以继续补第一条岗位主线`,
-    detail: terminalCount > 0
-      ? '进行中压力不大时，更适合把终态岗位的复盘时间线和结果原因留清楚。'
-      : '把阶段、跟进和少量待办记住就够了，低频信息都可以后补。',
   }
 }
 

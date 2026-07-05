@@ -462,8 +462,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             <SectionPanel
               title={summaryMissing ? '当前状态' : '整体评价'}
               subtitle={summaryMissing
-                ? '先确认这场记录目前处在哪一步，再决定是生成复盘、绑定岗位，还是直接回看逐题。'
-                : '先看总结和下一步，再决定是否需要下钻到逐题证据。'}
+                ? '看状态，选下一步。'
+                : '先看结论，需要证据时再下钻。'}
             >
               {detail.summary_markdown ? (
                 <div className="prose prose-sm prose-invert max-w-none text-text-primary leading-relaxed">
@@ -476,7 +476,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                   correctedCount={correctedCount}
                   canTrigger={canTrigger}
                   isAnalyzing={isAnalyzing}
-                  autoExpandTurns={autoExpandTurns}
                 />
               )}
             </SectionPanel>
@@ -782,14 +781,12 @@ function PendingSummaryWorkspace({
   correctedCount,
   canTrigger,
   isAnalyzing,
-  autoExpandTurns,
 }: {
   detail: ReviewSessionDetail
   scoredTurnsCount: number
   correctedCount: number
   canTrigger: boolean
   isAnalyzing: boolean
-  autoExpandTurns: boolean
 }) {
   const linkedLabel = detail.application
     ? `${detail.application.company || '未命名公司'} · ${detail.application.position || '岗位'}`
@@ -806,111 +803,65 @@ function PendingSummaryWorkspace({
           : '这场记录还没整理成正式复盘'
 
   const description = isAnalyzing
-    ? `系统正在根据已记录的 ${detail.turn_count} 轮问答补出总结、低分题和补强项。现在可以先确认岗位绑定，或者直接往下回看逐题记录。`
+    ? `正在整理 ${detail.turn_count} 轮问答。`
     : detail.status === 'analysis_failed'
-      ? '原始问答还在，重新生成一次通常就能补出总结、补强项和追问训练，不需要重新录制。'
+      ? '原始问答还在，可以直接重试。'
       : detail.auto_sync_eligible === false
-        ? `当前只有 ${detail.turn_count} 轮问答，默认不会自动把摘要和待办同步回求职看板，更适合用来排错、试录或验证链路。`
+        ? `${detail.turn_count} 轮问答，默认不回写看板。`
         : detail.turn_count <= 0
-          ? '这场记录已经建立，但还没有足够内容生成有效总结。后面录到实际问答后，这里会自然变成正式复盘。'
-          : `当前已保留 ${detail.turn_count} 轮问答${correctedCount > 0 ? `，以及 ${correctedCount} 处 ASR 纠错` : ''}。你可以先把它挂到岗位主线，再决定要不要生成结构化复盘。`
+          ? '还没有可复盘的问答。'
+          : `已保留 ${detail.turn_count} 轮问答${correctedCount > 0 ? `，${correctedCount} 处纠错` : ''}。`
+
+  const nextSteps = [
+    {
+      icon: Sparkles,
+      title: isAnalyzing ? '等生成完成' : detail.status === 'analysis_failed' ? '重新生成复盘' : '生成复盘',
+      value: isAnalyzing ? '处理中' : canTrigger ? '可开始' : '已生成',
+    },
+    {
+      icon: Link2,
+      title: detail.application ? '岗位已绑定' : '挂到岗位主线',
+      value: detail.application ? linkedLabel : '未绑定',
+    },
+    {
+      icon: MessageSquareQuote,
+      title: '回看逐题记录',
+      value: detail.turn_count > 0 ? `${detail.turn_count} 题` : '暂无',
+    },
+  ]
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(280px,0.92fr)]">
-      <div className="rounded-2xl border border-bg-hover bg-bg-tertiary/24 p-4">
-        <div className="text-sm font-semibold text-text-primary">{headline}</div>
-        <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-          {description}
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <SummaryFactPill label="问答" value={`${detail.turn_count} 轮`} />
-          <SummaryFactPill label="已评分" value={`${scoredTurnsCount} 轮`} />
-          <SummaryFactPill label="岗位主线" value={detail.application ? '已绑定' : '未绑定'} />
+    <div className="rounded-xl border border-bg-hover bg-bg-tertiary/20 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-text-primary">{headline}</div>
+          <p className="mt-1 text-sm text-text-secondary">{description}</p>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+          <span>问答 <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
+          <span>已评分 <span className="font-semibold text-text-primary">{scoredTurnsCount}</span></span>
+          <span>主线 <span className="font-semibold text-text-primary">{detail.application ? '已绑定' : '未绑定'}</span></span>
           {detail.auto_sync_eligible === false ? (
-            <SummaryFactPill label="自动回写" value="关闭" accent="warning" />
+            <span className="text-yellow-500">不回写看板</span>
           ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3">
-        <ReviewActionCard
-          icon={<Sparkles className="h-4 w-4 text-accent-blue" />}
-          title={isAnalyzing ? '复盘生成中' : detail.status === 'analysis_failed' ? '重新生成复盘' : '生成结构化复盘'}
-          description={isAnalyzing
-            ? '等结构化结果出来后，这里会补出总结、补强点和低分题。'
-            : detail.auto_sync_eligible === false
-              ? '就算只是测试片段，也可以先在这里生成一版本地复盘，不会污染求职看板。'
-              : '把原始问答整理成更适合回看的总结、补强点和训练建议。'}
-          footer={isAnalyzing ? '正在处理中' : canTrigger ? '右上角可以直接开始生成' : '这场记录已经具备结构化结果'}
-        />
-        <ReviewActionCard
-          icon={<Link2 className="h-4 w-4 text-accent-blue" />}
-          title={detail.application ? '岗位主线已接上' : '挂到岗位主线'}
-          description={detail.application
-            ? `当前已挂到 ${linkedLabel}，后续同岗位的新复盘会继续串在同一条时间线上。`
-            : '右侧直接绑定后，这场记录就会并入同岗位时间线，不会散在复盘列表里。'}
-          footer={detail.application ? '可以从右侧直接跳回岗位主线' : '绑定后更适合沿着同岗位回看多轮面试'}
-        />
-        <ReviewActionCard
-          icon={<MessageSquareQuote className="h-4 w-4 text-accent-blue" />}
-          title="回看逐题记录"
-          description={detail.turn_count > 0
-            ? `本场共记录 ${detail.turn_count} 题${autoExpandTurns ? '，下方已经直接展开原始问答。' : '，需要时再展开下方逐题区。'}`
-            : '当前还没有逐题记录可回看，后面录到真实问答后会出现在这里。'}
-          footer={detail.turn_count > 0 ? '排错、试录或短样本验证时，逐题原文通常最有价值' : '有实际问答后，这里会保留原文与分析证据'}
-        />
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {nextSteps.map((step) => {
+          const Icon = step.icon
+          return (
+            <div key={step.title} className="flex min-w-0 items-center gap-2 rounded-lg border border-bg-hover/80 bg-bg-secondary/45 px-3 py-2">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold text-text-primary">{step.title}</div>
+                <div className="truncate text-[11px] text-text-muted">{step.value}</div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
-  )
-}
-
-function ReviewActionCard({
-  icon,
-  title,
-  description,
-  footer,
-}: {
-  icon: ReactNode
-  title: string
-  description: string
-  footer: string
-}) {
-  return (
-    <div className="rounded-2xl border border-bg-hover bg-bg-secondary/55 p-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-accent-blue/15 bg-accent-blue/8">
-          {icon}
-        </span>
-        <span>{title}</span>
-      </div>
-      <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-        {description}
-      </p>
-      <div className="mt-3 text-[11px] leading-relaxed text-text-muted">
-        {footer}
-      </div>
-    </div>
-  )
-}
-
-function SummaryFactPill({
-  label,
-  value,
-  accent = 'neutral',
-}: {
-  label: string
-  value: string
-  accent?: 'neutral' | 'warning'
-}) {
-  const accentClass = accent === 'warning'
-    ? 'border-yellow-500/20 bg-yellow-500/8 text-yellow-500'
-    : 'border-bg-hover bg-bg-secondary/75 text-text-muted'
-
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] ${accentClass}`}>
-      <span className="font-medium text-text-secondary">{label}</span>
-      <span>{value}</span>
-    </span>
   )
 }
 
