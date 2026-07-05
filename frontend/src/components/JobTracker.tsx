@@ -1555,7 +1555,7 @@ function ApplicationReviewsModal({
               </div>
               <div className="mt-3 text-sm font-semibold text-text-primary">暂无关联复盘</div>
               <div className="mt-1 text-xs text-text-muted">
-                {closedStage ? '岗位已结束，后续可从复盘页手动补挂。' : '同岗位面试会自动串到这里。'}
+                {closedStage ? '已结束，可手动补挂。' : '暂无复盘。'}
               </div>
             </div>
           ) : (

@@ -499,7 +499,7 @@ describe('JobTracker', () => {
     })))
     await waitFor(() => expect(screen.getAllByText('Interview Failed Co').length).toBeGreaterThan(0))
     expect(screen.getByText('已归到“挂了”')).toBeInTheDocument()
-    expect(screen.getByText('结果已记录')).toBeInTheDocument()
+    expect(screen.getAllByText('结果已记录').length).toBeGreaterThan(0)
     expect(screen.getAllByText('一面挂').length).toBeGreaterThan(0)
     expect(screen.getByText('流程已结束')).toBeInTheDocument()
   })

@@ -260,7 +260,7 @@ function buildRowSupportText(app: Application, openTodoCount: number) {
 
   if (reviewCount > 0) {
     const timelineLead = isTerminalStage(app.stage)
-      ? '岗位时间线会保留'
+      ? '时间线保留'
       : reviewCount > 1
         ? `岗位时间线已串 ${reviewCount} 场`
         : '岗位时间线已接上'
@@ -268,7 +268,7 @@ function buildRowSupportText(app: Application, openTodoCount: number) {
   }
 
   if (isTerminalStage(app.stage)) {
-    return '结果已记住 · 后补复盘还会挂回这里'
+    return '结果已记录'
   }
 
   if (app.next_followup_at == null) {
@@ -279,7 +279,7 @@ function buildRowSupportText(app: Application, openTodoCount: number) {
     return `还剩 ${openTodoCount} 条待办`
   }
 
-  return '后续新面试会继续挂回这里'
+  return '待复盘'
 }
 
 function hiddenPreviewLabel(app: Application) {
@@ -765,7 +765,7 @@ export default function ApplicationsTable({
                           {reviewShortcutLabel(app)}
                         </button>
                       ) : (
-                        <span className="text-[11px] text-text-muted">后续同岗位复盘会自动串到这里</span>
+                        <span className="text-[11px] text-text-muted">暂无复盘</span>
                       )}
                     </div>
                   </article>
