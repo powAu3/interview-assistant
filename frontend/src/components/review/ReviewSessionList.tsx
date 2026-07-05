@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { ComponentType } from 'react'
 import dayjs from 'dayjs'
 import {
-  Eye,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -941,18 +940,6 @@ function ReviewQueueRow({
                 >
                   {session.status === 'analysis_failed' ? <RotateCw className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
                   {session.status === 'analysis_failed' ? '重试生成' : '生成复盘'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onViewDetail(session.id)
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-blue/25 bg-transparent px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/5"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  查看详情
                 </button>
 
                 {isTriggering ? (
