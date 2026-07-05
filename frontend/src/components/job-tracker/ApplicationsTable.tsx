@@ -798,22 +798,11 @@ export default function ApplicationsTable({
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-start justify-start gap-2 lg:col-start-2 lg:row-start-1 lg:justify-end xl:col-auto xl:row-auto xl:flex-col xl:items-end xl:justify-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleSelect(app.id)
-                          }}
-                          className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
-                            selected
-                              ? 'border-accent-blue/35 bg-transparent text-accent-blue'
-                              : 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          {selected ? '已定位详情' : '查看详情'}
-                        </button>
-                      </div>
+                      {selected ? (
+                        <div className="flex items-start justify-start lg:col-start-2 lg:row-start-1 lg:justify-end xl:col-auto xl:row-auto xl:items-center xl:justify-center">
+                          <span className="text-[11px] font-medium text-accent-blue">已定位</span>
+                        </div>
+                      ) : null}
                     </article>
                   )
                 })}

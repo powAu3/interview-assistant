@@ -202,7 +202,7 @@ describe('JobTracker', () => {
       )
     expect(updatedRow).not.toBeNull()
     await waitFor(() => {
-      expect(within(updatedRow as HTMLElement).getByRole('button', { name: '已定位详情' })).toBeInTheDocument()
+      expect(within(updatedRow as HTMLElement).getByText('已定位')).toBeInTheDocument()
     })
   })
 
