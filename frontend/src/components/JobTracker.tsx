@@ -580,29 +580,25 @@ export default function JobTracker() {
         {
           label: focusFilter === 'all' ? '当前' : currentFocusOption.label,
           value: `${visibleCount} 条`,
-          hint: focusFilter === 'all' ? '当前可见岗位' : '当前筛选结果',
           tone: focusFilter === 'all' ? 'blue' : 'green',
         },
         {
           label: '待跟进',
           value: dueSoonCount > 0 ? `${dueSoonCount} 条` : '已清空',
-          hint: dueSoonCount > 0 ? '最近 3 天内要推进' : '最近 3 天没有催办',
           tone: dueSoonCount > 0 ? 'amber' : 'neutral',
         },
         terminalApplicationsCount > 0
           ? {
               label: '已结束',
               value: `${terminalApplicationsCount} 条`,
-              hint: rejectedCount > 0 ? `挂了 ${rejectedCount} · 已放弃 ${withdrawnCount}` : '已放弃记录',
               tone: rejectedCount > 0 ? 'red' : 'neutral',
             }
           : {
               label: 'Offer',
               value: offerCount > 0 ? `${offerCount} 条` : '暂无',
-              hint: offerCount > 0 ? '有结果可继续比对' : '还没有拿到 offer',
               tone: offerCount > 0 ? 'green' : 'neutral',
             },
-      ] satisfies Array<{ label: string; value: string; hint: string; tone: HeaderSnapshotTone }>
+      ] satisfies Array<{ label: string; value: string; tone: HeaderSnapshotTone }>
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-bg-primary">
@@ -715,20 +711,15 @@ export default function JobTracker() {
             </div>
           </div>
 
-          <div className="text-[11px] leading-relaxed text-text-muted">
-            {applications.length === 0 ? (
-              <span className="rounded-md border border-bg-hover bg-bg-secondary px-2.5 py-1 text-text-secondary">
-                还没有岗位记录，先新建一条最小进度
-              </span>
-            ) : (
-              isCompactLayout ? (
+          {applications.length > 0 ? (
+            <div className="text-[11px] leading-relaxed text-text-muted">
+              {isCompactLayout ? (
                 <div className="flex flex-wrap gap-2">
                   {snapshotItems.map((item) => (
                     <HeaderSnapshotPill
                       key={item.label}
                       label={item.label}
                       value={item.value}
-                      hint={item.hint}
                       tone={item.tone}
                       isLight={isLight}
                     />
@@ -739,9 +730,9 @@ export default function JobTracker() {
                   items={snapshotItems}
                   isLight={isLight}
                 />
-              )
-            )}
-          </div>
+              )}
+            </div>
+          ) : null}
 
           {applications.length > 0 ? (
             isCompactLayout ? (
@@ -1047,14 +1038,12 @@ export default function JobTracker() {
 function HeaderSnapshotPill({
   label,
   value,
-  hint,
   tone,
   isLight,
   compact = false,
 }: {
   label: string
   value: string
-  hint: string
   tone: HeaderSnapshotTone
   isLight: boolean
   compact?: boolean
@@ -1079,9 +1068,6 @@ function HeaderSnapshotPill({
         <div className={`font-semibold uppercase text-text-muted ${compact ? 'text-[9px] tracking-[0.16em]' : 'text-[10px] tracking-[0.14em]'}`}>
           {label}
         </div>
-        <div className={`${compact ? 'mt-0.5 line-clamp-1 text-[10px]' : 'hidden'} text-text-muted`}>
-          {hint}
-        </div>
       </div>
       <div className={`shrink-0 font-semibold text-text-primary ${compact ? 'text-[13px]' : 'text-[13px]'}`}>
         {value}
@@ -1094,11 +1080,11 @@ function DesktopOverviewSummary({
   items,
   isLight,
 }: {
-  items: Array<{ label: string; value: string; hint: string; tone: HeaderSnapshotTone }>
+  items: Array<{ label: string; value: string; tone: HeaderSnapshotTone }>
   isLight: boolean
 }) {
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 border-t border-bg-hover/70 pt-2">
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1">
         {items.map((item) => (
           <DesktopOverviewInlineStat
             key={item.label}
@@ -1302,10 +1288,7 @@ function QuickCreatePanel({
     >
       <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-sm font-semibold text-text-primary">快速新增</div>
-            <span className="text-[11px] text-text-muted">只填 5 个字段</span>
-          </div>
+          <div className="text-sm font-semibold text-text-primary">快速新增</div>
         </div>
         <div className="flex items-center gap-2">
           <button
