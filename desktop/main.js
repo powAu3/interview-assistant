@@ -43,7 +43,11 @@ const {
   saveShortcutConfig,
   validateShortcutMap,
 } = require('./shortcuts');
-const { createOverlayChromeOptions } = require('./windowOptions');
+const {
+  createOverlayChromeOptions,
+  getPromptOverlayInitialWidth,
+  relayChildOutput,
+} = require('./windowOptions');
 
 const pkg = require('./package.json');
 
@@ -225,10 +229,7 @@ function getNormalOverlayBounds(mode) {
   let width;
   let height;
   if (mode === 'prompt') {
-    const promptMax = Number(lastOverlayState?.promptMaxWidth);
-    width = Math.isFinite(promptMax) && promptMax > 0
-      ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(1500, Math.round(promptMax)))
-      : 900;
+    width = getPromptOverlayInitialWidth(lastOverlayState?.promptMaxWidth);
     height = Math.max((storedSize?.h > 0) ? storedSize.h : OVERLAY_PRESET.height, minOverlayHeight);
   } else {
     width = Math.max((storedSize?.w > 0) ? storedSize.w : OVERLAY_PRESET.width, minOverlayWidth);
@@ -315,8 +316,8 @@ function startPythonBackend() {
     windowsHide: true,
   });
 
-  pythonProcess.stdout.on('data', (d) => process.stdout.write(`[py] ${d}`));
-  pythonProcess.stderr.on('data', (d) => process.stderr.write(`[py] ${d}`));
+  relayChildOutput(pythonProcess.stdout, process.stdout, '[py] ');
+  relayChildOutput(pythonProcess.stderr, process.stderr, '[py] ');
   pythonProcess.on('close', (code) => {
     console.log(`[py] exited with code ${code}`);
     pythonProcess = null;
