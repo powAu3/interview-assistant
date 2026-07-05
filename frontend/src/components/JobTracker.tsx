@@ -743,10 +743,20 @@ export default function JobTracker() {
                       setSearch('')
                     }
                   }}
-                  className={`w-full rounded-lg border py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted/70 focus:border-accent-blue/40 focus:outline-none focus:ring-2 focus:ring-accent-blue/15 ${
+                  className={`w-full rounded-lg border py-2 pl-9 ${search ? 'pr-9' : 'pr-3'} text-sm text-text-primary placeholder:text-text-muted/70 focus:border-accent-blue/40 focus:outline-none focus:ring-2 focus:ring-accent-blue/15 ${
                     isLight ? 'border-bg-hover bg-white' : 'border-white/[0.08] bg-black/15'
                   }`}
                 />
+                {search ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 rounded-md p-1 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
+                    aria-label="清空搜索"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
               </div>
 
               {isCompactLayout ? (

@@ -232,6 +232,21 @@ describe('JobTracker', () => {
     expect(searchInput).toHaveValue('')
   })
 
+  it('clears search from the visible clear button', async () => {
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+
+    const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市')
+    fireEvent.change(searchInput, { target: { value: 'missing company' } })
+    expect(await screen.findByText('没有匹配记录，试试换个关键词，或者先新增一条岗位。')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '清空搜索' }))
+
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+    expect(searchInput).toHaveValue('')
+    expect(screen.queryByRole('button', { name: '清空搜索' })).not.toBeInTheDocument()
+  })
+
   it('shows review summary and opens linked reviews', async () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
