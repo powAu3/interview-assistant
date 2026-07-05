@@ -1055,8 +1055,8 @@ export default function ApplicationsTable({
                   ) : (
                     <div className="flex flex-col gap-1.5 text-xs text-text-secondary">
                       <span>当前状态</span>
-                      <div className="rounded-md border border-bg-hover bg-bg-secondary/70 px-3 py-2.5 text-sm text-text-muted">
-                        终态记录不会再进入待跟进提醒；如果有关联复盘，时间线会继续保留。
+                      <div className="rounded-md border border-bg-hover bg-bg-secondary/70 px-3 py-2 text-sm text-text-muted">
+                        已结束 · 不进入待跟进
                       </div>
                     </div>
                   )}
@@ -1157,9 +1157,9 @@ export default function ApplicationsTable({
                   <div className="mb-3 flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <h4 className="text-sm font-semibold text-text-primary">编辑核心信息</h4>
-                      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                        这里只放高频字段：公司、岗位、城市、阶段和时间。
-                      </p>
+                      {isTerminalStage(draft.stage) ? (
+                        <div className="mt-1 text-[11px] text-text-muted">已结束 · 不进入待跟进</div>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {coreDirty ? (
@@ -1253,11 +1253,6 @@ export default function ApplicationsTable({
                       />
                     </label>
                   </div>
-                  {isTerminalStage(draft.stage) ? (
-                    <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
-                      当前阶段已结束，这条记录不会进入待跟进统计；如果有关联复盘，会优先显示最近一次复盘时间。
-                    </p>
-                  ) : null}
                 </section>
                 ) : null}
 

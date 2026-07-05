@@ -1059,23 +1059,23 @@ function sessionSummary(session: ReviewSession) {
     .trim()
   if (normalized) return normalized
   if (session.status === 'analysis_failed') {
-    return '分析失败了，先重试生成；如果怀疑录制内容有问题，再打开详情核对问答。'
+    return '先重试生成；必要时打开详情核对原文。'
   }
   if (session.status === 'partial_capture') {
-    return '采集不完整，先看原始内容，再决定是补录、重试，还是只保留这次记录。'
+    return '采集不完整，先核对原文再决定是否保留。'
   }
   if (session.status === 'recorded') {
     return session.auto_sync_eligible === false
-      ? '样本较短，默认不会自动回流到岗位看板；如果这场也重要，再手动生成后决定是否绑定岗位。'
-      : '录制已经结束，还没生成复盘；现在就可以手动触发分析。'
+      ? '样本较短，手动生成后再决定是否绑定岗位。'
+      : '录制已结束，可以生成复盘。'
   }
   if (session.status === 'analyzing') {
-    return '后台正在整理摘要、评分和薄弱点，先处理前面的记录，稍后回来刷新。'
+    return '正在整理摘要、评分和薄弱点。'
   }
   if (session.status === 'recording') {
-    return '这场面试还在录制中，结束后会继续进入复盘流程。'
+    return '录制中，结束后进入复盘。'
   }
-  return '打开详情可以继续查看逐题记录、ASR 纠错痕迹，以及和岗位主线的联动。'
+  return '打开详情查看逐题记录和岗位联动。'
 }
 
 function buildSessionClusters(sessions: ReviewSession[]): SessionCluster[] {

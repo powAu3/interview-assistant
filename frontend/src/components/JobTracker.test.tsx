@@ -523,7 +523,7 @@ describe('JobTracker', () => {
     fireEvent.click(screen.getByRole('button', { name: /挂了 · 1/ }))
     await waitFor(() => expect(screen.getAllByText('Rejected Co').length).toBeGreaterThan(0))
     expect(screen.getAllByText('二面挂').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/不会再进入待跟进提醒/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/不进入待跟进/).length).toBeGreaterThan(0)
     expect(screen.getByText('回看最后一场复盘')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: '看复盘' })[0])
