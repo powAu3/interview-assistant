@@ -362,11 +362,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         <span>{detail.turn_count} 轮问答</span>
                         <span>{scoredTurns.length} 轮已评分</span>
                       </div>
-                      {detail.auto_sync_eligible === false ? (
-                        <div className="mt-3 inline-flex rounded-lg border border-yellow-500/25 bg-yellow-500/8 px-3 py-1.5 text-xs font-medium text-yellow-500">
-                          短样本 · 不回写看板
-                        </div>
-                      ) : null}
                     </>
                   )}
                 </div>
