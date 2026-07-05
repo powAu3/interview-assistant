@@ -461,7 +461,6 @@ export default function ApplicationsTable({
     ? `已聚焦 1 条 · 当前筛选 ${ordered.length} 条`
     : `${ordered.length} / ${applications.length}`
   const extrasSummary = `复盘 ${current?.review_summary.review_count ?? 0} · 待办 ${openTodoCount} · ${currentOffer ? 'Offer 已记录' : 'Offer 暂无'}`
-  const extrasHeaderSummary = `待办 ${draftTodoLines.length} · 备注 ${hasDraftNotes ? '已写' : '暂无'} · ${currentOffer ? 'Offer 已记录' : 'Offer 暂无'}`
   const detailAction = current ? (() => {
     if (currentOffer && current.stage === 'offer') {
       return {
@@ -1270,12 +1269,7 @@ export default function ApplicationsTable({
                   >
                     <div className="min-w-0">
                       <h4 className="text-sm font-semibold text-text-primary">补充信息</h4>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
-                        <span>{extrasSummary}</span>
-                        <span className="rounded-md border border-bg-hover bg-bg-tertiary/35 px-2 py-0.5 text-text-muted">
-                          {extrasHeaderSummary}
-                        </span>
-                      </div>
+                      <div className="mt-1 text-[11px] text-text-secondary">{extrasSummary}</div>
                     </div>
                     <span className="rounded-md border border-bg-hover p-1.5 text-text-muted">
                       {extrasOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

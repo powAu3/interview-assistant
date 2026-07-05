@@ -339,13 +339,13 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 lg:max-w-[420px] lg:justify-end">
+                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:max-w-[420px] lg:justify-end lg:overflow-visible lg:px-0 lg:pb-0">
                     {focusOptions.map((item) => (
                       <button
                         key={item.key}
                         type="button"
                         onClick={() => setFocusFilter(item.key)}
-                        className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                           focusFilter === item.key
                             ? 'border-accent-blue/35 bg-transparent text-accent-blue'
                             : 'border-bg-hover bg-bg-secondary/50 text-text-secondary hover:bg-bg-hover'
@@ -779,22 +779,19 @@ function ReviewTimelineCluster({
   return (
     <section>
       {showTimelineHeader ? (
-        <div className="border-b border-bg-hover bg-bg-secondary/35 px-3 py-2.5">
+        <div className="border-b border-bg-hover bg-bg-secondary/35 px-3 py-2">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-blue">
-                  岗位时间线
-                </span>
                 <h4 className="text-sm font-semibold text-text-primary">
                   {cluster.application?.company || '未命名公司'} · {cluster.application?.position || '岗位未填写'}
                 </h4>
                 <StageBadge stage={cluster.application?.stage || 'applied'} />
-                <span className="rounded-md border border-bg-hover bg-bg-secondary/75 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+                <span className="text-[11px] text-text-muted">
                   同岗位 {timelineCount} 场复盘
                 </span>
               </div>
-              </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -859,6 +856,14 @@ function ReviewQueueRow({
   const summary = sessionSummary(session)
   const hasPrimaryTrigger = showTriggerButton
   const linkedApplicationName = `${session.application?.company || '未命名公司'} · ${session.application?.position || '岗位'}`
+  const metaParts = [
+    session.source === 'manual' ? '手动导入' : '实时记录',
+    showScore ? `${session.avg_score?.toFixed(1)} 分` : '未出分',
+    timeText,
+    durationText,
+    turnsText,
+    session.auto_sync_eligible === false ? '短样本' : null,
+  ].filter((item): item is string => Boolean(item))
 
   return (
     <article
@@ -872,42 +877,27 @@ function ReviewQueueRow({
       }}
       role="button"
       tabIndex={0}
-      className={`cursor-pointer px-4 py-2 outline-none transition-colors hover:bg-bg-tertiary/18 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-blue/30 ${sessionRowTone(session.status)}`}
+      className={`cursor-pointer px-3 py-2 outline-none transition-colors hover:bg-bg-tertiary/18 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-blue/30 ${sessionRowTone(session.status)}`}
       aria-label={`打开 ${title} 复盘详情`}
     >
-      <div className="flex gap-3">
+      <div className="flex gap-2.5">
         <div className={`hidden w-1 shrink-0 rounded-sm md:block ${sessionRailTone(session.status)}`} />
         <div className="min-w-0 flex-1">
-          <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h4 className="text-base font-semibold tracking-tight text-text-primary">{title}</h4>
-                <span className="text-sm text-text-secondary">{roleText}</span>
+                <h4 className="text-sm font-semibold tracking-tight text-text-primary">{title}</h4>
+                <span className="text-xs text-text-secondary">{roleText}</span>
               </div>
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${statusTone(session.status)}`}>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-text-muted">
+                <span className={`inline-flex items-center gap-1 font-medium ${statusTextTone(session.status)}`}>
                   <StatusIcon className={`h-3.5 w-3.5 ${session.status === 'analyzing' ? 'animate-spin' : ''} ${statusColor}`} />
                   {STATUS_LABELS[session.status]}
                 </span>
-                <span className="rounded-md border border-bg-hover bg-bg-tertiary/50 px-2 py-0.5 text-[11px] font-medium text-text-secondary">
-                  {session.source === 'manual' ? '手动导入' : '实时记录'}
-                </span>
-                {session.auto_sync_eligible === false ? (
-                  <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">
-                    短样本
-                  </span>
-                ) : null}
-                {showScore ? (
-                  <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${scoreTone(session.avg_score as number)}`}>
-                    {session.avg_score?.toFixed(1)}
-                  </span>
-                ) : (
-                  <span className="rounded-md border border-bg-hover px-2 py-0.5 text-[11px] text-text-muted">未出分</span>
-                )}
-                <span>{timeText}</span>
-                {durationText ? <span>{durationText}</span> : null}
-                <span>{turnsText}</span>
+                {metaParts.map((part) => (
+                  <span key={part}>{part}</span>
+                ))}
               </div>
               {showLinkedApplication ? (
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
@@ -937,12 +927,12 @@ function ReviewQueueRow({
                 </div>
               ) : null}
 
-              <p className={`text-sm leading-relaxed text-text-secondary ${showLinkedApplication ? 'mt-2 line-clamp-2' : 'mt-1 line-clamp-3'}`}>
+              <p className={`text-xs leading-relaxed text-text-secondary ${showLinkedApplication ? 'mt-2 line-clamp-2' : 'mt-1 line-clamp-2'}`}>
                 {summary}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 xl:min-w-[208px] xl:flex-col xl:items-end xl:justify-start">
+            <div className="flex flex-wrap items-center gap-2 xl:min-w-[188px] xl:flex-col xl:items-end xl:justify-start">
               {hasPrimaryTrigger ? (
                 <button
                   type="button"
@@ -1023,28 +1013,21 @@ function getSessionUiState(
   }
 }
 
-function scoreTone(score: number) {
-  if (score >= 8) return 'bg-green-500/10 text-green-500'
-  if (score >= 6) return 'bg-blue-500/10 text-blue-500'
-  if (score >= 4) return 'bg-yellow-500/10 text-yellow-500'
-  return 'bg-red-500/10 text-red-500'
-}
-
-function statusTone(status: ReviewSession['status']) {
+function statusTextTone(status: ReviewSession['status']) {
   switch (status) {
     case 'analysis_failed':
-      return 'border border-red-500/20 bg-red-500/10 text-red-500'
+      return 'text-red-500'
     case 'partial_capture':
-      return 'border border-yellow-500/20 bg-yellow-500/10 text-yellow-500'
+      return 'text-yellow-500'
     case 'recorded':
-      return 'border border-amber-500/20 bg-amber-500/10 text-amber-500'
+      return 'text-amber-500'
     case 'analyzing':
     case 'recording':
-      return 'border border-blue-500/20 bg-blue-500/10 text-blue-500'
+      return 'text-blue-500'
     case 'completed':
-      return 'border border-green-500/20 bg-green-500/10 text-green-500'
+      return 'text-green-500'
     default:
-      return 'border border-bg-hover bg-bg-tertiary text-text-secondary'
+      return 'text-text-secondary'
   }
 }
 
