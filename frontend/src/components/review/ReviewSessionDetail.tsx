@@ -1025,7 +1025,6 @@ function ApplicationLinkPanel({
   const [changing, setChanging] = useState(false)
   const selecting = !linked || changing
   const isClosedStage = linked ? isTerminalStage(linked.stage) : false
-  const sessionMoment = detail.ended_at ?? detail.started_at
   const linkedReviewSummary = linkedApplicationSummary?.review_summary
   const linkedReviewCount = linkedReviewSummary?.review_count ?? 0
   const isLatestLinkedReview = linkedReviewSummary?.latest_review_id != null && linkedReviewSummary.latest_review_id === detail.id
@@ -1035,9 +1034,6 @@ function ApplicationLinkPanel({
     : isLatestLinkedReview
       ? '当前这场是最近一场'
       : '当前这场是更早的一场'
-  const latestReviewTime = linkedReviewSummary?.latest_review_at != null
-    ? dayjs.unix(Math.floor(linkedReviewSummary.latest_review_at)).format('YYYY-MM-DD HH:mm')
-    : null
   const syncNote = detail.auto_sync_eligible === false
     ? '短样本，不回写看板'
     : isClosedStage
@@ -1116,44 +1112,6 @@ function ApplicationLinkPanel({
               </button>
             </div>
           </div>
-
-          {(linked.applied_at != null || linked.next_followup_at != null || sessionMoment != null) && (
-            <div className="flex flex-wrap gap-2 text-[10px] text-text-muted">
-              {linked.applied_at != null ? (
-                <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
-                  投递 {dayjs.unix(Math.floor(linked.applied_at)).format('YYYY-MM-DD')}
-                </span>
-              ) : (
-                <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
-                  投递时间未记录
-                </span>
-              )}
-              {sessionMoment != null ? (
-                <span className="rounded-full border border-accent-blue/15 bg-accent-blue/6 px-2.5 py-1 text-accent-blue">
-                  本场复盘 {dayjs.unix(Math.floor(sessionMoment)).format('YYYY-MM-DD HH:mm')}
-                </span>
-              ) : null}
-              {isClosedStage ? (
-                <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
-                  结果 {STAGE_LABELS[linked.stage] ?? linked.stage}
-                </span>
-              ) : linked.next_followup_at != null ? (
-                <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
-                  跟进 {dayjs.unix(Math.floor(linked.next_followup_at)).format('YYYY-MM-DD HH:mm')}
-                </span>
-              ) : (
-                <span className="rounded-full border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1">
-                  跟进时间未设置
-                </span>
-              )}
-            </div>
-          )}
-
-          {latestReviewTime ? (
-            <div className="text-[11px] text-text-muted">
-              最近复盘 {latestReviewTime}
-            </div>
-          ) : null}
         </div>
       ) : null}
 
