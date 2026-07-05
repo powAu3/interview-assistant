@@ -316,7 +316,7 @@ describe('JobTracker', () => {
       { target: { value: '优先准备 React 性能优化案例' } },
     )
 
-    const extrasPanel = screen.getByText('补充待保存').closest('section')
+    const extrasPanel = screen.getByText('补充待保存').parentElement
     expect(extrasPanel).not.toBeNull()
     const extrasScope = within(extrasPanel as HTMLElement)
 

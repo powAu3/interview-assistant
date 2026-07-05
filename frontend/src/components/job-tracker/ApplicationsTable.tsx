@@ -1181,30 +1181,26 @@ export default function ApplicationsTable({
                   {extrasOpen ? (
                     <div className="space-y-2.5 border-t border-bg-hover/80 px-3.5 py-3">
                       {extrasDirty ? (
-                        <section className="rounded-md border border-accent-blue/20 bg-accent-blue/[0.05] px-3 py-2.5">
-                          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
-                              <div className="text-sm font-semibold text-text-primary">补充待保存</div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={resetExtrasDraft}
-                                className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                              >
-                                恢复补充信息
-                              </button>
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => void handleSave('extras')}
-                                className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-                              >
-                                {saving ? '保存中...' : '保存补充信息'}
-                              </button>
-                            </div>
+                        <div className="flex flex-col gap-2.5 border-l border-accent-blue/25 pl-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="text-sm font-semibold text-text-primary">补充待保存</div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={resetExtrasDraft}
+                              className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                            >
+                              恢复补充信息
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => void handleSave('extras')}
+                              className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                            >
+                              {saving ? '保存中...' : '保存补充信息'}
+                            </button>
                           </div>
-                        </section>
+                        </div>
                       ) : null}
 
                       <div className="grid gap-4 xl:grid-cols-[minmax(220px,0.62fr)_minmax(0,1.38fr)]">

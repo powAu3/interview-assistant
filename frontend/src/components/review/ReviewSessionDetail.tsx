@@ -1041,7 +1041,7 @@ function ApplicationLinkPanel({
       {selecting && (
         <div className="space-y-3">
           {linked ? (
-            <div className="flex items-center justify-between rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-2 text-xs text-text-muted">
+            <div className="flex items-center justify-between gap-3 border-l border-bg-hover/80 pl-3 text-xs text-text-muted">
               <span>当前关联：{linked.company || '未命名公司'} · {linked.position || '岗位'}</span>
               <button type="button" onClick={() => setChanging(false)} className="text-accent-blue hover:underline">取消改绑</button>
             </div>
