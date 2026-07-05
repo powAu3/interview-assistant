@@ -547,7 +547,7 @@ function ManualImportPanel({
         </div>
         <div>
           <h3 className="text-sm font-semibold text-text-primary">手动复盘导入</h3>
-          <p className="mt-1 text-xs leading-relaxed text-text-muted">粘贴问答文本，提交后生成复盘。</p>
+          <p className="mt-1 text-xs text-text-muted">粘贴问答，生成复盘。</p>
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
@@ -578,7 +578,7 @@ function ManualImportPanel({
         className={`${FIELD_CLASS} mt-3 min-h-[180px] resize-y font-mono leading-relaxed`}
       />
       <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="text-[11px] text-text-muted">导入后会作为 manual 来源记录，不影响实时辅助。</div>
+        <div className="text-[11px] text-text-muted">手动记录，不影响实时辅助。</div>
         <button
           type="button"
           onClick={handleSubmit}
@@ -969,9 +969,11 @@ function ReviewQueueRow({
                 </div>
               ) : null}
 
-              <p className={`text-xs leading-relaxed text-text-secondary ${showLinkedApplication ? 'mt-2 line-clamp-2' : 'mt-1 line-clamp-2'}`}>
-                {summary}
-              </p>
+              {summary ? (
+                <p className={`text-xs leading-relaxed text-text-secondary ${showLinkedApplication ? 'mt-2 line-clamp-2' : 'mt-1 line-clamp-2'}`}>
+                  {summary}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:min-w-[188px] xl:flex-col xl:items-end xl:justify-start">
@@ -1094,30 +1096,30 @@ function sessionRowTone(status: ReviewSession['status']) {
   return ''
 }
 
-function sessionSummary(session: ReviewSession) {
+function sessionSummary(session: ReviewSession): string | null {
   const normalized = String(session.summary_markdown ?? '')
     .replace(/[#>*`_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   if (normalized) return normalized
   if (session.status === 'analysis_failed') {
-    return '先重试生成；必要时打开详情核对原文。'
+    return '生成失败，可重试。'
   }
   if (session.status === 'partial_capture') {
-    return '采集不完整，先核对原文再决定是否保留。'
+    return '采集不完整，先核对原文。'
   }
   if (session.status === 'recorded') {
     return session.auto_sync_eligible === false
-      ? '样本较短，手动生成后再决定是否绑定岗位。'
-      : '录制已结束，可以生成复盘。'
+      ? '短样本，不自动回写看板。'
+      : '可生成复盘。'
   }
   if (session.status === 'analyzing') {
-    return '正在整理摘要、评分和薄弱点。'
+    return '正在整理。'
   }
   if (session.status === 'recording') {
-    return '录制中，结束后进入复盘。'
+    return '录制中。'
   }
-  return '打开详情查看逐题记录和岗位联动。'
+  return null
 }
 
 function buildSessionClusters(sessions: ReviewSession[]): SessionCluster[] {
