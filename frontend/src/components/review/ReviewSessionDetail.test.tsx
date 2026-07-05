@@ -269,9 +269,9 @@ describe('ReviewSessionDetail', () => {
     render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
 
     await screen.findByText('当前状态')
-    expect(screen.getByText('这场记录更适合当测试片段')).toBeInTheDocument()
-    expect(screen.getByText('挂到岗位主线')).toBeInTheDocument()
-    expect(screen.getByText('回看逐题记录')).toBeInTheDocument()
+    expect(screen.getAllByText(/短样本/)).not.toHaveLength(0)
+    expect(screen.getAllByText(/不回写看板/)).not.toHaveLength(0)
+    expect(screen.getAllByText('未绑定')).not.toHaveLength(0)
     expect(screen.getByText('请讲讲你最熟悉的项目。')).toBeInTheDocument()
     expect(screen.getByText('短记录，已展开。')).toBeInTheDocument()
   })

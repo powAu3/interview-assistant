@@ -96,7 +96,7 @@ describe('ReviewSessionList', () => {
     expect(screen.getByRole('heading', { name: '进行中' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '已完成' })).toBeInTheDocument()
     expect(screen.getByText('OpenAI 一面')).toBeInTheDocument()
-    expect(screen.getByText('生成失败，可重试。')).toBeInTheDocument()
+    expect(screen.getByText('生成失败')).toBeInTheDocument()
     expect(screen.queryByText('打开详情查看逐题记录和岗位联动。')).not.toBeInTheDocument()
     expect(screen.getByText('米哈游二面')).toBeInTheDocument()
   })

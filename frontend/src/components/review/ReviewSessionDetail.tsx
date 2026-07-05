@@ -8,7 +8,6 @@ import {
   Sparkles,
   RotateCw,
   Loader2,
-  MessageSquareQuote,
   Tags,
   Link2,
   Unlink,
@@ -365,9 +364,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         <span>{scoredTurns.length} 轮已评分</span>
                       </div>
                       {detail.auto_sync_eligible === false ? (
-                        <div className="mt-3 rounded-lg border border-yellow-500/25 bg-yellow-500/8 px-3 py-2">
-                          <div className="text-sm font-semibold text-yellow-500">这场记录更像测试片段</div>
-                          <p className="mt-1 text-xs text-text-secondary">{detail.turn_count} 轮问答，默认不回写看板。</p>
+                        <div className="mt-3 inline-flex rounded-lg border border-yellow-500/25 bg-yellow-500/8 px-3 py-1.5 text-xs font-medium text-yellow-500">
+                          短样本 · 不回写看板
                         </div>
                       ) : null}
                     </>
@@ -465,7 +463,6 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                   detail={detail}
                   scoredTurnsCount={scoredTurns.length}
                   correctedCount={correctedCount}
-                  canTrigger={canTrigger}
                   isAnalyzing={isAnalyzing}
                 />
               )}
@@ -745,59 +742,39 @@ function PendingSummaryWorkspace({
   detail,
   scoredTurnsCount,
   correctedCount,
-  canTrigger,
   isAnalyzing,
 }: {
   detail: ReviewSessionDetail
   scoredTurnsCount: number
   correctedCount: number
-  canTrigger: boolean
   isAnalyzing: boolean
 }) {
   const linkedLabel = detail.application
     ? `${detail.application.company || '未命名公司'} · ${detail.application.position || '岗位'}`
-    : '还没挂到岗位主线'
+    : '未绑定'
 
   const headline = isAnalyzing
-    ? '这场记录正在整理成正式复盘'
+    ? '整理中'
     : detail.status === 'analysis_failed'
-      ? '上一次复盘生成失败了'
+      ? '生成失败'
       : detail.auto_sync_eligible === false
-        ? '这场记录更适合当测试片段'
+        ? '短样本'
         : detail.status === 'recorded' || detail.status === 'recording' || detail.status === 'partial_capture'
-          ? '这场记录还处在原始记录阶段'
-          : '这场记录还没整理成正式复盘'
+          ? '原始记录'
+          : '未生成复盘'
 
   const description = isAnalyzing
-    ? `正在整理 ${detail.turn_count} 轮问答。`
+    ? `${detail.turn_count} 轮问答`
     : detail.status === 'analysis_failed'
-      ? '原始问答还在，可以直接重试。'
+      ? '可重试'
       : detail.auto_sync_eligible === false
-        ? `${detail.turn_count} 轮问答，默认不回写看板。`
-        : detail.turn_count <= 0
-          ? '还没有可复盘的问答。'
-          : `已保留 ${detail.turn_count} 轮问答${correctedCount > 0 ? `，${correctedCount} 处纠错` : ''}。`
-
-  const nextSteps = [
-    {
-      icon: Sparkles,
-      title: isAnalyzing ? '等生成完成' : detail.status === 'analysis_failed' ? '重新生成复盘' : '生成复盘',
-      value: isAnalyzing ? '处理中' : canTrigger ? '可开始' : '已生成',
-    },
-    {
-      icon: Link2,
-      title: detail.application ? '岗位已绑定' : '挂到岗位主线',
-      value: detail.application ? linkedLabel : '未绑定',
-    },
-    {
-      icon: MessageSquareQuote,
-      title: '回看逐题记录',
-      value: detail.turn_count > 0 ? `${detail.turn_count} 题` : '暂无',
-    },
-  ]
+        ? `${detail.turn_count} 轮问答 · 不回写看板`
+      : detail.turn_count <= 0
+          ? '暂无问答'
+          : `${detail.turn_count} 轮问答${correctedCount > 0 ? ` · ${correctedCount} 处纠错` : ''}`
 
   return (
-    <div className="rounded-xl border border-bg-hover bg-bg-tertiary/20 p-4">
+    <div className="rounded-lg border border-bg-hover bg-bg-tertiary/15 p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-text-primary">{headline}</div>
@@ -811,21 +788,6 @@ function PendingSummaryWorkspace({
             <span className="text-yellow-500">不回写看板</span>
           ) : null}
         </div>
-      </div>
-
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        {nextSteps.map((step) => {
-          const Icon = step.icon
-          return (
-            <div key={step.title} className="flex min-w-0 items-center gap-2 rounded-lg border border-bg-hover/80 bg-bg-secondary/45 px-3 py-2">
-              <Icon className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-              <div className="min-w-0">
-                <div className="truncate text-xs font-semibold text-text-primary">{step.title}</div>
-                <div className="truncate text-[11px] text-text-muted">{step.value}</div>
-              </div>
-            </div>
-          )
-        })}
       </div>
     </div>
   )
@@ -1110,12 +1072,12 @@ function ApplicationLinkPanel({
               <button type="button" onClick={() => setChanging(false)} className="text-accent-blue hover:underline">取消改绑</button>
             </div>
           ) : (
-            <div className="text-xs text-text-muted">选择一个岗位，复盘会挂到它的时间线。</div>
+            <div className="text-xs text-text-muted">绑定到岗位主线</div>
           )}
           <input
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="搜索公司、岗位、城市后绑定..."
+            placeholder="搜索公司、岗位、城市"
             className="w-full rounded-lg border border-bg-hover bg-bg-tertiary/45 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent-blue/50 focus:outline-none"
           />
           <div className="grid gap-2 md:grid-cols-2">
@@ -1139,7 +1101,7 @@ function ApplicationLinkPanel({
           </div>
           {applications.length === 0 ? (
             <div className="rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-4 text-center text-xs text-text-muted">
-              暂无可绑定的求职记录。
+              暂无可绑定岗位
             </div>
           ) : null}
         </div>

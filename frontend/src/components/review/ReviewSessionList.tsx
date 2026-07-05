@@ -1093,21 +1093,21 @@ function sessionSummary(session: ReviewSession): string | null {
     .trim()
   if (normalized) return normalized
   if (session.status === 'analysis_failed') {
-    return '生成失败，可重试。'
+    return '生成失败'
   }
   if (session.status === 'partial_capture') {
-    return '采集不完整，先核对原文。'
+    return '采集不完整'
   }
   if (session.status === 'recorded') {
     return session.auto_sync_eligible === false
-      ? '短样本，不自动回写看板。'
-      : '可生成复盘。'
+      ? '短样本'
+      : '待生成'
   }
   if (session.status === 'analyzing') {
-    return '正在整理。'
+    return '整理中'
   }
   if (session.status === 'recording') {
-    return '录制中。'
+    return '录制中'
   }
   return null
 }
