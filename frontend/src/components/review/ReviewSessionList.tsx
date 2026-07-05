@@ -910,7 +910,7 @@ function ReviewQueueRow({
                       event.stopPropagation()
                       onOpenApplication(session)
                     }}
-                    className="rounded-md border border-accent-blue/25 bg-transparent px-2 py-0.5 text-[11px] font-medium text-accent-blue hover:bg-accent-blue/5"
+                    className="text-[11px] font-medium text-accent-blue hover:underline"
                   >
                     查看岗位
                   </button>
