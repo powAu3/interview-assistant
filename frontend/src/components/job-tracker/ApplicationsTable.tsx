@@ -1255,26 +1255,15 @@ export default function ApplicationsTable({
                               {currentOffer ? '编辑 Offer' : '记录 Offer'}
                             </button>
                           </div>
-                          <div className="mt-2.5 flex flex-wrap gap-2">
+                          <div className="mt-2.5 text-xs leading-relaxed text-text-secondary">
                             {currentOffer ? (
                               offerSummaryBits.length > 0 ? (
-                                offerSummaryBits.map((bit) => (
-                                  <span
-                                    key={bit}
-                                    className="inline-flex items-center rounded-md border border-emerald-500/15 bg-emerald-500/[0.06] px-2.5 py-1 text-[11px] text-emerald-600"
-                                  >
-                                    {bit}
-                                  </span>
-                                ))
+                                <span className="text-emerald-600">{offerSummaryBits.join(' · ')}</span>
                               ) : (
-                                <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
-                                  Offer 已记录
-                                </span>
+                                <span className="text-emerald-600">Offer 已记录</span>
                               )
                             ) : (
-                              <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
-                                暂无 Offer
-                              </span>
+                              <span className="text-text-muted">暂无 Offer</span>
                             )}
                           </div>
                         </section>
@@ -1284,22 +1273,17 @@ export default function ApplicationsTable({
                             <div>
                               <h5 className="text-sm font-semibold text-text-primary">待办与备注</h5>
                             </div>
-                            <span className="rounded-md border border-bg-hover bg-bg-tertiary/35 px-2.5 py-1 text-[11px] text-text-muted">
+                            <span className="text-[11px] text-text-muted">
                               当前 {draftTodoLines.length} 条待办
                             </span>
                           </div>
                           {draftTodoPreview.length > 0 ? (
-                            <div className="mb-2.5 flex flex-wrap gap-2">
+                            <div className="mb-2.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-text-secondary">
                               {draftTodoPreview.map((todo, index) => (
-                                <span
-                                  key={`${todo}-${index}`}
-                                  className="inline-flex items-center rounded-md border border-accent-blue/15 bg-accent-blue/[0.05] px-2.5 py-1 text-[11px] text-accent-blue"
-                                >
-                                  {todo}
-                                </span>
+                                <span key={`${todo}-${index}`}>{todo}</span>
                               ))}
                               {draftTodoLines.length > draftTodoPreview.length ? (
-                                <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
+                                <span className="text-text-muted">
                                   还有 {draftTodoLines.length - draftTodoPreview.length} 条
                                 </span>
                               ) : null}
