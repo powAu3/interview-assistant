@@ -574,11 +574,6 @@ export default function ApplicationsTable({
     : coreDirty
       ? '核心信息还没保存'
       : '补充信息还没保存'
-  const pendingSaveDetail = coreDirty && extrasDirty
-    ? '2 处待保存'
-    : coreDirty
-      ? '核心已改'
-      : '补充已改'
   const pendingSaveAssistAction = coreDirty && !editCoreOpen
     ? {
         label: '继续改核心信息',
@@ -1005,38 +1000,29 @@ export default function ApplicationsTable({
                 </div>
               </div>
               {dirty ? (
-                <div className="mt-2.5 rounded-md border border-accent-blue/15 bg-accent-blue/[0.05] px-3 py-2.5">
-                  <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-blue">
-                        待确认修改
-                      </div>
-                      <div className="mt-1 text-sm font-semibold text-text-primary">
-                        {pendingSaveTitle}
-                      </div>
-                      <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                        {pendingSaveDetail}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {pendingSaveAssistAction ? (
-                        <button
-                          type="button"
-                          onClick={pendingSaveAssistAction.onClick}
-                          className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                        >
-                          {pendingSaveAssistAction.label}
-                        </button>
-                      ) : null}
+                <div className="mt-2.5 flex flex-col gap-2 border-t border-accent-blue/20 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <span className="mr-2 text-[11px] font-semibold text-accent-blue">待确认修改</span>
+                    <span className="text-sm font-semibold text-text-primary">{pendingSaveTitle}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {pendingSaveAssistAction ? (
                       <button
                         type="button"
-                        disabled={saving}
-                        onClick={() => void handleSave(pendingSaveScope)}
-                        className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                        onClick={pendingSaveAssistAction.onClick}
+                        className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                       >
-                        {saving ? '保存中...' : pendingSaveLabel}
+                        {pendingSaveAssistAction.label}
                       </button>
-                    </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void handleSave(pendingSaveScope)}
+                      className="rounded-md bg-accent-blue px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                    >
+                      {saving ? '保存中...' : pendingSaveLabel}
+                    </button>
                   </div>
                 </div>
               ) : null}
