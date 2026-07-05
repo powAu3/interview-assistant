@@ -273,6 +273,6 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText('挂到岗位主线')).toBeInTheDocument()
     expect(screen.getByText('回看逐题记录')).toBeInTheDocument()
     expect(screen.getByText('请讲讲你最熟悉的项目。')).toBeInTheDocument()
-    expect(screen.getByText('这场记录比较短，已经直接展开原始问答，方便排错或快速回看。')).toBeInTheDocument()
+    expect(screen.getByText('短记录，已展开。')).toBeInTheDocument()
   })
 })

@@ -481,11 +481,11 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             {nextActions.length > 0 ? (
               <SectionPanel
                 title="下一轮补强"
-                subtitle="默认只给最值得立刻练的几件事，不把整份复盘都压给你。"
+                subtitle="只列最该练的几项。"
               >
                 <div className="grid gap-2 md:grid-cols-2">
                   {nextActions.map((item, idx) => (
-                    <div key={`${item}-${idx}`} className="rounded-2xl border border-bg-hover bg-bg-tertiary/30 px-3 py-3 text-sm leading-relaxed text-text-primary">
+                    <div key={`${item}-${idx}`} className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-2.5 text-sm leading-relaxed text-text-primary">
                       {item}
                     </div>
                   ))}
@@ -497,8 +497,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
               <CollapsibleSection
                 title={`逐题分析 · ${detail.turns.length} 题`}
                 subtitle={autoExpandTurns
-                  ? '这场记录比较短，已经直接展开原始问答，方便排错或快速回看。'
-                  : '只有需要找具体证据、回答原文或逐题评分时再展开。'}
+                  ? '短记录，已展开。'
+                  : '需要证据时再展开。'}
                 defaultOpen={autoExpandTurns}
               >
                 <div className="space-y-3">
@@ -515,10 +515,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             ) : (
               <SectionPanel
                 title="逐题分析"
-                subtitle="这场记录还没有可回看的问答内容。"
+                subtitle="暂无问答。"
               >
-                <div className="rounded-2xl border border-dashed border-bg-hover bg-bg-tertiary/20 px-4 py-6 text-sm leading-relaxed text-text-secondary">
-                  等录到实际问答后，这里会保留逐题原文、ASR 纠错、评分和后续分析证据。
+                <div className="rounded-lg border border-dashed border-bg-hover bg-bg-tertiary/20 px-4 py-5 text-sm text-text-secondary">
+                  有问答后会显示原文、纠错和评分。
                 </div>
               </SectionPanel>
             )}
@@ -552,7 +552,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
 
             <SectionPanel
               title="本场速览"
-              subtitle="先看这场的分数、低分题和纠错量，再决定要不要下钻到逐题。"
+              subtitle="分数、低分题和纠错量。"
             >
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <DetailMetric icon={BarChart3} label="综合评分" value={avgScoreDisplay} hint="满分 10.0" tone={scoreTone(detail.avg_score)} />
@@ -572,7 +572,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             {scoreDimensions.length > 0 ? (
               <CollapsibleSection
                 title="能力维度"
-                subtitle="更适合回头校准评分结构，默认先收起。"
+                subtitle="评分结构。"
               >
                 <div className="space-y-3">
                   {scoreDimensions.map((item) => (
@@ -597,11 +597,11 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             {followUpDrills.length > 0 ? (
               <CollapsibleSection
                 title={`追问训练 · ${followUpDrills.length}`}
-                subtitle="需要练答法时再展开，不占用默认阅读面。"
+                subtitle="练答法时再展开。"
               >
                 <div className="space-y-3">
                   {followUpDrills.map((item) => (
-                    <div key={`${item.seq}-${item.question}`} className="rounded-2xl border border-bg-hover bg-bg-tertiary/30 p-3">
+                    <div key={`${item.seq}-${item.question}`} className="rounded-lg border border-bg-hover bg-bg-tertiary/30 p-3">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <span className="rounded-md bg-bg-hover px-2 py-1 text-[10px] font-medium text-text-muted">第 {item.seq} 题</span>
                         {item.tags.map((tag) => (
@@ -892,24 +892,24 @@ function TurnCard({
     : 'text-text-muted bg-bg-hover border-bg-hover'
 
   return (
-    <div className="rounded-lg border border-bg-hover/60 bg-bg-secondary/40 overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all">
+    <div className="overflow-hidden rounded-lg border border-bg-hover/60 bg-bg-secondary/35">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-start gap-4 p-5 text-left hover:bg-bg-tertiary/25 transition-colors"
+        className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-bg-tertiary/25"
       >
-        <div className="flex-shrink-0 mt-1">
+        <div className="mt-1 flex-shrink-0">
           {expanded ? (
-            <ChevronDown className="w-5 h-5 text-text-muted" />
+            <ChevronDown className="h-4 w-4 text-text-muted" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-text-muted" />
+            <ChevronRight className="h-4 w-4 text-text-muted" />
           )}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold text-text-muted px-2 py-0.5 rounded-full bg-bg-hover">第 {turn.seq} 题</span>
+        <div className="min-w-0 flex-1">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="rounded-md bg-bg-hover px-2 py-0.5 text-xs font-bold text-text-muted">第 {turn.seq} 题</span>
             {turn.is_partial && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-500 border border-yellow-500/30">
+              <span className="rounded-md border border-yellow-500/30 bg-yellow-500/15 px-2 py-0.5 text-[10px] text-yellow-500">
                 部分录制
               </span>
             )}
@@ -918,15 +918,15 @@ function TurnCard({
         </div>
         {avgScore !== null && (
           <div className="flex-shrink-0 text-right">
-            <div className={`inline-flex items-center justify-center w-14 h-14 rounded-full border-2 ${scoreColor}`}>
-              <span className="text-lg font-bold">{avgScore.toFixed(1)}</span>
+            <div className={`inline-flex h-12 w-12 items-center justify-center rounded-lg border ${scoreColor}`}>
+              <span className="text-base font-bold">{avgScore.toFixed(1)}</span>
             </div>
           </div>
         )}
       </button>
 
       {expanded && (
-        <div className="border-t border-bg-hover/40 p-5 space-y-5 bg-bg-tertiary/20">
+        <div className="space-y-4 border-t border-bg-hover/40 bg-bg-tertiary/20 p-3">
           <div>
             <h4 className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">候选人回答</h4>
             {hasAsrCorrection && (
@@ -937,7 +937,7 @@ function TurnCard({
                 </div>
               </div>
             )}
-            <div className="text-sm text-text-primary whitespace-pre-wrap leading-relaxed bg-bg-secondary/50 p-4 rounded-lg">
+            <div className="whitespace-pre-wrap rounded-lg bg-bg-secondary/50 p-3 text-sm leading-relaxed text-text-primary">
               {turn.candidate_answer_text || '(未录制到回答)'}
             </div>
           </div>
@@ -945,7 +945,7 @@ function TurnCard({
           {turn.code_text && (
             <div>
               <h4 className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">代码</h4>
-              <pre className="text-xs bg-bg-tertiary/80 p-4 rounded-lg overflow-x-auto border border-bg-hover/40">
+              <pre className="overflow-x-auto rounded-lg border border-bg-hover/40 bg-bg-tertiary/80 p-3 text-xs">
                 <code>{turn.code_text}</code>
               </pre>
             </div>
@@ -1018,11 +1018,11 @@ function TurnCard({
           )}
 
           {!hasAnalysis && (
-            <div className="text-xs text-text-muted text-center py-4 bg-bg-secondary/30 rounded-lg">
+            <div className="rounded-lg bg-bg-secondary/30 py-3 text-center text-xs text-text-muted">
               {turn.analysis_status === 'pending'
-                ? '⏳ 等待分析'
+                ? '等待分析'
                 : turn.analysis_status === 'analyzing'
-                  ? '🔄 分析中...'
+                  ? '分析中...'
                   : '暂无分析'}
             </div>
           )}
