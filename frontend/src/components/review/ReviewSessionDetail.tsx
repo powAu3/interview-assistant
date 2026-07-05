@@ -262,7 +262,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   return (
     <div className="flex-1 overflow-auto p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-4">
-        <section className="rounded-[28px] border border-bg-hover/80 bg-bg-secondary/45 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.08)]">
+        <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
           <div className="flex items-start gap-3">
             <button
               type="button"
@@ -369,11 +369,9 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         <span>{scoredTurns.length} 轮已评分</span>
                       </div>
                       {detail.auto_sync_eligible === false ? (
-                        <div className="mt-3 rounded-2xl border border-yellow-500/25 bg-yellow-500/8 px-3 py-3">
+                        <div className="mt-3 rounded-lg border border-yellow-500/25 bg-yellow-500/8 px-3 py-2">
                           <div className="text-sm font-semibold text-yellow-500">这场记录更像测试片段</div>
-                          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-                            当前只有 {detail.turn_count} 轮问答，默认不会自动把复盘摘要和待办推回求职看板，避免短样本污染主流程。
-                          </p>
+                          <p className="mt-1 text-xs text-text-secondary">{detail.turn_count} 轮问答，默认不回写看板。</p>
                         </div>
                       ) : null}
                     </>
@@ -388,7 +386,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                           type="button"
                           onClick={handleTriggerAnalysis}
                           disabled={triggering}
-                          className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
                             detail.status === 'analysis_failed'
                               ? 'bg-red-500/12 text-red-500 hover:bg-red-500/18 disabled:opacity-50'
                               : 'bg-accent-blue text-white hover:brightness-110 disabled:opacity-50'
@@ -413,7 +411,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         </button>
                       ) : null}
                       {isAnalyzing ? (
-                        <div className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-500/10 px-4 py-3 text-sm font-medium text-blue-500">
+                        <div className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-500">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           分析中
                         </div>
@@ -639,10 +637,10 @@ function SectionPanel({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-[24px] border border-bg-hover/80 bg-bg-secondary/45 p-5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-      <div className="mb-4">
+    <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
+      <div className="mb-3">
         <h3 className="text-base font-semibold text-text-primary">{title}</h3>
-        {subtitle ? <p className="mt-1 text-sm leading-relaxed text-text-secondary">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-1 text-xs text-text-secondary">{subtitle}</p> : null}
       </div>
       {children}
     </section>
@@ -663,21 +661,21 @@ function CollapsibleSection({
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <section className="rounded-[24px] border border-bg-hover/80 bg-bg-secondary/45 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+    <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
       >
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-text-primary">{title}</h3>
-          {subtitle ? <p className="mt-1 text-sm leading-relaxed text-text-secondary">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-1 text-xs text-text-secondary">{subtitle}</p> : null}
         </div>
-        <span className="rounded-full border border-bg-hover p-2 text-text-muted">
+        <span className="rounded-md border border-bg-hover p-1.5 text-text-muted">
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </span>
       </button>
-      {open ? <div className="border-t border-bg-hover/80 px-5 py-4">{children}</div> : null}
+      {open ? <div className="border-t border-bg-hover/80 px-4 py-3">{children}</div> : null}
     </section>
   )
 }
@@ -696,7 +694,7 @@ function TakeawaysPanel({
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
         {strongPoints.length > 0 ? (
-          <div className="rounded-2xl border border-green-500/20 bg-green-500/6 p-4">
+          <div className="rounded-lg border border-green-500/20 bg-green-500/6 p-3">
             <div className="text-sm font-semibold text-green-500">高频亮点</div>
             <ul className="mt-3 space-y-2">
               {strongPoints.map((point, idx) => (
@@ -709,7 +707,7 @@ function TakeawaysPanel({
           </div>
         ) : null}
         {weakPoints.length > 0 ? (
-          <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/6 p-4">
+          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/6 p-3">
             <div className="text-sm font-semibold text-yellow-500">待改进点</div>
             <ul className="mt-3 space-y-2">
               {weakPoints.map((point, idx) => (
@@ -752,11 +750,11 @@ function HeaderCompactMetric({
   tone: string
 }) {
   return (
-    <div className={`rounded-2xl border px-3 py-2.5 ${tone}`}>
+    <div className={`rounded-lg border px-3 py-2 ${tone}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-75">{label}</div>
-          <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-text-muted">{hint}</div>
+          <div className="mt-1 line-clamp-2 text-[11px] text-text-muted">{hint}</div>
         </div>
         <div className="shrink-0 text-lg font-semibold leading-none text-text-primary">{value}</div>
       </div>
@@ -1069,34 +1067,22 @@ function ApplicationLinkPanel({
     : isLatestLinkedReview
       ? '当前这场是最近一场'
       : '当前这场是更早的一场'
-  const reviewRelationshipHint = linkedReviewCount <= 1
-    ? '后面同岗位的新复盘会继续往这条岗位时间线上挂。'
-    : isLatestLinkedReview
-      ? '后面如果还有下一轮面试，新复盘会继续接在这场后面。'
-      : linkedReviewSummary?.latest_review_at != null
-        ? `最近一场在 ${dayjs.unix(Math.floor(linkedReviewSummary.latest_review_at)).format('YYYY-MM-DD HH:mm')}。`
-        : '最近一场会继续显示在这条岗位时间线的末尾。'
-  const timelineHeadline = linkedReviewCount > 1
-    ? `同岗位已串起 ${linkedReviewCount} 场复盘`
-    : '当前这场已经挂回岗位主线'
-  const timelineDescription = linkedReviewCount > 1
-    ? (isLatestLinkedReview
-        ? '这条岗位已经形成连续时间线，后面如果还有下一轮面试，新复盘会继续接在后面。'
-        : '你现在看的这场会保留在更早位置，最近一场和后续新复盘会继续挂在同一条岗位主线上。')
-    : (isClosedStage
-        ? '虽然这条岗位已经结束，但这场复盘和后续补录内容都会继续保留在这条岗位主线上。'
-        : '现在先把这场复盘挂到岗位主线，后面同岗位的新复盘就会自然接成时间线。')
+  const latestReviewTime = linkedReviewSummary?.latest_review_at != null
+    ? dayjs.unix(Math.floor(linkedReviewSummary.latest_review_at)).format('YYYY-MM-DD HH:mm')
+    : null
+  const syncNote = detail.auto_sync_eligible === false
+    ? '短样本，不回写看板'
+    : isClosedStage
+      ? '已结束，不进待跟进'
+      : '弱项可同步待办'
   return (
-    <section className="rounded-[24px] border border-bg-hover/80 bg-bg-secondary/45 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+    <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
             <Link2 className="h-4 w-4 text-accent-blue" />
             关联求职记录
           </h3>
-          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-            挂回岗位主线后，同一岗位的多轮面试就会自然串成 1 条时间线。
-          </p>
         </div>
         {linked ? (
           <button
@@ -1112,90 +1098,54 @@ function ApplicationLinkPanel({
 
       {linked && !changing ? (
         <div className="space-y-3">
-          <div className="rounded-2xl border border-accent-blue/15 bg-accent-blue/[0.045] p-3.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-blue">
-                岗位时间线
-              </span>
-              <span className="text-sm font-semibold text-text-primary">
-                {linked.company || '未命名公司'} · {linked.position || '岗位'}
-              </span>
-              <StatusBadge className="border-bg-hover bg-bg-secondary/70 text-text-secondary">
-                {linkedStageLabel}
-              </StatusBadge>
-            </div>
-            <div className="mt-2 text-[11px] text-text-muted">
-              {linked.city ? `${linked.city} · ` : ''}{isClosedStage ? '这条岗位已经进入终态' : '这条岗位仍在主流程里推进'}
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-bg-hover bg-white/[0.38] px-3.5 py-3">
-              <div className="flex flex-col gap-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                    linkedReviewCount > 0 ? 'text-accent-blue' : 'text-text-muted'
-                  }`}>
-                    {linkedReviewCount > 1 ? '同岗位时间线' : '当前复盘位置'}
-                  </div>
-                  <span className="rounded-full border border-bg-hover bg-bg-tertiary/45 px-2.5 py-1 text-[10px] font-medium text-text-muted">
-                    当前这场 · {reviewRelationshipLabel}
-                  </span>
+          <div className="rounded-lg border border-accent-blue/15 bg-accent-blue/[0.035] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-text-primary">
+                  {linked.company || '未命名公司'} · {linked.position || '岗位'}
                 </div>
-                <div className="text-[15px] font-semibold text-text-primary">
-                  {timelineHeadline}
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+                  <span>{linkedStageLabel}</span>
+                  {linked.city ? <span>{linked.city}</span> : null}
+                  <span>{syncNote}</span>
                 </div>
-                <p className="text-sm leading-relaxed text-text-secondary">
-                  {timelineDescription}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {linkedReviewSummary && linkedReviewSummary.review_count > 0 ? (
-                    <button
-                      type="button"
-                      disabled={binding}
-                      onClick={() => onOpenReviewTimeline(linked.id)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-[11px] font-semibold text-accent-blue hover:bg-accent-blue/15 disabled:opacity-60"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      查看这条岗位的全部复盘
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={binding}
-                    onClick={() => setChanging(true)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-60"
-                  >
-                    <Link2 className="h-3.5 w-3.5" />
-                    改绑
-                  </button>
-                  <button
-                    type="button"
-                    disabled={binding}
-                    onClick={() => onBind(null)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-500/15 disabled:opacity-60"
-                  >
-                    <Unlink className="h-3.5 w-3.5" />
-                    解绑
-                  </button>
-                </div>
+              </div>
+              <div className="text-right text-xs text-text-muted">
+                <div><span className="font-semibold text-text-primary">{linkedReviewCount}</span> 场复盘</div>
+                <div className="mt-0.5">{reviewRelationshipLabel}</div>
               </div>
             </div>
 
-            <div className="mt-3 grid gap-2 lg:grid-cols-3 xl:grid-cols-1">
-              <LinkInsightCard
-                label="岗位阶段"
-                value={linkedStageLabel}
-                hint={isClosedStage ? '已结束，不再进入待跟进提醒。' : '这条岗位仍在主流程里继续推进。'}
-              />
-              <LinkInsightCard
-                label="同岗位复盘"
-                value={linkedReviewCount > 0 ? `${linkedReviewCount} 场` : '暂无'}
-                hint={linkedReviewCount > 1 ? '一条岗位会自然串起多轮面试。' : '后续复盘会继续挂回这里。'}
-              />
-              <LinkInsightCard
-                label="当前这场"
-                value={reviewRelationshipLabel}
-                hint={reviewRelationshipHint}
-              />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {linkedReviewSummary && linkedReviewSummary.review_count > 0 ? (
+                <button
+                  type="button"
+                  disabled={binding}
+                  onClick={() => onOpenReviewTimeline(linked.id)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-[11px] font-semibold text-accent-blue hover:bg-accent-blue/15 disabled:opacity-60"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  全部复盘
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={binding}
+                onClick={() => setChanging(true)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-bg-hover bg-bg-tertiary/35 px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-60"
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                改绑
+              </button>
+              <button
+                type="button"
+                disabled={binding}
+                onClick={() => onBind(null)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-medium text-red-400 hover:bg-red-500/15 disabled:opacity-60"
+              >
+                <Unlink className="h-3.5 w-3.5" />
+                解绑
+              </button>
             </div>
           </div>
 
@@ -1231,38 +1181,24 @@ function ApplicationLinkPanel({
             </div>
           )}
 
-          <div className="rounded-xl border border-bg-hover/80 bg-bg-tertiary/22 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary">
-            {detail.auto_sync_eligible === false
-              ? '当前复盘少于 5 轮，已建立关联，但不会自动同步待办和复盘摘要，避免测试记录污染看板。'
-              : isClosedStage
-                ? `这条岗位当前已${linkedStageLabel}。复盘会继续保留，方便回看原因，但不会作为待跟进提醒。`
-                : '这场复盘的弱项和低分题会同步到该岗位的待办里。'}
-            {linkedReviewSummary && linkedReviewSummary.review_count > 0 ? (
-              <span className="mt-2 block text-text-muted">
-                这条岗位当前共 {linkedReviewSummary.review_count} 场复盘
-                {linkedReviewSummary.latest_review_at != null
-                  ? `，最近一次 ${dayjs.unix(Math.floor(linkedReviewSummary.latest_review_at)).format('YYYY-MM-DD HH:mm')}`
-                  : ''}
-                。
-              </span>
-            ) : null}
-          </div>
+          {latestReviewTime ? (
+            <div className="text-[11px] text-text-muted">
+              最近复盘 {latestReviewTime}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {selecting && (
         <div className="space-y-3">
-          {!linked ? (
-            <div className="rounded-2xl border border-dashed border-accent-blue/25 bg-accent-blue/[0.04] px-3 py-3 text-xs leading-relaxed text-text-secondary">
-              先把这场复盘挂到一个岗位上，后面同岗位的新复盘就会自然接成一条时间线。
-            </div>
-          ) : null}
           {linked ? (
             <div className="flex items-center justify-between rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-2 text-xs text-text-muted">
               <span>当前关联：{linked.company || '未命名公司'} · {linked.position || '岗位'}</span>
               <button type="button" onClick={() => setChanging(false)} className="text-accent-blue hover:underline">取消改绑</button>
             </div>
-          ) : null}
+          ) : (
+            <div className="text-xs text-text-muted">选择一个岗位，复盘会挂到它的时间线。</div>
+          )}
           <input
             value={search}
             onChange={(e) => onSearch(e.target.value)}
@@ -1290,7 +1226,7 @@ function ApplicationLinkPanel({
           </div>
           {applications.length === 0 ? (
             <div className="rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-4 text-center text-xs text-text-muted">
-              暂无可绑定的求职记录，请先在求职看板新增一条。
+              暂无可绑定的求职记录。
             </div>
           ) : null}
         </div>
@@ -1336,26 +1272,6 @@ function DetailMetric({
   )
 }
 
-function LinkInsightCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint: string
-}) {
-  return (
-    <div className="rounded-xl border border-bg-hover/80 bg-bg-tertiary/28 px-3 py-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">{label}</div>
-        <div className="text-[12px] font-semibold text-text-primary">{value}</div>
-      </div>
-      <div className="mt-1 text-[10px] leading-relaxed text-text-secondary">{hint}</div>
-    </div>
-  )
-}
-
 function InlineNoticeBanner({ notice }: { notice: InlineNotice }) {
   const toneClass = {
     success: 'border-green-500/20 bg-green-500/8 text-green-500',
@@ -1365,7 +1281,7 @@ function InlineNoticeBanner({ notice }: { notice: InlineNotice }) {
   }[notice.tone]
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm ${toneClass}`}>
+    <div className={`rounded-lg border px-4 py-3 text-sm ${toneClass}`}>
       {notice.message}
     </div>
   )

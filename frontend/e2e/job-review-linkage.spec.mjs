@@ -47,7 +47,7 @@ test.describe('job tracker and review linkage', () => {
     await linkedReviewRow.getByRole('button', { name: '查看详情' }).click()
 
     await expect(page.getByText('已绑定求职记录')).toBeVisible()
-    await expect(page.getByText(/这条岗位当前共 2 场复盘/)).toBeVisible()
+    await expect(page.getByText(/2\s*场复盘/)).toBeVisible()
 
     await page.getByRole('button', { name: '去求职看板' }).click()
     await expect(page.getByRole('heading', { name: '求职进度', exact: true })).toBeVisible()
