@@ -756,20 +756,18 @@ function PendingSummaryWorkspace({
           : `${detail.turn_count} 轮问答${correctedCount > 0 ? ` · ${correctedCount} 处纠错` : ''}`
 
   return (
-    <div className="rounded-lg border border-bg-hover bg-bg-tertiary/15 p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-text-primary">{headline}</div>
-          <p className="mt-1 text-sm text-text-secondary">{description}</p>
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-          <span>问答 <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
-          <span>已评分 <span className="font-semibold text-text-primary">{scoredTurnsCount}</span></span>
-          <span>主线 <span className="font-semibold text-text-primary">{detail.application ? '已绑定' : '未绑定'}</span></span>
-          {detail.auto_sync_eligible === false ? (
-            <span className="text-yellow-500">不回写看板</span>
-          ) : null}
-        </div>
+    <div className="flex flex-col gap-3 border-l border-bg-hover/80 pl-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-text-primary">{headline}</div>
+        <p className="mt-1 text-sm text-text-secondary">{description}</p>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+        <span>问答 <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
+        <span>已评分 <span className="font-semibold text-text-primary">{scoredTurnsCount}</span></span>
+        <span>主线 <span className="font-semibold text-text-primary">{detail.application ? '已绑定' : '未绑定'}</span></span>
+        {detail.auto_sync_eligible === false ? (
+          <span className="text-yellow-500">不回写看板</span>
+        ) : null}
       </div>
     </div>
   )
