@@ -304,7 +304,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
               aria-expanded={showManualImport}
               className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
                 showManualImport
-                  ? 'border-accent-blue/35 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                  ? 'border-accent-blue/35 bg-transparent text-accent-blue hover:bg-bg-hover'
                   : 'border-bg-hover bg-bg-secondary text-text-secondary hover:bg-bg-hover'
               }`}
             >
@@ -317,7 +317,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
               aria-expanded={showSettings}
               className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
                 showSettings
-                  ? 'border-accent-blue/35 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                  ? 'border-accent-blue/35 bg-transparent text-accent-blue hover:bg-bg-hover'
                   : 'border-bg-hover bg-bg-secondary text-text-primary hover:bg-bg-hover'
               }`}
             >
@@ -446,7 +446,7 @@ function ReviewZeroState({
             aria-expanded={showManualImport}
             className={`inline-flex h-9 items-center gap-2 rounded-md px-3.5 text-sm font-semibold transition-colors ${
               showManualImport
-                ? 'border border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                ? 'border border-accent-blue/30 bg-transparent text-accent-blue hover:bg-bg-hover'
                 : 'bg-accent-blue text-white hover:bg-accent-blue/90'
             }`}
           >
@@ -459,7 +459,7 @@ function ReviewZeroState({
             aria-expanded={showSettings}
             className={`inline-flex h-9 items-center gap-2 rounded-md border px-3.5 text-sm font-medium transition-colors ${
               showSettings
-                ? 'border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                ? 'border-accent-blue/30 bg-transparent text-accent-blue hover:bg-bg-hover'
                 : 'border-bg-hover bg-bg-secondary text-text-primary hover:bg-bg-hover'
             }`}
           >
