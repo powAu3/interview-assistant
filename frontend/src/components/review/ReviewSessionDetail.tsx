@@ -801,11 +801,11 @@ function TurnCard({
   )
 
   const scoreColor = avgScore !== null
-    ? avgScore >= 8 ? 'text-green-500 bg-green-500/15 border-green-500/30'
-      : avgScore >= 6 ? 'text-blue-500 bg-blue-500/15 border-blue-500/30'
-      : avgScore >= 4 ? 'text-yellow-500 bg-yellow-500/15 border-yellow-500/30'
-      : 'text-red-500 bg-red-500/15 border-red-500/30'
-    : 'text-text-muted bg-bg-hover border-bg-hover'
+    ? avgScore >= 8 ? 'text-green-500'
+      : avgScore >= 6 ? 'text-blue-500'
+      : avgScore >= 4 ? 'text-yellow-500'
+      : 'text-red-500'
+    : 'text-text-muted'
 
   return (
     <div className="overflow-hidden rounded-lg border border-bg-hover/60 bg-bg-secondary/35">
@@ -825,7 +825,7 @@ function TurnCard({
           <div className="mb-1.5 flex items-center gap-2">
             <span className="rounded-md bg-bg-hover px-2 py-0.5 text-xs font-bold text-text-muted">第 {turn.seq} 题</span>
             {turn.is_partial && (
-              <span className="rounded-md border border-yellow-500/30 bg-yellow-500/15 px-2 py-0.5 text-[10px] text-yellow-500">
+              <span className="rounded-md border border-yellow-500/30 px-2 py-0.5 text-[10px] text-yellow-500">
                 部分录制
               </span>
             )}
@@ -834,7 +834,7 @@ function TurnCard({
         </div>
         {avgScore !== null && (
           <div className="flex-shrink-0 text-right">
-            <div className={`inline-flex h-8 min-w-10 items-center justify-center rounded-md border px-2 ${scoreColor}`}>
+            <div className={`inline-flex h-8 min-w-10 items-center justify-center rounded-md border border-bg-hover bg-bg-secondary/35 px-2 ${scoreColor}`}>
               <span className="text-xs font-semibold">{avgScore.toFixed(1)}</span>
             </div>
           </div>
@@ -842,7 +842,7 @@ function TurnCard({
       </button>
 
       {expanded && (
-        <div className="space-y-3 border-t border-bg-hover/40 bg-bg-tertiary/15 p-3">
+        <div className="space-y-3 border-t border-bg-hover/40 p-3">
           <div>
             <h4 className="mb-2 text-xs font-semibold text-text-muted">候选人回答</h4>
             {hasAsrCorrection && (
@@ -872,20 +872,20 @@ function TurnCard({
               {turn.scorecard && Object.keys(turn.scorecard).length > 0 && (
                 <div>
                   <h4 className="mb-2 text-xs font-semibold text-text-muted">评分详情</h4>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                     {Object.entries(turn.scorecard).map(([key, score]) => {
-                      const itemColor = score >= 8 ? 'border-green-500/30 bg-green-500/10 text-green-500'
-                        : score >= 6 ? 'border-blue-500/30 bg-blue-500/10 text-blue-500'
-                        : score >= 4 ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
-                        : 'border-red-500/30 bg-red-500/10 text-red-500'
+                      const scoreTone = score >= 8 ? 'text-green-500'
+                        : score >= 6 ? 'text-blue-500'
+                        : score >= 4 ? 'text-yellow-500'
+                        : 'text-red-500'
 
                       return (
                         <div
                           key={key}
-                          className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 ${itemColor}`}
+                          className="flex min-w-0 items-center justify-between gap-3 border-b border-bg-hover/50 py-1.5"
                         >
-                          <span className="min-w-0 truncate text-xs text-text-muted">{key}</span>
-                          <span className="text-sm font-semibold">{score}</span>
+                          <span className="min-w-0 truncate text-xs text-text-secondary">{key}</span>
+                          <span className={`text-sm font-semibold ${scoreTone}`}>{score}</span>
                         </div>
                       )
                     })}
