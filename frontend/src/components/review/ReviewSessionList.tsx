@@ -8,8 +8,6 @@ import {
   Clock,
   XCircle,
   Settings,
-  Brain,
-  Power,
   Sparkles,
   RotateCw,
   Loader2,
@@ -524,14 +522,9 @@ function ManualImportPanel({
   }
 
   return (
-    <div className="rounded-lg border border-accent-blue/25 bg-accent-blue/5 p-4">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="rounded-md bg-accent-blue/15 p-2 text-accent-blue">
-          <Upload className="h-4 w-4" />
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-text-primary">手动复盘导入</h3>
-        </div>
+    <div className="rounded-lg border border-bg-hover bg-bg-secondary/35 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-text-primary">手动复盘导入</h3>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <input
@@ -613,14 +606,9 @@ function ReviewSettingsPanel({
   }
 
   return (
-    <div className="rounded-lg border border-bg-hover/70 bg-bg-secondary/50 p-4">
-      <div className="mb-4 flex items-start gap-3">
-        <div className={`rounded-md p-2 ${reviewEnabled ? 'bg-green-500/15 text-green-500' : 'bg-bg-hover text-text-muted'}`}>
-          <Power className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-text-primary">复盘配置</h3>
-        </div>
+    <div className="rounded-lg border border-bg-hover bg-bg-secondary/35 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="min-w-0 flex-1 text-sm font-semibold text-text-primary">复盘配置</h3>
         <button
           type="button"
           onClick={() => onToggle(!reviewEnabled)}
@@ -637,8 +625,7 @@ function ReviewSettingsPanel({
           />
         </button>
       </div>
-      <label className="mb-2 flex items-center gap-2 text-xs font-medium text-text-secondary">
-        <Brain className="h-3.5 w-3.5 text-accent-blue" />
+      <label className="mb-2 block text-xs font-medium text-text-secondary">
         复盘分析模型
       </label>
       <select
@@ -653,7 +640,7 @@ function ReviewSettingsPanel({
           </option>
         ))}
       </select>
-      <div className="mt-4 rounded-lg border border-bg-hover bg-bg-tertiary/35 p-3">
+      <div className="mt-3 border-t border-bg-hover/80 pt-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xs font-semibold text-text-primary">ASR 纠错自检</div>
