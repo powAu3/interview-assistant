@@ -559,7 +559,7 @@ function SectionPanel({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45 p-4">
+    <section className="border-t border-bg-hover/80 py-4">
       <div className="mb-3">
         <h3 className="text-base font-semibold text-text-primary">{title}</h3>
         {subtitle ? <p className="mt-1 text-xs text-text-secondary">{subtitle}</p> : null}
@@ -583,21 +583,21 @@ function CollapsibleSection({
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <section className="rounded-lg border border-bg-hover/80 bg-bg-secondary/45">
+    <section className="border-t border-bg-hover/80 py-1">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-3 py-3 text-left"
       >
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-text-primary">{title}</h3>
           {subtitle ? <p className="mt-1 text-xs text-text-secondary">{subtitle}</p> : null}
         </div>
-        <span className="rounded-md border border-bg-hover p-1.5 text-text-muted">
+        <span className="p-1.5 text-text-muted">
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </span>
       </button>
-      {open ? <div className="border-t border-bg-hover/80 px-4 py-3">{children}</div> : null}
+      {open ? <div className="border-t border-bg-hover/70 py-3">{children}</div> : null}
     </section>
   )
 }
