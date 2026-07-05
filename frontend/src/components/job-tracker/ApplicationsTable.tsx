@@ -1138,7 +1138,7 @@ export default function ApplicationsTable({
                       ) : null}
                     </div>
 
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-bg-hover/70 pt-2">
                       {mainlinePulse.map((item) => (
                         <InlineSummaryPill
                           key={item.label}
@@ -1512,14 +1512,11 @@ function InlineSummaryPill({
   hint: string
   tone: string
 }) {
-  const surface = signalSurfaceTone(tone)
   return (
-    <div className={`rounded-md border px-2.5 py-1.5 ${surface}`}>
-      <div className="flex items-center gap-1.5 text-[11px]">
-        <span className="font-medium text-text-muted">{label}</span>
-        <span className={`font-semibold ${tone}`}>{value}</span>
-        <span className="text-text-muted">{hint}</span>
-      </div>
-    </div>
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
+      <span className="font-medium text-text-muted">{label}</span>
+      <span className={`font-semibold ${tone}`}>{value}</span>
+      <span className="text-text-muted">{hint}</span>
+    </span>
   )
 }
