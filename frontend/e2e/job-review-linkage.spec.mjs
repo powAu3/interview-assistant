@@ -43,8 +43,8 @@ test.describe('job tracker and review linkage', () => {
 
     await expect(page.getByRole('tab', { name: '面试复盘' })).toHaveAttribute('aria-selected', 'true')
     const linkedReviewRow = page.locator('article').filter({ hasText: '二面复盘' }).first()
-    await expect(linkedReviewRow.getByRole('button', { name: '查看详情' })).toBeVisible()
-    await linkedReviewRow.getByRole('button', { name: '查看详情' }).click()
+    await expect(linkedReviewRow).toBeVisible()
+    await linkedReviewRow.click()
 
     await expect(page.getByText('已绑定求职记录')).toBeVisible()
     await expect(page.getByText(/2\s*场复盘/)).toBeVisible()

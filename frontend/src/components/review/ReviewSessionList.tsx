@@ -885,7 +885,7 @@ function ReviewQueueRow({
       <div className="flex gap-2.5">
         <div className={`hidden w-1 shrink-0 rounded-sm md:block ${sessionRailTone(session.status)}`} />
         <div className="min-w-0 flex-1">
-          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+          <div className={`grid gap-2 ${hasPrimaryTrigger ? 'xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start' : ''}`}>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h4 className="text-sm font-semibold tracking-tight text-text-primary">{title}</h4>
@@ -936,8 +936,8 @@ function ReviewQueueRow({
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 xl:min-w-[188px] xl:flex-col xl:items-end xl:justify-start">
-              {hasPrimaryTrigger ? (
+            {hasPrimaryTrigger ? (
+              <div className="flex flex-wrap items-center gap-2 xl:min-w-[188px] xl:flex-col xl:items-end xl:justify-start">
                 <button
                   type="button"
                   onClick={(event) => {
@@ -953,7 +953,7 @@ function ReviewQueueRow({
                   {session.status === 'analysis_failed' ? <RotateCw className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
                   {session.status === 'analysis_failed' ? '重试生成' : '生成复盘'}
                 </button>
-              ) : (
+
                 <button
                   type="button"
                   onClick={(event) => {
@@ -965,29 +965,15 @@ function ReviewQueueRow({
                   <Eye className="h-3.5 w-3.5" />
                   查看详情
                 </button>
-              )}
 
-              {hasPrimaryTrigger ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onViewDetail(session.id)
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-blue/25 bg-transparent px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/5"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  查看详情
-                </button>
-              ) : null}
-
-              {isTriggering ? (
-                <span className="inline-flex h-9 items-center gap-1.5 px-2 text-xs text-text-muted">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  提交中
-                </span>
-              ) : null}
-            </div>
+                {isTriggering ? (
+                  <span className="inline-flex h-9 items-center gap-1.5 px-2 text-xs text-text-muted">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    提交中
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
