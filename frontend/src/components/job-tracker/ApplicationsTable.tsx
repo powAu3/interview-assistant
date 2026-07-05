@@ -1398,26 +1398,29 @@ export default function ApplicationsTable({
                         </section>
                       </div>
 
-                      <section className="rounded-md border border-red-500/15 bg-red-500/6 px-3 py-2.5">
-                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <h5 className="text-sm font-semibold text-text-primary">删除记录</h5>
-                            <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                              确认这条岗位不再需要保留时再删，避免把复盘、待办和 Offer 一起清掉。
+                      <details className="rounded-md border border-red-500/15 bg-red-500/6">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-text-primary [&::-webkit-details-marker]:hidden">
+                          <span>删除记录</span>
+                          <span className="text-[11px] font-medium text-text-muted">低频操作</span>
+                        </summary>
+                        <div className="border-t border-red-500/10 px-3 py-2.5">
+                          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-[11px] leading-relaxed text-text-secondary">
+                              会一起删除复盘、待办和 Offer 关联。
                             </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`删除「${current.company}」这条记录？`)) onDelete(current.id)
+                              }}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-500/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              删除这条记录
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`删除「${current.company}」这条记录？`)) onDelete(current.id)
-                            }}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-500/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            删除这条记录
-                          </button>
                         </div>
-                      </section>
+                      </details>
                     </div>
                   ) : null}
                 </section>
