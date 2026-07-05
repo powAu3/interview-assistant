@@ -151,4 +151,24 @@ describe('ReviewSessionList', () => {
     expect(screen.queryByText('OpenAI 一面')).not.toBeInTheDocument()
     expect(screen.getByText('米哈游二面')).toBeInTheDocument()
   })
+
+  it('makes manual import and settings panels visibly collapsible', async () => {
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('OpenAI 一面')
+
+    const manualButton = screen.getByRole('button', { name: '手动复盘' })
+    expect(manualButton).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(manualButton)
+
+    expect(screen.getByRole('button', { name: '收起导入' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('手动复盘导入')).toBeInTheDocument()
+
+    const settingsButton = screen.getByRole('button', { name: '配置' })
+    expect(settingsButton).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(settingsButton)
+
+    expect(screen.getByRole('button', { name: '收起配置' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('复盘配置')).toBeInTheDocument()
+  })
 })

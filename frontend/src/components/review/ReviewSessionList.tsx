@@ -307,18 +307,28 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             <button
               type="button"
               onClick={() => setShowManualImport((prev) => !prev)}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-accent-blue/30 bg-accent-blue/10 px-3 text-xs font-medium text-accent-blue hover:bg-accent-blue/15"
+              aria-expanded={showManualImport}
+              className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
+                showManualImport
+                  ? 'border-accent-blue/35 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                  : 'border-bg-hover bg-bg-secondary text-text-secondary hover:bg-bg-hover'
+              }`}
             >
               <Upload className="h-3.5 w-3.5" />
-              手动复盘
+              {showManualImport ? '收起导入' : '手动复盘'}
             </button>
             <button
               type="button"
               onClick={() => setShowSettings((prev) => !prev)}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-bg-hover bg-bg-secondary px-3 text-xs font-medium text-text-primary hover:bg-bg-hover"
+              aria-expanded={showSettings}
+              className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
+                showSettings
+                  ? 'border-accent-blue/35 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                  : 'border-bg-hover bg-bg-secondary text-text-primary hover:bg-bg-hover'
+              }`}
             >
               <Settings className="h-3.5 w-3.5" />
-              配置
+              {showSettings ? '收起配置' : '配置'}
             </button>
           </div>
         </header>
@@ -407,8 +417,10 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
         ) : (
           <ReviewZeroState
             reviewEnabled={reviewEnabled}
-            onManual={() => setShowManualImport(true)}
-            onSettings={() => setShowSettings(true)}
+            showManualImport={showManualImport}
+            showSettings={showSettings}
+            onManual={() => setShowManualImport((prev) => !prev)}
+            onSettings={() => setShowSettings((prev) => !prev)}
           />
         )}
         {!hasSessions ? configPanels : null}
@@ -420,10 +432,14 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
 
 function ReviewZeroState({
   reviewEnabled,
+  showManualImport,
+  showSettings,
   onManual,
   onSettings,
 }: {
   reviewEnabled: boolean
+  showManualImport: boolean
+  showSettings: boolean
   onManual: () => void
   onSettings: () => void
 }) {
@@ -441,18 +457,28 @@ function ReviewZeroState({
           <button
             type="button"
             onClick={onManual}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-accent-blue px-3.5 text-sm font-semibold text-white hover:bg-accent-blue/90"
+            aria-expanded={showManualImport}
+            className={`inline-flex h-9 items-center gap-2 rounded-md px-3.5 text-sm font-semibold transition-colors ${
+              showManualImport
+                ? 'border border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                : 'bg-accent-blue text-white hover:bg-accent-blue/90'
+            }`}
           >
             <Upload className="h-4 w-4" />
-            手动复盘
+            {showManualImport ? '收起导入' : '手动复盘'}
           </button>
           <button
             type="button"
             onClick={onSettings}
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-bg-hover bg-bg-secondary px-3.5 text-sm font-medium text-text-primary hover:bg-bg-hover"
+            aria-expanded={showSettings}
+            className={`inline-flex h-9 items-center gap-2 rounded-md border px-3.5 text-sm font-medium transition-colors ${
+              showSettings
+                ? 'border-accent-blue/30 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/15'
+                : 'border-bg-hover bg-bg-secondary text-text-primary hover:bg-bg-hover'
+            }`}
           >
             <Settings className="h-4 w-4" />
-            配置
+            {showSettings ? '收起配置' : '配置'}
           </button>
         </div>
       </div>
