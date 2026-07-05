@@ -845,7 +845,6 @@ function TurnCard({
     (turn.risks && turn.risks.length > 0) ||
     (turn.scorecard && Object.keys(turn.scorecard).length > 0)
 
-  // 计算平均分和颜色
   const avgScore = getTurnAvgScore(turn)
   const hasAsrCorrection = Boolean(
     turn.original_candidate_answer_text &&
@@ -886,19 +885,19 @@ function TurnCard({
         </div>
         {avgScore !== null && (
           <div className="flex-shrink-0 text-right">
-            <div className={`inline-flex h-12 w-12 items-center justify-center rounded-lg border ${scoreColor}`}>
-              <span className="text-base font-bold">{avgScore.toFixed(1)}</span>
+            <div className={`inline-flex h-8 min-w-10 items-center justify-center rounded-md border px-2 ${scoreColor}`}>
+              <span className="text-xs font-semibold">{avgScore.toFixed(1)}</span>
             </div>
           </div>
         )}
       </button>
 
       {expanded && (
-        <div className="space-y-4 border-t border-bg-hover/40 bg-bg-tertiary/20 p-3">
+        <div className="space-y-3 border-t border-bg-hover/40 bg-bg-tertiary/15 p-3">
           <div>
-            <h4 className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">候选人回答</h4>
+            <h4 className="mb-2 text-xs font-semibold text-text-muted">候选人回答</h4>
             {hasAsrCorrection && (
-              <div className="mb-3 rounded-lg border border-accent-blue/25 bg-accent-blue/10 px-3 py-2">
+              <div className="mb-2 rounded-md border border-accent-blue/20 bg-accent-blue/[0.06] px-3 py-2">
                 <div className="mb-1 text-[11px] font-semibold text-accent-blue">ASR 已纠错</div>
                 <div className="text-xs leading-relaxed text-text-muted">
                   原始转写：{turn.original_candidate_answer_text}
@@ -912,8 +911,8 @@ function TurnCard({
 
           {turn.code_text && (
             <div>
-              <h4 className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">代码</h4>
-              <pre className="overflow-x-auto rounded-lg border border-bg-hover/40 bg-bg-tertiary/80 p-3 text-xs">
+              <h4 className="mb-2 text-xs font-semibold text-text-muted">代码</h4>
+              <pre className="overflow-x-auto rounded-md border border-bg-hover/40 bg-bg-tertiary/80 p-3 text-xs">
                 <code>{turn.code_text}</code>
               </pre>
             </div>
@@ -923,8 +922,8 @@ function TurnCard({
             <>
               {turn.scorecard && Object.keys(turn.scorecard).length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted mb-3 uppercase tracking-wider">评分详情</h4>
-                  <div className="grid grid-cols-3 gap-3">
+                  <h4 className="mb-2 text-xs font-semibold text-text-muted">评分详情</h4>
+                  <div className="grid grid-cols-3 gap-2">
                     {Object.entries(turn.scorecard).map(([key, score]) => {
                       const itemColor = score >= 8 ? 'border-green-500/30 bg-green-500/10 text-green-500'
                         : score >= 6 ? 'border-blue-500/30 bg-blue-500/10 text-blue-500'
@@ -934,10 +933,10 @@ function TurnCard({
                       return (
                         <div
                           key={key}
-                          className={`flex flex-col items-center justify-center px-4 py-3 rounded-lg border ${itemColor}`}
+                          className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 ${itemColor}`}
                         >
-                          <span className="text-xs text-text-muted mb-1">{key}</span>
-                          <span className="text-2xl font-bold">{score}</span>
+                          <span className="min-w-0 truncate text-xs text-text-muted">{key}</span>
+                          <span className="text-sm font-semibold">{score}</span>
                         </div>
                       )
                     })}
@@ -947,17 +946,11 @@ function TurnCard({
 
               {turn.strengths && turn.strengths.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-green-500 mb-3 uppercase tracking-wider flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <span className="text-xs">✓</span>
-                    </div>
-                    亮点
-                  </h4>
-                  <ul className="space-y-2">
+                  <h4 className="mb-2 text-xs font-semibold text-green-500">亮点</h4>
+                  <ul className="space-y-1.5 border-l border-green-500/25 pl-3">
                     {turn.strengths.map((s, idx) => (
-                      <li key={idx} className="text-sm text-text-primary flex items-start gap-3 leading-relaxed">
-                        <span className="text-green-500 mt-1 flex-shrink-0">✓</span>
-                        <span className="flex-1">{s}</span>
+                      <li key={idx} className="text-sm leading-relaxed text-text-primary">
+                        {s}
                       </li>
                     ))}
                   </ul>
@@ -966,17 +959,11 @@ function TurnCard({
 
               {turn.risks && turn.risks.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-yellow-500 mb-3 uppercase tracking-wider flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                      <span className="text-xs">!</span>
-                    </div>
-                    待改进
-                  </h4>
-                  <ul className="space-y-2">
+                  <h4 className="mb-2 text-xs font-semibold text-yellow-500">待改进</h4>
+                  <ul className="space-y-1.5 border-l border-yellow-500/25 pl-3">
                     {turn.risks.map((r, idx) => (
-                      <li key={idx} className="text-sm text-text-primary flex items-start gap-3 leading-relaxed">
-                        <span className="text-yellow-500 mt-1 flex-shrink-0">⚠</span>
-                        <span className="flex-1">{r}</span>
+                      <li key={idx} className="text-sm leading-relaxed text-text-primary">
+                        {r}
                       </li>
                     ))}
                   </ul>
