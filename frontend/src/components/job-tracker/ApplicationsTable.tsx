@@ -439,7 +439,6 @@ export default function ApplicationsTable({
     .map((line) => line.trim())
     .filter(Boolean) ?? []
   const draftTodoPreview = draftTodoLines.slice(0, 3)
-  const hasDraftNotes = Boolean(draft?.notes.trim())
   const offerSummaryBits = currentOffer
     ? [
         currentOffer.base_salary || null,
@@ -488,7 +487,7 @@ export default function ApplicationsTable({
       }
       return {
         title: '流程已结束',
-        detail: '保留结果和必要备注',
+        detail: '结果归档',
         primaryLabel: '编辑核心信息',
         primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
         onPrimary: () => setEditCoreOpen(true),
@@ -500,7 +499,7 @@ export default function ApplicationsTable({
     if (current.next_followup_at == null) {
       return {
         title: '补下次跟进',
-        detail: '让提醒和筛选可用',
+        detail: '未设跟进',
         primaryLabel: '补时间',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setEditCoreOpen(true),
@@ -516,7 +515,7 @@ export default function ApplicationsTable({
     if (openTodoCount === 0) {
       return {
         title: '补 1 条下一步',
-        detail: '避免回头不知道推进什么',
+        detail: '待办为空',
         primaryLabel: '补待办',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setExtrasOpen(true),
@@ -539,7 +538,7 @@ export default function ApplicationsTable({
 
     return {
       title: '继续推进',
-      detail: '更新阶段或补充待办',
+      detail: '阶段 / 待办',
       primaryLabel: '编辑核心信息',
       primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
       onPrimary: () => setEditCoreOpen(true),
@@ -625,10 +624,10 @@ export default function ApplicationsTable({
       ? '核心信息还没保存'
       : '补充信息还没保存'
   const pendingSaveDetail = coreDirty && extrasDirty
-    ? '核心和补充都有改动。'
+    ? '2 处待保存'
     : coreDirty
-      ? '阶段、时间或岗位已改。'
-      : '待办或备注已改。'
+      ? '核心已改'
+      : '补充已改'
   const pendingSaveAssistAction = coreDirty && !editCoreOpen
     ? {
         label: '继续改核心信息',
@@ -643,10 +642,7 @@ export default function ApplicationsTable({
   const quickProgressDirty = current != null && draft != null
     ? draft.stage !== current.stage || draft.nextFollowupInput !== toDateInput(current.next_followup_at)
     : false
-  const quickProgressTitle = currentIsTerminal ? '快速改结果' : '快速更新进度'
-  const quickProgressHint = currentIsTerminal
-    ? '只改结果阶段'
-    : '阶段和下次跟进'
+  const quickProgressTitle = currentIsTerminal ? '改结果' : '更新进度'
   const headerQuickProgressShellClass = isLight
     ? 'border-bg-hover bg-bg-secondary/25'
     : 'border-white/[0.08] bg-black/12'
@@ -994,7 +990,6 @@ export default function ApplicationsTable({
                         {quickProgressTitle}
                       </div>
                     </div>
-                    <div className="mt-1 text-sm font-semibold text-text-primary">{quickProgressHint}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -1277,8 +1272,7 @@ export default function ApplicationsTable({
                         <section className="rounded-md border border-accent-blue/20 bg-accent-blue/[0.05] px-3 py-2.5">
                           <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                              <div className="text-sm font-semibold text-text-primary">补充信息有未保存修改</div>
-                              <p className="mt-1 text-[11px] text-text-secondary">待办、备注或 Offer 已改。</p>
+                              <div className="text-sm font-semibold text-text-primary">补充待保存</div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <button
@@ -1331,7 +1325,7 @@ export default function ApplicationsTable({
                                 ))
                               ) : (
                                 <span className="inline-flex items-center rounded-md border border-bg-hover bg-bg-tertiary/25 px-2.5 py-1 text-[11px] text-text-muted">
-                                  已记录 Offer，细节还可以继续补
+                                  Offer 已记录
                                 </span>
                               )
                             ) : (
@@ -1388,23 +1382,17 @@ export default function ApplicationsTable({
                               />
                             </label>
                           </div>
-                          {hasDraftNotes ? (
-                            <div className="mt-2.5 rounded-md border border-bg-hover bg-bg-tertiary/20 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary">
-                              当前备注预览：{draft?.notes.trim().slice(0, 90)}{draft?.notes.trim().length > 90 ? '...' : ''}
-                            </div>
-                          ) : null}
                         </section>
                       </div>
 
                       <details className="rounded-md border border-red-500/15 bg-red-500/6">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-text-primary [&::-webkit-details-marker]:hidden">
                           <span>删除记录</span>
-                          <span className="text-[11px] font-medium text-text-muted">低频操作</span>
                         </summary>
                         <div className="border-t border-red-500/10 px-3 py-2.5">
                           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                             <p className="text-[11px] leading-relaxed text-text-secondary">
-                              会一起删除复盘、待办和 Offer 关联。
+                              会删除关联数据。
                             </p>
                             <button
                               type="button"
