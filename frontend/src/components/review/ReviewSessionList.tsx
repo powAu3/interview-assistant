@@ -431,7 +431,7 @@ function ReviewZeroState({
   onSettings: () => void
 }) {
   return (
-    <section className="rounded-lg border border-bg-hover bg-bg-secondary/35 px-4 py-5">
+    <section className="border-l border-bg-hover/80 py-2 pl-3">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-text-primary">暂无复盘记录</div>

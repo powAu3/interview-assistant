@@ -945,7 +945,6 @@ export default function JobTracker() {
           </div>
         ) : view === 'table' && applications.length === 0 ? (
           <JobTrackerZeroState
-            isLight={isLight}
             onCreate={() => setComposerOpen(true)}
           />
         ) : view === 'table' ? (
@@ -1104,19 +1103,9 @@ function DesktopOverviewInlineStat({
   )
 }
 
-function JobTrackerZeroState({
-  isLight,
-  onCreate,
-}: {
-  isLight: boolean
-  onCreate: () => void
-}) {
+function JobTrackerZeroState({ onCreate }: { onCreate: () => void }) {
   return (
-    <section
-      className={`rounded-lg border px-4 py-5 md:px-5 ${
-        isLight ? 'border-bg-hover bg-white' : 'border-white/[0.06] bg-bg-secondary/35'
-      }`}
-    >
+    <section className="border-l border-bg-hover/80 py-2 pl-3">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-text-primary">暂无岗位记录</div>
