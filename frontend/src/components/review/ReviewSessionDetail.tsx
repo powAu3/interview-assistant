@@ -460,7 +460,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
               </CollapsibleSection>
             ) : (
               <SectionPanel title="逐题分析">
-                <div className="rounded-lg border border-dashed border-bg-hover bg-bg-tertiary/20 px-4 py-5 text-sm text-text-secondary">
+                <div className="border-l border-bg-hover/80 py-1 pl-3 text-sm text-text-secondary">
                   有问答后会显示原文、纠错和评分。
                 </div>
               </SectionPanel>
