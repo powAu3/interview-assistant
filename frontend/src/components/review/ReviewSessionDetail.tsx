@@ -712,7 +712,9 @@ function PendingSummaryWorkspace({
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
         <span>问答 <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
         <span>已评分 <span className="font-semibold text-text-primary">{scoredTurnsCount}</span></span>
-        <span>主线 <span className="font-semibold text-text-primary">{detail.application ? '已绑定' : '未绑定'}</span></span>
+        {detail.application ? (
+          <span>主线 <span className="font-semibold text-text-primary">已绑定</span></span>
+        ) : null}
         {detail.auto_sync_eligible === false ? (
           <span className="text-yellow-500">不回写看板</span>
         ) : null}

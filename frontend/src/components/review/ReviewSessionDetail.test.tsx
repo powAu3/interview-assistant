@@ -270,7 +270,7 @@ describe('ReviewSessionDetail', () => {
     await screen.findByText('当前状态')
     expect(screen.getAllByText(/短样本/)).not.toHaveLength(0)
     expect(screen.getAllByText(/不回写看板/)).not.toHaveLength(0)
-    expect(screen.getAllByText('未绑定')).not.toHaveLength(0)
+    expect(screen.queryByText('未绑定')).not.toBeInTheDocument()
     expect(screen.getByText('请讲讲你最熟悉的项目。')).toBeInTheDocument()
     expect(screen.getByText('短记录，已展开。')).toBeInTheDocument()
   })
