@@ -371,7 +371,7 @@ describe('JobTracker', () => {
     fireEvent.change(screen.getByLabelText('公司名称'), { target: { value: 'Acme Labs' } })
 
     expect(screen.getByText('待保存')).toBeInTheDocument()
-    expect(screen.getByText('核心信息还没保存')).toBeInTheDocument()
+    expect(screen.getByText('核心待保存')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '暂时无需保存' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: '保存核心信息' })[0])

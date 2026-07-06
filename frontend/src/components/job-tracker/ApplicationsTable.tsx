@@ -565,10 +565,10 @@ export default function ApplicationsTable({
       ? '保存核心信息'
       : '保存补充信息'
   const pendingSaveTitle = coreDirty && extrasDirty
-    ? '这条岗位还有 2 处未保存修改'
+    ? '2 处待保存'
     : coreDirty
-      ? '核心信息还没保存'
-      : '补充信息还没保存'
+      ? '核心待保存'
+      : '补充待保存'
   const pendingSaveAssistAction = coreDirty && !editCoreOpen
     ? {
         label: '继续改核心信息',
