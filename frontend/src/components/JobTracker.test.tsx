@@ -316,7 +316,13 @@ describe('JobTracker', () => {
       { target: { value: '优先准备 React 性能优化案例' } },
     )
 
-    const extrasPanel = screen.getByText('补充待保存').parentElement
+    const extrasPanel = screen
+      .getAllByRole('button', { name: '保存补充信息' })
+      .map((button) => button.parentElement?.parentElement)
+      .find((panel): panel is HTMLElement =>
+        panel instanceof HTMLElement &&
+        within(panel).queryByRole('button', { name: '撤销修改' }) != null,
+      )
     expect(extrasPanel).not.toBeNull()
     const extrasScope = within(extrasPanel as HTMLElement)
 
@@ -329,7 +335,7 @@ describe('JobTracker', () => {
       notes: '优先准备 React 性能优化案例',
       todos: [{ id: expect.any(String), title: '周五前跟进 recruiter', done: false, due: undefined }],
     })))
-    await waitFor(() => expect(screen.queryByText('补充待保存')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('待保存')).not.toBeInTheDocument())
     expect(screen.queryByRole('button', { name: '撤销修改' })).not.toBeInTheDocument()
   })
 

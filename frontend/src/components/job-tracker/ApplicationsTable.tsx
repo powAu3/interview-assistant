@@ -903,7 +903,7 @@ export default function ApplicationsTable({
                       onClick={() => setEditCoreOpen((prev) => !prev)}
                       className="rounded-md border border-bg-hover bg-bg-secondary/75 px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                     >
-                      {editCoreOpen ? '收起完整编辑' : '编辑核心信息'}
+                      {editCoreOpen ? '收起编辑' : '编辑核心信息'}
                     </button>
                     <button
                       type="button"
@@ -1163,7 +1163,7 @@ export default function ApplicationsTable({
                     <div className="space-y-2.5 border-t border-bg-hover/80 py-3">
                       {extrasDirty ? (
                         <div className="flex flex-col gap-2.5 border-l border-accent-blue/25 pl-3 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="text-sm font-semibold text-text-primary">补充待保存</div>
+                          <div className="text-sm font-semibold text-text-primary">待保存</div>
                           <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
