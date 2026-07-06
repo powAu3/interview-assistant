@@ -410,7 +410,11 @@ export default function ApplicationsTable({
   const mobileFocusedSummary = mobileFocusedList
     ? `已聚焦 1 条 · 当前筛选 ${ordered.length} 条`
     : `${ordered.length} / ${applications.length}`
-  const extrasSummary = `复盘 ${current?.review_summary.review_count ?? 0} · 待办 ${openTodoCount} · ${currentOffer ? 'Offer 已记录' : 'Offer 暂无'}`
+  const extrasSummary = [
+    `复盘 ${current?.review_summary.review_count ?? 0}`,
+    `待办 ${openTodoCount}`,
+    currentOffer ? 'Offer 已记录' : null,
+  ].filter((item): item is string => Boolean(item)).join(' · ')
   const detailAction = current ? (() => {
     if (currentOffer && current.stage === 'offer') {
       return {
