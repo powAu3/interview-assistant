@@ -1056,7 +1056,7 @@ export default function ApplicationsTable({
                           onClick={resetCoreDraft}
                           className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                         >
-                          恢复核心信息
+                          撤销修改
                         </button>
                       ) : null}
                       <button
@@ -1170,7 +1170,7 @@ export default function ApplicationsTable({
                               onClick={resetExtrasDraft}
                               className="rounded-md border border-bg-hover bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
                             >
-                              恢复补充信息
+                              撤销修改
                             </button>
                             <button
                               type="button"

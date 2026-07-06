@@ -321,7 +321,7 @@ describe('JobTracker', () => {
     const extrasScope = within(extrasPanel as HTMLElement)
 
     expect(extrasScope.getByRole('button', { name: '保存补充信息' })).toBeInTheDocument()
-    expect(extrasScope.getByRole('button', { name: '恢复补充信息' })).toBeInTheDocument()
+    expect(extrasScope.getByRole('button', { name: '撤销修改' })).toBeInTheDocument()
 
     fireEvent.click(extrasScope.getByRole('button', { name: '保存补充信息' }))
 
@@ -330,7 +330,7 @@ describe('JobTracker', () => {
       todos: [{ id: expect.any(String), title: '周五前跟进 recruiter', done: false, due: undefined }],
     })))
     await waitFor(() => expect(screen.queryByText('补充待保存')).not.toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: '恢复补充信息' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '撤销修改' })).not.toBeInTheDocument()
   })
 
   it('shows a lightweight pending-save rail for core edits', async () => {
