@@ -267,7 +267,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    expect(screen.getByText('补下次跟进')).toBeInTheDocument()
+    expect(screen.getByText('补跟进时间')).toBeInTheDocument()
     expect(screen.getAllByText(/2 场 · 7\.1/).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '补时间' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /查看 Acme 的 2 场复盘/ }))
@@ -507,7 +507,7 @@ describe('JobTracker', () => {
     expect(screen.getByText('已归到“挂了”')).toBeInTheDocument()
     expect(screen.getAllByText('结果已记录').length).toBeGreaterThan(0)
     expect(screen.getAllByText('一面挂').length).toBeGreaterThan(0)
-    expect(screen.getByText('流程已结束')).toBeInTheDocument()
+    expect(screen.getAllByText('已结束').length).toBeGreaterThan(0)
   })
 
   it('treats round-specific rejected applications as closed and avoids follow-up wording in detail', async () => {
@@ -545,7 +545,7 @@ describe('JobTracker', () => {
     await waitFor(() => expect(screen.getAllByText('Rejected Co').length).toBeGreaterThan(0))
     expect(screen.getAllByText('二面挂').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/不进入待跟进/).length).toBeGreaterThan(0)
-    expect(screen.getByText('回看最后一场复盘')).toBeInTheDocument()
+    expect(screen.getByText('回看复盘')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: '看复盘' })[0])
     expect(await screen.findByText('1 场复盘')).toBeInTheDocument()

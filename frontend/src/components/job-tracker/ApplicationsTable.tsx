@@ -418,7 +418,7 @@ export default function ApplicationsTable({
   const detailAction = current ? (() => {
     if (currentOffer && current.stage === 'offer') {
       return {
-        title: '补 Offer 细节',
+        title: '补 Offer',
         primaryLabel: '补 Offer',
         primaryClass: 'bg-emerald-500 text-white hover:brightness-110',
         onPrimary: () => onOpenOffer(current),
@@ -430,17 +430,17 @@ export default function ApplicationsTable({
     if (currentIsTerminal) {
       if (currentHasReviewTimeline) {
         return {
-          title: '回看最后一场复盘',
+          title: '回看复盘',
           primaryLabel: '看复盘',
           primaryClass: 'bg-accent-blue text-white hover:brightness-110',
           onPrimary: () => onOpenReviews(current),
-          secondaryLabel: openTodoCount > 0 ? '看补充信息' : null,
+          secondaryLabel: openTodoCount > 0 ? '补充' : null,
           onSecondary: openTodoCount > 0 ? () => setExtrasOpen(true) : null,
         }
       }
       return {
-        title: '流程已结束',
-        primaryLabel: '编辑核心信息',
+        title: '已结束',
+        primaryLabel: '编辑核心',
         primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
         onPrimary: () => setEditCoreOpen(true),
         secondaryLabel: null,
@@ -450,7 +450,7 @@ export default function ApplicationsTable({
 
     if (current.next_followup_at == null) {
       return {
-        title: '补下次跟进',
+        title: '补跟进时间',
         primaryLabel: '补时间',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setEditCoreOpen(true),
@@ -465,32 +465,32 @@ export default function ApplicationsTable({
 
     if (openTodoCount === 0) {
       return {
-        title: '补 1 条下一步',
+        title: '补下一步',
         primaryLabel: '补待办',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => setExtrasOpen(true),
-        secondaryLabel: currentHasReviewTimeline ? '看复盘' : '编辑核心信息',
+        secondaryLabel: currentHasReviewTimeline ? '看复盘' : '编辑核心',
         onSecondary: currentHasReviewTimeline ? () => onOpenReviews(current) : () => setEditCoreOpen(true),
       }
     }
 
     if (currentHasReviewTimeline) {
       return {
-        title: '已有复盘时间线',
+        title: '复盘时间线',
         primaryLabel: '看复盘',
         primaryClass: 'bg-accent-blue text-white hover:brightness-110',
         onPrimary: () => onOpenReviews(current),
-        secondaryLabel: '看补充信息',
+        secondaryLabel: '补充',
         onSecondary: () => setExtrasOpen(true),
       }
     }
 
     return {
-      title: '继续推进',
-      primaryLabel: '编辑核心信息',
+      title: '推进',
+      primaryLabel: '编辑核心',
       primaryClass: 'border border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary',
       onPrimary: () => setEditCoreOpen(true),
-      secondaryLabel: '看补充信息',
+      secondaryLabel: '补充',
       onSecondary: () => setExtrasOpen(true),
     }
   })() : null
@@ -996,12 +996,12 @@ export default function ApplicationsTable({
               <div className="space-y-2.5">
                 <section className="border-t border-bg-hover/80 pt-3">
                   <div className="flex flex-col gap-2.5">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <div className="text-xs font-semibold text-text-muted">
                           下一步
                         </div>
-                        <div className="mt-1.5 text-base font-semibold text-text-primary">
+                        <div className="text-sm font-semibold text-text-primary">
                           {detailAction?.title ?? (currentIsTerminal ? `${stageLabel}回看` : `围绕 ${stageLabel} 继续推进`)}
                         </div>
                       </div>
