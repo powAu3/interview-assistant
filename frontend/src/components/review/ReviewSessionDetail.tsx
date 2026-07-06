@@ -335,7 +335,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                       ) : null}
                       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-text-muted">
                         <span>{reviewStatusMeta.label}</span>
-                        <span>{detail.application ? '已绑定求职记录' : '未绑定求职记录'}</span>
+                        {detail.application ? <span>已绑定求职记录</span> : null}
                         {detail.auto_sync_eligible === false ? <span>测试片段</span> : null}
                         <span>{dayjs.unix(Math.floor(detail.started_at)).format('YYYY-MM-DD HH:mm')}</span>
                         {sessionDurationMinutes != null ? <span>时长 {sessionDurationMinutes} 分钟</span> : null}
