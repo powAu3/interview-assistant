@@ -891,7 +891,7 @@ export default function ApplicationsTable({
                 <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                      <div className="text-xs font-medium text-text-muted">
                         {quickProgressTitle}
                       </div>
                     </div>
@@ -1340,7 +1340,7 @@ function DesktopSignalLine({
   return (
     <div className={`rounded-md border px-3 py-2.5 ${className}`}>
       <div className="flex items-start gap-3">
-        <div className="w-11 shrink-0 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+        <div className="w-11 shrink-0 pt-0.5 text-[11px] font-medium text-text-muted">
           {label}
         </div>
         <div className="min-w-0 flex-1">
