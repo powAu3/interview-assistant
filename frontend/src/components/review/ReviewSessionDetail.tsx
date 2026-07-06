@@ -682,10 +682,6 @@ function PendingSummaryWorkspace({
   correctedCount: number
   isAnalyzing: boolean
 }) {
-  const linkedLabel = detail.application
-    ? `${detail.application.company || '未命名公司'} · ${detail.application.position || '岗位'}`
-    : '未绑定'
-
   const headline = isAnalyzing
     ? '整理中'
     : detail.status === 'analysis_failed'
@@ -707,10 +703,11 @@ function PendingSummaryWorkspace({
           : `${detail.turn_count} 轮问答${correctedCount > 0 ? ` · ${correctedCount} 处纠错` : ''}`
 
   return (
-    <div className="flex flex-col gap-3 border-l border-bg-hover/80 pl-3 lg:flex-row lg:items-start lg:justify-between">
-      <div className="min-w-0">
-        <div className="text-sm font-semibold text-text-primary">{headline}</div>
-        <p className="mt-1 text-sm text-text-secondary">{description}</p>
+    <div className="flex flex-col gap-2 border-l border-bg-hover/80 pl-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="min-w-0 text-sm text-text-secondary">
+        <span className="font-semibold text-text-primary">{headline}</span>
+        <span className="mx-2 text-text-muted">·</span>
+        <span>{description}</span>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
         <span>问答 <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
