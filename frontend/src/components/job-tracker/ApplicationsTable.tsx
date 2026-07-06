@@ -802,9 +802,8 @@ export default function ApplicationsTable({
               {hiddenApplicationsCount > 0 && onShowAll ? (
                 <div className="border-t border-bg-hover/80 bg-bg-tertiary/12 px-4 py-2.5">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="text-[11px] font-medium text-text-secondary">当前只看 {focusFilterLabel}</span>
                     <span className="text-sm font-semibold text-text-primary">
-                      还有 {hiddenApplicationsCount} 条记录
+                      已隐藏 {hiddenApplicationsCount} 条
                     </span>
                     {hiddenPreviewItems.map((app) => (
                       <span

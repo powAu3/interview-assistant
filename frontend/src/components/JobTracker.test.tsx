@@ -663,11 +663,11 @@ describe('JobTracker', () => {
     render(<JobTracker />)
 
     await waitFor(() => expect(screen.getAllByText('MiniMax').length).toBeGreaterThan(0))
-    expect(screen.getByText(/还有 2 条记录/)).toBeInTheDocument()
+    expect(screen.getByText(/已隐藏 2 条/)).toBeInTheDocument()
     expect(screen.getByText('Moonshot AI')).toBeInTheDocument()
-    expect(screen.getAllByText('二面挂').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/二面挂/).length).toBeGreaterThan(0)
     expect(screen.getByText('Teal')).toBeInTheDocument()
-    expect(screen.getAllByText('已放弃').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/已放弃/).length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: '查看全部' }))
 
