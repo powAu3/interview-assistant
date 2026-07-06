@@ -1201,17 +1201,15 @@ export default function ApplicationsTable({
                               {currentOffer ? '编辑 Offer' : '记录 Offer'}
                             </button>
                           </div>
-                          <div className="mt-2.5 text-xs leading-relaxed text-text-secondary">
-                            {currentOffer ? (
-                              offerSummaryBits.length > 0 ? (
+                          {currentOffer ? (
+                            <div className="mt-2.5 text-xs leading-relaxed text-text-secondary">
+                              {offerSummaryBits.length > 0 ? (
                                 <span className="text-emerald-600">{offerSummaryBits.join(' · ')}</span>
                               ) : (
                                 <span className="text-emerald-600">Offer 已记录</span>
-                              )
-                            ) : (
-                              <span className="text-text-muted">暂无 Offer</span>
-                            )}
-                          </div>
+                              )}
+                            </div>
+                          ) : null}
                         </section>
 
                         <section className="min-w-0 border-t border-bg-hover/80 pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
@@ -1219,9 +1217,11 @@ export default function ApplicationsTable({
                             <div>
                               <h5 className="text-sm font-semibold text-text-primary">待办与备注</h5>
                             </div>
-                            <span className="text-[11px] text-text-muted">
-                              当前 {draftTodoLines.length} 条待办
-                            </span>
+                            {draftTodoLines.length > 0 ? (
+                              <span className="text-[11px] text-text-muted">
+                                {draftTodoLines.length} 条待办
+                              </span>
+                            ) : null}
                           </div>
                           {draftTodoPreview.length > 0 ? (
                             <div className="mb-2.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-text-secondary">
