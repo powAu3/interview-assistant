@@ -849,7 +849,7 @@ function ReviewQueueRow({
   const hasPrimaryTrigger = showTriggerButton
   const linkedApplicationName = `${session.application?.company || '未命名公司'} · ${session.application?.position || '岗位'}`
   const metaParts = [
-    showScore ? `${session.avg_score?.toFixed(1)}分` : '未出分',
+    showScore ? `${session.avg_score?.toFixed(1)}分` : null,
     timeText,
     turnsText,
     session.auto_sync_eligible === false ? '短样本' : null,
