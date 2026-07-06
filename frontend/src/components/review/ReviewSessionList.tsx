@@ -293,10 +293,11 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             <button
               type="button"
               onClick={() => void loadSessions(page)}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-bg-hover bg-bg-secondary px-3 text-xs font-medium text-text-secondary hover:bg-bg-hover"
+              aria-label="刷新复盘列表"
+              title="刷新"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-bg-hover bg-bg-secondary text-text-secondary hover:bg-bg-hover"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              刷新
             </button>
             <button
               type="button"
