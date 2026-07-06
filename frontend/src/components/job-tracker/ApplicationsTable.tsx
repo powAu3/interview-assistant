@@ -871,7 +871,7 @@ export default function ApplicationsTable({
                     </span>
                   </div>
                   {saveNotice ? (
-                    <div className="mt-2 inline-flex rounded-md border border-accent-blue/20 bg-accent-blue/10 px-2.5 py-1 text-[11px] text-accent-blue">
+                    <div className="mt-2 text-[11px] font-medium text-accent-blue">
                       {saveNotice}
                     </div>
                   ) : null}
@@ -963,9 +963,9 @@ export default function ApplicationsTable({
                 </div>
               </div>
               {dirty ? (
-                <div className="mt-2.5 flex flex-col gap-2 border-t border-accent-blue/20 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-2.5 flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <span className="mr-2 text-[11px] font-semibold text-accent-blue">待确认修改</span>
+                    <span className="mr-2 text-[11px] font-medium text-accent-blue">待保存</span>
                     <span className="text-sm font-semibold text-text-primary">{pendingSaveTitle}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

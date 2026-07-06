@@ -364,7 +364,7 @@ describe('JobTracker', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑核心信息' }))
     fireEvent.change(screen.getByLabelText('公司名称'), { target: { value: 'Acme Labs' } })
 
-    expect(screen.getByText('待确认修改')).toBeInTheDocument()
+    expect(screen.getByText('待保存')).toBeInTheDocument()
     expect(screen.getByText('核心信息还没保存')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '暂时无需保存' })).not.toBeInTheDocument()
 
@@ -373,7 +373,7 @@ describe('JobTracker', () => {
     await waitFor(() => expect(apiMock.jobTrackerPatchApplication).toHaveBeenCalledWith(1, expect.objectContaining({
       company: 'Acme Labs',
     })))
-    await waitFor(() => expect(screen.queryByText('待确认修改')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('待保存')).not.toBeInTheDocument())
   })
 
   it('lets desktop detail update stage and follow-up without opening full core edit', async () => {
