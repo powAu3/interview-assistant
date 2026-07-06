@@ -1018,39 +1018,25 @@ function HeaderSnapshotPill({
   value,
   tone,
   isLight,
-  compact = false,
 }: {
   label: string
   value: string
   tone: HeaderSnapshotTone
   isLight: boolean
-  compact?: boolean
 }) {
   const toneClass = {
-    neutral: isLight ? 'border-bg-hover bg-white text-text-secondary' : 'border-white/[0.08] bg-black/15 text-text-secondary',
-    blue: isLight ? 'border-accent-blue/20 bg-accent-blue/6 text-accent-blue' : 'border-accent-blue/20 bg-accent-blue/10 text-accent-blue',
-    amber: isLight ? 'border-yellow-500/20 bg-yellow-500/8 text-yellow-600' : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',
-    green: isLight ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-600' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
-    red: isLight ? 'border-red-500/20 bg-red-500/8 text-red-600' : 'border-red-500/20 bg-red-500/10 text-red-400',
+    neutral: isLight ? 'text-text-secondary' : 'text-text-secondary',
+    blue: isLight ? 'text-accent-blue' : 'text-accent-blue',
+    amber: isLight ? 'text-yellow-600' : 'text-yellow-400',
+    green: isLight ? 'text-emerald-600' : 'text-emerald-400',
+    red: isLight ? 'text-red-600' : 'text-red-400',
   }[tone]
 
   return (
-    <div
-      className={`rounded-md border ${toneClass} ${
-        compact
-          ? 'inline-flex min-w-[112px] items-center gap-2 px-2.5 py-1'
-          : 'inline-flex min-w-[128px] items-center justify-between gap-3 px-2.5 py-1.5 sm:w-auto'
-      }`}
-    >
-      <div className={compact ? 'min-w-0 flex-1' : undefined}>
-        <div className={`font-semibold uppercase text-text-muted ${compact ? 'text-[9px] tracking-[0.16em]' : 'text-[10px] tracking-[0.14em]'}`}>
-          {label}
-        </div>
-      </div>
-      <div className={`shrink-0 font-semibold text-text-primary ${compact ? 'text-[13px]' : 'text-[13px]'}`}>
-        {value}
-      </div>
-    </div>
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
+      <span className="shrink-0 text-text-muted">{label}</span>
+      <span className={`shrink-0 font-semibold ${toneClass}`}>{value}</span>
+    </span>
   )
 }
 

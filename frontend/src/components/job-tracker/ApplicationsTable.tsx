@@ -821,7 +821,7 @@ export default function ApplicationsTable({
                     <button
                       type="button"
                       onClick={onShowAll}
-                      className="rounded-md border border-accent-blue/20 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/15"
+                      className="text-xs font-medium text-accent-blue transition hover:underline"
                     >
                       查看全部
                     </button>
