@@ -348,7 +348,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                         onClick={() => setFocusFilter(item.key)}
                         className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                           focusFilter === item.key
-                            ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                            ? 'border-bg-hover bg-transparent text-accent-blue'
                             : 'border-bg-hover bg-bg-secondary/50 text-text-secondary hover:bg-bg-hover'
                         }`}
                       >

@@ -748,7 +748,7 @@ export default function JobTracker() {
                       }}
                       className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         focusFilter === item.key
-                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                          ? 'border-bg-hover bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -763,7 +763,7 @@ export default function JobTracker() {
                       onClick={() => setShowSecondaryFilters((prev) => !prev)}
                       className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         selectedSecondaryFilter
-                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                          ? 'border-bg-hover bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -790,7 +790,7 @@ export default function JobTracker() {
                         }}
                         className={`rounded-md border px-3 py-2 text-left text-xs font-medium transition-colors ${
                           focusFilter === item.key
-                            ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                            ? 'border-bg-hover bg-transparent text-accent-blue'
                             : isLight
                               ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
                               : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -815,7 +815,7 @@ export default function JobTracker() {
                       }}
                       className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         focusFilter === item.key
-                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                          ? 'border-bg-hover bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -830,7 +830,7 @@ export default function JobTracker() {
                       onClick={() => setShowSecondaryFilters((prev) => !prev)}
                       className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                         selectedSecondaryFilter
-                          ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                          ? 'border-bg-hover bg-transparent text-accent-blue'
                           : isLight
                             ? 'border-bg-hover bg-white text-text-secondary hover:text-text-primary'
                             : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
@@ -857,7 +857,7 @@ export default function JobTracker() {
                         }}
                         className={`rounded-md border px-3 py-2 text-left text-xs font-medium transition-colors ${
                           focusFilter === item.key
-                            ? 'border-accent-blue/35 bg-transparent text-accent-blue'
+                            ? 'border-bg-hover bg-transparent text-accent-blue'
                             : isLight
                               ? 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
                               : 'border-white/[0.08] bg-black/10 text-text-secondary hover:text-text-primary'
