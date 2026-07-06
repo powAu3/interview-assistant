@@ -687,9 +687,7 @@ export default function ApplicationsTable({
                         >
                           {reviewShortcutLabel(app)}
                         </button>
-                      ) : (
-                        <span className="text-[11px] text-text-muted">暂无复盘</span>
-                      )}
+                      ) : null}
                     </div>
                   </article>
                 )
