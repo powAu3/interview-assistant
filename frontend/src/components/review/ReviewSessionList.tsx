@@ -284,9 +284,9 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-xl font-semibold text-text-primary">面试复盘</h2>
-              <span className="text-xs text-text-muted">
-                {reviewEnabled ? '自动记录已启用' : '自动记录未启用'}
-              </span>
+              {!reviewEnabled ? (
+                <span className="text-xs text-text-muted">自动记录未启用</span>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
