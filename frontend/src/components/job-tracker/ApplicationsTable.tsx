@@ -571,12 +571,12 @@ export default function ApplicationsTable({
       : '补充待保存'
   const pendingSaveAssistAction = coreDirty && !editCoreOpen
     ? {
-        label: '继续改核心信息',
+        label: '改核心',
         onClick: () => setEditCoreOpen(true),
       }
     : extrasDirty && !extrasOpen
       ? {
-          label: '去补充信息',
+          label: '去补充',
           onClick: () => setExtrasOpen(true),
         }
       : null
