@@ -106,7 +106,7 @@ describe('ReviewSessionList', () => {
     render(<ReviewSessionList onViewDetail={onViewDetail} />)
 
     await screen.findByText('OpenAI 一面')
-    fireEvent.click(screen.getAllByRole('button', { name: '查看岗位' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 .*岗位/ })[0])
     expect(onViewDetail).not.toHaveBeenCalled()
 
     await waitFor(() => {

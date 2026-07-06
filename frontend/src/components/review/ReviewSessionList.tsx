@@ -907,13 +907,14 @@ function ReviewQueueRow({
                   ) : null}
                   <button
                     type="button"
+                    aria-label={`查看 ${linkedApplicationName} 岗位`}
                     onClick={(event) => {
                       event.stopPropagation()
                       onOpenApplication(session)
                     }}
-                    className="text-[11px] font-medium text-accent-blue hover:underline"
+                    className="text-[11px] font-medium text-text-muted transition-colors hover:text-accent-blue hover:underline"
                   >
-                    查看岗位
+                    岗位
                   </button>
                 </div>
               ) : null}
