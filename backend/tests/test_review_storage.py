@@ -299,6 +299,76 @@ def test_update_turn_analysis_preserves_original_answer_when_corrected():
     assert turn["evidence"]["asr_correction"]["corrected"] == "Redis 有字符串和哈希"
 
 
+def test_update_turn_analysis_merges_existing_evidence():
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    turn_id = review.add_turn(
+        session_id=session_id,
+        qa_id="qa-screen",
+        seq=1,
+        question_text="截图题怎么修？",
+        candidate_answer_text="",
+        reference_answer_text="修复边界条件。",
+        evidence={
+            "vision_verify": {
+                "verdict": "FAIL",
+                "reason": "第二个样例不通过",
+            }
+        },
+    )
+
+    review.update_turn_analysis(
+        turn_id=turn_id,
+        analysis_status="completed",
+        strengths=["定位到边界"],
+        risks=["缺少空输入"],
+        evidence={"improvement_advice": "补充空输入和重复值用例"},
+        scorecard={"正确性": 6},
+    )
+
+    turn = review.get_session_detail(session_id)["turns"][0]
+    assert turn["evidence"]["vision_verify"] == {
+        "verdict": "FAIL",
+        "reason": "第二个样例不通过",
+    }
+    assert turn["evidence"]["improvement_advice"] == "补充空输入和重复值用例"
+
+
+def test_update_turn_analysis_status_only_preserves_analysis_fields():
+    session_id = review.create_session(
+        started_at=time.time(),
+        interviewer_enabled=True,
+        candidate_enabled=True,
+    )
+    turn_id = review.add_turn(
+        session_id=session_id,
+        qa_id="qa-001",
+        seq=1,
+        question_text="Redis 缓存击穿怎么处理？",
+        candidate_answer_text="加互斥锁和逻辑过期。",
+        analysis_status="completed",
+        strengths=["覆盖互斥锁"],
+        risks=["缺少热点过期说明"],
+        evidence={"tags": ["Redis"]},
+        scorecard={"准确性": 7},
+    )
+
+    review.update_turn_analysis(
+        turn_id=turn_id,
+        analysis_status="failed",
+    )
+
+    turn = review.get_session_detail(session_id)["turns"][0]
+    assert turn["analysis_status"] == "failed"
+    assert turn["strengths"] == ["覆盖互斥锁"]
+    assert turn["risks"] == ["缺少热点过期说明"]
+    assert turn["evidence"] == {"tags": ["Redis"]}
+    assert turn["scorecard"] == {"准确性": 7}
+
+
 def test_nonexistent_session():
     """测试访问不存在的 session"""
     detail = review.get_session_detail(99999)

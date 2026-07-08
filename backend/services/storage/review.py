@@ -426,25 +426,36 @@ def update_turn_analysis(
     with _db_lock:
         conn = _conn()
         now = time.time()
-        row = conn.execute("SELECT session_id FROM review_turns WHERE id = ?", (turn_id,)).fetchone()
+        row = conn.execute(
+            "SELECT session_id, evidence_json FROM review_turns WHERE id = ?",
+            (turn_id,),
+        ).fetchone()
         if row:
             session_id = int(row["session_id"])
 
         # 构建动态 SQL
-        fields = [
-            "analysis_status = ?",
-            "strengths_json = ?",
-            "risks_json = ?",
-            "evidence_json = ?",
-            "scorecard_json = ?",
-        ]
-        params = [
-            analysis_status,
-            json.dumps(strengths or [], ensure_ascii=False) if strengths is not None else None,
-            json.dumps(risks or [], ensure_ascii=False) if risks is not None else None,
-            json.dumps(evidence or {}, ensure_ascii=False) if evidence is not None else None,
-            json.dumps(scorecard or {}, ensure_ascii=False) if scorecard is not None else None,
-        ]
+        fields = ["analysis_status = ?"]
+        params = [analysis_status]
+        if strengths is not None:
+            fields.append("strengths_json = ?")
+            params.append(json.dumps(strengths or [], ensure_ascii=False))
+        if risks is not None:
+            fields.append("risks_json = ?")
+            params.append(json.dumps(risks or [], ensure_ascii=False))
+        if evidence is not None:
+            existing_evidence: dict[str, Any] = {}
+            if row and row["evidence_json"]:
+                try:
+                    parsed = json.loads(row["evidence_json"])
+                    if isinstance(parsed, dict):
+                        existing_evidence = parsed
+                except (json.JSONDecodeError, TypeError):
+                    existing_evidence = {}
+            fields.append("evidence_json = ?")
+            params.append(json.dumps({**existing_evidence, **(evidence or {})}, ensure_ascii=False))
+        if scorecard is not None:
+            fields.append("scorecard_json = ?")
+            params.append(json.dumps(scorecard or {}, ensure_ascii=False))
 
         # 如果提供了纠正后的回答，添加到更新字段
         if corrected_answer is not None:
