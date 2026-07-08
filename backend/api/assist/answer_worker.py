@@ -681,12 +681,12 @@ def process_question_parallel(
             "model_index": model_idx,
         }
     )
-    # 候选人回答窗口用于下一轮上下文或复盘记录；仅在相关能力开启时绑定 qa_id。
+    # 候选人回答窗口用于下一轮上下文、知识记录或后续手动复盘；只要候选人 ASR 开启就绑定 qa_id。
     should_open_candidate_window = (
         _supports_candidate_context_source(source, meta)
         and (
             candidate_context_enabled
-            or (bool(getattr(cfg, "review_enabled", False)) and bool(getattr(cfg, "candidate_asr_enabled", False)))
+            or bool(getattr(cfg, "candidate_asr_enabled", False))
         )
     )
     if should_open_candidate_window:

@@ -169,6 +169,33 @@ def test_process_question_parallel_submits_candidate_answer_to_knowledge(monkeyp
     ]
 
 
+def test_process_question_parallel_binds_candidate_window_for_manual_review_recording(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = False
+    cfg.review_enabled = False
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "助手参考答案。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("讲讲你做过的项目", None, False, "asr", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    answer_start = next(event for event in broadcasts if event["type"] == "answer_start")
+    assert get_session().current_candidate_qa_id == answer_start["id"]
+
+
 def test_process_question_parallel_logs_token_delta_and_uses_realtime_token_cap(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     info_calls: list[tuple[tuple, dict]] = []
