@@ -613,7 +613,19 @@ def test_generic_project_noun_does_not_force_resume_context(monkeypatch: pytest.
     assert captured["include_resume"] is False
 
 
-def test_manual_question_negating_project_context_disables_resume(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize(
+    "question",
+    [
+        "rules 和 skills 的区别是什么？不要结合项目，就讲核心区别。",
+        "rules 和 skills 的区别是什么？不用结合项目，就讲核心区别。",
+        "rules 和 skills 的区别是什么？别参考项目，只讲核心概念。",
+        "rules 和 skills 的区别是什么？不用看简历，直接讲概念。",
+    ],
+)
+def test_manual_question_negating_project_context_disables_resume(
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+):
     broadcasts: list[dict] = []
     captured: dict[str, object] = {}
     cfg = _cfg()
@@ -632,11 +644,45 @@ def test_manual_question_negating_project_context_disables_resume(monkeypatch: p
 
     answer_worker.process_question_parallel(
         (
-            "rules 和 skills 的区别是什么？不要结合项目，就讲核心区别。",
+            question,
             None,
             True,
             "manual_text",
             {},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is False
+
+
+def test_realtime_resume_negation_overrides_project_context_cue(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "只讲核心概念。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "先别结合项目了，讲一下 RBAC 和 ABAC 的核心区别。",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 1},
         ),
         seq=0,
         model_idx=0,
