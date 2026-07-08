@@ -649,7 +649,7 @@ export default function JobTracker() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
                 <input
                   type="search"
-                  placeholder="搜索公司 / 岗位 / 城市"
+                  placeholder="搜索公司 / 岗位 / 城市 / 待办"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => {

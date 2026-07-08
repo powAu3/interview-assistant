@@ -18,11 +18,18 @@ const apiMock = vi.hoisted(() => ({
 vi.mock('@/lib/api', () => ({ api: apiMock }))
 vi.mock('./job-tracker/KanbanBoard', () => ({
   default: ({ applications, search }: any) => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     const visible = applications.filter((app: any) => {
       if (!q) return true
-      return [app.company, app.position, app.city, app.notes]
-        .some((value) => String(value).toLowerCase().includes(q))
+      return [
+        app.company,
+        app.position,
+        app.city,
+        app.notes,
+        app.interviewer_info,
+        app.feedback,
+        ...(app.todos ?? []).flatMap((todo: any) => [todo.title, todo.due ?? '']),
+      ].some((value) => String(value).toLowerCase().includes(q.toLowerCase()))
     })
     return (
       <div>
@@ -220,7 +227,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    fireEvent.change(screen.getByPlaceholderText('搜索公司 / 岗位 / 城市'), { target: { value: 'react' } })
+    fireEvent.change(screen.getByPlaceholderText('搜索公司 / 岗位 / 城市 / 待办'), { target: { value: 'react' } })
     expect(screen.getByRole('button', { name: '整理模式' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '整理模式' }))
 
@@ -232,7 +239,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市')
+    const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市 / 待办')
     fireEvent.change(searchInput, { target: { value: 'missing company' } })
     expect(await screen.findByText('没有匹配记录。')).toBeInTheDocument()
 
@@ -246,7 +253,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市')
+    const searchInput = screen.getByPlaceholderText('搜索公司 / 岗位 / 城市 / 待办')
     fireEvent.change(searchInput, { target: { value: 'missing company' } })
     expect(await screen.findByText('没有匹配记录。')).toBeInTheDocument()
 
