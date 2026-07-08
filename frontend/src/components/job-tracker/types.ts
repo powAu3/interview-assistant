@@ -70,6 +70,22 @@ export interface Offer {
   position?: string
 }
 
+function parseScore(value: unknown): number | null {
+  if (value == null) return null
+  let score: number | null = null
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    score = value
+  } else if (typeof value === 'string') {
+    const match = value.trim().match(/-?\d+(?:\.\d+)?/)
+    if (match) {
+      const parsed = Number(match[0])
+      if (Number.isFinite(parsed)) score = parsed
+    }
+  }
+  if (score === null || score < 0 || score > 10) return null
+  return score
+}
+
 export function parseApplication(raw: Record<string, unknown>): Application {
   const todos = raw.todos
   const reviewSummary = (raw.review_summary && typeof raw.review_summary === 'object'
@@ -93,12 +109,12 @@ export function parseApplication(raw: Record<string, unknown>): Application {
     review_summary: {
       review_count: Number(reviewSummary.review_count ?? 0),
       latest_review_id: reviewSummary.latest_review_id != null ? Number(reviewSummary.latest_review_id) : null,
-      latest_avg_score: reviewSummary.latest_avg_score != null ? Number(reviewSummary.latest_avg_score) : null,
+      latest_avg_score: parseScore(reviewSummary.latest_avg_score),
       latest_review_at: reviewSummary.latest_review_at != null ? Number(reviewSummary.latest_review_at) : null,
       latest_status: reviewSummary.latest_status != null ? String(reviewSummary.latest_status) : null,
       linked_review_count: Number(reviewSummary.linked_review_count ?? reviewSummary.review_count ?? 0),
       latest_linked_review_id: reviewSummary.latest_linked_review_id != null ? Number(reviewSummary.latest_linked_review_id) : null,
-      latest_linked_avg_score: reviewSummary.latest_linked_avg_score != null ? Number(reviewSummary.latest_linked_avg_score) : null,
+      latest_linked_avg_score: parseScore(reviewSummary.latest_linked_avg_score),
       latest_linked_review_at: reviewSummary.latest_linked_review_at != null ? Number(reviewSummary.latest_linked_review_at) : null,
       latest_linked_status: reviewSummary.latest_linked_status != null ? String(reviewSummary.latest_linked_status) : null,
     },
