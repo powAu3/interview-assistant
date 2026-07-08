@@ -138,6 +138,7 @@ export default function ControlBar() {
   const recentSet = quickPromptSessionUsed
 
   const visibleDevices = useMemo(() => splitAudioDevices(devices).visible, [devices])
+  const candidateMicDevices = useMemo(() => devices.filter((device) => !device.is_loopback), [devices])
 
   // WebSocket 从断开恢复时 toast 通知,避免用户误以为系统没反应
   const prevWsConnectedRef = useRef(wsConnected)
@@ -161,8 +162,21 @@ export default function ControlBar() {
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const selectedCandidateDevice = devices.find((d) => d.id === selectedCandidateMic) ?? null
   const selectedCandidateIsMic = selectedCandidateDevice?.is_loopback === false
-  const hasLoopback = devices.some((d) => d.is_loopback)
   const candidateCaptureEnabled = config?.candidate_asr_enabled ?? false
+  const candidateMicMatchesMeetingAudio = Boolean(
+    !isExamMode &&
+    candidateCaptureEnabled &&
+    selectedDevice !== null &&
+    selectedCandidateMic !== null &&
+    selectedDevice === selectedCandidateMic,
+  )
+  const effectiveCandidateMic = !isExamMode &&
+    candidateCaptureEnabled &&
+    selectedCandidateMic !== null &&
+    selectedCandidateMic !== selectedDevice
+    ? selectedCandidateMic
+    : null
+  const hasLoopback = devices.some((d) => d.is_loopback)
   const activeModel = config?.models?.[config.active_model]
   const activeModelSupportsVision = activeModel?.supports_vision ?? false
   const pastedImageVisionHint = activeModelSupportsVision
@@ -187,10 +201,16 @@ export default function ControlBar() {
       if (selectedCandidateMic !== null) setSelectedCandidateMic(null)
       return
     }
-    if (selectedCandidateMic !== null && devices.some((d) => d.id === selectedCandidateMic && !d.is_loopback)) return
-    const mic = devices.find((d) => !d.is_loopback)
+    if (selectedCandidateMic !== null && devices.some((d) => d.id === selectedCandidateMic && !d.is_loopback)) {
+      if (selectedDevice !== null && selectedCandidateMic === selectedDevice) {
+        const alternativeMic = candidateMicDevices.find((d) => d.id !== selectedDevice)
+        if (alternativeMic) setSelectedCandidateMic(alternativeMic.id)
+      }
+      return
+    }
+    const mic = candidateMicDevices.find((d) => d.id !== selectedDevice) ?? candidateMicDevices[0]
     setSelectedCandidateMic(mic?.id ?? null)
-  }, [devices, selectedCandidateMic])
+  }, [devices, candidateMicDevices, selectedCandidateMic, selectedDevice])
 
   useEffect(() => {
     setInputLevel(null)
@@ -255,7 +275,7 @@ export default function ControlBar() {
     try {
       await api.start(
         isExamMode ? null : selectedDevice,
-        !isExamMode && candidateCaptureEnabled ? selectedCandidateMic : null,
+        effectiveCandidateMic,
       )
       if (isExamMode) {
         showExamOverlayPrompt()
@@ -281,7 +301,7 @@ export default function ControlBar() {
     }
     catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '开始失败' : '开始面试失败')) }
     finally { setLoading(false) }
-  }, [selectedDevice, selectedCandidateMic, isExamMode, candidateCaptureEnabled])
+  }, [selectedDevice, effectiveCandidateMic, isExamMode])
   const handleStop = useCallback(async () => {
     if (isRecording && !window.confirm(isExamMode ? '结束本次笔试？当前答案会保留在页面上。' : '结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
     setLoading(true)
@@ -298,8 +318,8 @@ export default function ControlBar() {
   }, [])
   const handleResume = useCallback(async () => {
     setLoading(true)
-    try { await api.resume(selectedDevice ?? undefined, !isExamMode && candidateCaptureEnabled ? selectedCandidateMic : null) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally { setLoading(false) }
-  }, [selectedDevice, selectedCandidateMic, isExamMode, candidateCaptureEnabled])
+    try { await api.resume(selectedDevice ?? undefined, effectiveCandidateMic) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally { setLoading(false) }
+  }, [selectedDevice, effectiveCandidateMic, isExamMode])
   const handleClear = useCallback(async () => {
     if (qaPairs.length > 0 || transcriptions.length > 0 || candidateTranscriptions.length > 0) {
       if (!window.confirm('确定要清空当前页的转录与答案吗？清空后不可恢复。')) return
@@ -482,6 +502,12 @@ export default function ControlBar() {
           <span>“我的麦克风”建议选择普通麦克风，不要选择系统音频设备</span>
         </div>
       )}
+      {candidateMicMatchesMeetingAudio && (
+        <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>“我的麦克风”和会议音频相同，本次不会单独记录你的回答；请选择系统音频/虚拟声卡作为会议音频。</span>
+        </div>
+      )}
       {lastWSError && (
         <div className="flex items-center gap-2 text-xs text-accent-red bg-accent-red/10 px-3 py-1.5 rounded-lg">
           <span>{lastWSError}</span>
@@ -564,7 +590,7 @@ export default function ControlBar() {
                   {!candidateSttLoading && candidateSttLoaded && <span className="text-accent-green ml-1">✓</span>}
                 </span>
                 <AudioDevicePicker
-                  devices={devices.filter((device) => !device.is_loopback)}
+                  devices={candidateMicDevices}
                   selectedDevice={selectedCandidateMic}
                   onSelect={setSelectedCandidateMic}
                   onRefresh={handleRefreshDevices}

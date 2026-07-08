@@ -389,6 +389,52 @@ describe('ControlBar', () => {
     })
   })
 
+  it('prefers a candidate microphone different from the meeting audio device', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 11, name: 'Built-in Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+        { id: 12, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '选择我的麦克风' })).toHaveTextContent('当前：USB Mic')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '开始面试' }))
+
+    await waitFor(() => {
+      expect(apiMock.start).toHaveBeenCalledWith(11, 12)
+    })
+  })
+
+  it('warns and skips candidate ASR when candidate microphone matches meeting audio', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    expect(await screen.findByText(/本次不会单独记录你的回答/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '开始面试' }))
+
+    await waitFor(() => {
+      expect(apiMock.start).toHaveBeenCalledWith(11, null)
+    })
+  })
+
   it('does not pass candidate microphone when candidate ASR is disabled', async () => {
     useInterviewStore.setState({
       config: {
