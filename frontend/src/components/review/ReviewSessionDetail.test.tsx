@@ -319,6 +319,50 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText(/原始转写：我会用 red 地址布隆过绿器和空值缓存。/)).toBeInTheDocument()
   })
 
+  it('shows screenshot self-check evidence in turn details', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      turn_count: 1,
+      turns: [
+        {
+          id: 91,
+          session_id: 7,
+          qa_id: 'qa-screen',
+          seq: 1,
+          question_text: '两张截图里的代码题怎么修？',
+          candidate_answer_text: '我按第一张截图写了代码。',
+          original_candidate_answer_text: null,
+          reference_answer_text: '需要结合第二张截图里的失败样例修正。',
+          code_text: null,
+          duration_ms: 30000,
+          is_partial: false,
+          analysis_status: 'pending',
+          strengths: [],
+          risks: [],
+          evidence: {
+            vision_verify: {
+              verdict: 'FAIL',
+              reason: '第二张截图里的样例不通过',
+            },
+          },
+          scorecard: {},
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+      ],
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('逐题分析 · 1 题')
+    fireEvent.click(screen.getByRole('button', { name: /逐题分析 · 1 题/ }))
+    await screen.findByText('两张截图里的代码题怎么修？')
+
+    expect(screen.getByText('截图自检风险')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('截图自检不一致，请人工复核')
+    expect(screen.getByText('第二张截图里的样例不通过')).toBeInTheDocument()
+  })
+
   it('refreshes an analyzing review detail until the generated analysis is ready', async () => {
     vi.useFakeTimers()
     apiMock.reviewSessionDetail

@@ -2,7 +2,14 @@
 测试 review 与 assist 生命周期集成
 """
 import pytest
+from pathlib import Path
+import sys
 from unittest.mock import MagicMock
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from services import review_integration
 from services.storage import review
 from core.session import Session, QAPair
@@ -164,6 +171,8 @@ def test_on_assist_stop_saves_turns(monkeypatch):
             timestamp=2000.0,
             source="asr",
             model_name="gpt-4o",
+            vision_verify_verdict="FAIL",
+            vision_verify_reason="截图里的第二个样例不通过",
         ),
         QAPair(id="qa3", question="什么是 CAP？", answer="CAP 是一致性可用性分区容错。", timestamp=3000.0),
         QAPair(id="qa4", question="Redis 持久化方案？", answer="RDB 和 AOF。", timestamp=4000.0),
@@ -197,6 +206,10 @@ def test_on_assist_stop_saves_turns(monkeypatch):
     turn2 = detail["turns"][1]
     assert turn2["qa_id"] == "qa2"
     assert turn2["seq"] == 2
+    assert turn2["evidence"]["vision_verify"] == {
+        "verdict": "FAIL",
+        "reason": "截图里的第二个样例不通过",
+    }
 
 
 def test_on_assist_stop_no_session():

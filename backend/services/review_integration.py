@@ -93,6 +93,7 @@ def on_assist_stop(session: Session) -> Optional[int]:
         # 保存所有 QA turns
         for idx, qa in enumerate(session.qa_pairs, start=1):
             candidate_answer = session.get_candidate_answer_for_qa(qa.id, max_chars=2000)
+            evidence = _build_turn_evidence(qa)
             review.add_turn(
                 session_id=session_id,
                 qa_id=qa.id,
@@ -103,6 +104,7 @@ def on_assist_stop(session: Session) -> Optional[int]:
                 duration_ms=0,  # 暂时无法精确计算每题时长
                 is_partial=False,
                 analysis_status="pending",
+                evidence=evidence,
             )
 
         # 结束录制。review_enabled 控制是否立即进入分析队列; 关闭时只落盘为
@@ -144,6 +146,18 @@ def on_assist_stop(session: Session) -> Optional[int]:
 def get_current_review_session_id() -> Optional[int]:
     """返回当前进行中的 review session id"""
     return _current_review_session_id
+
+
+def _build_turn_evidence(qa) -> dict:
+    verdict = str(getattr(qa, "vision_verify_verdict", "") or "").strip().upper()
+    if verdict not in ("PASS", "FAIL", "UNKNOWN"):
+        return {}
+    return {
+        "vision_verify": {
+            "verdict": verdict,
+            "reason": str(getattr(qa, "vision_verify_reason", "") or "").strip(),
+        },
+    }
 
 
 def on_assist_pause():

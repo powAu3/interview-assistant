@@ -11,6 +11,9 @@ import {
   Link2,
   Unlink,
   ExternalLink,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react'
 import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
@@ -29,6 +32,11 @@ interface Props {
 type InlineNotice = {
   tone: 'success' | 'info' | 'warning' | 'error'
   message: string
+}
+
+type TurnVisionVerify = {
+  verdict: 'PASS' | 'FAIL' | 'UNKNOWN'
+  reason: string
 }
 
 const REVIEW_STATUS_META: Record<ReviewSessionDetail['status'], { label: string }> = {
@@ -776,6 +784,7 @@ function TurnCard({
     turn.original_candidate_answer_text &&
     turn.original_candidate_answer_text !== turn.candidate_answer_text,
   )
+  const visionVerify = getTurnVisionVerify(turn)
 
   const scoreColor = avgScore !== null
     ? avgScore >= 8 ? 'text-green-500'
@@ -806,6 +815,11 @@ function TurnCard({
                 部分录制
               </span>
             )}
+            {visionVerify?.verdict === 'FAIL' && (
+              <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-500">
+                截图自检风险
+              </span>
+            )}
           </div>
           <div className="text-sm text-text-primary leading-relaxed">{turn.question_text}</div>
         </div>
@@ -818,6 +832,7 @@ function TurnCard({
 
       {expanded && (
         <div className="space-y-3 border-t border-bg-hover/40 py-3">
+          {visionVerify && <TurnVisionVerifyNotice verify={visionVerify} />}
           <div>
             <h4 className="mb-2 text-xs font-semibold text-text-muted">候选人回答</h4>
             {hasAsrCorrection && (
@@ -909,6 +924,53 @@ function TurnCard({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function getTurnVisionVerify(turn: ReviewTurn): TurnVisionVerify | null {
+  const raw = turn.evidence?.vision_verify
+  if (!raw || typeof raw !== 'object') return null
+  const data = raw as { verdict?: unknown; reason?: unknown }
+  const verdict = String(data.verdict || '').toUpperCase()
+  if (verdict !== 'PASS' && verdict !== 'FAIL' && verdict !== 'UNKNOWN') return null
+  return {
+    verdict,
+    reason: String(data.reason ?? '').trim(),
+  }
+}
+
+function TurnVisionVerifyNotice({ verify }: { verify: TurnVisionVerify }) {
+  const meta = verify.verdict === 'PASS'
+    ? {
+        icon: ShieldCheck,
+        label: '截图自检通过',
+        className: 'border-green-500/25 bg-green-500/5 text-green-500',
+      }
+    : verify.verdict === 'FAIL'
+      ? {
+          icon: ShieldAlert,
+          label: '截图自检不一致，请人工复核',
+          className: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500',
+        }
+      : {
+          icon: Shield,
+          label: '截图自检无定论',
+          className: 'border-bg-hover/70 bg-bg-tertiary/30 text-text-muted',
+        }
+  const Icon = meta.icon
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs leading-relaxed ${meta.className}`}
+      role={verify.verdict === 'FAIL' ? 'alert' : 'status'}
+    >
+      <Icon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <div className="min-w-0">
+        <div className="font-semibold">{meta.label}</div>
+        {verify.reason && (
+          <div className="mt-0.5 break-words opacity-85">{verify.reason}</div>
+        )}
+      </div>
     </div>
   )
 }
