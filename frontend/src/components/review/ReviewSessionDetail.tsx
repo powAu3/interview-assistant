@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -65,6 +65,8 @@ const REVIEW_STATUS_META: Record<ReviewSessionDetail['status'], { label: string 
 const REVIEW_ANALYSIS_POLL_MS = 5000
 
 export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
+  const activeSessionIdRef = useRef(sessionId)
+  activeSessionIdRef.current = sessionId
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<ReviewSessionDetail | null>(null)
@@ -78,15 +80,22 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [inlineNotice, setInlineNotice] = useState<InlineNotice | null>(null)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   const setJobTrackerDeepLink = useUiPrefsStore((s) => s.setJobTrackerDeepLink)
+  const isActiveSession = (targetSessionId: number) => activeSessionIdRef.current === targetSessionId
 
   useEffect(() => {
     let cancelled = false
+    const targetSessionId = sessionId
     async function load() {
       setLoading(true)
       setError(null)
+      setInlineNotice(null)
+      setEditing(false)
+      setTriggering(false)
+      setBinding(false)
+      setExpandedTurns(new Set())
       try {
-        const data = parseReviewSessionDetail(await api.reviewSessionDetail(sessionId) as Record<string, unknown>)
-        if (cancelled) return
+        const data = parseReviewSessionDetail(await api.reviewSessionDetail(targetSessionId) as Record<string, unknown>)
+        if (cancelled || !isActiveSession(targetSessionId)) return
         setDetail(data)
         setEditForm({
           title: data.title || '',
@@ -97,10 +106,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
           setExpandedTurns(new Set([data.turns[0].id]))
         }
       } catch (err) {
-        if (cancelled) return
+        if (cancelled || !isActiveSession(targetSessionId)) return
         setError(getErrorMessage(err, '加载详情失败'))
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && isActiveSession(targetSessionId)) setLoading(false)
       }
     }
     load()
@@ -172,40 +181,49 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   }
 
   const handleSaveEdit = async () => {
+    const targetSessionId = sessionId
+    const nextForm = { ...editForm }
     try {
-      await api.reviewUpdateSession(sessionId, editForm)
-      setDetail((prev) => prev ? { ...prev, ...editForm } : prev)
+      await api.reviewUpdateSession(targetSessionId, nextForm)
+      if (!isActiveSession(targetSessionId)) return
+      setDetail((prev) => prev?.id === targetSessionId ? { ...prev, ...nextForm } : prev)
       setEditing(false)
       setInlineNotice({ tone: 'success', message: '已保存复盘标题与岗位信息' })
     } catch (err) {
+      if (!isActiveSession(targetSessionId)) return
       setInlineNotice({ tone: 'error', message: getErrorMessage(err, '保存失败') })
     }
   }
 
   const handleTriggerAnalysis = async () => {
+    const targetSessionId = sessionId
     setTriggering(true)
     try {
-      const result = await api.reviewTriggerAnalysis(sessionId)
+      const result = await api.reviewTriggerAnalysis(targetSessionId)
+      if (!isActiveSession(targetSessionId)) return
       if (result.status === 'started' || result.status === 'pending') {
-        setDetail((prev) => prev ? { ...prev, status: 'analyzing' } : prev)
+        setDetail((prev) => prev?.id === targetSessionId ? { ...prev, status: 'analyzing' } : prev)
         setInlineNotice({ tone: 'info', message: '复盘分析已开始，请稍后刷新查看结果' })
       } else if (result.status === 'done') {
         setInlineNotice({ tone: 'success', message: '复盘已完成' })
       }
     } catch (err) {
+      if (!isActiveSession(targetSessionId)) return
       setInlineNotice({ tone: 'error', message: getErrorMessage(err, '触发分析失败') })
     } finally {
-      setTriggering(false)
+      if (isActiveSession(targetSessionId)) setTriggering(false)
     }
   }
 
   const handleBindApplication = async (applicationId: number | null) => {
+    const targetSessionId = sessionId
     setBinding(true)
     try {
-      const result = await api.reviewUpdateSession(sessionId, { application_id: applicationId }) as {
+      const result = await api.reviewUpdateSession(targetSessionId, { application_id: applicationId }) as {
         auto_sync_eligible?: boolean
       }
-      const data = parseReviewSessionDetail(await api.reviewSessionDetail(sessionId) as Record<string, unknown>)
+      const data = parseReviewSessionDetail(await api.reviewSessionDetail(targetSessionId) as Record<string, unknown>)
+      if (!isActiveSession(targetSessionId)) return
       setDetail(data)
       if (applicationId == null) {
         setInlineNotice({ tone: 'info', message: '已解除求职记录关联' })
@@ -215,9 +233,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
         setInlineNotice({ tone: 'success', message: '已关联求职记录，并同步复盘待办' })
       }
     } catch (err) {
+      if (!isActiveSession(targetSessionId)) return
       setInlineNotice({ tone: 'error', message: getErrorMessage(err, '关联求职记录失败') })
     } finally {
-      setBinding(false)
+      if (isActiveSession(targetSessionId)) setBinding(false)
     }
   }
 

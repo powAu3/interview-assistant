@@ -64,6 +64,16 @@ const application = {
   },
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 describe('ReviewSessionDetail', () => {
   afterEach(() => {
     cleanup()
@@ -211,6 +221,56 @@ describe('ReviewSessionDetail', () => {
       applicationId: 2,
       openReviews: false,
     })
+  })
+
+  it('ignores stale bind refreshes after switching review sessions', async () => {
+    const bindUpdate = createDeferred<{ success: boolean; synced_todos: boolean }>()
+    apiMock.reviewUpdateSession.mockReturnValueOnce(bindUpdate.promise)
+    apiMock.reviewSessionDetail
+      .mockResolvedValueOnce(baseDetail)
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        id: 8,
+        title: '二面复盘',
+        company: 'Nova',
+        role: 'Backend',
+        application_id: null,
+        application: null,
+      })
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        application_id: application.id,
+        application: {
+          id: application.id,
+          company: application.company,
+          position: application.position,
+          city: application.city,
+          stage: application.stage,
+        },
+      })
+
+    const { rerender } = render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('关联求职记录')
+    fireEvent.click(screen.getByRole('button', { name: /ByteDance/ }))
+    await waitFor(() => {
+      expect(apiMock.reviewUpdateSession).toHaveBeenCalledWith(7, { application_id: 2 })
+    })
+
+    rerender(<ReviewSessionDetail sessionId={8} onBack={vi.fn()} />)
+    expect(await screen.findByText('二面复盘')).toBeInTheDocument()
+
+    await act(async () => {
+      bindUpdate.resolve({ success: true, synced_todos: true })
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(apiMock.reviewSessionDetail).toHaveBeenCalledTimes(3)
+    })
+
+    expect(screen.getByText('二面复盘')).toBeInTheDocument()
+    expect(screen.queryByText('已绑定求职记录')).not.toBeInTheDocument()
+    expect(screen.queryByText('已关联求职记录，并同步复盘待办')).not.toBeInTheDocument()
   })
 
   it('shows a guided desktop workspace for sparse test-fragment reviews and auto-expands short turn records', async () => {
