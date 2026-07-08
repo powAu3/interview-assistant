@@ -45,7 +45,7 @@ const SHOW_TERMINAL_STORAGE_KEY = 'ia-jobtracker-show-terminal'
 type ApplicationReviewItem = {
   id: number
   status: string
-  started_at: number
+  started_at: number | null
   ended_at: number | null
   title?: string | null
   company?: string | null
@@ -53,7 +53,7 @@ type ApplicationReviewItem = {
   turn_count: number
   avg_score: number | null
   summary_preview?: string | null
-  updated_at: number
+  updated_at: number | null
   auto_sync_eligible?: boolean
 }
 
@@ -114,6 +114,50 @@ function parseApplicationResponse(
     return { ...parsed, review_summary: fallbackReviewSummary }
   }
   return parsed
+}
+
+function parseFiniteNumber(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseNonNegativeCount(value: unknown): number {
+  return Math.max(0, Math.floor(parseFiniteNumber(value) ?? 0))
+}
+
+function parseOptionalBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
+  }
+  return undefined
+}
+
+function parseApplicationReviewItem(item: Record<string, unknown>): ApplicationReviewItem | null {
+  const id = parseFiniteNumber(item.id)
+  if (id == null) return null
+  return {
+    id,
+    status: String(item.status ?? ''),
+    started_at: parseFiniteNumber(item.started_at),
+    ended_at: parseFiniteNumber(item.ended_at),
+    title: item.title != null ? String(item.title) : null,
+    company: item.company != null ? String(item.company) : null,
+    role: item.role != null ? String(item.role) : null,
+    turn_count: parseNonNegativeCount(item.turn_count),
+    avg_score: parseReviewScore(item.avg_score),
+    summary_preview: item.summary_preview != null ? String(item.summary_preview) : null,
+    updated_at: parseFiniteNumber(item.updated_at),
+    auto_sync_eligible: parseOptionalBoolean(item.auto_sync_eligible),
+  }
 }
 
 function useCompactLayout(maxWidth = 640) {
@@ -520,20 +564,9 @@ export default function JobTracker() {
       try {
         const res = await api.jobTrackerApplicationReviews(app.id)
         if (reviewRequestSeqRef.current !== requestSeq) return
-        setReviewItems((res.items as Record<string, unknown>[]).map((item) => ({
-          id: Number(item.id),
-          status: String(item.status ?? ''),
-          started_at: Number(item.started_at ?? 0),
-          ended_at: item.ended_at != null ? Number(item.ended_at) : null,
-          title: item.title != null ? String(item.title) : null,
-          company: item.company != null ? String(item.company) : null,
-          role: item.role != null ? String(item.role) : null,
-          turn_count: Number(item.turn_count ?? 0),
-          avg_score: parseReviewScore(item.avg_score),
-          summary_preview: item.summary_preview != null ? String(item.summary_preview) : null,
-          updated_at: Number(item.updated_at ?? 0),
-          auto_sync_eligible: item.auto_sync_eligible != null ? Boolean(item.auto_sync_eligible) : undefined,
-        })))
+        setReviewItems((res.items as Record<string, unknown>[])
+          .map(parseApplicationReviewItem)
+          .filter((item): item is ApplicationReviewItem => item !== null))
       } catch (e) {
         if (reviewRequestSeqRef.current !== requestSeq) return
         setToastMessage(e instanceof Error ? e.message : '加载关联复盘失败')
