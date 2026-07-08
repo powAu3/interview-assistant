@@ -530,18 +530,31 @@ function getOpenMarkdownFenceAt(lines: string[]) {
   let openFence = ''
   let openFenceMarker = ''
   for (const line of lines) {
-    const match = line.match(/^\s{0,3}(```+|~~~+)(.*)$/)
-    if (!match) continue
-    const marker = match[1]
+    const fence = parseMarkdownFenceLine(line)
+    if (!fence) continue
+    const marker = fence.marker
     if (!openFence) {
-      openFence = `${marker}${match[2] ?? ''}`.trimEnd()
+      openFence = fence.opener
       openFenceMarker = marker
-    } else if (marker[0] === openFenceMarker[0] && marker.length >= openFenceMarker.length) {
+    } else if (isClosingMarkdownFence(marker, openFenceMarker)) {
       openFence = ''
       openFenceMarker = ''
     }
   }
   return openFence
+}
+
+function parseMarkdownFenceLine(line: string): { marker: string; opener: string } | null {
+  const match = line.match(/^\s{0,3}(```+|~~~+)(.*)$/)
+  if (!match) return null
+  return {
+    marker: match[1],
+    opener: `${match[1]}${match[2] ?? ''}`.trimEnd(),
+  }
+}
+
+function isClosingMarkdownFence(marker: string, openMarker: string) {
+  return marker[0] === openMarker[0] && marker.length >= openMarker.length
 }
 
 function buildFocusTabs(answerText: string, question: string, isStreaming: boolean): FocusTabPane[] {
@@ -586,18 +599,27 @@ function buildFocusTabs(answerText: string, question: string, isStreaming: boole
 function parseMarkdownFocusSections(answerText: string): Array<{ label: string; content: string }> {
   const sections: Array<{ label: string; content: string }> = []
   let current: { label: string; content: string } | null = null
-  let inCode = false
+  let codeFenceMarker = ''
   let preamble = ''
 
   for (const rawLine of answerText.split('\n')) {
     const line = rawLine.trimEnd()
-    if (line.trim().startsWith('```')) {
-      inCode = !inCode
-      if (current) current.content = appendFocusLine(current.content, rawLine)
+    const fence = parseMarkdownFenceLine(line)
+    if (fence) {
+      if (!codeFenceMarker) {
+        codeFenceMarker = fence.marker
+      } else if (isClosingMarkdownFence(fence.marker, codeFenceMarker)) {
+        codeFenceMarker = ''
+      }
+      if (current) {
+        current.content = appendFocusLine(current.content, rawLine)
+      } else {
+        preamble = appendFocusLine(preamble, rawLine)
+      }
       continue
     }
 
-    const label = inCode ? null : getFocusHeadingLabel(line)
+    const label = codeFenceMarker ? null : getFocusHeadingLabel(line)
     if (label) {
       current = { label, content: '' }
       sections.push(current)
@@ -628,13 +650,16 @@ function getOpeningTabLabel(text: string) {
 function getFocusHeadingLabel(line: string) {
   const markdown = line.match(/^\s{0,3}#{2,4}\s+(.+?)\s*#*\s*$/)
   const bracket = line.match(/^\s*【([^】]{1,28})】\s*$/)
-  const raw = markdown?.[1] ?? bracket?.[1]
+  const bold = line.match(/^\s*(?:[-*+]\s+)?(?:[\d一二三四五六七八九十]+[.)、\s-]+)?(?:\*\*|__)([^*_]{1,32}?)(?:\*\*|__)\s*[：:]?\s*$/)
+  const raw = markdown?.[1] ?? bracket?.[1] ?? bold?.[1]
   if (!raw) return null
   const label = raw
     .replace(/^[\d一二三四五六七八九十]+[.)、\s-]+/, '')
+    .replace(/^(\*\*|__)(.+)\1$/, '$2')
+    .replace(/[`*_]/g, '')
     .replace(/[：:]\s*$/, '')
     .trim()
-  if (!label || label.length > 18) return null
+  if (!label || label.length > 24) return null
   return label
 }
 

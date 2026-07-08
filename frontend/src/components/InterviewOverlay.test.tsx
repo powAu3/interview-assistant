@@ -454,6 +454,46 @@ describe('InterviewOverlay', () => {
     expect(screen.getByText(/ASR 把 CAP 识别成 cache/)).toBeInTheDocument()
   })
 
+  it('splits numbered bold model headings into focus tabs', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        question: 'LRU 缓存怎么实现？',
+        answer: '1. **核心思路**\n哈希表加双向链表。\n\n2. **复杂度分析**\nget/put 都是 O(1)。',
+      }],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByRole('button', { name: '核心思路' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: '复杂度分析' }))
+    expect(screen.getByRole('heading', { name: '复杂度分析' })).toBeInTheDocument()
+    expect(screen.getByText(/O\(1\)/)).toBeInTheDocument()
+  })
+
+  it('keeps tilde fenced code headings out of focus tabs', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        question: 'Markdown 里有代码块时怎么展示？',
+        answer: '## 解题思路\n先说明思路。\n\n~~~md\n## 伪标题\n代码块内容\n~~~\n\n## 复杂度\n一次扫描。',
+      }],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.queryByRole('button', { name: '伪标题' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '复杂度' }))
+    expect(screen.getByRole('heading', { name: '复杂度' })).toBeInTheDocument()
+    expect(screen.getByText('一次扫描。')).toBeInTheDocument()
+  })
+
   it('uses model-provided self introduction tabs instead of forcing code buckets', () => {
     useInterviewStore.setState({
       qaPairs: [{
