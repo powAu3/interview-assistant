@@ -81,6 +81,7 @@ describe('SpeechTab', () => {
     expect(screen.getByText('我的回答上下文（麦克风）')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: '我的回答上下文（麦克风）' })).toHaveAttribute('aria-checked', 'false')
     expect(screen.getAllByText(/不会触发自动答题/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/不读取麦克风，完全按旧逻辑追问/)).toBeInTheDocument()
     expect(screen.getByText('麦克风兼容模式')).toBeInTheDocument()
     expect(screen.getByText('共享兼容优先')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Whisper（本地，免费）')).toBeInTheDocument()
@@ -89,6 +90,39 @@ describe('SpeechTab', () => {
     expect(screen.getByText('边听边写')).toBeInTheDocument()
     expect(screen.getByText('兜底等最后一句 (ms)')).toBeInTheDocument()
     expect(screen.getByDisplayValue('200')).toBeInTheDocument()
+  })
+
+  it('describes candidate microphone ASR as review recording even when follow-up context is off', () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+        candidate_asr_enabled: true,
+        candidate_context_enabled: false,
+      },
+    }) as any)
+
+    render(<SpeechTab />)
+
+    expect(screen.getByText(/Whisper 本地，仅记录复盘，追问按旧逻辑/)).toBeInTheDocument()
+    expect(screen.getByText(/用于把你的真实回答写入复盘/)).toBeInTheDocument()
+    expect(screen.getByText('仅写入复盘记录')).toBeInTheDocument()
+  })
+
+  it('describes candidate microphone ASR as review recording plus spoken follow-up context when enabled', () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+        candidate_asr_enabled: true,
+        candidate_context_enabled: true,
+      },
+    }) as any)
+
+    render(<SpeechTab />)
+
+    expect(screen.getByText(/Whisper 本地，记录复盘，并给追问补真实口述/)).toBeInTheDocument()
+    expect(screen.getByText('下一题携带真实口述')).toBeInTheDocument()
   })
 
   it('marks speech settings dirty and clears after saving', async () => {

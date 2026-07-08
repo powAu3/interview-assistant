@@ -188,6 +188,11 @@ export default function SpeechTab() {
       ? '豆包云端'
       : '通用云端'
   const candidateContextActive = form.candidate_asr_enabled && form.candidate_context_enabled
+  const candidateUsageLabel = !form.candidate_asr_enabled
+    ? '不读取麦克风，完全按旧逻辑追问'
+    : candidateContextActive
+      ? `${candidateSttLabel}，记录复盘，并给追问补真实口述`
+      : `${candidateSttLabel}，仅记录复盘，追问按旧逻辑`
   const searchQuery = useSettingsSearch()
   const inSearch = searchQuery.trim().length > 0
   const effectiveSaveState: SaveState = saveState === 'saving' || saveState === 'error'
@@ -229,10 +234,10 @@ export default function SpeechTab() {
                 <StatusBadge status={form.candidate_asr_enabled ? 'ok' : 'idle'} label={form.candidate_asr_enabled ? '辅助上下文' : '已关闭'} />
               </div>
               <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                只识别你实际说出口的回答，写入追问上下文；不会触发自动答题，也不会混入面试官问题流。
+                只识别你实际说出口的回答，用于复盘记录；可选写入追问上下文，不会触发自动答题，也不会混入面试官问题流。
               </p>
               <p className="mt-2 text-[11px] text-text-muted">
-                当前：{form.candidate_asr_enabled ? `${candidateSttLabel}，追问${candidateContextActive ? '优先使用真实口述' : '按旧逻辑'}` : '不读取麦克风，完全按旧逻辑追问'}。
+                当前：{candidateUsageLabel}。
               </p>
             </div>
           </div>
@@ -406,7 +411,7 @@ export default function SpeechTab() {
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-text-primary">我的回答上下文（麦克风）</h3>
               <p className="text-[11px] leading-relaxed text-text-muted mt-0.5">
-                只用于记录你真实说出口的回答，给下一轮追问做上下文；不会触发自动答题。
+                记录你真实说出口的回答，用于面试复盘；也可以给下一轮追问做上下文，不会触发自动答题。
               </p>
             </div>
             <div className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-bg-hover bg-bg-tertiary/45 px-2.5 py-2">
@@ -444,7 +449,7 @@ export default function SpeechTab() {
           )}
           {form.candidate_asr_enabled && (
             <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
-              开启后控制条会多选一路“我的麦克风”。这一路只用共享方式读取；如果会议软件独占麦克风，会自动关闭我的口述记录，不影响面试录音。
+              开启后控制条会多选一路“我的麦克风”，用于把你的真实回答写入复盘；开启“下一题使用真实回答上下文”后，追问也会优先参考这一路口述。这一路只用共享方式读取；如果会议软件独占麦克风，会自动关闭我的口述记录，不影响面试录音。
             </div>
           )}
 
@@ -501,7 +506,7 @@ export default function SpeechTab() {
                 <span className="text-xs text-text-secondary">{
                   !form.candidate_asr_enabled
                     ? (form.candidate_context_enabled ? '开启麦克风后生效' : '按旧逻辑')
-                    : (candidateContextActive ? '下一题携带真实口述' : '按旧逻辑')
+                    : (candidateContextActive ? '下一题携带真实口述' : '仅写入复盘记录')
                 }</span>
               </label>
             </Field>
