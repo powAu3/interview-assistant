@@ -473,6 +473,34 @@ def test_resume_question_keeps_resume_context_enabled(monkeypatch: pytest.Monkey
     assert captured["include_resume"] is True
 
 
+def test_chinese_self_intro_keeps_resume_context_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "结合简历做自我介绍。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("先简单介绍一下自己。", None, False, "conversation_loopback", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is True
+
+
 def test_manual_question_negating_project_context_disables_resume(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     captured: dict[str, object] = {}
@@ -527,6 +555,40 @@ def test_english_resume_question_keeps_resume_context_enabled(monkeypatch: pytes
     answer_worker.process_question_parallel(
         (
             "Can you explain how you designed RBAC in your previous project?",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 1},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is True
+
+
+def test_english_self_intro_keeps_resume_context_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "Project A: RBAC platform with audit logs."
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "Use the resume for a concise introduction.")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "Tell me about yourself.",
             None,
             False,
             "conversation_loopback",
