@@ -50,7 +50,7 @@ export interface ReviewTurn {
   strengths?: string[] | null
   risks?: string[] | null
   evidence?: Record<string, unknown> | null
-  scorecard?: Record<string, number> | null
+  scorecard?: Record<string, unknown> | null
   created_at: number
   updated_at: number
 }

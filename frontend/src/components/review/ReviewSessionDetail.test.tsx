@@ -319,6 +319,46 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText(/原始转写：我会用 red 地址布隆过绿器和空值缓存。/)).toBeInTheDocument()
   })
 
+  it('tolerates string scorecard values in turn details', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      turn_count: 1,
+      turns: [
+        {
+          id: 82,
+          session_id: 7,
+          qa_id: 'qa-score',
+          seq: 1,
+          question_text: '讲讲 Redis 缓存击穿。',
+          candidate_answer_text: '我会用互斥锁。',
+          original_candidate_answer_text: null,
+          reference_answer_text: '可补充逻辑过期和热点保护。',
+          code_text: null,
+          duration_ms: 30000,
+          is_partial: false,
+          analysis_status: 'completed',
+          strengths: [],
+          risks: [],
+          evidence: null,
+          scorecard: { 准确性: '8', 深度: '7.5分', 表达: '无法评分' },
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+      ],
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('逐题分析 · 1 题')
+    fireEvent.click(screen.getByRole('button', { name: /逐题分析 · 1 题/ }))
+    await screen.findByText('讲讲 Redis 缓存击穿。')
+
+    expect(screen.getByText('7.8')).toBeInTheDocument()
+    expect(screen.getByText('8.0')).toBeInTheDocument()
+    expect(screen.getByText('7.5')).toBeInTheDocument()
+    expect(screen.getByText('无法评分')).toBeInTheDocument()
+  })
+
   it('shows screenshot self-check evidence in turn details', async () => {
     apiMock.reviewSessionDetail.mockResolvedValueOnce({
       ...baseDetail,

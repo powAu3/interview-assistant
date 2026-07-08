@@ -897,10 +897,9 @@ function TurnCard({
                   <h4 className="mb-2 text-xs font-semibold text-text-muted">评分详情</h4>
                   <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                     {Object.entries(turn.scorecard).map(([key, score]) => {
-                      const scoreTone = score >= 8 ? 'text-green-500'
-                        : score >= 6 ? 'text-blue-500'
-                        : score >= 4 ? 'text-yellow-500'
-                        : 'text-red-500'
+                      const parsedScore = parseScoreValue(score)
+                      const scoreTone = parsedScore !== null ? scoreTextClass(parsedScore) : 'text-text-muted'
+                      const scoreLabel = parsedScore !== null ? parsedScore.toFixed(1) : String(score ?? '—')
 
                       return (
                         <div
@@ -908,7 +907,7 @@ function TurnCard({
                           className="flex min-w-0 items-center justify-between gap-3 border-b border-bg-hover/50 py-1.5"
                         >
                           <span className="min-w-0 truncate text-xs text-text-secondary">{key}</span>
-                          <span className={`text-sm font-semibold ${scoreTone}`}>{score}</span>
+                          <span className={`text-sm font-semibold ${scoreTone}`}>{scoreLabel}</span>
                         </div>
                       )
                     })}
@@ -1211,6 +1210,9 @@ function InlineNoticeBanner({ notice }: { notice: InlineNotice }) {
 function getTurnAvgScore(turn: ReviewTurn): number | null {
   if (!turn.scorecard || Object.keys(turn.scorecard).length === 0) return null
   const values = Object.values(turn.scorecard)
+    .map(parseScoreValue)
+    .filter((score): score is number => score !== null)
+  if (values.length === 0) return null
   return values.reduce((a, b) => a + b, 0) / values.length
 }
 
@@ -1218,8 +1220,8 @@ function buildScoreDimensions(detail: ReviewSessionDetail) {
   const byName = new Map<string, { total: number; count: number }>()
   for (const turn of detail.turns ?? []) {
     for (const [name, rawScore] of Object.entries(turn.scorecard ?? {})) {
-      const score = Number(rawScore)
-      if (!Number.isFinite(score)) continue
+      const score = parseScoreValue(rawScore)
+      if (score === null) continue
       const current = byName.get(name) ?? { total: 0, count: 0 }
       current.total += score
       current.count += 1
@@ -1238,7 +1240,8 @@ function buildFollowUpDrills(detail: ReviewSessionDetail) {
     const followUps = getStringList(evidence.follow_up_questions)
     const advice = getStringValue(evidence.improvement_advice)
     const tags = getStringList(evidence.tags).slice(0, 3)
-    const fallbackNeeded = getTurnAvgScore(turn) !== null && Number(getTurnAvgScore(turn)) < 6
+    const avgScore = getTurnAvgScore(turn)
+    const fallbackNeeded = avgScore !== null && avgScore < 6
     const questions = followUps.length > 0
       ? followUps
       : fallbackNeeded
@@ -1267,6 +1270,21 @@ function getStringList(value: unknown): string[] {
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function parseScoreValue(value: unknown): number | null {
+  let score: number | null = null
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    score = value
+  } else if (typeof value === 'string') {
+    const match = value.trim().match(/-?\d+(?:\.\d+)?/)
+    if (match) {
+      const parsed = Number(match[0])
+      if (Number.isFinite(parsed)) score = parsed
+    }
+  }
+  if (score === null || score < 0 || score > 10) return null
+  return score
 }
 
 function dimensionTone(score: number) {
