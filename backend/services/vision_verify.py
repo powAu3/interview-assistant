@@ -6,7 +6,7 @@
 让用户在 UI 上看到「自检通过 / 自检失败」的可信度提示,
 而不是悄悄替换原答案,避免误判时 silently 改坏。
 
-只在 ``PROMPT_MODE_SERVER_SCREEN`` 调用,且仅当存在 vision 模型时触发。
+只在截图答题链路调用,包括普通服务端截图和笔试截图; 仅当存在 vision 模型时触发。
 """
 from __future__ import annotations
 

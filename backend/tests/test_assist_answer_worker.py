@@ -1266,6 +1266,48 @@ def test_written_exam_screenshot_injects_recent_qa_as_revision_context(monkeypat
     assert content[1]["image_url"]["url"] == "data:image/png;base64,failcase"
 
 
+def test_written_exam_screenshot_schedules_self_verify_with_all_images(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    scheduled: list[dict] = []
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "```python\ndef solve():\n    print('ok')\n```")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    import services.vision_verify as vision_verify
+
+    monkeypatch.setattr(
+        vision_verify,
+        "schedule_self_verify",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+
+    answer_worker.process_question_parallel(
+        (
+            "两张笔试截图题面",
+            ["data:image/png;base64,first", "data:image/png;base64,second"],
+            True,
+            "server_screen_multi",
+            {"origin": "server_screen", "image_count": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert len(scheduled) == 1
+    assert scheduled[0]["image_data_url"] == [
+        "data:image/png;base64,first",
+        "data:image/png;base64,second",
+    ]
+    assert scheduled[0]["answer"].startswith("```python")
+
+
 def test_written_exam_revision_context_compacts_previous_screen_prompt(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     captured = {}

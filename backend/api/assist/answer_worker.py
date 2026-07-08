@@ -913,7 +913,7 @@ def process_question_parallel(
                     qa_id,
                     question_text[:80],
                 )
-            if prompt_mode == PROMPT_MODE_SERVER_SCREEN and images:
+            if prompt_mode in (PROMPT_MODE_SERVER_SCREEN, PROMPT_MODE_WRITTEN_EXAM) and images:
                 try:
                     from services.vision_verify import schedule_self_verify
 
