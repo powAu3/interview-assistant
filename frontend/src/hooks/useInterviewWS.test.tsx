@@ -150,6 +150,22 @@ describe('useInterviewWS', () => {
     expect(useInterviewStore.getState().wsIsLeader).toBe(false)
   })
 
+  it('ignores stale websocket events after deactivation', () => {
+    const { rerender } = render(<Harness active />)
+    const ws = FakeWebSocket.instances[0]
+
+    rerender(<Harness active={false} />)
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({ type: 'answer_start', id: 'stale', question: '旧连接问题' })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.wsConnected).toBe(false)
+    expect(state.qaPairs).toEqual([])
+  })
+
   it('reconnects after close', () => {
     render(<Harness />)
     const first = FakeWebSocket.instances[0]
@@ -161,6 +177,28 @@ describe('useInterviewWS', () => {
     })
 
     expect(FakeWebSocket.instances.length).toBe(2)
+  })
+
+  it('ignores stale messages from a previous websocket after reconnect', () => {
+    render(<Harness />)
+    const first = FakeWebSocket.instances[0]
+
+    act(() => {
+      first.emitOpen()
+      first.emitClose()
+      vi.advanceTimersByTime(1000)
+    })
+
+    const second = FakeWebSocket.instances[1]
+    act(() => {
+      second.emitOpen()
+      first.emitMessage({ type: 'answer_start', id: 'stale', question: '旧连接问题' })
+      second.emitMessage({ type: 'answer_start', id: 'fresh', question: '新连接问题' })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.qaPairs.map((qa) => qa.id)).toEqual(['fresh'])
+    expect(state.currentStreamingId).toBe('fresh')
   })
 
   it('warns when candidate microphone degrades safely', () => {

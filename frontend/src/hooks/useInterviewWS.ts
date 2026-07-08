@@ -50,6 +50,7 @@ export function useInterviewWS(active = true) {
     lastServerPongAt.current = Date.now()
 
     ws.onopen = () => {
+      if (wsRef.current !== ws) return
       reconnectAttempts.current = 0
       useInterviewStore.getState().setWsConnected(true)
       if (reconnectTimer.current) {
@@ -58,6 +59,7 @@ export function useInterviewWS(active = true) {
       }
     }
     ws.onmessage = (event) => {
+      if (wsRef.current !== ws) return
       lastServerPongAt.current = Date.now()
       let data: WsMsg
       try {
