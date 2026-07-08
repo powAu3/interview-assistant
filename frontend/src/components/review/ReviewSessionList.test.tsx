@@ -17,6 +17,32 @@ vi.mock('../../lib/api', () => ({
   getErrorMessage: (err: unknown, fallback: string) => err instanceof Error ? err.message : fallback,
 }))
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
+function reviewSession(id: number, title: string) {
+  return {
+    id,
+    status: 'completed',
+    started_at: 1710020000 + id,
+    ended_at: 1710020900 + id,
+    source: 'manual',
+    title,
+    company: null,
+    role: '后端开发',
+    turn_count: 6,
+    avg_score: 7.8,
+    summary_markdown: `${title} 已生成。`,
+    application_id: null,
+    application: null,
+  }
+}
+
 describe('ReviewSessionList', () => {
   afterEach(() => {
     cleanup()
@@ -307,5 +333,76 @@ describe('ReviewSessionList', () => {
     expect(apiMock.reviewSessions).toHaveBeenCalledTimes(2)
     expect(screen.getByText('复盘已生成，项目回答更聚焦。')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '已完成' })).toBeInTheDocument()
+  })
+
+  it('keeps the newest page when older pagination requests finish later', async () => {
+    const slowPageTwo = createDeferred<unknown>()
+    apiMock.reviewSessions
+      .mockResolvedValueOnce({
+        total: 45,
+        page: 1,
+        page_size: 20,
+        items: [reviewSession(1, '第一页复盘')],
+      })
+      .mockReturnValueOnce(slowPageTwo.promise)
+      .mockResolvedValueOnce({
+        total: 45,
+        page: 3,
+        page_size: 20,
+        items: [reviewSession(3, '第三页复盘')],
+      })
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('第一页复盘')
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    await screen.findByText('2 / 3')
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+
+    expect(await screen.findByText('第三页复盘')).toBeInTheDocument()
+
+    await act(async () => {
+      slowPageTwo.resolve({
+        total: 45,
+        page: 2,
+        page_size: 20,
+        items: [reviewSession(2, '第二页慢复盘')],
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('第三页复盘')).toBeInTheDocument()
+    expect(screen.queryByText('第二页慢复盘')).not.toBeInTheDocument()
+  })
+
+  it('returns to the last valid page when the review total shrinks', async () => {
+    apiMock.reviewSessions
+      .mockResolvedValueOnce({
+        total: 21,
+        page: 1,
+        page_size: 20,
+        items: [reviewSession(1, '第一页复盘')],
+      })
+      .mockResolvedValueOnce({
+        total: 5,
+        page: 2,
+        page_size: 20,
+        items: [],
+      })
+      .mockResolvedValueOnce({
+        total: 5,
+        page: 1,
+        page_size: 20,
+        items: [reviewSession(5, '剩余复盘')],
+      })
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('第一页复盘')
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+
+    expect(await screen.findByText('剩余复盘')).toBeInTheDocument()
+    expect(screen.queryByText('没有复盘记录')).not.toBeInTheDocument()
+    expect(apiMock.reviewSessions).toHaveBeenLastCalledWith(1, 20)
   })
 })

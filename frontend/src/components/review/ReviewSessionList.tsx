@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { ComponentType } from 'react'
 import dayjs from 'dayjs'
 import {
@@ -85,6 +85,7 @@ interface Props {
 }
 
 export default function ReviewSessionList({ onViewDetail }: Props) {
+  const latestLoadIdRef = useRef(0)
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ReviewSessionsResponse | null>(null)
   const [page, setPage] = useState(1)
@@ -107,16 +108,31 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const models = config?.models ?? []
 
   const loadSessions = useCallback(async (p: number, options?: { silent?: boolean }) => {
+    const loadId = latestLoadIdRef.current + 1
+    latestLoadIdRef.current = loadId
+    let redirectedToValidPage = false
     if (!options?.silent) setLoading(true)
     try {
       const resp = await api.reviewSessions(p, pageSize)
-      setData(parseReviewSessionsResponse(resp))
+      if (loadId !== latestLoadIdRef.current) return
+      const parsed = parseReviewSessionsResponse(resp)
+      const lastPage = Math.max(1, Math.ceil(parsed.total / pageSize))
+      if (p > lastPage) {
+        redirectedToValidPage = true
+        setPage(lastPage)
+        return
+      }
+      setData(parsed)
     } catch (err) {
-      console.error('Failed to load review sessions:', err)
+      if (loadId === latestLoadIdRef.current && !options?.silent) {
+        setToastMessage(getErrorMessage(err, '加载复盘列表失败'))
+      }
     } finally {
-      if (!options?.silent) setLoading(false)
+      if (loadId === latestLoadIdRef.current && !options?.silent && !redirectedToValidPage) {
+        setLoading(false)
+      }
     }
-  }, [])
+  }, [setToastMessage])
 
   useEffect(() => {
     loadSessions(page)
