@@ -109,4 +109,33 @@ describe('configStore transcription windows', () => {
     expect(state.candidateTranscriptions).toHaveLength(200)
     expect(state.candidateTranscriptions[0]).toBe('candidate 5')
   })
+
+  it('restores screenshot self-check results from session init data', () => {
+    const store = useInterviewStore.getState()
+
+    store.setInitData({
+      transcriptions: [],
+      candidate_answer_segments: [],
+      qa_pairs: [{
+        id: 'qa-screen',
+        question: '截图题',
+        answer: '答案',
+        timestamp: 1710000000,
+        source: 'server_screen_multi',
+        model_name: 'Lite Ark',
+        vision_verify: {
+          verdict: 'FAIL',
+          reason: '第二张截图里的样例不通过',
+        },
+      }],
+    })
+
+    const qa = useInterviewStore.getState().qaPairs[0]
+    expect(qa.questionSource).toBe('server_screen_multi')
+    expect(qa.modelLabel).toBe('Lite Ark')
+    expect(qa.visionVerify).toEqual({
+      verdict: 'FAIL',
+      reason: '第二张截图里的样例不通过',
+    })
+  })
 })

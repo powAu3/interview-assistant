@@ -44,6 +44,22 @@ def test_session_snapshot_contains_serialized_qa_fields():
     assert snapshot['qa_pairs'][0]['model_name'] == 'demo'
 
 
+def test_session_snapshot_contains_vision_verify_result():
+    session = session_mod.reset_session()
+    qa = session.add_qa('截图题', '答案', source='server_screen_multi', model_name='vision')
+
+    assert session.set_vision_verify(qa.id, 'FAIL', '第二张截图里的样例不通过') is True
+
+    snapshot = session.snapshot()
+
+    assert snapshot['qa_pairs'][0]['vision_verify'] == {
+        'verdict': 'FAIL',
+        'reason': '第二张截图里的样例不通过',
+    }
+    assert 'vision_verify_verdict' not in snapshot['qa_pairs'][0]
+    assert 'vision_verify_reason' not in snapshot['qa_pairs'][0]
+
+
 def test_candidate_asr_pending_preserves_active_qa_after_window_closes():
     session = session_mod.reset_session()
     session.open_candidate_answer_window("qa-prev")

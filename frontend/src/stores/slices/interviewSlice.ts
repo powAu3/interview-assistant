@@ -14,6 +14,17 @@ function takeTail<T>(items: T[], maxItems: number): T[] {
   return items.length > maxItems ? items.slice(-maxItems) : items
 }
 
+function normalizeVisionVerify(raw: unknown): QAPair['visionVerify'] | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const data = raw as { verdict?: unknown; reason?: unknown }
+  const verdict = String(data.verdict || '').toUpperCase()
+  if (verdict !== 'PASS' && verdict !== 'FAIL' && verdict !== 'UNKNOWN') return undefined
+  return {
+    verdict,
+    reason: String(data.reason ?? ''),
+  }
+}
+
 function _scheduleChunkFlush(set: (fn: (s: RootState) => Partial<RootState>) => void) {
   if (_chunkFlushTimer !== null) return
   _chunkFlushTimer = setTimeout(() => {
@@ -245,15 +256,19 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
       transcriptions: takeTail(data.transcriptions ?? [], MAX_TRANSCRIPTIONS),
       candidateTranscriptions: restoredCandidateTranscriptions,
       qaPairs: (data.qa_pairs ?? []).map(
-        (qa: Partial<QAPair> & { id: string; question: string; answer: string }) => ({
-          ...qa,
-          thinkContent: qa.thinkContent ?? '',
-          isThinking: false,
-          timestamp: qa.timestamp ?? Date.now() / 1000,
-          questionSource: (qa as any).source ?? qa.questionSource,
-          modelLabel: (qa as any).model_name ?? qa.modelLabel,
-          status: qa.status ?? 'done' as QAStatus,
-        }),
+        (qa: Partial<QAPair> & { id: string; question: string; answer: string }) => {
+          const visionVerify = normalizeVisionVerify((qa as any).visionVerify ?? (qa as any).vision_verify)
+          return {
+            ...qa,
+            thinkContent: qa.thinkContent ?? '',
+            isThinking: false,
+            timestamp: qa.timestamp ?? Date.now() / 1000,
+            questionSource: (qa as any).source ?? qa.questionSource,
+            modelLabel: (qa as any).model_name ?? qa.modelLabel,
+            status: qa.status ?? 'done' as QAStatus,
+            ...(visionVerify ? { visionVerify } : {}),
+          }
+        },
       ),
       currentStreamingId: null,
       streamingIds: [],

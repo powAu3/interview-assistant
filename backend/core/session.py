@@ -12,6 +12,8 @@ class QAPair:
     timestamp: float = field(default_factory=time.time)
     source: str = ""
     model_name: str = ""
+    vision_verify_verdict: str = ""
+    vision_verify_reason: str = ""
 
 
 @dataclass
@@ -182,6 +184,20 @@ class Session:
             self.qa_pairs = self.qa_pairs[-self.MAX_QA_PAIRS:]
         return qa
 
+    def set_vision_verify(self, qa_id: str, verdict: str, reason: str = "") -> bool:
+        target = (qa_id or "").strip()
+        if not target:
+            return False
+        normalized = (verdict or "UNKNOWN").strip().upper()
+        if normalized not in ("PASS", "FAIL", "UNKNOWN"):
+            normalized = "UNKNOWN"
+        for qa in self.qa_pairs:
+            if qa.id == target:
+                qa.vision_verify_verdict = normalized
+                qa.vision_verify_reason = (reason or "").strip()
+                return True
+        return False
+
     def get_conversation_messages(self) -> list[dict]:
         return list(self.conversation_history)
 
@@ -344,14 +360,23 @@ class Session:
                 asdict(seg) for seg in self.candidate_answer_segments[-50:]
             ],
             "qa_pairs": [
-                {
-                    **asdict(qa),
-                    "source": getattr(qa, "source", "") or "",
-                    "model_name": getattr(qa, "model_name", "") or "",
-                }
+                self._serialize_qa_pair(qa)
                 for qa in self.qa_pairs
             ],
         }
+
+    def _serialize_qa_pair(self, qa: QAPair) -> dict:
+        payload = asdict(qa)
+        verdict = str(payload.pop("vision_verify_verdict", "") or "")
+        reason = str(payload.pop("vision_verify_reason", "") or "")
+        payload["source"] = getattr(qa, "source", "") or ""
+        payload["model_name"] = getattr(qa, "model_name", "") or ""
+        if verdict:
+            payload["vision_verify"] = {
+                "verdict": verdict,
+                "reason": reason,
+            }
+        return payload
 
 
 _session: Optional[Session] = None

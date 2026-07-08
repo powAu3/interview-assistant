@@ -183,6 +183,17 @@ def schedule_self_verify(
             _log.warning("vision self-verify worker crashed: %s", e)
             result = {"verdict": "UNKNOWN", "reason": f"自检异常: {e}"}
         try:
+            from core.session import conversation_lock, get_session
+
+            with conversation_lock:
+                get_session().set_vision_verify(
+                    qa_id,
+                    str(result["verdict"]),
+                    str(result["reason"]),
+                )
+        except Exception as e:  # noqa: BLE001
+            _log.warning("vision self-verify session persist failed: %s", e)
+        try:
             broadcast_callable({
                 "type": "vision_verify",
                 "id": qa_id,
