@@ -19,6 +19,7 @@ import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
 import { api, getErrorMessage } from '../../lib/api'
 import type { ReviewSessionDetail, ReviewTurn } from './types'
+import { parseReviewSessionDetail } from './types'
 import { getReviewSourceMeta, isWrittenExamReview, type ReviewSourceMeta } from './sourceMeta'
 import type { Application } from '../job-tracker/types'
 import { parseApplication } from '../job-tracker/types'
@@ -84,7 +85,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       setLoading(true)
       setError(null)
       try {
-        const data = await api.reviewSessionDetail(sessionId)
+        const data = parseReviewSessionDetail(await api.reviewSessionDetail(sessionId) as Record<string, unknown>)
         if (cancelled) return
         setDetail(data)
         setEditForm({
@@ -114,7 +115,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
     let cancelled = false
     const pollDetail = async () => {
       try {
-        const data = await api.reviewSessionDetail(sessionId)
+        const data = parseReviewSessionDetail(await api.reviewSessionDetail(sessionId) as Record<string, unknown>)
         if (cancelled) return
         setDetail(data)
         if (data.status === 'completed') {
@@ -204,7 +205,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       const result = await api.reviewUpdateSession(sessionId, { application_id: applicationId }) as {
         auto_sync_eligible?: boolean
       }
-      const data = await api.reviewSessionDetail(sessionId)
+      const data = parseReviewSessionDetail(await api.reviewSessionDetail(sessionId) as Record<string, unknown>)
       setDetail(data)
       if (applicationId == null) {
         setInlineNotice({ tone: 'info', message: '已解除求职记录关联' })

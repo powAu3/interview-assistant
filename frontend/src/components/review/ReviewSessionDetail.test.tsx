@@ -359,6 +359,19 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText('无法评分')).toBeInTheDocument()
   })
 
+  it('normalizes string session scores in the detail header', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      avg_score: '8.4分',
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('一面复盘')
+    expect(screen.getByText('8.4')).toBeInTheDocument()
+    expect(screen.queryByText('NaN')).not.toBeInTheDocument()
+  })
+
   it('shows screenshot self-check evidence in turn details', async () => {
     apiMock.reviewSessionDetail.mockResolvedValueOnce({
       ...baseDetail,

@@ -19,6 +19,7 @@ import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { StageBadge } from '@/components/job-tracker/stageConfig'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import type { ReviewSession, ReviewSessionsResponse } from './types'
+import { parseReviewSessionsResponse } from './types'
 import { getReviewSourceMeta, isWrittenExamReview } from './sourceMeta'
 
 const STATUS_LABELS: Record<ReviewSession['status'], string> = {
@@ -109,7 +110,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     if (!options?.silent) setLoading(true)
     try {
       const resp = await api.reviewSessions(p, pageSize)
-      setData(resp)
+      setData(parseReviewSessionsResponse(resp))
     } catch (err) {
       console.error('Failed to load review sessions:', err)
     } finally {

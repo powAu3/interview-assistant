@@ -89,7 +89,7 @@ describe('ReviewSessionList', () => {
           company: '米哈游',
           role: '客户端工程师',
           turn_count: 6,
-          avg_score: 7.8,
+          avg_score: '7.8分',
           summary_markdown: '表现稳定，项目细节比较扎实。',
           application_id: null,
           application: null,
@@ -112,6 +112,8 @@ describe('ReviewSessionList', () => {
     expect(screen.getByText('生成失败')).toBeInTheDocument()
     expect(screen.queryByText('打开详情查看逐题记录和岗位联动。')).not.toBeInTheDocument()
     expect(screen.getByText('米哈游二面')).toBeInTheDocument()
+    expect(screen.getByText('7.8分')).toBeInTheDocument()
+    expect(screen.queryByText('NaN分')).not.toBeInTheDocument()
   })
 
   it('labels written-exam review sessions with exam-specific metadata', async () => {
