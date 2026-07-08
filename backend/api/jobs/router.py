@@ -101,6 +101,11 @@ async def api_list_applications(
         "latest_avg_score": None,
         "latest_review_at": None,
         "latest_status": None,
+        "linked_review_count": 0,
+        "latest_linked_review_id": None,
+        "latest_linked_avg_score": None,
+        "latest_linked_review_at": None,
+        "latest_linked_status": None,
     }
     for item in items:
         item["review_summary"] = summaries.get(int(item["id"]), dict(empty_summary))

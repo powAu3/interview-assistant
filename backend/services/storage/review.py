@@ -612,12 +612,12 @@ def get_application_review_summaries(application_ids: list[int]) -> dict[int, di
         conn = _conn()
         rows = conn.execute(
             f"""
-            SELECT id, application_id, status, started_at, ended_at, avg_score
+            SELECT id, application_id, status, started_at, ended_at, turn_count, avg_score
             FROM review_sessions
-            WHERE application_id IN ({placeholders}) AND turn_count >= ?
+            WHERE application_id IN ({placeholders})
             ORDER BY application_id ASC, COALESCE(ended_at, started_at) DESC, id DESC
             """,
-            [*ids, AUTO_REVIEW_SYNC_MIN_TURNS],
+            ids,
         ).fetchall()
         conn.close()
 
@@ -628,12 +628,25 @@ def get_application_review_summaries(application_ids: list[int]) -> dict[int, di
             "latest_avg_score": None,
             "latest_review_at": None,
             "latest_status": None,
+            "linked_review_count": 0,
+            "latest_linked_review_id": None,
+            "latest_linked_avg_score": None,
+            "latest_linked_review_at": None,
+            "latest_linked_status": None,
         }
         for app_id in ids
     }
     for row in rows:
         app_id = int(row["application_id"])
         summary = summaries[app_id]
+        summary["linked_review_count"] += 1
+        if summary["latest_linked_review_id"] is None:
+            summary["latest_linked_review_id"] = int(row["id"])
+            summary["latest_linked_avg_score"] = row["avg_score"]
+            summary["latest_linked_review_at"] = row["ended_at"] if row["ended_at"] is not None else row["started_at"]
+            summary["latest_linked_status"] = row["status"]
+        if not is_auto_sync_eligible_session(dict(row)):
+            continue
         summary["review_count"] += 1
         if summary["latest_review_id"] is None:
             summary["latest_review_id"] = int(row["id"])

@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import KanbanBoard from './KanbanBoard'
 import type { Application } from './types'
@@ -58,5 +58,37 @@ describe('KanbanBoard', () => {
     fireEvent.wheel(board, { deltaY: 180, deltaX: 0 })
 
     expect(board.scrollLeft).toBe(180)
+  })
+
+  it('shows short linked reviews on cards without a formal review count', () => {
+    render(
+      <KanbanBoard
+        applications={[
+          {
+            ...app(1, 'interview1'),
+            review_summary: {
+              review_count: 0,
+              latest_review_id: null,
+              latest_avg_score: null,
+              latest_review_at: null,
+              latest_status: null,
+              linked_review_count: 1,
+              latest_linked_review_id: 12,
+              latest_linked_avg_score: null,
+              latest_linked_review_at: 1710003600,
+              latest_linked_status: 'completed',
+            },
+          },
+        ]}
+        onStageChange={vi.fn()}
+        onReorderInStage={vi.fn()}
+        search=""
+        showTerminalStages={false}
+        onShowTerminalStagesChange={vi.fn()}
+        terminalApplicationsCount={0}
+      />,
+    )
+
+    expect(screen.getByText('复盘 短样本')).toBeInTheDocument()
   })
 })

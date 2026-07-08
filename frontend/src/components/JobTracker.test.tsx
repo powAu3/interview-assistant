@@ -215,7 +215,7 @@ describe('JobTracker', () => {
       .map((node) => node.closest('article'))
       .find((candidate): candidate is HTMLElement =>
         candidate instanceof HTMLElement &&
-        within(candidate).queryByRole('button', { name: /查看 MiniMax 的 2 场复盘/ }) != null,
+        within(candidate).queryByRole('button', { name: /查看 MiniMax 的 2 场关联复盘/ }) != null,
       )
     expect(updatedRow).not.toBeNull()
     await waitFor(() => {
@@ -268,7 +268,7 @@ describe('JobTracker', () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
-    fireEvent.click(screen.getAllByRole('button', { name: /查看 Acme 的 2 场复盘/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 Acme 的 2 场关联复盘/ })[0])
 
     await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(1))
     expect(await screen.findByText('系统设计复盘')).toBeInTheDocument()
@@ -340,8 +340,8 @@ describe('JobTracker', () => {
     render(<JobTracker />)
 
     await waitFor(() => expect(screen.getAllByText('MiniMax').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getAllByRole('button', { name: /查看 Acme 的 1 场复盘/ })[0])
-    fireEvent.click(screen.getAllByRole('button', { name: /查看 MiniMax 的 1 场复盘/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 Acme 的 1 场关联复盘/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 MiniMax 的 1 场关联复盘/ })[0])
 
     await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(2))
     await act(async () => {
@@ -395,7 +395,7 @@ describe('JobTracker', () => {
     expect(screen.getByText('补跟进时间')).toBeInTheDocument()
     expect(screen.getAllByText(/2 场 · 7\.1/).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '补时间' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /查看 Acme 的 2 场复盘/ }))
+    fireEvent.click(screen.getByRole('button', { name: /查看 Acme 的 2 场关联复盘/ }))
 
     await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(1))
     expect(await screen.findByText('系统设计复盘')).toBeInTheDocument()

@@ -13,8 +13,12 @@ export function matchesApplicationSearch(application: Application, search: strin
     application.stage,
     ...(application.todos ?? []).flatMap((todo) => [todo.title, todo.due ?? '']),
     application.review_summary.latest_status ?? '',
+    application.review_summary.latest_linked_status ?? '',
     application.review_summary.latest_avg_score != null
       ? application.review_summary.latest_avg_score.toFixed(1)
+      : '',
+    application.review_summary.linked_review_count != null && application.review_summary.linked_review_count > application.review_summary.review_count
+      ? '短样本 关联复盘'
       : '',
   ]
 

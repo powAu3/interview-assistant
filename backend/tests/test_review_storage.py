@@ -453,7 +453,11 @@ def test_short_review_does_not_auto_sync_todos_or_summary(tmp_path, monkeypatch)
     assert detail is not None
     assert detail["auto_sync_eligible"] is False
     assert jt.get_application(app["id"])["todos"] == []
-    assert review.get_application_review_summaries([app["id"]])[app["id"]]["review_count"] == 0
+    summary = review.get_application_review_summaries([app["id"]])[app["id"]]
+    assert summary["review_count"] == 0
+    assert summary["linked_review_count"] == 1
+    assert summary["latest_linked_review_id"] == session_id
+    assert summary["latest_review_id"] is None
 
 
 def test_binding_backfills_default_review_info_and_followup_time(tmp_path, monkeypatch):
@@ -582,5 +586,7 @@ def test_application_review_summary_uses_latest_session(tmp_path, monkeypatch):
     summary = review.get_application_review_summaries([app["id"]])[app["id"]]
 
     assert summary["review_count"] == 2
+    assert summary["linked_review_count"] == 2
     assert summary["latest_review_id"] == latest_id
+    assert summary["latest_linked_review_id"] == latest_id
     assert summary["latest_avg_score"] == 8.0

@@ -63,4 +63,25 @@ describe('job tracker search', () => {
     expect(filterApplicationsBySearch(applications, '复盘待办').map((item) => item.company)).toEqual(['Acme'])
     expect(filterApplicationsBySearch(applications, '下周').map((item) => item.company)).toEqual(['MiniMax'])
   })
+
+  it('matches applications with linked short review samples', () => {
+    const item = application({
+      company: 'ByteDance',
+      review_summary: {
+        review_count: 0,
+        latest_review_id: null,
+        latest_avg_score: null,
+        latest_review_at: null,
+        latest_status: null,
+        linked_review_count: 1,
+        latest_linked_review_id: 21,
+        latest_linked_avg_score: null,
+        latest_linked_review_at: 1710003600,
+        latest_linked_status: 'completed',
+      },
+    })
+
+    expect(matchesApplicationSearch(item, '短样本')).toBe(true)
+    expect(filterApplicationsBySearch([item], '关联复盘')).toEqual([item])
+  })
 })

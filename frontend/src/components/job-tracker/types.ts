@@ -27,6 +27,11 @@ export interface ApplicationReviewSummary {
   latest_avg_score: number | null
   latest_review_at: number | null
   latest_status: string | null
+  linked_review_count?: number
+  latest_linked_review_id?: number | null
+  latest_linked_avg_score?: number | null
+  latest_linked_review_at?: number | null
+  latest_linked_status?: string | null
 }
 
 export interface Application {
@@ -91,6 +96,11 @@ export function parseApplication(raw: Record<string, unknown>): Application {
       latest_avg_score: reviewSummary.latest_avg_score != null ? Number(reviewSummary.latest_avg_score) : null,
       latest_review_at: reviewSummary.latest_review_at != null ? Number(reviewSummary.latest_review_at) : null,
       latest_status: reviewSummary.latest_status != null ? String(reviewSummary.latest_status) : null,
+      linked_review_count: Number(reviewSummary.linked_review_count ?? reviewSummary.review_count ?? 0),
+      latest_linked_review_id: reviewSummary.latest_linked_review_id != null ? Number(reviewSummary.latest_linked_review_id) : null,
+      latest_linked_avg_score: reviewSummary.latest_linked_avg_score != null ? Number(reviewSummary.latest_linked_avg_score) : null,
+      latest_linked_review_at: reviewSummary.latest_linked_review_at != null ? Number(reviewSummary.latest_linked_review_at) : null,
+      latest_linked_status: reviewSummary.latest_linked_status != null ? String(reviewSummary.latest_linked_status) : null,
     },
   }
 }

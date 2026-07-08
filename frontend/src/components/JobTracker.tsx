@@ -54,6 +54,7 @@ type ApplicationReviewItem = {
   avg_score: number | null
   summary_preview?: string | null
   updated_at: number
+  auto_sync_eligible?: boolean
 }
 
 type CreateApplicationDraft = {
@@ -517,6 +518,7 @@ export default function JobTracker() {
           avg_score: item.avg_score != null ? Number(item.avg_score) : null,
           summary_preview: item.summary_preview != null ? String(item.summary_preview) : null,
           updated_at: Number(item.updated_at ?? 0),
+          auto_sync_eligible: item.auto_sync_eligible != null ? Boolean(item.auto_sync_eligible) : undefined,
         })))
       } catch (e) {
         if (reviewRequestSeqRef.current !== requestSeq) return
@@ -1381,6 +1383,7 @@ function ApplicationReviewsModal({
   const latestReviewAt = items[0]?.ended_at ?? items[0]?.started_at ?? null
   const latestScore = items[0]?.avg_score ?? null
   const scoredCount = items.filter((item) => item.avg_score != null).length
+  const shortSampleCount = items.filter((item) => item.auto_sync_eligible === false).length
   const closedStage = isTerminalStage(app.stage)
   const latestReviewLabel = latestReviewAt != null
     ? dayjs.unix(Math.floor(latestReviewAt)).format('YYYY-MM-DD HH:mm')
@@ -1424,6 +1427,9 @@ function ApplicationReviewsModal({
               <div className="flex flex-col gap-1.5 border-b border-bg-hover/80 pb-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
                   <span className="font-medium text-text-primary">{items.length} 场复盘</span>
+                  {shortSampleCount > 0 ? (
+                    <span>短样本 {shortSampleCount}</span>
+                  ) : null}
                   <span>最近 {latestReviewLabel}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
@@ -1457,6 +1463,11 @@ function ApplicationReviewsModal({
                               {highlighted ? (
                                 <span className="text-[11px] font-medium text-accent-blue">
                                   当前这场
+                                </span>
+                              ) : null}
+                              {item.auto_sync_eligible === false ? (
+                                <span className="text-[11px] font-medium text-amber-500">
+                                  短样本
                                 </span>
                               ) : null}
                             </div>

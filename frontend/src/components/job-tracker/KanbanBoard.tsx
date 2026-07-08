@@ -85,6 +85,23 @@ function buildColumnIds(apps: Application[], visibleStages: string[]): Record<st
   return out
 }
 
+function linkedReviewCount(summary: Application['review_summary'] | null | undefined): number {
+  return Number(summary?.linked_review_count ?? summary?.review_count ?? 0)
+}
+
+function latestLinkedReviewAt(summary: Application['review_summary'] | null | undefined): number | null {
+  return summary?.latest_linked_review_at ?? summary?.latest_review_at ?? null
+}
+
+function reviewBadgeLabel(summary: Application['review_summary']): string {
+  const linkedCount = linkedReviewCount(summary)
+  const shortCount = Math.max(0, linkedCount - summary.review_count)
+  if (summary.review_count <= 0) {
+    return linkedCount > 1 ? `短样本 ${linkedCount}` : '短样本'
+  }
+  return shortCount > 0 ? `${summary.review_count} +${shortCount} 短` : String(summary.review_count)
+}
+
 const RAIL_LABEL: Record<string, string> = {
   applied: '\u6295\u9012',
   written: '\u6D4B\u8BC4',
@@ -169,11 +186,12 @@ function SortableKanbanCard({
   const nextStage = nextStageAfter(app.stage)
   const reviewSummary = app.review_summary
   const reviewScore = reviewSummary?.latest_avg_score
+  const linkedReviews = linkedReviewCount(reviewSummary)
   const terminalStage = isTerminalStage(app.stage)
   const rejectedStage = isRejectedStage(app.stage)
   const timeBadgeLabel = terminalStage
-    ? reviewSummary?.latest_review_at != null
-      ? `复盘 ${dayjs.unix(Math.floor(reviewSummary.latest_review_at)).format('M/D')}`
+    ? latestLinkedReviewAt(reviewSummary) != null
+      ? `复盘 ${dayjs.unix(Math.floor(latestLinkedReviewAt(reviewSummary) as number)).format('M/D')}`
       : rejectedStage
         ? STAGE_LABELS[app.stage] ?? app.stage
         : '已放弃'
@@ -256,10 +274,12 @@ function SortableKanbanCard({
                 {timeBadgeLabel}
               </span>
             ) : null}
-            {reviewSummary?.review_count > 0 ? (
+            {linkedReviews > 0 ? (
               <span
                 className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-                  reviewScore == null
+                  reviewSummary.review_count <= 0
+                    ? 'bg-amber-500/15 text-amber-500'
+                    : reviewScore == null
                     ? isLight ? 'bg-gray-100 text-gray-500' : 'bg-white/[0.06] text-text-muted'
                     : reviewScore < 6
                       ? 'bg-yellow-500/15 text-yellow-500'
@@ -269,7 +289,7 @@ function SortableKanbanCard({
                 }`}
               >
                 <MessageSquareText className="w-3 h-3 opacity-80" />
-                复盘 {reviewSummary.review_count}{reviewScore != null ? ` · ${reviewScore.toFixed(1)}` : ''}
+                复盘 {reviewBadgeLabel(reviewSummary)}{reviewScore != null && reviewSummary.review_count > 0 ? ` · ${reviewScore.toFixed(1)}` : ''}
               </span>
             ) : null}
           </div>

@@ -9,7 +9,7 @@ import {
   MapPin,
   Trash2,
 } from 'lucide-react'
-import type { Application, Offer, Stage, TodoItem } from './types'
+import type { Application, ApplicationReviewSummary, Offer, Stage, TodoItem } from './types'
 import { filterApplicationsBySearch } from './search'
 import {
   getStageOrderIndex,
@@ -156,7 +156,7 @@ function formatDate(unix: number | null, fallback = '--') {
 
 function getScheduleMeta(app: Application) {
   if (isTerminalStage(app.stage)) {
-    const reviewAt = app.review_summary.latest_review_at
+    const reviewAt = latestLinkedReviewAt(app.review_summary)
     const isRejected = isRejectedStage(app.stage)
     const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
     const tone = isRejected ? 'text-red-500' : 'text-text-muted'
@@ -198,35 +198,53 @@ function getScheduleMeta(app: Application) {
   }
 }
 
+function linkedReviewCount(summary: ApplicationReviewSummary | null | undefined): number {
+  return Number(summary?.linked_review_count ?? summary?.review_count ?? 0)
+}
+
+function latestLinkedReviewAt(summary: ApplicationReviewSummary | null | undefined): number | null {
+  return summary?.latest_linked_review_at ?? summary?.latest_review_at ?? null
+}
+
 function reviewSummaryText(app: Application) {
   const summary = app.review_summary
+  const linkedCount = linkedReviewCount(summary)
+  const shortCount = Math.max(0, linkedCount - summary.review_count)
   if (summary.review_count <= 0) {
+    if (linkedCount > 0) {
+      return { label: linkedCount > 1 ? `${linkedCount} 短样本` : '短样本', tone: 'text-amber-500' }
+    }
     return { label: '暂无', tone: 'text-text-muted' }
   }
+  const countLabel = shortCount > 0 ? `${summary.review_count} 场 +${shortCount} 短` : `${summary.review_count} 场`
   if (summary.latest_avg_score == null) {
-    return { label: `${summary.review_count} 场`, tone: 'text-text-secondary' }
+    return { label: countLabel, tone: 'text-text-secondary' }
   }
   if (summary.latest_avg_score < 6) {
-    return { label: `${summary.review_count} 场 · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-yellow-500' }
+    return { label: `${countLabel} · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-yellow-500' }
   }
   if (summary.latest_avg_score >= 8) {
-    return { label: `${summary.review_count} 场 · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-green-500' }
+    return { label: `${countLabel} · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-green-500' }
   }
-  return { label: `${summary.review_count} 场 · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-blue-500' }
+  return { label: `${countLabel} · ${summary.latest_avg_score.toFixed(1)}`, tone: 'text-blue-500' }
 }
 
 function hasReviewTimeline(app: Application) {
-  return app.review_summary.review_count > 0
+  return linkedReviewCount(app.review_summary) > 0
 }
 
 function reviewShortcutLabel(app: Application) {
-  const count = app.review_summary.review_count
+  const count = linkedReviewCount(app.review_summary)
   if (count <= 0) return '暂无复盘'
+  if (app.review_summary.review_count <= 0) return count > 1 ? `看 ${count} 条短样本` : '看短样本'
   return count > 1 ? `看 ${count} 场复盘` : '看复盘'
 }
 
 function reviewShortcutClass(app: Application) {
   const latestScore = app.review_summary.latest_avg_score
+  if (app.review_summary.review_count <= 0 && linkedReviewCount(app.review_summary) > 0) {
+    return 'border-amber-500/20 bg-amber-500/10 text-amber-500 hover:bg-amber-500/15'
+  }
   if (latestScore == null) return 'border-bg-hover bg-bg-secondary text-text-secondary hover:text-text-primary'
   if (latestScore < 6) return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/15'
   if (latestScore >= 8) return 'border-green-500/20 bg-green-500/10 text-green-500 hover:bg-green-500/15'
@@ -235,7 +253,7 @@ function reviewShortcutClass(app: Application) {
 
 function hiddenPreviewLabel(app: Application) {
   const stageLabel = STAGE_LABELS[app.stage] ?? app.stage
-  const reviewCount = app.review_summary.review_count
+  const reviewCount = linkedReviewCount(app.review_summary)
   if (reviewCount > 1) return `${stageLabel} · ${reviewCount} 场复盘`
   if (reviewCount === 1) return `${stageLabel} · 1 场复盘`
   return stageLabel
@@ -400,6 +418,7 @@ export default function ApplicationsTable({
   const scheduleMeta = current ? getScheduleMeta(current) : null
   const currentReview = current ? reviewSummaryText(current) : null
   const currentHasReviewTimeline = current ? hasReviewTimeline(current) : false
+  const currentLinkedReviewCount = current ? linkedReviewCount(current.review_summary) : 0
   const stageLabel = current ? STAGE_LABELS[current.stage] ?? current.stage : ''
   const currentIsTerminal = current ? isTerminalStage(current.stage) : false
   const desktopSplitLayout = !compactDetailLayout
@@ -411,7 +430,7 @@ export default function ApplicationsTable({
     ? `已聚焦 1 条 · 当前筛选 ${ordered.length} 条`
     : `${ordered.length} / ${applications.length}`
   const extrasSummary = [
-    `复盘 ${current?.review_summary.review_count ?? 0}`,
+    `复盘 ${currentLinkedReviewCount}`,
     `待办 ${openTodoCount}`,
     currentOffer ? 'Offer 已记录' : null,
   ].filter((item): item is string => Boolean(item)).join(' · ')
@@ -494,8 +513,9 @@ export default function ApplicationsTable({
       onSecondary: () => setExtrasOpen(true),
     }
   })() : null
-  const latestReviewLabel = current?.review_summary.latest_review_at != null
-    ? dayjs.unix(Math.floor(current.review_summary.latest_review_at)).format('MM-DD HH:mm')
+  const latestReviewAt = current ? latestLinkedReviewAt(current.review_summary) : null
+  const latestReviewLabel = latestReviewAt != null
+    ? dayjs.unix(Math.floor(latestReviewAt)).format('MM-DD HH:mm')
     : null
   const standalonePanelClass = isLight ? 'border-bg-hover bg-white' : 'border-white/[0.06] bg-bg-secondary/35'
   const stackedDetailShellClass = isLight
@@ -515,10 +535,10 @@ export default function ApplicationsTable({
     {
       label: '复盘',
       value: currentReview?.label ?? '暂无',
-      hint: current.review_summary.review_count > 1
+      hint: currentLinkedReviewCount > 1
         ? latestReviewLabel ?? '时间线'
-        : current.review_summary.review_count === 1
-          ? latestReviewLabel ?? '最近一场'
+        : currentLinkedReviewCount === 1
+          ? latestReviewLabel ?? (current.review_summary.review_count > 0 ? '最近一场' : '短样本')
           : '未绑定',
       tone: currentReview?.tone ?? 'text-text-secondary',
     },
@@ -629,6 +649,7 @@ export default function ApplicationsTable({
                 const schedule = getScheduleMeta(app)
                 const review = reviewSummaryText(app)
                 const reviewLinked = hasReviewTimeline(app)
+                const linkedCount = linkedReviewCount(app.review_summary)
                 return (
                   <article
                     key={app.id}
@@ -687,7 +708,7 @@ export default function ApplicationsTable({
                           type="button"
                           onClick={() => onOpenReviews(app)}
                           className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${reviewShortcutClass(app)}`}
-                          aria-label={`查看 ${app.company || '该岗位'} 的 ${app.review_summary.review_count} 场复盘`}
+                          aria-label={`查看 ${app.company || '该岗位'} 的 ${linkedCount} 场关联复盘`}
                         >
                           {reviewShortcutLabel(app)}
                         </button>
@@ -709,6 +730,7 @@ export default function ApplicationsTable({
                   const schedule = getScheduleMeta(app)
                   const review = reviewSummaryText(app)
                   const reviewLinked = hasReviewTimeline(app)
+                  const linkedCount = linkedReviewCount(app.review_summary)
                   const appOpenTodoCount = app.todos.filter((todo) => !todo.done).length
                   return (
                     <article
@@ -765,13 +787,13 @@ export default function ApplicationsTable({
                                 onOpenReviews(app)
                               }}
                               className="inline-flex"
-                              aria-label={`查看 ${app.company || '该岗位'} 的 ${app.review_summary.review_count} 场复盘`}
+                              aria-label={`查看 ${app.company || '该岗位'} 的 ${linkedCount} 场关联复盘`}
                             >
                               <DesktopSignalChip
                                 label="复盘"
                                 value={review.label}
                                 tone={review.tone}
-                                actionLabel={app.review_summary.review_count > 1 ? '看时间线' : '看复盘'}
+                                actionLabel={linkedCount > 1 ? '看时间线' : '看复盘'}
                               />
                             </button>
                           ) : (

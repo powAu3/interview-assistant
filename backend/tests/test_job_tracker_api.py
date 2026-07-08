@@ -58,6 +58,21 @@ def test_applications_include_review_summary_and_review_list(tmp_path: Path, mon
         )
     review.end_session(session_id, status="completed", ended_at=time.time())
     review.update_session_summary(session_id, "## 总结\n还不错", [], [], avg_score=7.5)
+    short_session_id = review.create_session(
+        started_at=time.time() + 10,
+        interviewer_enabled=True,
+        candidate_enabled=True,
+        application_id=app_row["id"],
+        title="ACME 截图笔试练习",
+    )
+    review.add_turn(
+        session_id=short_session_id,
+        qa_id="short-qa-1",
+        seq=1,
+        question_text="短样本问题",
+        candidate_answer_text="短样本回答",
+    )
+    review.end_session(short_session_id, status="completed", ended_at=time.time() + 20)
 
     app = FastAPI()
     app.include_router(jobs_router.router, prefix="/api")
@@ -71,8 +86,13 @@ def test_applications_include_review_summary_and_review_list(tmp_path: Path, mon
     assert item["review_summary"]["review_count"] == 1
     assert item["review_summary"]["latest_review_id"] == session_id
     assert item["review_summary"]["latest_avg_score"] == 7.5
+    assert item["review_summary"]["linked_review_count"] == 2
+    assert item["review_summary"]["latest_linked_review_id"] == short_session_id
 
     assert reviews_res.status_code == 200
-    review_item = reviews_res.json()["items"][0]
-    assert review_item["id"] == session_id
+    review_items = reviews_res.json()["items"]
+    assert review_items[0]["id"] == short_session_id
+    assert review_items[0]["auto_sync_eligible"] is False
+    review_item = next(item for item in review_items if item["id"] == session_id)
+    assert review_item["auto_sync_eligible"] is True
     assert review_item["summary_preview"].startswith("## 总结")
