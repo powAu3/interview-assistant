@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional, Any
 import json
+import math
 import os
 
 from core.logger import get_logger
@@ -10,6 +11,29 @@ import shutil
 import threading
 
 logger = get_logger(__name__)
+
+DEFAULT_TEMPERATURE = 0.5
+DEFAULT_MAX_TOKENS = 4096
+
+
+def _finite_number(value: Any, fallback: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(parsed):
+        return fallback
+    return parsed
+
+
+def normalize_llm_temperature(value: Any) -> float:
+    parsed = _finite_number(value, DEFAULT_TEMPERATURE)
+    return max(0.0, min(2.0, parsed))
+
+
+def normalize_llm_max_tokens(value: Any) -> int:
+    parsed = _finite_number(value, DEFAULT_MAX_TOKENS)
+    return max(256, min(32768, int(parsed)))
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILE = os.environ.get("IA_CONFIG_PATH") or os.path.join(_BACKEND_DIR, "config.json")
@@ -167,6 +191,16 @@ class AppConfig(BaseModel):
     review_enabled: bool = False
     review_model_index: int = 0
 
+    @field_validator("temperature", mode="before")
+    @classmethod
+    def _normalize_temperature_field(cls, value: Any) -> float:
+        return normalize_llm_temperature(value)
+
+    @field_validator("max_tokens", mode="before")
+    @classmethod
+    def _normalize_max_tokens_field(cls, value: Any) -> int:
+        return normalize_llm_max_tokens(value)
+
     @model_validator(mode="after")
     def _ensure_valid_models(self):
         if self.stt_provider == "iflytek":
@@ -186,6 +220,8 @@ class AppConfig(BaseModel):
             self.candidate_stt_provider = "whisper"
         if self.candidate_stt_provider in ("doubao", "generic") and not self.candidate_remote_stt_enabled:
             self.candidate_stt_provider = "whisper"
+        self.temperature = normalize_llm_temperature(self.temperature)
+        self.max_tokens = normalize_llm_max_tokens(self.max_tokens)
         self.candidate_context_wait_ms = max(0, min(2000, int(self.candidate_context_wait_ms or 0)))
         self.candidate_context_max_chars = max(100, min(4000, int(self.candidate_context_max_chars or 900)))
         self.candidate_context_min_chars = max(1, min(100, int(self.candidate_context_min_chars or 6)))

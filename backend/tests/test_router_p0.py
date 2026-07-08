@@ -429,6 +429,28 @@ def test_update_config_accepts_screen_capture_max_long_edge_zero(monkeypatch):
     assert seen["d"]["screen_capture_max_long_edge"] == 0
 
 
+def test_update_config_normalizes_generation_params(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_update_config(d):
+        seen["d"] = dict(d)
+
+    async def fake_run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(common_router, "update_config", fake_update_config)
+    monkeypatch.setattr(common_router, "run_in_threadpool", fake_run_in_threadpool)
+    _stub_config_response(monkeypatch)
+
+    body = _Body(temperature=float("nan"), max_tokens=999999)
+
+    result = _run(common_router.api_update_config(body))
+
+    assert result == {"ok": True}
+    assert seen["d"]["temperature"] == 0.5
+    assert seen["d"]["max_tokens"] == 32768
+
+
 def test_update_config_clamps_realtime_voice_runtime_knobs(monkeypatch):
     seen: dict[str, object] = {}
 

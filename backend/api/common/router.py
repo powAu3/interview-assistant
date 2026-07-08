@@ -14,6 +14,7 @@ from core.config import (
     get_config, update_config,
     POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
+    normalize_llm_max_tokens, normalize_llm_temperature,
 )
 from core.env import env_int
 from services.audio import AudioCapture
@@ -315,6 +316,10 @@ async def api_update_config(body: ConfigUpdate):
             )
         if d.get("candidate_stt_provider") in ("doubao", "generic") and not bool(d.get("candidate_remote_stt_enabled", get_config().candidate_remote_stt_enabled)):
             d["candidate_stt_provider"] = "whisper"
+        if "temperature" in d:
+            d["temperature"] = normalize_llm_temperature(d["temperature"])
+        if "max_tokens" in d:
+            d["max_tokens"] = normalize_llm_max_tokens(d["max_tokens"])
         if "candidate_whisper_model" in d:
             d["candidate_whisper_model"] = str(d["candidate_whisper_model"]).strip()
         if "candidate_whisper_language" in d:
