@@ -101,6 +101,14 @@ def test_should_create_review_session():
         candidate_asr_enabled=True,
     ) is False
 
+    # 笔试模式无音频设备也应落入复盘
+    assert review_integration.should_create_review_session(
+        interviewer_device_id=None,
+        candidate_device_id=None,
+        candidate_asr_enabled=False,
+        written_exam_mode=True,
+    ) is True
+
 
 def test_on_assist_start_creates_session():
     """测试 assist 启动时创建 session"""
@@ -132,6 +140,25 @@ def test_on_assist_start_no_session_when_conditions_not_met():
 
     assert session_id is None
     assert review_integration.get_current_review_session_id() is None
+
+
+def test_written_exam_start_creates_session_without_audio_devices():
+    """笔试模式无录音设备时仍创建复盘 session"""
+    session_id = review_integration.on_assist_start(
+        interviewer_device_id=None,
+        candidate_device_id=None,
+        candidate_asr_enabled=False,
+        written_exam_mode=True,
+    )
+
+    assert session_id is not None
+    assert review_integration.get_current_review_session_id() == session_id
+
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["source"] == "written_exam"
+    assert detail["interviewer_capture_enabled"] == 0
+    assert detail["candidate_capture_enabled"] == 0
 
 
 def test_on_assist_stop_saves_turns(monkeypatch):
@@ -210,6 +237,44 @@ def test_on_assist_stop_saves_turns(monkeypatch):
         "verdict": "FAIL",
         "reason": "截图里的第二个样例不通过",
     }
+
+
+def test_written_exam_stop_saves_turns_without_candidate_asr(monkeypatch):
+    """笔试截图答题没有候选人麦克风时也保存到复盘"""
+    monkeypatch.setattr(
+        review_integration, "get_config", lambda: _FakeConfig(review_enabled=False)
+    )
+
+    session_id = review_integration.on_assist_start(
+        interviewer_device_id=None,
+        candidate_device_id=None,
+        candidate_asr_enabled=False,
+        written_exam_mode=True,
+    )
+    assert session_id is not None
+
+    mock_session = Session()
+    mock_session.qa_pairs = [
+        QAPair(
+            id="qa-screen-1",
+            question="截图题：两数之和怎么写？ [📷 附图]",
+            answer="用哈希表一次遍历。",
+            source="server_screen_single",
+            model_name="lite-ark",
+        ),
+    ]
+
+    ended_session_id = review_integration.on_assist_stop(mock_session)
+
+    assert ended_session_id == session_id
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["source"] == "written_exam"
+    assert detail["status"] == "recorded"
+    assert detail["turn_count"] == 1
+    assert detail["turns"][0]["qa_id"] == "qa-screen-1"
+    assert detail["turns"][0]["candidate_answer_text"] == ""
+    assert detail["turns"][0]["reference_answer_text"] == "用哈希表一次遍历。"
 
 
 def test_on_assist_stop_no_session():

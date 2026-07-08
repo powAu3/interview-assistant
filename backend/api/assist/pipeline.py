@@ -930,6 +930,7 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
         interviewer_device_id=device_id,
         candidate_device_id=review_candidate_device_id,
         candidate_asr_enabled=bool(getattr(cfg, "candidate_asr_enabled", False)),
+        written_exam_mode=bool(getattr(cfg, "written_exam_mode", False)),
     )
 
 

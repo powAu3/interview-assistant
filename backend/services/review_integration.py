@@ -20,6 +20,7 @@ def should_create_review_session(
     interviewer_device_id: Optional[int],
     candidate_device_id: Optional[int],
     candidate_asr_enabled: bool,
+    written_exam_mode: bool = False,
 ) -> bool:
     """
     判断是否应该创建 review session。
@@ -28,12 +29,17 @@ def should_create_review_session(
     配齐就创建并落盘 QA turns, 后续是否自动跑 LLM 复盘由 on_assist_stop 按
     review_enabled 决定 (关闭时置 recorded 状态, 可手动触发)。
 
-    仅当以下条件全部满足才创建:
+    普通语音面试仅当以下条件全部满足才创建:
     1. interviewer 音频设备有效
     2. candidate mic 有效
     3. candidate ASR 开启
     4. 两个设备不同
+
+    笔试模式没有 interviewer 音频设备, 但仍会产生截图题目和答案, 也需要落入
+    面试复盘, 因此 written_exam_mode=True 时允许创建无音频采集的 session。
     """
+    if written_exam_mode:
+        return True
     if interviewer_device_id is None:
         return False
     if candidate_device_id is None:
@@ -49,6 +55,7 @@ def on_assist_start(
     interviewer_device_id: Optional[int],
     candidate_device_id: Optional[int],
     candidate_asr_enabled: bool,
+    written_exam_mode: bool = False,
 ) -> Optional[int]:
     """
     Assist 启动时调用，创建 review session
@@ -57,7 +64,10 @@ def on_assist_start(
     global _current_review_session_id
 
     if not should_create_review_session(
-        interviewer_device_id, candidate_device_id, candidate_asr_enabled
+        interviewer_device_id,
+        candidate_device_id,
+        candidate_asr_enabled,
+        written_exam_mode=written_exam_mode,
     ):
         logger.info("Review session not created: conditions not met")
         return None
@@ -65,8 +75,13 @@ def on_assist_start(
     try:
         session_id = review.create_session(
             started_at=time.time(),
-            interviewer_enabled=True,
-            candidate_enabled=True,
+            interviewer_enabled=interviewer_device_id is not None,
+            candidate_enabled=(
+                candidate_device_id is not None
+                and candidate_asr_enabled
+                and candidate_device_id != interviewer_device_id
+            ),
+            source="written_exam" if written_exam_mode else "assist",
         )
         _current_review_session_id = session_id
         logger.info("Review session created: session_id=%d", session_id)
