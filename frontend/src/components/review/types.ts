@@ -81,15 +81,27 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
-function parseNumber(value: unknown, fallback = 0): number {
+function finiteNumber(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string' && value.trim() === '') return null
   const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseNumber(value: unknown, fallback = 0): number {
+  return finiteNumber(value) ?? fallback
 }
 
 function parseNullableNumber(value: unknown): number | null {
-  if (value == null) return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  return finiteNumber(value)
+}
+
+function parseNonNegativeInteger(value: unknown, fallback = 0): number {
+  return Math.max(0, Math.floor(parseNumber(value, fallback)))
+}
+
+function parsePositiveInteger(value: unknown, fallback = 1): number {
+  return Math.max(1, Math.floor(parseNumber(value, fallback)))
 }
 
 function parseOptionalBoolean(value: unknown): boolean | undefined {
@@ -146,7 +158,7 @@ export function parseReviewTurn(raw: Record<string, unknown>): ReviewTurn {
     original_candidate_answer_text: raw.original_candidate_answer_text != null ? String(raw.original_candidate_answer_text) : null,
     reference_answer_text: raw.reference_answer_text != null ? String(raw.reference_answer_text) : null,
     code_text: raw.code_text != null ? String(raw.code_text) : null,
-    duration_ms: parseNumber(raw.duration_ms),
+    duration_ms: parseNonNegativeInteger(raw.duration_ms),
     is_partial: parseBoolean(raw.is_partial),
     analysis_status: ['pending', 'analyzing', 'completed', 'failed'].includes(String(raw.analysis_status ?? ''))
       ? String(raw.analysis_status) as ReviewTurn['analysis_status']
@@ -177,7 +189,7 @@ export function parseReviewSession(raw: Record<string, unknown>): ReviewSession 
     resume_snapshot: raw.resume_snapshot != null ? String(raw.resume_snapshot) : null,
     interviewer_capture_enabled: parseBoolean(raw.interviewer_capture_enabled),
     candidate_capture_enabled: parseBoolean(raw.candidate_capture_enabled),
-    turn_count: parseNumber(raw.turn_count),
+    turn_count: parseNonNegativeInteger(raw.turn_count),
     avg_score: parseReviewScore(raw.avg_score),
     summary_markdown: raw.summary_markdown != null ? String(raw.summary_markdown) : null,
     strong_points: parseStringList(raw.strong_points),
@@ -203,9 +215,9 @@ export function parseReviewSessionsResponse(raw: unknown): ReviewSessionsRespons
     ? record.items.map((item) => parseReviewSession(asRecord(item)))
     : []
   return {
-    total: parseNumber(record.total, items.length),
-    page: parseNumber(record.page, 1),
-    page_size: parseNumber(record.page_size, items.length),
+    total: parseNonNegativeInteger(record.total, items.length),
+    page: parsePositiveInteger(record.page, 1),
+    page_size: parsePositiveInteger(record.page_size, Math.max(1, items.length)),
     items,
   }
 }

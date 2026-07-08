@@ -75,4 +75,46 @@ describe('review types', () => {
     expect(detail.turns[0].is_partial).toBe(false)
     expect(detail.turns[0].scorecard).toEqual({ 准确性: '8.0分' })
   })
+
+  it('treats blank nullable numbers as missing and clamps counters', () => {
+    const detail = parseReviewSessionDetail({
+      id: '10',
+      status: 'completed',
+      started_at: '1710000000',
+      ended_at: '',
+      source: 'assist',
+      application_id: '',
+      application: {
+        id: '3',
+        company: 'Acme',
+        updated_at: '',
+      },
+      turn_count: '-4',
+      avg_score: '无法评分',
+      created_at: 1710000000,
+      updated_at: 1710003600,
+      turns: [{
+        id: 101,
+        session_id: 10,
+        seq: 1,
+        duration_ms: '-1200',
+      }],
+    })
+
+    expect(detail.ended_at).toBeNull()
+    expect(detail.application_id).toBeNull()
+    expect(detail.application?.updated_at).toBeNull()
+    expect(detail.turn_count).toBe(0)
+    expect(detail.turns[0].duration_ms).toBe(0)
+
+    const resp = parseReviewSessionsResponse({
+      total: '-5',
+      page: '-2',
+      page_size: '0',
+      items: [],
+    })
+    expect(resp.total).toBe(0)
+    expect(resp.page).toBe(1)
+    expect(resp.page_size).toBe(1)
+  })
 })
