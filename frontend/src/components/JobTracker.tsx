@@ -6,6 +6,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import dayjs from 'dayjs'
@@ -274,6 +275,7 @@ export default function JobTracker() {
   const [reviewItems, setReviewItems] = useState<ApplicationReviewItem[]>([])
   const [reviewLoading, setReviewLoading] = useState(false)
   const [reviewModalHighlightId, setReviewModalHighlightId] = useState<number | null>(null)
+  const reviewRequestSeqRef = useRef(0)
   const [showSecondaryFilters, setShowSecondaryFilters] = useState(false)
   const isCompactLayout = useCompactLayout()
   const isNarrowDetailLayout = useCompactLayout(1024)
@@ -494,12 +496,15 @@ export default function JobTracker() {
 
   const openReviewsModal = useCallback(
     async (app: Application, highlightedReviewId: number | null = null) => {
+      const requestSeq = reviewRequestSeqRef.current + 1
+      reviewRequestSeqRef.current = requestSeq
       setReviewModalApp(app)
       setReviewModalHighlightId(highlightedReviewId)
       setReviewItems([])
       setReviewLoading(true)
       try {
         const res = await api.jobTrackerApplicationReviews(app.id)
+        if (reviewRequestSeqRef.current !== requestSeq) return
         setReviewItems((res.items as Record<string, unknown>[]).map((item) => ({
           id: Number(item.id),
           status: String(item.status ?? ''),
@@ -514,9 +519,12 @@ export default function JobTracker() {
           updated_at: Number(item.updated_at ?? 0),
         })))
       } catch (e) {
+        if (reviewRequestSeqRef.current !== requestSeq) return
         setToastMessage(e instanceof Error ? e.message : '加载关联复盘失败')
       } finally {
-        setReviewLoading(false)
+        if (reviewRequestSeqRef.current === requestSeq) {
+          setReviewLoading(false)
+        }
       }
     },
     [setToastMessage],
@@ -1021,8 +1029,11 @@ export default function JobTracker() {
           loading={reviewLoading}
           highlightedReviewId={reviewModalHighlightId}
           onClose={() => {
+            reviewRequestSeqRef.current += 1
             setReviewModalApp(null)
             setReviewModalHighlightId(null)
+            setReviewItems([])
+            setReviewLoading(false)
           }}
           onViewDetail={openReviewDetail}
         />

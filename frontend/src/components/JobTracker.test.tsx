@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import JobTracker from './JobTracker'
 import { useInterviewStore } from '@/stores/configStore'
@@ -43,6 +43,16 @@ function setViewportWidth(width: number) {
     value: width,
   })
   window.dispatchEvent(new Event('resize'))
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
 }
 
 describe('JobTracker', () => {
@@ -261,6 +271,114 @@ describe('JobTracker', () => {
     expect(useUiPrefsStore.getState().appMode).toBe('review')
     expect(useUiPrefsStore.getState().reviewDeepLinkSessionId).toBe(11)
     expect((useInterviewStore.getState().setToastMessage as any)).toHaveBeenCalledWith('已打开 Acme · Frontend 的复盘详情')
+  })
+
+  it('keeps the latest review timeline when overlapping review requests finish out of order', async () => {
+    apiMock.jobTrackerApplications.mockResolvedValueOnce({
+      items: [
+        {
+          id: 1,
+          company: 'Acme',
+          position: 'Frontend',
+          city: 'Shanghai',
+          notes: '',
+          stage: 'interview1',
+          updated_at: 1710000000,
+          created_at: 1710000000,
+          applied_at: null,
+          next_followup_at: null,
+          interviewer_info: '',
+          feedback: '',
+          todos: [],
+          sort_order: 0,
+          review_summary: {
+            review_count: 1,
+            latest_review_id: 11,
+            latest_avg_score: 7.1,
+            latest_review_at: 1710003600,
+            latest_status: 'completed',
+          },
+        },
+        {
+          id: 2,
+          company: 'MiniMax',
+          position: 'AI Product Engineer',
+          city: 'Shanghai',
+          notes: '',
+          stage: 'interview2',
+          updated_at: 1710007200,
+          created_at: 1710007200,
+          applied_at: 1710007200,
+          next_followup_at: 1710093600,
+          interviewer_info: '',
+          feedback: '',
+          todos: [],
+          sort_order: 0,
+          review_summary: {
+            review_count: 1,
+            latest_review_id: 22,
+            latest_avg_score: 8.2,
+            latest_review_at: 1710007200,
+            latest_status: 'completed',
+          },
+        },
+      ],
+    })
+    const acmeReviews = deferred<{ items: Record<string, unknown>[] }>()
+    const minimaxReviews = deferred<{ items: Record<string, unknown>[] }>()
+    apiMock.jobTrackerApplicationReviews
+      .mockReturnValueOnce(acmeReviews.promise)
+      .mockReturnValueOnce(minimaxReviews.promise)
+
+    render(<JobTracker />)
+
+    await waitFor(() => expect(screen.getAllByText('MiniMax').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 Acme 的 1 场复盘/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 MiniMax 的 1 场复盘/ })[0])
+
+    await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(2))
+    await act(async () => {
+      minimaxReviews.resolve({
+        items: [{
+          id: 22,
+          status: 'completed',
+          started_at: 1710003600,
+          ended_at: 1710007200,
+          title: 'MiniMax 复盘',
+          company: 'MiniMax',
+          role: 'AI Product Engineer',
+          turn_count: 6,
+          avg_score: 8.2,
+          summary_preview: '项目拆解和追问承接更清楚。',
+          updated_at: 1710007200,
+        }],
+      })
+    })
+
+    expect(await screen.findByText('MiniMax 复盘')).toBeInTheDocument()
+    expect(screen.getByText(/项目拆解和追问承接更清楚/)).toBeInTheDocument()
+
+    await act(async () => {
+      acmeReviews.resolve({
+        items: [{
+          id: 11,
+          status: 'completed',
+          started_at: 1710000000,
+          ended_at: 1710003600,
+          title: 'Acme 复盘',
+          company: 'Acme',
+          role: 'Frontend',
+          turn_count: 4,
+          avg_score: 7.1,
+          summary_preview: '这是较慢返回的旧请求。',
+          updated_at: 1710003600,
+        }],
+      })
+    })
+
+    expect(screen.getByText('MiniMax 复盘')).toBeInTheDocument()
+    expect(screen.queryByText('Acme 复盘')).not.toBeInTheDocument()
+    expect(screen.queryByText(/较慢返回的旧请求/)).not.toBeInTheDocument()
   })
 
   it('surfaces review timeline access in the selected application summary', async () => {
