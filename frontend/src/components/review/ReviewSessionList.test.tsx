@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewSessionList from './ReviewSessionList'
 import { useInterviewStore } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
@@ -18,7 +18,18 @@ vi.mock('../../lib/api', () => ({
 }))
 
 describe('ReviewSessionList', () => {
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
+    apiMock.reviewSessions.mockReset()
+    apiMock.updateConfig.mockReset()
+    apiMock.reviewTriggerAnalysis.mockReset()
+    apiMock.reviewCreateManual.mockReset()
+    apiMock.reviewAsrCorrectionTest.mockReset()
+
     useInterviewStore.setState({
       config: {
         review_enabled: false,
@@ -178,5 +189,68 @@ describe('ReviewSessionList', () => {
     fireEvent.click(screen.getByRole('button', { name: '收起配置' }))
     expect(screen.getByRole('button', { name: '配置' })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('复盘配置')).not.toBeInTheDocument()
+  })
+
+  it('quietly refreshes analyzing sessions so completed analysis appears without manual refresh', async () => {
+    vi.useFakeTimers()
+    apiMock.reviewSessions
+      .mockResolvedValueOnce({
+        total: 1,
+        page: 1,
+        page_size: 20,
+        items: [
+          {
+            id: 40,
+            status: 'analyzing',
+            started_at: 1710110000,
+            ended_at: 1710112100,
+            source: 'assist',
+            title: '字节一面',
+            company: '字节跳动',
+            role: '后端开发',
+            turn_count: 8,
+            avg_score: null,
+            application_id: null,
+            application: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        total: 1,
+        page: 1,
+        page_size: 20,
+        items: [
+          {
+            id: 40,
+            status: 'completed',
+            started_at: 1710110000,
+            ended_at: 1710112100,
+            source: 'assist',
+            title: '字节一面',
+            company: '字节跳动',
+            role: '后端开发',
+            turn_count: 8,
+            avg_score: 8.1,
+            summary_markdown: '复盘已生成，项目回答更聚焦。',
+            application_id: null,
+            application: null,
+          },
+        ],
+      })
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByText('字节一面')).toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7000)
+    })
+
+    expect(apiMock.reviewSessions).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('复盘已生成，项目回答更聚焦。')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '已完成' })).toBeInTheDocument()
   })
 })

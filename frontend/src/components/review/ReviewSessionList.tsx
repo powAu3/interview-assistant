@@ -48,6 +48,7 @@ const STATUS_COLORS: Record<ReviewSession['status'], string> = {
 }
 
 const FIELD_CLASS = 'w-full rounded-lg border border-bg-hover bg-bg-tertiary px-3 py-2 text-xs text-text-primary placeholder-text-muted outline-none transition focus:border-accent-blue/60 focus:ring-2 focus:ring-accent-blue/10 disabled:cursor-not-allowed disabled:opacity-50'
+const REVIEW_LIST_POLL_MS = 7000
 
 type AsrSelfTestResult = {
   ok: boolean
@@ -71,6 +72,10 @@ type SessionCluster = {
   key: string
   application: ReviewSession['application'] | null
   items: ReviewSession[]
+}
+
+function sessionHasGeneratedAnalysis(session: ReviewSession) {
+  return Boolean(session.summary_markdown) || session.avg_score != null
 }
 
 interface Props {
@@ -99,18 +104,15 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const reviewModelIndex = config?.review_model_index ?? 0
   const models = config?.models ?? []
 
-  const hasGeneratedAnalysis = (session: ReviewSession) =>
-    Boolean(session.summary_markdown) || session.avg_score != null
-
-  const loadSessions = useCallback(async (p: number) => {
-    setLoading(true)
+  const loadSessions = useCallback(async (p: number, options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true)
     try {
       const resp = await api.reviewSessions(p, pageSize)
       setData(resp)
     } catch (err) {
       console.error('Failed to load review sessions:', err)
     } finally {
-      setLoading(false)
+      if (!options?.silent) setLoading(false)
     }
   }, [])
 
@@ -193,8 +195,9 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   }, [setAppMode, setJobTrackerDeepLink])
 
   const sessions = data?.items ?? []
+  const hasAnalyzingSession = sessions.some((session) => session.status === 'analyzing')
   const total = data?.total ?? 0
-  const groups = useMemo(() => buildSessionGroups(sessions, hasGeneratedAnalysis), [sessions])
+  const groups = useMemo(() => buildSessionGroups(sessions, sessionHasGeneratedAnalysis), [sessions])
   const hasSessions = total > 0
   const linkedReviewCounts = useMemo(() => {
     const counts = new Map<number, number>()
@@ -268,6 +271,15 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const reviewWorkspaceShellClass = isLight
     ? 'border-bg-hover bg-white'
     : 'border-white/[0.08] bg-bg-secondary/42'
+
+  useEffect(() => {
+    if (!hasAnalyzingSession) return undefined
+
+    const timer = window.setInterval(() => {
+      void loadSessions(page, { silent: true })
+    }, REVIEW_LIST_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [hasAnalyzingSession, loadSessions, page])
 
   if (loading && !data) {
     return (
@@ -374,7 +386,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
                 onViewDetail={onViewDetail}
                 onOpenApplication={handleOpenApplication}
                 onTriggerAnalysis={handleTriggerAnalysis}
-                hasGeneratedAnalysis={hasGeneratedAnalysis}
+                hasGeneratedAnalysis={sessionHasGeneratedAnalysis}
               />
 
               {total > pageSize && (

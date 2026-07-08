@@ -52,6 +52,8 @@ const REVIEW_STATUS_META: Record<ReviewSessionDetail['status'], { label: string 
   },
 }
 
+const REVIEW_ANALYSIS_POLL_MS = 5000
+
 export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -68,11 +70,13 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const setJobTrackerDeepLink = useUiPrefsStore((s) => s.setJobTrackerDeepLink)
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       setLoading(true)
       setError(null)
       try {
         const data = await api.reviewSessionDetail(sessionId)
+        if (cancelled) return
         setDetail(data)
         setEditForm({
           title: data.title || '',
@@ -83,13 +87,43 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
           setExpandedTurns(new Set([data.turns[0].id]))
         }
       } catch (err) {
+        if (cancelled) return
         setError(getErrorMessage(err, '加载详情失败'))
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
+    return () => {
+      cancelled = true
+    }
   }, [sessionId])
+
+  useEffect(() => {
+    if (detail?.status !== 'analyzing') return undefined
+
+    let cancelled = false
+    const pollDetail = async () => {
+      try {
+        const data = await api.reviewSessionDetail(sessionId)
+        if (cancelled) return
+        setDetail(data)
+        if (data.status === 'completed') {
+          setInlineNotice({ tone: 'success', message: '复盘分析已完成' })
+        } else if (data.status === 'analysis_failed') {
+          setInlineNotice({ tone: 'error', message: '复盘分析失败，可重试生成' })
+        }
+      } catch {
+        // Keep the existing detail visible; the manual refresh/trigger actions remain available.
+      }
+    }
+
+    const timer = window.setInterval(pollDetail, REVIEW_ANALYSIS_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [detail?.status, sessionId])
 
   useEffect(() => {
     let cancelled = false

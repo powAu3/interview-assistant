@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReviewSessionDetail from './ReviewSessionDetail'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
@@ -65,6 +65,11 @@ const application = {
 }
 
 describe('ReviewSessionDetail', () => {
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
     apiMock.reviewSessionDetail.mockReset()
     apiMock.reviewUpdateSession.mockReset()
@@ -273,5 +278,39 @@ describe('ReviewSessionDetail', () => {
     expect(screen.queryByText('未绑定')).not.toBeInTheDocument()
     expect(screen.getByText('请讲讲你最熟悉的项目。')).toBeInTheDocument()
     expect(screen.getByText('短记录，已展开。')).toBeInTheDocument()
+  })
+
+  it('refreshes an analyzing review detail until the generated analysis is ready', async () => {
+    vi.useFakeTimers()
+    apiMock.reviewSessionDetail
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        status: 'analyzing',
+        avg_score: null,
+        summary_markdown: null,
+        strong_points: [],
+        weak_points: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        status: 'completed',
+        avg_score: 8.2,
+        summary_markdown: '自动生成的复盘已经完成。',
+      })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getAllByText('分析中').length).toBeGreaterThan(0)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+
+    expect(apiMock.reviewSessionDetail).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('复盘分析已完成')).toBeInTheDocument()
+    expect(screen.getByText('自动生成的复盘已经完成。')).toBeInTheDocument()
   })
 })
