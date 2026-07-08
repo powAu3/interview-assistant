@@ -26,7 +26,6 @@ import {
   type SaveState,
 } from './shared'
 import SttGuideCard from './SttGuideCard'
-import BetaBadge from '@/components/kb/BetaBadge'
 
 function clampNumberInput(value: unknown, min: number, max: number, fallback: number): number {
   const parsed = Number(value)
@@ -421,14 +420,9 @@ export default function SpeechTab() {
       </GradientCard>
 
       <Section
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            可选辅助 ASR（我的回答）
-            <BetaBadge title="我的麦克风 ASR — Beta" className="scale-90 origin-left" />
-          </span>
-        }
+        title="可选辅助 ASR（我的回答）"
         icon={<Mic className="w-3.5 h-3.5" />}
-        keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本 beta"
+        keywords="candidate mic microphone asr 候选人 麦克风 真实回答 追问上下文 成本"
       >
         <GradientCard className="p-4 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

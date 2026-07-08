@@ -77,7 +77,7 @@ describe('SpeechTab', () => {
     expect(screen.getByText('实时辅助语音链路')).toBeInTheDocument()
     expect(screen.getByText('主链路 ASR（面试官 / 会议音频）')).toBeInTheDocument()
     expect(screen.getByText('可选辅助 ASR（我的回答）')).toBeInTheDocument()
-    expect(screen.getByTitle('我的麦克风 ASR — Beta')).toBeInTheDocument()
+    expect(screen.queryByText(/Beta/i)).not.toBeInTheDocument()
     expect(screen.getByText('我的回答记录（麦克风）')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: '我的回答记录（麦克风）' })).toHaveAttribute('aria-checked', 'false')
     expect(screen.getAllByText(/不会触发自动答题/).length).toBeGreaterThan(0)
