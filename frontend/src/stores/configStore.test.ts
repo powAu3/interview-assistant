@@ -79,6 +79,49 @@ describe('configStore answer streaming', () => {
       },
     ])
   })
+
+  it('keeps duplicate answer_start events idempotent', async () => {
+    const store = useInterviewStore.getState()
+
+    store.startAnswer('qa-dup', '介绍 Redis', { source: 'interviewer', modelName: 'Lite' })
+    store.appendAnswerChunk('qa-dup', '已经生成')
+    await vi.advanceTimersByTimeAsync(80)
+
+    store.startAnswer('qa-dup', '介绍 Redis 持久化', { modelName: 'Pro' })
+
+    const state = useInterviewStore.getState()
+    expect(state.currentStreamingId).toBe('qa-dup')
+    expect(state.streamingIds).toEqual(['qa-dup'])
+    expect(state.qaPairs).toHaveLength(1)
+    expect(state.qaPairs[0]).toMatchObject({
+      id: 'qa-dup',
+      question: '介绍 Redis 持久化',
+      answer: '已经生成',
+      questionSource: 'interviewer',
+      modelLabel: 'Pro',
+      status: 'streaming',
+    })
+  })
+
+  it('ignores duplicate answer_start events after completion', () => {
+    const store = useInterviewStore.getState()
+
+    store.startAnswer('qa-done', '介绍 Redis')
+    store.finalizeAnswer('qa-done', '介绍 Redis', '最终答案')
+    store.startAnswer('qa-done', '迟到 start', { source: 'stale', modelName: 'Stale' })
+
+    const state = useInterviewStore.getState()
+    expect(state.currentStreamingId).toBeNull()
+    expect(state.streamingIds).toEqual([])
+    expect(state.qaPairs).toHaveLength(1)
+    expect(state.qaPairs[0]).toMatchObject({
+      id: 'qa-done',
+      question: '介绍 Redis',
+      answer: '最终答案',
+      modelLabel: undefined,
+      status: 'done',
+    })
+  })
 })
 
 describe('configStore toast queue', () => {

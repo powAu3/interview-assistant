@@ -137,24 +137,51 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
   }),
 
   startAnswer: (id, question, meta) =>
-    set((s) => ({
-      currentStreamingId: id,
-      streamingIds: [...s.streamingIds, id],
-      qaPairs: [
-        ...s.qaPairs,
-        {
-          id,
-          question,
-          answer: '',
-          thinkContent: '',
-          isThinking: false,
-          timestamp: Date.now() / 1000,
-          questionSource: meta?.source,
-          modelLabel: meta?.modelName,
-          status: 'streaming' as QAStatus,
-        },
-      ],
-    })),
+    set((s) => {
+      const existing = s.qaPairs.find((qa) => qa.id === id)
+      if (existing) {
+        if (existing.status !== 'streaming') {
+          return {
+            currentStreamingId: s.currentStreamingId,
+            streamingIds: s.streamingIds,
+            qaPairs: s.qaPairs,
+          }
+        }
+        const streamingIds = s.streamingIds.includes(id) ? s.streamingIds : [...s.streamingIds, id]
+        return {
+          currentStreamingId: id,
+          streamingIds,
+          qaPairs: s.qaPairs.map((qa) =>
+            qa.id === id
+              ? {
+                  ...qa,
+                  question,
+                  questionSource: meta?.source ?? qa.questionSource,
+                  modelLabel: meta?.modelName ?? qa.modelLabel,
+                }
+              : qa,
+          ),
+        }
+      }
+      return {
+        currentStreamingId: id,
+        streamingIds: [...s.streamingIds, id],
+        qaPairs: [
+          ...s.qaPairs,
+          {
+            id,
+            question,
+            answer: '',
+            thinkContent: '',
+            isThinking: false,
+            timestamp: Date.now() / 1000,
+            questionSource: meta?.source,
+            modelLabel: meta?.modelName,
+            status: 'streaming' as QAStatus,
+          },
+        ],
+      }
+    }),
 
   appendThinkChunk: (id, chunk) => {
     const buf = _chunkBuffer.get(id) ?? { answer: '', think: '' }
