@@ -125,6 +125,50 @@ describe('SpeechTab', () => {
     expect(screen.getByText('下一题携带真实口述')).toBeInTheDocument()
   })
 
+  it('warns when candidate cloud ASR is selected without matching credentials', () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+        candidate_asr_enabled: true,
+        candidate_stt_provider: 'generic',
+        generic_stt_api_base_url: '',
+        generic_stt_api_key: '',
+        generic_stt_model: '',
+      },
+    }) as any)
+
+    render(<SpeechTab />)
+
+    expect(screen.getByDisplayValue('通用 ASR（云端，会增加成本）')).toBeInTheDocument()
+    expect(screen.getByText(/已选择 通用 ASR 麦克风 ASR，但上方 通用 ASR 凭据还没补全/)).toBeInTheDocument()
+    expect(screen.getByText(/请切到对应主链路 ASR 填写凭据并保存，或改回 Whisper/)).toBeInTheDocument()
+  })
+
+  it('does not save candidate remote STT as enabled while candidate ASR is off', async () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+        candidate_asr_enabled: false,
+        candidate_stt_provider: 'generic',
+        candidate_remote_stt_enabled: true,
+      },
+    }) as any)
+
+    render(<SpeechTab />)
+
+    fireEvent.click(screen.getByText('保存语音配置'))
+
+    await waitFor(() => {
+      expect(updateConfigAndRefresh).toHaveBeenCalledWith(expect.objectContaining({
+        candidate_asr_enabled: false,
+        candidate_stt_provider: 'generic',
+        candidate_remote_stt_enabled: false,
+      }))
+    })
+  })
+
   it('marks speech settings dirty and clears after saving', async () => {
     useInterviewStore.setState((state) => ({
       config: {

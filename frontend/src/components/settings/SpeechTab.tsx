@@ -121,11 +121,13 @@ export default function SpeechTab() {
     setSaveState('saving')
     setSaveError(null)
     try {
-      await updateConfigAndRefresh({
+      const savedForm = {
         ...form,
-        candidate_remote_stt_enabled: form.candidate_stt_provider !== 'whisper',
-      })
-      markSaved(form)
+        candidate_remote_stt_enabled: form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper',
+      }
+      await updateConfigAndRefresh(savedForm)
+      setForm(savedForm)
+      markSaved(savedForm)
       setSaveState('saved')
       useInterviewStore.getState().setToastMessage('语音配置已保存')
       return true
@@ -187,6 +189,9 @@ export default function SpeechTab() {
     : form.candidate_stt_provider === 'doubao'
       ? '豆包云端'
       : '通用云端'
+  const candidateRemoteSelected = form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper'
+  const candidateRemoteCredentialReady = !candidateRemoteSelected || credentialConfigured(form.candidate_stt_provider)
+  const candidateRemoteProviderLabel = providerMeta[form.candidate_stt_provider]?.label ?? form.candidate_stt_provider
   const candidateContextActive = form.candidate_asr_enabled && form.candidate_context_enabled
   const candidateUsageLabel = !form.candidate_asr_enabled
     ? '不读取麦克风，不写入复盘，追问按旧逻辑'
@@ -512,8 +517,14 @@ export default function SpeechTab() {
             </Field>
           </div>
           {form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper' && (
-            <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-text-secondary">
-              已选择云端麦克风 ASR：我的麦克风转写会调用对应云端接口并产生额外成本。切回 Whisper 即恢复本地免费识别。
+            <div className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${
+              candidateRemoteCredentialReady
+                ? 'border-amber-400/25 bg-amber-500/10 text-text-secondary'
+                : 'border-red-400/30 bg-red-500/10 text-red-200'
+            }`}>
+              {candidateRemoteCredentialReady
+                ? `已选择 ${candidateRemoteProviderLabel} 麦克风 ASR：我的麦克风转写会复用上方云端 ASR 凭据并产生额外成本。切回 Whisper 即恢复本地免费识别。`
+                : `已选择 ${candidateRemoteProviderLabel} 麦克风 ASR，但上方 ${candidateRemoteProviderLabel} 凭据还没补全；启动面试后我的回答记录可能无法转写。请切到对应主链路 ASR 填写凭据并保存，或改回 Whisper。`}
             </div>
           )}
 
