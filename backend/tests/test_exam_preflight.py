@@ -111,8 +111,12 @@ def test_run_exam_preflight_broadcasts_steps_and_status(monkeypatch: pytest.Monk
     assert status["qa_id"] == "qa-preflight"
     assert status["steps"]["submit"]["status"] == "pass"
     assert status["steps"]["llm"]["status"] == "pass"
+    assert status["steps"]["ws"]["status"] == "pass"
+    assert status["steps"]["ui"]["status"] == "pass"
     assert "def two_sum" in status["steps"]["llm"]["answer"]
     assert any(event.get("type") == "exam_preflight_step" for event in events)
+    assert any(event.get("step") == "ws" and event.get("status") == "pass" for event in events)
+    assert any(event.get("step") == "ui" and event.get("status") == "pass" for event in events)
     assert any(event.get("step") == "done" for event in events)
 
 
@@ -155,4 +159,6 @@ def test_run_exam_preflight_keeps_pass_status_when_worker_returns_fast(monkeypat
     assert status["qa_id"] == "qa-fast"
     assert status["steps"]["submit"]["status"] == "pass"
     assert status["steps"]["llm"]["status"] == "pass"
+    assert status["steps"]["ws"]["status"] == "pass"
+    assert status["steps"]["ui"]["status"] == "pass"
     assert status["steps"]["done"]["status"] == "done"

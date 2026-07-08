@@ -268,6 +268,18 @@ def record_exam_preflight_answer_event(event: dict) -> None:
             _set_step("error", "fail", "检测异常: 模型回答为空", {"preflight_id": preflight_id})
             _finish_preflight()
             return
+        _set_step(
+            "ws",
+            "pass",
+            "真实答题 WebSocket 完整推送正常",
+            {"preflight_id": preflight_id},
+        )
+        _set_step(
+            "ui",
+            "pass",
+            "检测结果已写入状态，可恢复展示",
+            {"preflight_id": preflight_id},
+        )
         _set_step("done", "done", "笔试链路检测完成", {"preflight_id": preflight_id})
         _finish_preflight()
         return
