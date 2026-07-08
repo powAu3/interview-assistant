@@ -1,6 +1,6 @@
 """服务端截图审题 self-verify Agent (P2-agent-vision)。
 
-主流程跑完后,异步用同一张截图 + 已生成答案再问一次视觉模型:
+主流程跑完后,异步用同一批截图 + 已生成答案再问一次视觉模型:
 "该解法是否能通过题面给出的样例输入 / 约束?"
 模型返回 JSON 判定 + 简短理由,我们把结果广播给前端,
 让用户在 UI 上看到「自检通过 / 自检失败」的可信度提示,
@@ -25,6 +25,8 @@ _VERIFY_SEMAPHORE = threading.BoundedSemaphore(4)
 
 
 _VERIFY_PROMPT = """你是严谨的代码评审员。下面是一道编程题(以截图形式给出)以及一位候选人提交的解答。
+
+{image_note}
 
 请判断:
 1. 解答的算法思路是否能正确处理图中题面的所有样例输入与边界约束?
@@ -105,6 +107,18 @@ def _normalize_image_data_urls(image_data_url: Optional[str | Sequence[str]]) ->
     return [_normalize_image_data_url(item) for item in candidates if str(item or "").strip()]
 
 
+def _build_verify_prompt(answer: str, image_count: int) -> str:
+    if image_count > 1:
+        image_note = (
+            f"本次共有 {image_count} 张连续截图，请按提交顺序合并理解题面。"
+            "后续截图可能包含补充约束、失败用例、运行报错、隐藏条件或样例输出，"
+            "这些信息必须参与判定；如果后续截图推翻前一版理解，以后续截图为准。"
+        )
+    else:
+        image_note = "本次共有 1 张截图，请以截图中可见的题面、样例和约束为准。"
+    return _VERIFY_PROMPT.format(answer=answer, image_note=image_note)
+
+
 def _verify_blocking(answer: str, image_data_url: str | Sequence[str]) -> dict:
     """同步执行一次 self-verify。失败时返回 verdict=UNKNOWN。"""
     model_cfg = _pick_vision_model_cfg()
@@ -116,7 +130,7 @@ def _verify_blocking(answer: str, image_data_url: str | Sequence[str]) -> dict:
     client = get_client_for_model(model_cfg)
     images = _normalize_image_data_urls(image_data_url)
     user_content = [
-        {"type": "text", "text": _VERIFY_PROMPT.format(answer=answer)},
+        {"type": "text", "text": _build_verify_prompt(answer, len(images))},
     ]
     for image_url in images:
         user_content.append({"type": "image_url", "image_url": {"url": image_url}})

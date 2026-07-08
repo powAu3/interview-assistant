@@ -49,7 +49,18 @@ def test_verify_blocking_sends_all_images_to_vision_model(monkeypatch):
     content = captured["messages"][0]["content"]
     assert content[0]["type"] == "text"
     assert "print('ok')" in content[0]["text"]
+    assert "共有 2 张连续截图" in content[0]["text"]
+    assert "按提交顺序合并理解题面" in content[0]["text"]
+    assert "以后续截图为准" in content[0]["text"]
     assert [part["image_url"]["url"] for part in content[1:]] == [
         "data:image/png;base64,a",
         "data:image/png;base64,Yg==",
     ]
+
+
+def test_build_verify_prompt_mentions_single_screenshot_scope():
+    prompt = vision_verify._build_verify_prompt("answer", 1)
+
+    assert "共有 1 张截图" in prompt
+    assert "截图中可见的题面、样例和约束" in prompt
+    assert "连续截图" not in prompt
