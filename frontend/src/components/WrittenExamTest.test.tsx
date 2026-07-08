@@ -14,10 +14,13 @@ vi.mock('@/lib/backendUrl', () => ({ buildWsUrl: () => 'ws://example.test/ws' })
 class FakeWebSocket {
   static instances: FakeWebSocket[] = []
   onmessage: ((event: MessageEvent) => void) | null = null
+  closed = false
   constructor(public url: string) {
     FakeWebSocket.instances.push(this)
   }
-  close() {}
+  close() {
+    this.closed = true
+  }
   emit(data: unknown) {
     this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent)
   }
@@ -135,6 +138,55 @@ describe('WrittenExamTest', () => {
     expect(screen.getByText(/def two_sum/)).toBeInTheDocument()
     expect(screen.getByText('笔试链路畅通，可以开始了！')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重新' })).toBeEnabled()
+  })
+
+  it('keeps one websocket while filtering stale preflight streams', async () => {
+    render(<WrittenExamTest />)
+
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    const ws = FakeWebSocket.instances[0]
+
+    await act(async () => {
+      ws.emit({
+        type: 'answer_start',
+        exam_preflight_id: 'preflight-current',
+        model_name: 'GPT-4.1 Vision',
+      })
+      await Promise.resolve()
+    })
+
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(ws.closed).toBe(false)
+    expect(screen.getByText('真实答题 worker 已开始流式回答')).toBeInTheDocument()
+
+    await act(async () => {
+      ws.emit({
+        type: 'answer_done',
+        exam_preflight_id: 'preflight-old',
+        answer: 'stale answer should be ignored',
+        first_token_ms: 9,
+        total_ms: 10,
+        model_name: 'GPT-4.1 Vision',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('stale answer should be ignored')).not.toBeInTheDocument()
+
+    await act(async () => {
+      ws.emit({
+        type: 'answer_done',
+        exam_preflight_id: 'preflight-current',
+        answer: 'current answer is rendered',
+        first_token_ms: 120,
+        total_ms: 880,
+        model_name: 'GPT-4.1 Vision',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('current answer is rendered')).toBeInTheDocument()
+    expect(FakeWebSocket.instances).toHaveLength(1)
   })
 
   it('warns when no vision model is configured', () => {

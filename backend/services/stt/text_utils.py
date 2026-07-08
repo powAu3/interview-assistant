@@ -589,6 +589,19 @@ _FOLLOWUP_CUES = re.compile(
     r"真的吗|确定吗|怎么说|啥意思|什么意思)",
     re.IGNORECASE,
 )
+_ENGLISH_FOLLOWUP_CUES = re.compile(
+    r"(?:"
+    r"\byou\s+(?:just\s+)?(?:said|mentioned)\b|"
+    r"\b(?:previous|last)\s+(?:one|round|question|answer)\b|"
+    r"\bfollow(?:ing)?\s*up\b|"
+    r"\b(?:can|could)\s+you\s+elaborate\b|"
+    r"\btell\s+me\s+more\b|"
+    r"\bgive\s+(?:me\s+)?an\s+example\b|"
+    r"\bwhy\s+not\b|"
+    r"\bhow\s+(?:did|would|do)\s+you\s+(?:validate|verify|test|handle|solve|improve)\s+(?:it|that|this)\b"
+    r")",
+    re.IGNORECASE,
+)
 
 _PRONOUN_FOLLOWUP = re.compile(
     r"^(?:那|那么|然后|所以|但是|不过|另外|还有|以及).*(?:呢|吗|么|吧|\?|？)$"
@@ -608,6 +621,9 @@ def classify_followup(
         return False
 
     if _FOLLOWUP_CUES.search(normalized):
+        return True
+
+    if _ENGLISH_FOLLOWUP_CUES.search(normalized):
         return True
 
     if len(normalized) < 15 and _PRONOUN_FOLLOWUP.match(normalized):

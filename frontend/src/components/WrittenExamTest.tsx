@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Brain,
@@ -97,7 +97,11 @@ export default function WrittenExamTest() {
   const [steps, setSteps] = useState<Record<string, StepState>>({})
   const [done, setDone] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [activePreflightId, setActivePreflightId] = useState<string | null>(null)
+  const activePreflightIdRef = useRef<string | null>(null)
+
+  const setCurrentPreflightId = useCallback((preflightId: string | null) => {
+    activePreflightIdRef.current = preflightId
+  }, [])
 
   const hydrateStatus = useCallback(async () => {
     try {
@@ -105,7 +109,9 @@ export default function WrittenExamTest() {
       const statusSteps = normalizeStatusSteps(status?.steps)
       const isRunning = Boolean(status?.running)
       const isDone = !isRunning && statusSteps.done?.status === 'done'
-      setActivePreflightId(status?.preflight_id ? String(status.preflight_id) : null)
+      if (status?.preflight_id) {
+        setCurrentPreflightId(String(status.preflight_id))
+      }
       setSteps((prev) => ({
         ...prev,
         ...Object.fromEntries(
@@ -121,15 +127,16 @@ export default function WrittenExamTest() {
     } catch {
       /* status hydration is best-effort; WS has the primary progress stream */
     }
-  }, [])
+  }, [setCurrentPreflightId])
 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data)
       if (msg.exam_preflight_id) {
         const eventPreflightId = String(msg.exam_preflight_id)
-        if (activePreflightId && eventPreflightId !== activePreflightId) return
-        if (!activePreflightId) setActivePreflightId(eventPreflightId)
+        const currentPreflightId = activePreflightIdRef.current
+        if (currentPreflightId && eventPreflightId !== currentPreflightId) return
+        if (!currentPreflightId) setCurrentPreflightId(eventPreflightId)
         if (msg.type === 'answer_start') {
           setRunning(true)
           setSteps((prev) => ({
@@ -191,8 +198,9 @@ export default function WrittenExamTest() {
       const { step, status, detail, answer, question, first_token_ms, total_ms, model_name } = msg
       if (msg.preflight_id) {
         const eventPreflightId = String(msg.preflight_id)
-        if (activePreflightId && eventPreflightId !== activePreflightId) return
-        if (!activePreflightId) setActivePreflightId(eventPreflightId)
+        const currentPreflightId = activePreflightIdRef.current
+        if (currentPreflightId && eventPreflightId !== currentPreflightId) return
+        if (!currentPreflightId) setCurrentPreflightId(eventPreflightId)
       }
       if (step === 'done') {
         setDone(true)
@@ -212,7 +220,7 @@ export default function WrittenExamTest() {
     } catch {
       /* ignore malformed WS frames */
     }
-  }, [activePreflightId, hydrateStatus])
+  }, [hydrateStatus, setCurrentPreflightId])
 
   useEffect(() => {
     const ws = new WebSocket(buildWsUrl('/ws'))
@@ -229,7 +237,7 @@ export default function WrittenExamTest() {
     setDone(false)
     setSteps({})
     setErrorMsg(null)
-    setActivePreflightId(null)
+    setCurrentPreflightId(null)
     try {
       await api.examPreflightRun()
     } catch (error: any) {

@@ -3,10 +3,16 @@ import type { RootState } from './rootState'
 import type { QAPair, QAStatus } from './types'
 
 const CHUNK_THROTTLE_MS = 50
+const MAX_TRANSCRIPTIONS = 200
+const MAX_CANDIDATE_TRANSCRIPTIONS = 200
 
 const _chunkBuffer: Map<string, { answer: string; think: string }> = new Map()
 let _chunkFlushTimer: ReturnType<typeof setTimeout> | null = null
 let _candidateSegmentIds: Array<string | null> = []
+
+function takeTail<T>(items: T[], maxItems: number): T[] {
+  return items.length > maxItems ? items.slice(-maxItems) : items
+}
 
 function _scheduleChunkFlush(set: (fn: (s: RootState) => Partial<RootState>) => void) {
   if (_chunkFlushTimer !== null) return
@@ -89,7 +95,9 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
   setPaused: (v) => set({ isPaused: v }),
   setAudioLevel: (v) => set({ audioLevel: v }),
   setTranscribing: (v) => set({ isTranscribing: v }),
-  addTranscription: (text) => set((s) => ({ transcriptions: [...s.transcriptions, text] })),
+  addTranscription: (text) => set((s) => ({
+    transcriptions: takeTail([...s.transcriptions, text], MAX_TRANSCRIPTIONS),
+  })),
   addCandidateTranscription: (text, meta) => set((s) => {
     const segmentId = meta?.segmentId || null
     if (segmentId) {
@@ -103,8 +111,15 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
     if (s.candidateTranscriptions[s.candidateTranscriptions.length - 1] === text) {
       return { candidateTranscriptions: s.candidateTranscriptions }
     }
-    _candidateSegmentIds = [..._candidateSegmentIds, segmentId]
-    return { candidateTranscriptions: [...s.candidateTranscriptions, text] }
+    const nextTranscriptions = [...s.candidateTranscriptions, text]
+    const nextSegmentIds = [..._candidateSegmentIds, segmentId]
+    const overflow = Math.max(0, nextTranscriptions.length - MAX_CANDIDATE_TRANSCRIPTIONS)
+    _candidateSegmentIds = overflow > 0 ? nextSegmentIds.slice(overflow) : nextSegmentIds
+    return {
+      candidateTranscriptions: overflow > 0
+        ? nextTranscriptions.slice(overflow)
+        : nextTranscriptions,
+    }
   }),
 
   startAnswer: (id, question, meta) =>
@@ -209,22 +224,25 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
     const candidateSegments = Array.isArray(data.candidate_answer_segments)
       ? data.candidate_answer_segments
       : []
-    const restoredCandidateTranscriptions = candidateSegments.length > 0
+    const restoredCandidatePairs: Array<{ text: string; segmentId: string | null }> = candidateSegments.length > 0
       ? candidateSegments
-          .map((segment: any) => String(segment?.text ?? '').trim())
-          .filter(Boolean)
-      : data.candidate_transcriptions ?? []
-    _candidateSegmentIds = candidateSegments.length > 0
-      ? candidateSegments
-          .map((segment: any) => (segment?.segment_id ? String(segment.segment_id) : null))
-          .filter((_segmentId: string | null, index: number) => Boolean(restoredCandidateTranscriptions[index]))
-      : restoredCandidateTranscriptions.map(() => null)
+          .map((segment: any) => ({
+            text: String(segment?.text ?? '').trim(),
+            segmentId: segment?.segment_id ? String(segment.segment_id) : null,
+          }))
+          .filter((segment: { text: string; segmentId: string | null }) => Boolean(segment.text))
+      : (data.candidate_transcriptions ?? [])
+          .map((text: unknown) => ({ text: String(text ?? '').trim(), segmentId: null }))
+          .filter((segment: { text: string; segmentId: string | null }) => Boolean(segment.text))
+    const restoredCandidatePairsTail = takeTail(restoredCandidatePairs, MAX_CANDIDATE_TRANSCRIPTIONS)
+    const restoredCandidateTranscriptions = restoredCandidatePairsTail.map((segment) => segment.text)
+    _candidateSegmentIds = restoredCandidatePairsTail.map((segment) => segment.segmentId)
     if (_chunkFlushTimer !== null) {
       clearTimeout(_chunkFlushTimer)
       _chunkFlushTimer = null
     }
     set({
-      transcriptions: data.transcriptions ?? [],
+      transcriptions: takeTail(data.transcriptions ?? [], MAX_TRANSCRIPTIONS),
       candidateTranscriptions: restoredCandidateTranscriptions,
       qaPairs: (data.qa_pairs ?? []).map(
         (qa: Partial<QAPair> & { id: string; question: string; answer: string }) => ({

@@ -89,6 +89,18 @@ def _clip_text(text: str, max_chars: int) -> str:
     return cleaned[: max(0, max_chars - 1)].rstrip() + "…"
 
 
+def _written_exam_question_context_label(question: str, source: str) -> str:
+    cleaned = " ".join(str(question or "").split())
+    if (
+        cleaned.startswith("下图来自运行本后端")
+        or "请基于图中可见信息作答" in cleaned
+    ):
+        if source == "server_screen_multi":
+            return "上一批连续截图题面（无 OCR 文本，以上一版答案和当前截图为准）"
+        return "上一张截图题面（无 OCR 文本，以上一版答案和当前截图为准）"
+    return _clip_text(cleaned, 260)
+
+
 def _written_exam_followup_context(session_ref, *, source: str, image_count: int) -> str:
     if image_count <= 0 or not (source or "").startswith("server_screen_"):
         return ""
@@ -110,7 +122,9 @@ def _written_exam_followup_context(session_ref, *, source: str, image_count: int
         "最近上一版答案参考:",
     ]
     for idx, qa in enumerate(recent_qas, start=1):
-        lines.append(f"{idx}. 题目/截图: {_clip_text(qa.question, 260)}")
+        lines.append(
+            f"{idx}. 题目/截图: {_written_exam_question_context_label(qa.question, qa.source)}"
+        )
         lines.append(f"   上一版答案: {_clip_text(qa.answer, 900)}")
     return "\n".join(lines)
 
@@ -143,6 +157,15 @@ _FOLLOWUP_BRIDGE_PREFIXES = (
     "刚才",
     "前面",
     "上面",
+    "how",
+    "why",
+    "what about",
+    "then",
+    "so",
+    "and",
+    "also",
+    "could you",
+    "can you",
 )
 _FOLLOWUP_BRIDGE_PHRASES = (
     "刚才说的",
@@ -160,6 +183,20 @@ _FOLLOWUP_BRIDGE_PHRASES = (
     "补充一下",
     "接着说",
     "继续说",
+    "you just mentioned",
+    "you said",
+    "previous one",
+    "last round",
+    "how did you",
+    "how would you",
+    "how do you",
+    "why did you",
+    "why not",
+    "can you elaborate",
+    "could you elaborate",
+    "give an example",
+    "tell me more",
+    "continue",
 )
 
 _RESUME_CONTEXT_CUES = (
@@ -174,6 +211,21 @@ _RESUME_CONTEXT_CUES = (
     "你们当时",
     "上一家公司",
     "项目里",
+    "resume",
+    "cv",
+    "my background",
+    "your background",
+    "my experience",
+    "your experience",
+    "my project",
+    "your project",
+    "previous project",
+    "project experience",
+    "internship",
+    "work experience",
+    "previous company",
+    "what you built",
+    "what you worked on",
 )
 _RESUME_CONTEXT_NEGATIONS = (
     "不要结合项目",
@@ -181,6 +233,37 @@ _RESUME_CONTEXT_NEGATIONS = (
     "先不说项目",
     "不要结合简历",
     "不结合简历",
+    "without resume",
+    "without my resume",
+    "without your resume",
+    "not based on resume",
+    "not based on my resume",
+    "not based on your resume",
+    "ignore resume",
+    "ignore my resume",
+    "ignore your resume",
+    "do not use resume",
+    "don't use resume",
+    "without project context",
+    "no project context",
+    "not based on project",
+    "not based on my project",
+    "not based on your project",
+    "ignore project",
+    "ignore my project",
+    "ignore your project",
+    "do not use project",
+    "don't use project",
+    "do not relate to my project",
+    "don't relate to my project",
+    "do not relate to your project",
+    "don't relate to your project",
+    "do not relate it to my project",
+    "don't relate it to my project",
+    "do not relate it to your project",
+    "don't relate it to your project",
+    "do not combine with project",
+    "don't combine with project",
 )
 
 
@@ -188,11 +271,12 @@ def _followup_needs_bridge(question_text: str) -> bool:
     normalized = normalize_transcription_for_analysis(question_text)
     if not normalized:
         return False
+    normalized_lc = normalized.lower()
     if len(normalized) <= 18:
         return True
-    if any(phrase in normalized for phrase in _FOLLOWUP_BRIDGE_PHRASES) and len(normalized) <= 42:
+    if any(phrase in normalized_lc for phrase in _FOLLOWUP_BRIDGE_PHRASES) and len(normalized) <= 64:
         return True
-    if any(normalized.startswith(prefix) for prefix in _FOLLOWUP_BRIDGE_PREFIXES) and len(normalized) <= 34:
+    if any(normalized_lc.startswith(prefix) for prefix in _FOLLOWUP_BRIDGE_PREFIXES) and len(normalized) <= 56:
         return True
     return False
 
@@ -201,16 +285,17 @@ def _question_explicitly_requests_resume_context(question_text: str) -> bool:
     normalized = normalize_transcription_for_analysis(question_text)
     if not normalized:
         return False
-    if any(phrase in normalized for phrase in _RESUME_CONTEXT_NEGATIONS):
+    normalized_lc = normalized.lower()
+    if any(phrase in normalized_lc for phrase in _RESUME_CONTEXT_NEGATIONS):
         return False
-    return any(phrase in normalized for phrase in _RESUME_CONTEXT_CUES)
+    return any(phrase in normalized_lc for phrase in _RESUME_CONTEXT_CUES)
 
 
 def _question_rejects_resume_context(question_text: str) -> bool:
     normalized = normalize_transcription_for_analysis(question_text)
     if not normalized:
         return False
-    return any(phrase in normalized for phrase in _RESUME_CONTEXT_NEGATIONS)
+    return any(phrase in normalized.lower() for phrase in _RESUME_CONTEXT_NEGATIONS)
 
 
 def _should_include_resume_context(

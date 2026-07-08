@@ -253,15 +253,10 @@ export default function PreferencesTab() {
 
       {/* ── 2. 悬浮提示窗（含截图区域、笔试模式） ── */}
       <Collapsible
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            工作模式
-            <BetaBadge title="悬浮提示窗 — 仍在测试中" />
-          </span>
-        }
+        title="工作模式"
         searchTitle="工作模式"
         icon={<Monitor className="w-3.5 h-3.5" />}
-        keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗 beta exam"
+        keywords="overlay 截图 笔试 toolbar ocr vision 悬浮窗 浮窗 exam"
       >
         <div className="flex justify-end">
           <SaveStateBadge mode="auto" state="idle" label="悬浮窗外观本机即时生效" />
@@ -298,7 +293,7 @@ export default function PreferencesTab() {
           )}
         </div>
         <div className="mb-2 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-[11px] text-text-secondary leading-relaxed">
-          <div className="font-semibold text-accent-amber mb-0.5">反截图检测为 Beta 能力</div>
+          <div className="font-semibold text-accent-amber mb-0.5">反截图检测说明</div>
           <div>
             Windows 上通过 <code className="font-mono text-[10px] bg-bg-tertiary/60 px-1 rounded">setContentProtection</code> 可稳定避免被屏幕共享软件截图；
             macOS 15+ 的 <span className="font-mono text-[10px]">ScreenCaptureKit</span> 会绕过保护位，实际效果请以你自己的环境测试为准。
@@ -499,7 +494,6 @@ export default function PreferencesTab() {
             <div className="flex items-center gap-2">
               <PenLine className="w-3.5 h-3.5 text-text-muted" />
               <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">笔试模式</span>
-              <BetaBadge title="笔试模式 — 仍在测试中" />
             </div>
             <Toggle
               checked={config?.written_exam_mode ?? false}

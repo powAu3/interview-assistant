@@ -103,12 +103,30 @@ function createInitialDraft(): CreateApplicationDraft {
 }
 
 function useCompactLayout(maxWidth = 640) {
-  const read = () => (typeof window !== 'undefined' ? window.innerWidth < maxWidth : false)
+  const read = () => {
+    if (typeof window === 'undefined') return false
+    if (typeof window.matchMedia === 'function') {
+      return window.matchMedia(`(max-width: ${Math.max(0, maxWidth - 0.02)}px)`).matches
+    }
+    return window.innerWidth < maxWidth
+  }
   const [compact, setCompact] = useState(read)
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
-    const onResize = () => setCompact(window.innerWidth < maxWidth)
+    const update = (next: boolean) => setCompact((current) => (current === next ? current : next))
+    if (typeof window.matchMedia === 'function') {
+      const media = window.matchMedia(`(max-width: ${Math.max(0, maxWidth - 0.02)}px)`)
+      const onChange = () => update(media.matches)
+      onChange()
+      if (typeof media.addEventListener === 'function') {
+        media.addEventListener('change', onChange)
+        return () => media.removeEventListener('change', onChange)
+      }
+      media.addListener(onChange)
+      return () => media.removeListener(onChange)
+    }
+    const onResize = () => update(window.innerWidth < maxWidth)
     onResize()
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)

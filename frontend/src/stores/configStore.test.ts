@@ -50,3 +50,63 @@ describe('configStore toast queue', () => {
     expect(state.toasts.map((toast) => toast.message)).toEqual(['旧提示', '新提示'])
   })
 })
+
+describe('configStore transcription windows', () => {
+  beforeEach(() => {
+    useInterviewStore.setState({
+      transcriptions: [],
+      candidateTranscriptions: [],
+    } as any)
+  })
+
+  it('keeps interviewer transcriptions bounded for long sessions', () => {
+    const store = useInterviewStore.getState()
+
+    for (let i = 0; i < 205; i += 1) {
+      store.addTranscription(`question ${i}`)
+    }
+
+    const state = useInterviewStore.getState()
+    expect(state.transcriptions).toHaveLength(200)
+    expect(state.transcriptions[0]).toBe('question 5')
+    expect(state.transcriptions[199]).toBe('question 204')
+  })
+
+  it('keeps candidate transcriptions bounded while preserving segment replacement', () => {
+    const store = useInterviewStore.getState()
+
+    for (let i = 0; i < 205; i += 1) {
+      store.addCandidateTranscription(`candidate ${i}`, { segmentId: `seg-${i}` })
+    }
+
+    let state = useInterviewStore.getState()
+    expect(state.candidateTranscriptions).toHaveLength(200)
+    expect(state.candidateTranscriptions[0]).toBe('candidate 5')
+
+    store.addCandidateTranscription('candidate 5 revised', { segmentId: 'seg-5' })
+
+    state = useInterviewStore.getState()
+    expect(state.candidateTranscriptions).toHaveLength(200)
+    expect(state.candidateTranscriptions[0]).toBe('candidate 5 revised')
+    expect(state.candidateTranscriptions[199]).toBe('candidate 204')
+  })
+
+  it('caps restored session transcriptions on init', () => {
+    const store = useInterviewStore.getState()
+
+    store.setInitData({
+      transcriptions: Array.from({ length: 205 }, (_, i) => `question ${i}`),
+      candidate_answer_segments: Array.from({ length: 205 }, (_, i) => ({
+        text: `candidate ${i}`,
+        segment_id: `seg-${i}`,
+      })),
+      qa_pairs: [],
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.transcriptions).toHaveLength(200)
+    expect(state.transcriptions[0]).toBe('question 5')
+    expect(state.candidateTranscriptions).toHaveLength(200)
+    expect(state.candidateTranscriptions[0]).toBe('candidate 5')
+  })
+})

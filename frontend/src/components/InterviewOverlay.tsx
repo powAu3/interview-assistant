@@ -363,27 +363,26 @@ export default function InterviewOverlay() {
           <div className="ov-grip" aria-hidden />
           <div className="ov-focus-toolbar" aria-label="专注面板工具">
             {focusTools.map((tool) => (
-              <span
+              <button
                 key={tool.key}
+                type="button"
                 className={`ov-focus-tool ${busyAction === tool.key ? 'ov-focus-tool--busy' : ''}`}
-                role="button"
-                tabIndex={-1}
                 onMouseDown={suppressToolbarMouseDown}
                 onClick={() => runOverlayAction(tool.key)}
               >
                 <span>{busyAction === tool.key ? '处理中…' : tool.label}</span>
                 {tool.shortcut && <kbd>{getShortcutDisplay(tool.shortcut)}</kbd>}
-              </span>
+              </button>
             ))}
           </div>
 
           <div className="ov-focus-tabs" aria-label="答案分区">
             {focusTabs.map((tab) => (
-              <span
+              <button
                 key={tab.key}
+                type="button"
                 className={`ov-focus-tab ${tab.key === activeFocusTab ? 'ov-focus-tab--active' : ''} ${tab.isGenerating ? 'ov-focus-tab--forming' : ''}`}
-                role="button"
-                tabIndex={-1}
+                aria-pressed={tab.key === activeFocusTab}
                 onMouseDown={suppressToolbarMouseDown}
                 onClick={() => {
                   pinnedFocusTabsByQaIdRef.current[displayedQaKey] = true
@@ -393,7 +392,7 @@ export default function InterviewOverlay() {
                 }}
               >
                 {tab.label}
-              </span>
+              </button>
             ))}
             <span className="ov-focus-tab-keys" aria-hidden>
               <span>切换分区</span>

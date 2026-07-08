@@ -480,6 +480,119 @@ def test_manual_question_negating_project_context_disables_resume(monkeypatch: p
     assert captured["include_resume"] is False
 
 
+def test_english_resume_question_keeps_resume_context_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "Project A: RBAC platform with audit logs."
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "Use the RBAC project.")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "Can you explain how you designed RBAC in your previous project?",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 1},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is True
+
+
+def test_english_project_negation_disables_resume_context(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "Project A: RBAC platform with audit logs."
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "Only the concept.")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "Explain RBAC vs ABAC. Do not relate it to my project; just the core concept.",
+            None,
+            True,
+            "manual_text",
+            {},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is False
+
+
+def test_english_short_followup_inherits_previous_resume_context(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    session = get_session()
+    session.add_qa(
+        "Tell me about your project experience with RBAC.",
+        "I built an RBAC platform with audit logs.",
+        qa_id="qa-prev",
+        source="conversation_loopback",
+        model_name="模型一",
+    )
+    cfg = _cfg()
+    cfg.resume_text = "Project A: RBAC platform with audit logs."
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["user"] = messages[-1]["content"]
+        yield ("text", "Validate with audit-log tests.")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "How did you validate it?",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is True
+    assert "[追问上下文]" in str(captured["user"])
+    assert "Tell me about your project experience with RBAC." in str(captured["user"])
+
+
 def test_realtime_asr_source_uses_candidate_context_and_opens_next_window(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     seen: dict[str, str] = {}
@@ -1022,6 +1135,49 @@ def test_written_exam_screenshot_injects_recent_qa_as_revision_context(monkeypat
     assert "expected=1 actual=0" in text
     assert "普通历史不应进入" not in text
     assert content[1]["image_url"]["url"] == "data:image/png;base64,failcase"
+
+
+def test_written_exam_revision_context_compacts_previous_screen_prompt(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured = {}
+    session = get_session()
+    previous_prompt = answer_worker.prompt_server_screen_code("Python", "left_half")
+    session.add_qa(
+        previous_prompt + " [📷 附图]",
+        "```python\ndef solve():\n    print('old')\n```",
+        source="server_screen_left",
+        model_name="模型一",
+    )
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        captured["messages"] = messages
+        yield ("text", "```python\ndef solve():\n    print('new')\n```")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "截图显示上一版未通过",
+            ["data:image/png;base64,failcase"],
+            True,
+            "server_screen_left",
+            {"origin": "server_screen", "image_count": 1},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    text = captured["messages"][0]["content"][0]["text"]
+    assert "上一张截图题面（无 OCR 文本，以上一版答案和当前截图为准）" in text
+    assert "下图来自运行本后端" not in text
+    assert "请基于图中可见信息作答" not in text
+    assert "print('old')" in text
+    assert "截图显示上一版未通过" in text
 
 
 def test_written_exam_screenshot_ignores_non_screen_qa_revision_context(monkeypatch: pytest.MonkeyPatch):

@@ -269,6 +269,7 @@ export default function AnswerPanel() {
   const qaPairs = useInterviewStore((s) => s.qaPairs)
   const streamingIds = useInterviewStore((s) => s.streamingIds)
   const config = useInterviewStore((s) => s.config)
+  const isRecording = useInterviewStore((s) => s.isRecording)
   const isExamMode = config?.written_exam_mode === true
   const toggleSettings = useInterviewStore((s) => s.toggleSettings)
   const answerPanelLayout = useUiPrefsStore((s) => s.answerPanelLayout)
@@ -323,7 +324,7 @@ export default function AnswerPanel() {
   const needsConfig = config && (!config.models?.length || !config.api_key_set)
   const multiStream = streamingIds.length > 1
 
-  const isIdle = !useInterviewStore.getState().isRecording
+  const isIdle = !isRecording
 
   if (qaPairs.length === 0) {
     return (

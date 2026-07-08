@@ -775,6 +775,9 @@ code, pre, .font-mono {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  border: 0;
+  background: transparent;
+  font: inherit;
   white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
@@ -784,6 +787,12 @@ code, pre, .font-mono {
 
 .ov-focus-tool:hover {
   color: rgba(30, 41, 59, 0.92);
+}
+
+.ov-focus-tool:focus-visible,
+.ov-focus-tab:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.42);
+  outline-offset: 2px;
 }
 
 .ov-focus-tool--busy {
@@ -832,6 +841,8 @@ code, pre, .font-mono {
 .ov-focus-tab {
   display: inline-flex;
   align-items: center;
+  border: 0;
+  font: inherit;
   min-height: 30px;
   max-width: 168px;
   padding: 0 15px;

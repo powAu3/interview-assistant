@@ -333,6 +333,29 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-shell--focus')).toBeInTheDocument()
   })
 
+  it('uses real accessible buttons for focus tools and section tabs', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '## 解题思路\n双指针。\n\n## 代码解决方案\nreturn 0',
+      }],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByRole('button', { name: /^截图审题/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^取消生成/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '解题思路' })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: '代码解决方案' }))
+
+    expect(screen.getByRole('button', { name: '代码解决方案' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/return 0/)).toBeInTheDocument()
+  })
+
   it('uses a readable dark text color in focus mode regardless of the regular overlay font color', () => {
     useInterviewStore.setState({
       qaPairs: [{ ...qa, answer: '## 结论\n浅色用户字体不应该影响专注面板。' }],
