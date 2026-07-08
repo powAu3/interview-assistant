@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ControlBar from './ControlBar'
 import { useInterviewStore } from '@/stores/configStore'
@@ -355,6 +355,27 @@ describe('ControlBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /结束面试/ }))
 
     expect(await screen.findByText('结束面试失败：stop down')).toBeInTheDocument()
+  })
+
+  it('uses fresh written-exam stop copy after mode changes while recording', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    apiMock.stop.mockRejectedValue(new Error('stop down'))
+    useInterviewStore.setState({ isRecording: true, isPaused: false } as any)
+
+    render(<ControlBar />)
+
+    act(() => {
+      useInterviewStore.setState({
+        config: {
+          ...(useInterviewStore.getState().config as object),
+          written_exam_mode: true,
+        },
+      } as any)
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^结束$/ }))
+
+    expect(confirmSpy).toHaveBeenCalledWith('结束本次笔试？当前答案会保留在页面上。')
+    expect(await screen.findByText('结束笔试失败：stop down')).toBeInTheDocument()
   })
 
   it('surfaces cancel-generation failures instead of swallowing them', async () => {

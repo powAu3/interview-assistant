@@ -309,9 +309,9 @@ export default function ControlBar() {
       await api.stop()
       window.electronAPI?.syncOverlayWindow?.({ visible: false }).catch(() => {})
     } catch (e: unknown) {
-      setError(`结束${isExamMode ? '' : '面试'}失败：${getErrorMessage(e)}`)
+      setError(`结束${isExamMode ? '笔试' : '面试'}失败：${getErrorMessage(e)}`)
     } finally { setLoading(false) }
-  }, [isRecording])
+  }, [isExamMode, isRecording])
   const handlePause = useCallback(async () => {
     setLoading(true)
     try { await api.pause() } catch (e: unknown) { setError(getErrorMessage(e, '暂停失败')) } finally { setLoading(false) }
