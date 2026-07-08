@@ -14,6 +14,7 @@ import json
 import re
 import threading
 import base64
+from collections.abc import Sequence
 from typing import Optional
 
 from core.logger import get_logger
@@ -94,7 +95,17 @@ def _normalize_image_data_url(image_data_url: str) -> str:
     return f"data:image/png;base64,{raw}"
 
 
-def _verify_blocking(answer: str, image_data_url: str) -> dict:
+def _normalize_image_data_urls(image_data_url: Optional[str | Sequence[str]]) -> list[str]:
+    if not image_data_url:
+        return []
+    if isinstance(image_data_url, str):
+        candidates = [image_data_url]
+    else:
+        candidates = [str(item) for item in image_data_url if item]
+    return [_normalize_image_data_url(item) for item in candidates if str(item or "").strip()]
+
+
+def _verify_blocking(answer: str, image_data_url: str | Sequence[str]) -> dict:
     """同步执行一次 self-verify。失败时返回 verdict=UNKNOWN。"""
     model_cfg = _pick_vision_model_cfg()
     if model_cfg is None:
@@ -103,10 +114,12 @@ def _verify_blocking(answer: str, image_data_url: str) -> dict:
     from services.llm import _add_tokens, get_client_for_model
 
     client = get_client_for_model(model_cfg)
+    images = _normalize_image_data_urls(image_data_url)
     user_content = [
         {"type": "text", "text": _VERIFY_PROMPT.format(answer=answer)},
-        {"type": "image_url", "image_url": {"url": _normalize_image_data_url(image_data_url)}},
     ]
+    for image_url in images:
+        user_content.append({"type": "image_url", "image_url": {"url": image_url}})
     try:
         response = client.chat.completions.create(
             model=model_cfg.model,
@@ -132,7 +145,7 @@ def schedule_self_verify(
     *,
     qa_id: str,
     answer: str,
-    image_data_url: Optional[str],
+    image_data_url: Optional[str | Sequence[str]],
     broadcast_callable,
 ) -> None:
     """异步触发一次 self-verify,完成后通过 broadcast_callable 推送结果。
@@ -140,7 +153,8 @@ def schedule_self_verify(
     无 image / 无答案 / 无 vision 模型时直接跳过(不报错)。
     所有失败均吞掉,只通过 verdict=UNKNOWN 透出。
     """
-    if not qa_id or not answer or not image_data_url:
+    images = _normalize_image_data_urls(image_data_url)
+    if not qa_id or not answer or not images:
         return
     if _pick_vision_model_cfg() is None:
         return
@@ -150,7 +164,7 @@ def schedule_self_verify(
 
     def _worker() -> None:
         try:
-            result = _verify_blocking(answer, image_data_url)
+            result = _verify_blocking(answer, images)
         except Exception as e:  # noqa: BLE001
             _log.warning("vision self-verify worker crashed: %s", e)
             result = {"verdict": "UNKNOWN", "reason": f"自检异常: {e}"}

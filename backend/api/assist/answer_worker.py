@@ -920,7 +920,7 @@ def process_question_parallel(
                     schedule_self_verify(
                         qa_id=qa_id,
                         answer=full_answer,
-                        image_data_url=images[0],
+                        image_data_url=images,
                         broadcast_callable=deps.broadcast,
                     )
                 except Exception as exc: # noqa: BLE001

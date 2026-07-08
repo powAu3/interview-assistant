@@ -1138,6 +1138,46 @@ def test_process_question_parallel_sends_multiple_images_to_vision_model(
     assert get_session().conversation_history[0]["content"] == "多图题面 [图片已省略 x2]"
 
 
+def test_process_question_parallel_passes_all_images_to_self_verify(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    scheduled: list[dict] = []
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "多图答案")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    import services.vision_verify as vision_verify
+
+    monkeypatch.setattr(
+        vision_verify,
+        "schedule_self_verify",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+
+    answer_worker.process_question_parallel(
+        (
+            "多图题面",
+            ["data:image/png;base64,a", "data:image/png;base64,b"],
+            True,
+            "server_screen_multi",
+            {"origin": "server_screen", "image_count": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert len(scheduled) == 1
+    assert scheduled[0]["image_data_url"] == [
+        "data:image/png;base64,a",
+        "data:image/png;base64,b",
+    ]
+
+
 def test_written_exam_request_does_not_include_history(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     captured = {}
