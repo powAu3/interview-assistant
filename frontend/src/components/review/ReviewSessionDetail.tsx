@@ -799,10 +799,16 @@ function TurnCard({
   const answerText = isWrittenExam
     ? (turn.reference_answer_text || turn.candidate_answer_text || '')
     : turn.candidate_answer_text
+  const visionVerify = getTurnVisionVerify(turn)
+  const improvementAdvice = getStringValue(turn.evidence?.improvement_advice)
+  const followUpQuestions = getStringList(turn.evidence?.follow_up_questions).slice(0, 2)
+  const evidenceTags = getStringList(turn.evidence?.tags).slice(0, 3)
+  const hasActionEvidence = Boolean(improvementAdvice || followUpQuestions.length > 0 || evidenceTags.length > 0)
   const hasAnalysis =
     (turn.strengths && turn.strengths.length > 0) ||
     (turn.risks && turn.risks.length > 0) ||
-    (turn.scorecard && Object.keys(turn.scorecard).length > 0)
+    (turn.scorecard && Object.keys(turn.scorecard).length > 0) ||
+    hasActionEvidence
 
   const avgScore = getTurnAvgScore(turn)
   const hasAsrCorrection = Boolean(
@@ -810,7 +816,6 @@ function TurnCard({
     turn.original_candidate_answer_text &&
     turn.original_candidate_answer_text !== turn.candidate_answer_text,
   )
-  const visionVerify = getTurnVisionVerify(turn)
 
   const scoreColor = avgScore !== null
     ? avgScore >= 8 ? 'text-green-500'
@@ -934,6 +939,33 @@ function TurnCard({
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {hasActionEvidence && (
+                <div className="rounded-md border border-bg-hover/70 bg-bg-tertiary/35 px-3 py-2.5">
+                  <h4 className="mb-2 text-xs font-semibold text-text-muted">复练建议</h4>
+                  {improvementAdvice && (
+                    <div className="text-sm leading-relaxed text-text-primary">{improvementAdvice}</div>
+                  )}
+                  {followUpQuestions.length > 0 && (
+                    <ul className="mt-2 space-y-1.5 border-l border-accent-blue/25 pl-3">
+                      {followUpQuestions.map((question, idx) => (
+                        <li key={idx} className="text-sm leading-relaxed text-text-primary">
+                          {question}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {evidenceTags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {evidenceTags.map((tag) => (
+                        <span key={tag} className="rounded border border-bg-hover bg-bg-primary/60 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </>

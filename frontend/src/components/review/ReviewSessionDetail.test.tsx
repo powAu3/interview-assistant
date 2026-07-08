@@ -363,6 +363,51 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText('第二张截图里的样例不通过')).toBeInTheDocument()
   })
 
+  it('shows per-turn practice evidence in turn details', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      turn_count: 1,
+      turns: [
+        {
+          id: 92,
+          session_id: 7,
+          qa_id: 'qa-review',
+          seq: 1,
+          question_text: 'Redis 缓存击穿怎么处理？',
+          candidate_answer_text: '我会加互斥锁。',
+          original_candidate_answer_text: null,
+          reference_answer_text: '可讲互斥锁、逻辑过期和热点保护。',
+          code_text: null,
+          duration_ms: 30000,
+          is_partial: false,
+          analysis_status: 'completed',
+          strengths: [],
+          risks: [],
+          evidence: {
+            improvement_advice: '补充逻辑过期和热点 key 保护策略。',
+            follow_up_questions: ['热点 key 同时过期时怎么保护数据库？'],
+            tags: ['Redis', '缓存击穿'],
+          },
+          scorecard: {},
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+      ],
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('逐题分析 · 1 题')
+    fireEvent.click(screen.getByRole('button', { name: /逐题分析 · 1 题/ }))
+    await screen.findByText('Redis 缓存击穿怎么处理？')
+
+    expect(screen.getByText('复练建议')).toBeInTheDocument()
+    expect(screen.getByText('补充逻辑过期和热点 key 保护策略。')).toBeInTheDocument()
+    expect(screen.getByText('热点 key 同时过期时怎么保护数据库？')).toBeInTheDocument()
+    expect(screen.getByText('Redis')).toBeInTheDocument()
+    expect(screen.getByText('缓存击穿')).toBeInTheDocument()
+  })
+
   it('shows generated answers for written-exam review turns', async () => {
     apiMock.reviewSessionDetail.mockResolvedValueOnce({
       ...baseDetail,
