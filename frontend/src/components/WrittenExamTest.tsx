@@ -110,6 +110,21 @@ function applyFailureSteps(prev: Record<string, StepState>, message: string): Re
   return next
 }
 
+function applyRequestFailureSteps(prev: Record<string, StepState>, message: string): Record<string, StepState> {
+  return applyFailureSteps(
+    {
+      ...prev,
+      submit: {
+        ...(prev.submit ?? { status: 'idle', detail: '' }),
+        status: 'fail',
+        detail: message,
+        question: FIXED_QUESTION,
+      },
+    },
+    message,
+  )
+}
+
 export default function WrittenExamTest() {
   const config = useInterviewStore((s) => s.config)
   const [running, setRunning] = useState(false)
@@ -279,8 +294,11 @@ export default function WrittenExamTest() {
     try {
       await api.examPreflightRun()
     } catch (error: any) {
+      const message = error?.message || '笔试链路检测请求失败，请确认后端服务已启动'
       setRunning(false)
-      setErrorMsg(error?.message || '笔试链路检测请求失败，请确认后端服务已启动')
+      setDone(true)
+      setErrorMsg(message)
+      setSteps((prev) => applyRequestFailureSteps(prev, message))
     }
   }
 

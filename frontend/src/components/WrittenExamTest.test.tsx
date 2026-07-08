@@ -213,6 +213,20 @@ describe('WrittenExamTest', () => {
     expect(screen.getByText('部分环节异常，请检查配置后重试')).toBeInTheDocument()
   })
 
+  it('marks startup request failures as failed preflight steps', async () => {
+    apiMock.examPreflightRun.mockRejectedValueOnce(new Error('笔试链路检测已在运行中'))
+    render(<WrittenExamTest />)
+
+    fireEvent.click(screen.getByRole('button', { name: '开始检测' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('笔试链路检测已在运行中').length).toBeGreaterThan(0)
+    })
+    expect(screen.getByText('未收到可展示的笔试答案')).toBeInTheDocument()
+    expect(screen.getByText('部分环节异常，请检查配置后重试')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重新' })).toBeEnabled()
+  })
+
   it('hydrates failed preflight status into visible failed steps', async () => {
     apiMock.examPreflightStatus.mockResolvedValueOnce({
       running: false,
