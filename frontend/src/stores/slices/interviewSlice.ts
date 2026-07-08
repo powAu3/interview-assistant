@@ -32,18 +32,21 @@ function _scheduleChunkFlush(set: (fn: (s: RootState) => Partial<RootState>) => 
     const pending = new Map(_chunkBuffer)
     _chunkBuffer.clear()
     if (pending.size === 0) return
-    set((s) => ({
-      qaPairs: s.qaPairs.map((qa) => {
-        const buf = pending.get(qa.id)
-        if (!buf) return qa
-        return {
-          ...qa,
-          thinkContent: buf.think ? qa.thinkContent + buf.think : qa.thinkContent,
-          answer: buf.answer ? qa.answer + buf.answer : qa.answer,
-          isThinking: buf.answer ? false : buf.think ? true : qa.isThinking,
-        }
-      }),
-    }))
+    set((s) => {
+      const activeStreamingIds = new Set(s.streamingIds)
+      return {
+        qaPairs: s.qaPairs.map((qa) => {
+          const buf = pending.get(qa.id)
+          if (!buf || qa.status !== 'streaming' || !activeStreamingIds.has(qa.id)) return qa
+          return {
+            ...qa,
+            thinkContent: buf.think ? qa.thinkContent + buf.think : qa.thinkContent,
+            answer: buf.answer ? qa.answer + buf.answer : qa.answer,
+            isThinking: buf.answer ? false : buf.think ? true : qa.isThinking,
+          }
+        }),
+      }
+    })
   }, CHUNK_THROTTLE_MS)
 }
 

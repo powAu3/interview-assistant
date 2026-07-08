@@ -31,6 +31,54 @@ describe('configStore answer streaming', () => {
     const qa = useInterviewStore.getState().qaPairs[0]
     expect(qa.answer).toBe('最终答案')
   })
+
+  it('ignores late chunks after an answer reaches a terminal state', async () => {
+    const store = useInterviewStore.getState()
+
+    store.startAnswer('qa-done', '介绍 Redis')
+    store.finalizeAnswer('qa-done', '介绍 Redis', '最终答案', '最终思考')
+    store.appendThinkChunk('qa-done', '迟到思考')
+    store.appendAnswerChunk('qa-done', '迟到答案')
+
+    store.startAnswer('qa-cancelled', '介绍索引')
+    store.cancelAnswer('qa-cancelled')
+    store.appendThinkChunk('qa-cancelled', '迟到思考')
+    store.appendAnswerChunk('qa-cancelled', '迟到答案')
+
+    store.startAnswer('qa-error', '介绍事务')
+    store.errorAnswer('qa-error', '生成失败')
+    store.appendThinkChunk('qa-error', '迟到思考')
+    store.appendAnswerChunk('qa-error', '迟到答案')
+
+    await vi.advanceTimersByTimeAsync(80)
+
+    const state = useInterviewStore.getState()
+    expect(state.streamingIds).toEqual([])
+    expect(state.qaPairs).toMatchObject([
+      {
+        id: 'qa-done',
+        answer: '最终答案',
+        thinkContent: '最终思考',
+        isThinking: false,
+        status: 'done',
+      },
+      {
+        id: 'qa-cancelled',
+        answer: '',
+        thinkContent: '',
+        isThinking: false,
+        status: 'cancelled',
+      },
+      {
+        id: 'qa-error',
+        answer: '',
+        thinkContent: '',
+        isThinking: false,
+        status: 'error',
+        errorMessage: '生成失败',
+      },
+    ])
+  })
 })
 
 describe('configStore toast queue', () => {
