@@ -189,7 +189,7 @@ export default function SpeechTab() {
       : '通用云端'
   const candidateContextActive = form.candidate_asr_enabled && form.candidate_context_enabled
   const candidateUsageLabel = !form.candidate_asr_enabled
-    ? '不读取麦克风，完全按旧逻辑追问'
+    ? '不读取麦克风，不写入复盘，追问按旧逻辑'
     : candidateContextActive
       ? `${candidateSttLabel}，记录复盘，并给追问补真实口述`
       : `${candidateSttLabel}，仅记录复盘，追问按旧逻辑`
@@ -231,7 +231,7 @@ export default function SpeechTab() {
             <div className="rounded-lg border border-bg-hover bg-bg-tertiary/30 px-3 py-3">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold text-text-primary">2. 我的麦克风 ASR</h3>
-                <StatusBadge status={form.candidate_asr_enabled ? 'ok' : 'idle'} label={form.candidate_asr_enabled ? '辅助上下文' : '已关闭'} />
+                <StatusBadge status={form.candidate_asr_enabled ? 'ok' : 'idle'} label={form.candidate_asr_enabled ? '回答记录' : '已关闭'} />
               </div>
               <p className="mt-2 text-xs leading-relaxed text-text-secondary">
                 只识别你实际说出口的回答，用于复盘记录；可选写入追问上下文，不会触发自动答题，也不会混入面试官问题流。
@@ -409,7 +409,7 @@ export default function SpeechTab() {
         <GradientCard className="p-4 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-text-primary">我的回答上下文（麦克风）</h3>
+              <h3 className="text-sm font-semibold text-text-primary">我的回答记录（麦克风）</h3>
               <p className="text-[11px] leading-relaxed text-text-muted mt-0.5">
                 记录你真实说出口的回答，用于面试复盘；也可以给下一轮追问做上下文，不会触发自动答题。
               </p>
@@ -421,7 +421,7 @@ export default function SpeechTab() {
               <button
                 type="button"
                 role="switch"
-                aria-label="我的回答上下文（麦克风）"
+                aria-label="我的回答记录（麦克风）"
                 aria-checked={form.candidate_asr_enabled}
                 onClick={() => {
                   const enabled = !form.candidate_asr_enabled
