@@ -280,6 +280,45 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText('短记录，已展开。')).toBeInTheDocument()
   })
 
+  it('shows corrected candidate answers while keeping original ASR text expandable', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      turn_count: 1,
+      turns: [
+        {
+          id: 81,
+          session_id: 7,
+          qa_id: 'qa-1',
+          seq: 1,
+          question_text: 'Redis 缓存穿透怎么处理？',
+          candidate_answer_text: '我会用 Redis 布隆过滤器和空值缓存。',
+          original_candidate_answer_text: '我会用 red 地址布隆过绿器和空值缓存。',
+          reference_answer_text: '可讲布隆过滤器、空值缓存和参数校验。',
+          code_text: null,
+          duration_ms: 32000,
+          is_partial: false,
+          analysis_status: 'completed',
+          strengths: ['能说出常见方案'],
+          risks: [],
+          evidence: null,
+          scorecard: { 准确性: 8, 深度: 6, 表达: 7 },
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+      ],
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('逐题分析 · 1 题')
+    fireEvent.click(screen.getByRole('button', { name: /逐题分析 · 1 题/ }))
+    await screen.findByText('Redis 缓存穿透怎么处理？')
+
+    expect(await screen.findByText('ASR 已纠错，当前显示纠错后回答')).toBeInTheDocument()
+    expect(screen.getByText('我会用 Redis 布隆过滤器和空值缓存。')).toBeInTheDocument()
+    expect(screen.getByText(/原始转写：我会用 red 地址布隆过绿器和空值缓存。/)).toBeInTheDocument()
+  })
+
   it('refreshes an analyzing review detail until the generated analysis is ready', async () => {
     vi.useFakeTimers()
     apiMock.reviewSessionDetail

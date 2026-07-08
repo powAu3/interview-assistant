@@ -821,12 +821,14 @@ function TurnCard({
           <div>
             <h4 className="mb-2 text-xs font-semibold text-text-muted">候选人回答</h4>
             {hasAsrCorrection && (
-              <div className="mb-2 border-l border-bg-hover/80 pl-3">
-                <div className="mb-1 text-[11px] font-semibold text-accent-blue">ASR 已纠错</div>
-                <div className="text-xs leading-relaxed text-text-muted">
+              <details className="mb-2 rounded-md border border-accent-blue/20 bg-accent-blue/5 px-3 py-2 text-xs">
+                <summary className="cursor-pointer select-none font-semibold text-accent-blue">
+                  ASR 已纠错，当前显示纠错后回答
+                </summary>
+                <div className="mt-2 whitespace-pre-wrap border-l border-bg-hover/80 pl-3 leading-relaxed text-text-muted">
                   原始转写：{turn.original_candidate_answer_text}
                 </div>
-              </div>
+              </details>
             )}
             <div className="whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
               {turn.candidate_answer_text || '(未录制到回答)'}
