@@ -288,6 +288,7 @@ interface UiPrefsState {
   interviewOverlayPromptMaxWidth: number
   interviewOverlayPromptAutoFollow: boolean
   interviewOverlayMaxLines: number
+  interviewOverlayVisible: boolean
 
   setAnswerPanelLayout: (layout: 'cards' | 'stream') => void
   setColorScheme: (id: ColorSchemeId) => void
@@ -344,6 +345,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
   interviewOverlayPromptMaxWidth: readOverlayPromptMaxWidth(),
   interviewOverlayPromptAutoFollow: readOverlayPromptAutoFollow(),
   interviewOverlayMaxLines: readOverlayMaxLines(),
+  interviewOverlayVisible: false,
 
   setAnswerPanelLayout: (layout) => {
     try {
@@ -473,6 +475,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     }),
   applyInterviewOverlayState: (payload, options = {}) => {
     const shouldApplyStyle = options.persistStyle === true || payload.initialized === true
+    const visible = typeof payload.visible === 'boolean' ? payload.visible : null
     const enabled = shouldApplyStyle ? normalizeOverlayEnabled(payload.enabled) : null
     const opacity = shouldApplyStyle ? normalizeOverlayOpacity(payload.opacity) : null
     const fontSize = shouldApplyStyle ? normalizeOverlayFontSize(payload.fontSize) : null
@@ -511,6 +514,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
       interviewOverlayPromptMaxWidth: promptMaxWidth ?? state.interviewOverlayPromptMaxWidth,
       interviewOverlayPromptAutoFollow: promptAutoFollow ?? state.interviewOverlayPromptAutoFollow,
       interviewOverlayMaxLines: maxLines ?? state.interviewOverlayMaxLines,
+      interviewOverlayVisible: visible ?? state.interviewOverlayVisible,
     }))
   },
 }))

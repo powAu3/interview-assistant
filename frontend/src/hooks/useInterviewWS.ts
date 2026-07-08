@@ -17,7 +17,7 @@ interface WsMsg {
   [k: string]: unknown
 }
 
-export function useInterviewWS() {
+export function useInterviewWS(active = true) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<number | null>(null)
   const reconnectAttempts = useRef(0)
@@ -263,6 +263,12 @@ export function useInterviewWS() {
         wsRef.current = null
       }
       useInterviewStore.getState().setWsConnected(false)
+      useInterviewStore.getState().setWsIsLeader(false)
+    }
+
+    if (!active) {
+      teardown()
+      return teardown
     }
 
     unsubscribe = subscribeLeader((isLeader) => {
@@ -297,8 +303,7 @@ export function useInterviewWS() {
       if (pingTimer) clearInterval(pingTimer)
       teardown()
     }
-    // 此 effect 仅在 mount 时建立连接；内部所有依赖都通过 ref/store getState 访问，
-    // 不需要重建 effect。empty deps 是 by design。
+    // 除 active 外，内部依赖都通过 ref/store getState 访问，不需要因 store 变化重建连接。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [active])
 }

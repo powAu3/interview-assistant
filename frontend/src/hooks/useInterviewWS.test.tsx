@@ -19,6 +19,7 @@ class FakeWebSocket {
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
   sent: string[] = []
+  closed = false
 
   constructor(public url: string) {
     FakeWebSocket.instances.push(this)
@@ -43,12 +44,13 @@ class FakeWebSocket {
   }
 
   close() {
+    this.closed = true
     this.onclose?.()
   }
 }
 
-function Harness() {
-  useInterviewWS()
+function Harness({ active = true }: { active?: boolean }) {
+  useInterviewWS(active)
   return null
 }
 
@@ -118,6 +120,34 @@ describe('useInterviewWS', () => {
     expect(state.transcriptions).toEqual(['hello'])
     expect(state.qaPairs[0].question).toBe('Q')
     expect(state.qaPairs[1].answer).toContain('part')
+  })
+
+  it('does not connect while inactive and connects after activation', () => {
+    const { rerender } = render(<Harness active={false} />)
+
+    expect(FakeWebSocket.instances).toHaveLength(0)
+    expect(useInterviewStore.getState().wsConnected).toBe(false)
+    expect(useInterviewStore.getState().wsIsLeader).toBe(false)
+
+    rerender(<Harness active />)
+
+    expect(FakeWebSocket.instances).toHaveLength(1)
+  })
+
+  it('closes the websocket when deactivated', () => {
+    const { rerender } = render(<Harness active />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+    })
+    expect(useInterviewStore.getState().wsConnected).toBe(true)
+
+    rerender(<Harness active={false} />)
+
+    expect(ws.closed).toBe(true)
+    expect(useInterviewStore.getState().wsConnected).toBe(false)
+    expect(useInterviewStore.getState().wsIsLeader).toBe(false)
   })
 
   it('reconnects after close', () => {

@@ -41,8 +41,6 @@ const OVERLAY_MARKDOWN_COMPONENTS: Components = {
 }
 
 export default function InterviewOverlay() {
-  useInterviewWS()
-
   const qaPairs = useInterviewStore((s) => s.qaPairs)
   const streamingIds = useInterviewStore((s) => s.streamingIds)
   const isRecording = useInterviewStore((s) => s.isRecording)
@@ -60,8 +58,11 @@ export default function InterviewOverlay() {
   const maxLines = useUiPrefsStore((s) => s.interviewOverlayMaxLines)
   const overlayPromptMaxWidth = useUiPrefsStore((s) => s.interviewOverlayPromptMaxWidth)
   const overlayPromptAutoFollow = useUiPrefsStore((s) => s.interviewOverlayPromptAutoFollow)
+  const overlayVisible = useUiPrefsStore((s) => s.interviewOverlayVisible)
   const syncPrefs = useUiPrefsStore((s) => s.syncInterviewOverlayPrefs)
   const applyState = useUiPrefsStore((s) => s.applyInterviewOverlayState)
+  const hasOverlayVisibilityIpc = Boolean(window.electronAPI?.getOverlayState || window.electronAPI?.onOverlayState)
+  useInterviewWS(enabled && (overlayVisible || !hasOverlayVisibilityIpc))
   const [activeFocusTabsByQaId, setActiveFocusTabsByQaId] = useState<Record<string, string>>({})
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [reviewQaId, setReviewQaId] = useState<string | null>(null)

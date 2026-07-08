@@ -44,6 +44,7 @@ beforeEach(() => {
     interviewOverlayPromptMaxWidth: 900,
     interviewOverlayPromptAutoFollow: false,
     interviewOverlayMaxLines: 0,
+    interviewOverlayVisible: false,
   })
 })
 
@@ -172,6 +173,7 @@ describe('useOverlayWindowSync', () => {
       interviewOverlayFocusHeightPct: 71,
       interviewOverlayPromptAutoFollow: true,
       interviewOverlayMaxLines: 7,
+      interviewOverlayVisible: false,
     })
     expect(localStorage.getItem('ia_overlay_enabled')).toBe('1')
     expect(localStorage.getItem('ia_overlay_opacity')).toBe('0.42')

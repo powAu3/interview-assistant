@@ -10,9 +10,10 @@ const apiMock = vi.hoisted(() => ({
   cancelAsk: vi.fn(),
   clear: vi.fn(),
 }))
+const useInterviewWSMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hooks/useInterviewWS', () => ({
-  useInterviewWS: () => undefined,
+  useInterviewWS: useInterviewWSMock,
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -34,6 +35,7 @@ beforeEach(() => {
   apiMock.askFromServerScreen.mockReset()
   apiMock.cancelAsk.mockReset()
   apiMock.clear.mockReset()
+  useInterviewWSMock.mockReset()
   apiMock.askFromServerScreen.mockResolvedValue({ ok: true })
   apiMock.cancelAsk.mockResolvedValue({ ok: true })
   apiMock.clear.mockResolvedValue({ ok: true })
@@ -57,6 +59,7 @@ beforeEach(() => {
     interviewOverlayPromptMaxWidth: 900,
     interviewOverlayPromptAutoFollow: false,
     interviewOverlayMaxLines: 0,
+    interviewOverlayVisible: true,
   })
   localStorage.setItem('ia_overlay_enabled', '1')
   localStorage.setItem('ia_overlay_mode', 'glass')
@@ -64,6 +67,31 @@ beforeEach(() => {
 })
 
 describe('InterviewOverlay', () => {
+  it('connects its websocket only while the overlay window is enabled and visible', () => {
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = {
+      getOverlayState: vi.fn().mockResolvedValue(null),
+      onOverlayState: vi.fn(() => () => {}),
+    }
+    useUiPrefsStore.setState({ interviewOverlayEnabled: true, interviewOverlayVisible: false })
+    const { rerender } = render(<InterviewOverlay />)
+
+    expect(useInterviewWSMock).toHaveBeenLastCalledWith(false)
+
+    act(() => {
+      useUiPrefsStore.setState({ interviewOverlayVisible: true })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(useInterviewWSMock).toHaveBeenLastCalledWith(true)
+
+    act(() => {
+      useUiPrefsStore.setState({ interviewOverlayEnabled: false })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(useInterviewWSMock).toHaveBeenLastCalledWith(false)
+  })
+
   it('renders the existing glass overlay mode', () => {
     render(<InterviewOverlay />)
 

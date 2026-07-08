@@ -16,6 +16,7 @@ describe('uiPrefsStore overlay state sync', () => {
       interviewOverlayPromptMaxWidth: 900,
       interviewOverlayPromptAutoFollow: false,
       interviewOverlayMaxLines: 0,
+      interviewOverlayVisible: false,
     })
   })
 
@@ -122,5 +123,22 @@ describe('uiPrefsStore overlay state sync', () => {
 
     expect(useUiPrefsStore.getState().interviewOverlayPromptAutoFollow).toBe(true)
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayPromptAutoFollow)).toBe('1')
+  })
+
+  it('tracks overlay window visibility without persisting it as a style preference', () => {
+    useUiPrefsStore.getState().applyInterviewOverlayState({
+      initialized: false,
+      enabled: false,
+      visible: true,
+      opacity: 0.88,
+      fontSize: 14,
+      fontColor: '#e2e8f0',
+      showBg: true,
+      maxLines: 0,
+    })
+
+    expect(useUiPrefsStore.getState().interviewOverlayVisible).toBe(true)
+    expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayEnabled)).toBeNull()
+    expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayOpacity)).toBeNull()
   })
 })
