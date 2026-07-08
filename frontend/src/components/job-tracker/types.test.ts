@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseApplication } from './types'
+import { parseApplication, parseReviewScore } from './types'
 
 describe('job tracker types', () => {
+  it('parses review score numbers from backend labels', () => {
+    expect(parseReviewScore(8)).toBe(8)
+    expect(parseReviewScore('8.2分')).toBe(8.2)
+    expect(parseReviewScore('无法评分')).toBeNull()
+    expect(parseReviewScore('11')).toBeNull()
+  })
+
   it('normalizes review summary score strings while parsing applications', () => {
     const app = parseApplication({
       id: 1,

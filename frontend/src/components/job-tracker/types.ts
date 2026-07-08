@@ -70,7 +70,7 @@ export interface Offer {
   position?: string
 }
 
-function parseScore(value: unknown): number | null {
+export function parseReviewScore(value: unknown): number | null {
   if (value == null) return null
   let score: number | null = null
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -109,12 +109,12 @@ export function parseApplication(raw: Record<string, unknown>): Application {
     review_summary: {
       review_count: Number(reviewSummary.review_count ?? 0),
       latest_review_id: reviewSummary.latest_review_id != null ? Number(reviewSummary.latest_review_id) : null,
-      latest_avg_score: parseScore(reviewSummary.latest_avg_score),
+      latest_avg_score: parseReviewScore(reviewSummary.latest_avg_score),
       latest_review_at: reviewSummary.latest_review_at != null ? Number(reviewSummary.latest_review_at) : null,
       latest_status: reviewSummary.latest_status != null ? String(reviewSummary.latest_status) : null,
       linked_review_count: Number(reviewSummary.linked_review_count ?? reviewSummary.review_count ?? 0),
       latest_linked_review_id: reviewSummary.latest_linked_review_id != null ? Number(reviewSummary.latest_linked_review_id) : null,
-      latest_linked_avg_score: parseScore(reviewSummary.latest_linked_avg_score),
+      latest_linked_avg_score: parseReviewScore(reviewSummary.latest_linked_avg_score),
       latest_linked_review_at: reviewSummary.latest_linked_review_at != null ? Number(reviewSummary.latest_linked_review_at) : null,
       latest_linked_status: reviewSummary.latest_linked_status != null ? String(reviewSummary.latest_linked_status) : null,
     },

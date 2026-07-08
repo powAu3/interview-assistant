@@ -265,6 +265,22 @@ describe('JobTracker', () => {
   })
 
   it('shows review summary and opens linked reviews', async () => {
+    apiMock.jobTrackerApplicationReviews.mockResolvedValueOnce({
+      items: [{
+        id: 11,
+        status: 'completed',
+        started_at: 1710000000,
+        ended_at: 1710003600,
+        title: '系统设计复盘',
+        company: 'Acme',
+        role: 'Frontend',
+        turn_count: 4,
+        avg_score: '8.2分',
+        summary_preview: '缓存与限流回答不错，容量估算需要补强。',
+        updated_at: 1710003600,
+      }],
+    })
+
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
 
@@ -273,6 +289,8 @@ describe('JobTracker', () => {
     await waitFor(() => expect(apiMock.jobTrackerApplicationReviews).toHaveBeenCalledWith(1))
     expect(await screen.findByText('系统设计复盘')).toBeInTheDocument()
     expect(screen.getByText(/缓存与限流回答不错/)).toBeInTheDocument()
+    expect(screen.getByText((_, node) => node?.textContent === '最近得分 8.2')).toBeInTheDocument()
+    expect(screen.queryByText('NaN')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '打开复盘' }))
     expect(useUiPrefsStore.getState().appMode).toBe('review')

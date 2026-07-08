@@ -29,7 +29,7 @@ import ApplicationsTable from './job-tracker/ApplicationsTable'
 const KanbanBoard = lazy(() => import('./job-tracker/KanbanBoard'))
 const OfferEditModal = lazy(() => import('./job-tracker/OfferEditModal'))
 import type { Application, Offer, Stage } from './job-tracker/types'
-import { parseApplication, parseOffer } from './job-tracker/types'
+import { parseApplication, parseOffer, parseReviewScore } from './job-tracker/types'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import {
   ONGOING_STAGES,
@@ -529,7 +529,7 @@ export default function JobTracker() {
           company: item.company != null ? String(item.company) : null,
           role: item.role != null ? String(item.role) : null,
           turn_count: Number(item.turn_count ?? 0),
-          avg_score: item.avg_score != null ? Number(item.avg_score) : null,
+          avg_score: parseReviewScore(item.avg_score),
           summary_preview: item.summary_preview != null ? String(item.summary_preview) : null,
           updated_at: Number(item.updated_at ?? 0),
           auto_sync_eligible: item.auto_sync_eligible != null ? Boolean(item.auto_sync_eligible) : undefined,
