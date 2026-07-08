@@ -363,6 +363,56 @@ describe('ReviewSessionDetail', () => {
     expect(screen.getByText('第二张截图里的样例不通过')).toBeInTheDocument()
   })
 
+  it('shows generated answers for written-exam review turns', async () => {
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      source: 'written_exam',
+      title: null,
+      company: null,
+      role: null,
+      summary_markdown: null,
+      avg_score: 7.7,
+      turn_count: 1,
+      strong_points: [],
+      weak_points: [],
+      turns: [
+        {
+          id: 101,
+          session_id: 7,
+          qa_id: 'qa-screen-1',
+          seq: 1,
+          question_text: '截图题：两数之和怎么写？',
+          candidate_answer_text: '',
+          original_candidate_answer_text: null,
+          reference_answer_text: '用哈希表一次遍历，返回目标差值命中的下标。',
+          code_text: null,
+          duration_ms: 30000,
+          is_partial: false,
+          analysis_status: 'completed',
+          strengths: ['复杂度清晰'],
+          risks: ['缺少空数组用例'],
+          evidence: { review_mode: 'written_exam' },
+          scorecard: { 正确性: 8, 完整性: 7, 可提交性: 8 },
+          created_at: 1710000000,
+          updated_at: 1710000000,
+        },
+      ],
+    })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('截图笔试复盘')
+    expect(screen.getByText('笔试练习')).toBeInTheDocument()
+    expect(screen.getAllByText('1 题').length).toBeGreaterThan(0)
+    expect(screen.getByText('1 题已评分')).toBeInTheDocument()
+    expect(screen.getByText('模式')).toBeInTheDocument()
+    expect(screen.getByText('笔试')).toBeInTheDocument()
+    expect(screen.getByText('生成答案')).toBeInTheDocument()
+    expect(screen.getByText('用哈希表一次遍历，返回目标差值命中的下标。')).toBeInTheDocument()
+    expect(screen.queryByText('候选人回答')).not.toBeInTheDocument()
+    expect(screen.queryByText('(未录制到回答)')).not.toBeInTheDocument()
+  })
+
   it('refreshes an analyzing review detail until the generated analysis is ready', async () => {
     vi.useFakeTimers()
     apiMock.reviewSessionDetail

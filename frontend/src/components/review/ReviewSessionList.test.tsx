@@ -112,6 +112,40 @@ describe('ReviewSessionList', () => {
     expect(screen.getByText('米哈游二面')).toBeInTheDocument()
   })
 
+  it('labels written-exam review sessions with exam-specific metadata', async () => {
+    apiMock.reviewSessions.mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      page_size: 20,
+      items: [
+        {
+          id: 52,
+          status: 'recorded',
+          started_at: 1710300000,
+          ended_at: 1710300900,
+          source: 'written_exam',
+          title: '截图笔试练习',
+          company: null,
+          role: null,
+          turn_count: 2,
+          avg_score: null,
+          summary_markdown: null,
+          auto_sync_eligible: true,
+          application_id: null,
+          application: null,
+        },
+      ],
+    })
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('截图笔试练习')
+    expect(screen.getByText('笔试练习')).toBeInTheDocument()
+    expect(screen.getByText('截图题')).toBeInTheDocument()
+    expect(screen.getByText('2题')).toBeInTheDocument()
+    expect(screen.getByText('待生成笔试报告')).toBeInTheDocument()
+  })
+
   it('can jump from a review card back to the linked application timeline', async () => {
     const onViewDetail = vi.fn()
     render(<ReviewSessionList onViewDetail={onViewDetail} />)

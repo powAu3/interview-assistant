@@ -19,6 +19,7 @@ import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
 import { api, getErrorMessage } from '../../lib/api'
 import type { ReviewSessionDetail, ReviewTurn } from './types'
+import { getReviewSourceMeta, isWrittenExamReview, type ReviewSourceMeta } from './sourceMeta'
 import type { Application } from '../job-tracker/types'
 import { parseApplication } from '../job-tracker/types'
 import { STAGE_LABELS, isTerminalStage } from '../job-tracker/stageConfig'
@@ -243,6 +244,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   }
 
   const avgScoreDisplay = detail.avg_score != null ? detail.avg_score.toFixed(1) : '—'
+  const sourceMeta = getReviewSourceMeta(detail.source)
+  const isWrittenExam = isWrittenExamReview(detail.source)
 
   const hasGeneratedAnalysis = Boolean(detail.summary_markdown) || detail.avg_score != null ||
     detail.turns?.some((turn) =>
@@ -279,7 +282,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
     .slice(0, 8)
   const titleText = detail.title || (detail.company && detail.role
     ? `${detail.company} - ${detail.role}`
-    : detail.company || detail.role || '面试详情')
+    : detail.company || detail.role || sourceMeta.detailLabel)
   const detailIdentityText = `${detail.company ?? ''}${detail.company && detail.role ? ' - ' : ''}${detail.role ?? ''}`.trim()
   const subtitleText = detail.title && (detail.company || detail.role) && normalizeCompareText(detail.title) !== normalizeCompareText(detailIdentityText)
     ? detailIdentityText
@@ -361,6 +364,9 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         <h2 className="text-2xl font-bold tracking-tight text-text-primary md:text-[28px]">
                           {titleText}
                         </h2>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${sourceMeta.badgeClassName}`}>
+                          {sourceMeta.label}
+                        </span>
                         <button
                           type="button"
                           onClick={() => setEditing(true)}
@@ -381,8 +387,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         {detail.auto_sync_eligible === false ? <span>测试片段</span> : null}
                         <span>{dayjs.unix(Math.floor(detail.started_at)).format('YYYY-MM-DD HH:mm')}</span>
                         {sessionDurationMinutes != null ? <span>时长 {sessionDurationMinutes} 分钟</span> : null}
-                        <span>{detail.turn_count} 轮问答</span>
-                        <span>{scoredTurns.length} 轮已评分</span>
+                        <span>{detail.turn_count} {sourceMeta.unit}</span>
+                        <span>{scoredTurns.length} {sourceMeta.unit}已评分</span>
                       </div>
                     </>
                   )}
@@ -434,11 +440,19 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         value={avgScoreDisplay}
                         valueClass={detail.avg_score != null ? scoreTextClass(detail.avg_score) : 'text-text-primary'}
                       />
-                      <HeaderCompactMetric
-                        label="纠错"
-                        value={String(correctedCount)}
-                        valueClass={correctedCount > 0 ? 'text-blue-500' : 'text-text-secondary'}
-                      />
+                      {isWrittenExam ? (
+                        <HeaderCompactMetric
+                          label="模式"
+                          value="笔试"
+                          valueClass="text-cyan-500"
+                        />
+                      ) : (
+                        <HeaderCompactMetric
+                          label="纠错"
+                          value={String(correctedCount)}
+                          valueClass={correctedCount > 0 ? 'text-blue-500' : 'text-text-secondary'}
+                        />
+                      )}
                     </div>
                   </div>
                 ) : null}
@@ -466,6 +480,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                   scoredTurnsCount={scoredTurns.length}
                   correctedCount={correctedCount}
                   isAnalyzing={isAnalyzing}
+                  sourceMeta={sourceMeta}
                 />
               )}
             </SectionPanel>
@@ -495,6 +510,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                       key={turn.id}
                       turn={turn}
                       expanded={expandedTurns.has(turn.id)}
+                      sourceMeta={sourceMeta}
                       onToggle={() => toggleTurn(turn.id)}
                     />
                   ))}
@@ -503,7 +519,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
             ) : (
               <SectionPanel title="逐题分析">
                 <div className="border-l border-bg-hover/80 py-1 pl-3 text-sm text-text-secondary">
-                  有问答后会显示原文、纠错和评分。
+                  {isWrittenExam ? '有截图题后会显示生成答案、自检和评分。' : '有问答后会显示原文、纠错和评分。'}
                 </div>
               </SectionPanel>
             )}
@@ -718,12 +734,15 @@ function PendingSummaryWorkspace({
   scoredTurnsCount,
   correctedCount,
   isAnalyzing,
+  sourceMeta,
 }: {
   detail: ReviewSessionDetail
   scoredTurnsCount: number
   correctedCount: number
   isAnalyzing: boolean
+  sourceMeta: ReviewSourceMeta
 }) {
+  const unitLabel = isWrittenExamReview(detail.source) ? '题目' : '问答'
   const headline = isAnalyzing
     ? '整理中'
     : detail.status === 'analysis_failed'
@@ -735,14 +754,14 @@ function PendingSummaryWorkspace({
           : '未生成复盘'
 
   const description = isAnalyzing
-    ? `${detail.turn_count} 轮问答`
+    ? `${detail.turn_count} ${sourceMeta.unit}`
     : detail.status === 'analysis_failed'
       ? '可重试'
       : detail.auto_sync_eligible === false
-        ? `${detail.turn_count} 轮问答 · 不回写看板`
+        ? `${detail.turn_count} ${sourceMeta.unit} · 不回写看板`
       : detail.turn_count <= 0
-          ? '暂无问答'
-          : `${detail.turn_count} 轮问答${correctedCount > 0 ? ` · ${correctedCount} 处纠错` : ''}`
+          ? `暂无${unitLabel}`
+          : `${detail.turn_count} ${sourceMeta.unit}${correctedCount > 0 ? ` · ${correctedCount} 处纠错` : ''}`
 
   return (
     <div className="flex flex-col gap-2 border-l border-bg-hover/80 pl-3 lg:flex-row lg:items-center lg:justify-between">
@@ -752,7 +771,7 @@ function PendingSummaryWorkspace({
         <span>{description}</span>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-        <span>问答 <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
+        <span>{unitLabel} <span className="font-semibold text-text-primary">{detail.turn_count}</span></span>
         <span>已评分 <span className="font-semibold text-text-primary">{scoredTurnsCount}</span></span>
         {detail.application ? (
           <span>主线 <span className="font-semibold text-text-primary">已绑定</span></span>
@@ -768,12 +787,18 @@ function PendingSummaryWorkspace({
 function TurnCard({
   turn,
   expanded,
+  sourceMeta,
   onToggle,
 }: {
   turn: ReviewTurn
   expanded: boolean
+  sourceMeta: ReviewSourceMeta
   onToggle: () => void
 }) {
+  const isWrittenExam = sourceMeta.kind === 'written_exam'
+  const answerText = isWrittenExam
+    ? (turn.reference_answer_text || turn.candidate_answer_text || '')
+    : turn.candidate_answer_text
   const hasAnalysis =
     (turn.strengths && turn.strengths.length > 0) ||
     (turn.risks && turn.risks.length > 0) ||
@@ -781,6 +806,7 @@ function TurnCard({
 
   const avgScore = getTurnAvgScore(turn)
   const hasAsrCorrection = Boolean(
+    !isWrittenExam &&
     turn.original_candidate_answer_text &&
     turn.original_candidate_answer_text !== turn.candidate_answer_text,
   )
@@ -834,7 +860,7 @@ function TurnCard({
         <div className="space-y-3 border-t border-bg-hover/40 py-3">
           {visionVerify && <TurnVisionVerifyNotice verify={visionVerify} />}
           <div>
-            <h4 className="mb-2 text-xs font-semibold text-text-muted">候选人回答</h4>
+            <h4 className="mb-2 text-xs font-semibold text-text-muted">{sourceMeta.answerHeading}</h4>
             {hasAsrCorrection && (
               <details className="mb-2 rounded-md border border-accent-blue/20 bg-accent-blue/5 px-3 py-2 text-xs">
                 <summary className="cursor-pointer select-none font-semibold text-accent-blue">
@@ -846,7 +872,7 @@ function TurnCard({
               </details>
             )}
             <div className="whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
-              {turn.candidate_answer_text || '(未录制到回答)'}
+              {answerText || sourceMeta.emptyAnswer}
             </div>
           </div>
 

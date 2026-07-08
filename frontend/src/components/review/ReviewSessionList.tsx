@@ -19,6 +19,7 @@ import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { StageBadge } from '@/components/job-tracker/stageConfig'
 import { isLightColorScheme } from '@/lib/colorScheme'
 import type { ReviewSession, ReviewSessionsResponse } from './types'
+import { getReviewSourceMeta, isWrittenExamReview } from './sourceMeta'
 
 const STATUS_LABELS: Record<ReviewSession['status'], string> = {
   recording: '录制中',
@@ -854,10 +855,12 @@ function ReviewQueueRow({
 }) {
   const showLinkedApplication = Boolean(session.application)
   const showScore = session.avg_score != null
+  const sourceMeta = getReviewSourceMeta(session.source)
+  const isWrittenExam = isWrittenExamReview(session.source)
   const title = session.title || session.company || '未命名复盘'
-  const roleText = session.role || '岗位未填写'
+  const roleText = session.role || (isWrittenExam ? '截图题' : '岗位未填写')
   const timeText = dayjs.unix(Math.floor(session.started_at)).format('MM-DD HH:mm')
-  const turnsText = `${session.turn_count}轮`
+  const turnsText = `${session.turn_count}${sourceMeta.unit}`
   const summary = sessionSummary(session)
   const hasPrimaryTrigger = showTriggerButton
   const linkedApplicationName = `${session.application?.company || '未命名公司'} · ${session.application?.position || '岗位'}`
@@ -890,6 +893,9 @@ function ReviewQueueRow({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h4 className="text-sm font-semibold tracking-tight text-text-primary">{title}</h4>
+                <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${sourceMeta.badgeClassName}`}>
+                  {sourceMeta.label}
+                </span>
                 <span className="text-xs text-text-secondary">{roleText}</span>
               </div>
 
@@ -1033,6 +1039,7 @@ function sessionRowTone(status: ReviewSession['status']) {
 }
 
 function sessionSummary(session: ReviewSession): string | null {
+  const isWrittenExam = isWrittenExamReview(session.source)
   const normalized = String(session.summary_markdown ?? '')
     .replace(/[#>*`_-]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -1045,15 +1052,20 @@ function sessionSummary(session: ReviewSession): string | null {
     return '采集不完整'
   }
   if (session.status === 'recorded') {
+    if (isWrittenExam) {
+      return session.auto_sync_eligible === false
+        ? '短样本笔试记录'
+        : '待生成笔试报告'
+    }
     return session.auto_sync_eligible === false
       ? '短样本'
       : '待生成'
   }
   if (session.status === 'analyzing') {
-    return '整理中'
+    return isWrittenExam ? '整理笔试报告中' : '整理中'
   }
   if (session.status === 'recording') {
-    return '录制中'
+    return isWrittenExam ? '笔试记录中' : '录制中'
   }
   return null
 }
