@@ -85,6 +85,18 @@ const EMPTY_REMOTE_MODEL_LIST: RemoteModelListState = {
 }
 
 const KEEP_EXISTING_API_KEY = '__IA_KEEP_EXISTING_API_KEY__'
+const DEFAULT_TEMPERATURE = 0.5
+const DEFAULT_MAX_TOKENS = 4096
+
+function clampNumberInput(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, Math.min(max, parsed))
+}
+
+function clampIntegerInput(value: unknown, min: number, max: number, fallback: number): number {
+  return Math.floor(clampNumberInput(value, min, max, fallback))
+}
 
 function toModelRow(model: ModelFullInfo, index: number): ModelRow {
   return {
@@ -144,6 +156,20 @@ function apiKeyPlaceholder(model: ModelFullInfo) {
   return '填入你的 API Key'
 }
 
+function normalizeLlmForm(form: {
+  temperature: unknown
+  max_tokens: unknown
+  think_mode: boolean
+  think_effort: string
+}) {
+  return {
+    temperature: clampNumberInput(form.temperature, 0, 2, DEFAULT_TEMPERATURE),
+    max_tokens: clampIntegerInput(form.max_tokens, 256, 32768, DEFAULT_MAX_TOKENS),
+    think_mode: form.think_mode,
+    think_effort: form.think_effort,
+  }
+}
+
 function formatRemoteModelError(error: unknown): string {
   const raw = error instanceof Error && error.message
     ? error.message
@@ -193,8 +219,8 @@ export default function ModelsTab() {
   const remoteModelRequestVersions = useRef<Record<string, number>>({})
 
   const [llmForm, setLlmForm] = useState({
-    temperature: 0.5,
-    max_tokens: 4096,
+    temperature: DEFAULT_TEMPERATURE,
+    max_tokens: DEFAULT_MAX_TOKENS,
     think_mode: false,
     think_effort: 'off',
   })
@@ -261,12 +287,12 @@ export default function ModelsTab() {
 
   useEffect(() => {
     if (!config?.models?.length) return
-    const nextLlmForm = {
+    const nextLlmForm = normalizeLlmForm({
       temperature: config.temperature,
       max_tokens: config.max_tokens,
       think_mode: config.think_mode ?? false,
       think_effort: config.think_effort ?? 'off',
-    }
+    })
     const nextMaxP = Math.min(8, Math.max(1, config.max_parallel_answers ?? 2))
     if (!queueDirty) {
       setMaxP(nextMaxP)
@@ -640,8 +666,10 @@ export default function ModelsTab() {
     setLlmSaveState('saving')
     setLlmSaveError(null)
     try {
-      await updateConfigAndRefresh(llmForm)
-      markLlmSaved(llmForm)
+      const savedForm = normalizeLlmForm(llmForm)
+      await updateConfigAndRefresh(savedForm)
+      setLlmForm(savedForm)
+      markLlmSaved(savedForm)
       setLlmSaveState('saved')
       useInterviewStore.getState().setToastMessage('LLM 参数已保存')
     } catch (e: any) {
@@ -1127,7 +1155,12 @@ export default function ModelsTab() {
               min="0"
               max="2"
               value={llmForm.temperature}
-              onChange={(e) => setLlmForm({ ...llmForm, temperature: parseFloat(e.target.value) })}
+              onChange={(e) => {
+                setLlmForm({
+                  ...llmForm,
+                  temperature: clampNumberInput(e.target.value, 0, 2, DEFAULT_TEMPERATURE),
+                })
+              }}
               className="input-field"
             />
           </Field>
@@ -1138,7 +1171,12 @@ export default function ModelsTab() {
               min="256"
               max="32768"
               value={llmForm.max_tokens}
-              onChange={(e) => setLlmForm({ ...llmForm, max_tokens: parseInt(e.target.value) })}
+              onChange={(e) => {
+                setLlmForm({
+                  ...llmForm,
+                  max_tokens: clampIntegerInput(e.target.value, 256, 32768, DEFAULT_MAX_TOKENS),
+                })
+              }}
               className="input-field"
             />
           </Field>

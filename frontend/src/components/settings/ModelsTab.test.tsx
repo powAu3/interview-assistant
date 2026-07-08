@@ -371,6 +371,51 @@ describe('ModelsTab state sync', () => {
     expect(screen.getByText('有未保存更改')).toBeInTheDocument()
   })
 
+  it('normalizes invalid generation params from config before saving', async () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        temperature: 'not-a-number',
+        max_tokens: 999999,
+      },
+    }) as any)
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存生成参数')
+
+    expect(screen.queryByDisplayValue('NaN')).not.toBeInTheDocument()
+    expect(screen.getByDisplayValue('0.5')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('32768')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('保存生成参数'))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+        temperature: 0.5,
+        max_tokens: 32768,
+      }))
+    })
+  })
+
+  it('clamps edited generation params before saving', async () => {
+    render(<ModelsTab />)
+
+    await screen.findByText('保存生成参数')
+    const [temperatureInput, maxTokensInput] = screen.getAllByRole('spinbutton')
+
+    fireEvent.change(temperatureInput, { target: { value: '9' } })
+    fireEvent.change(maxTokensInput, { target: { value: '100' } })
+    fireEvent.click(screen.getByText('保存生成参数'))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+        temperature: 2,
+        max_tokens: 256,
+      }))
+    })
+  })
+
   it('shows model health detail as a tooltip in the model list', async () => {
     apiMock.getModelsHealth.mockResolvedValue({
       health: { 0: 'error' },
