@@ -20,6 +20,11 @@ type FocusTabPane = {
   isGenerating?: boolean
 }
 
+type VisionVerifyState = {
+  verdict: 'PASS' | 'FAIL' | 'UNKNOWN'
+  reason: string
+}
+
 const FOCUS_TAB_CACHE_LIMIT = 20
 const FOCUS_TEXT_COLOR = '#263241'
 
@@ -88,6 +93,13 @@ export default function InterviewOverlay() {
       : displayedQa?.status === 'error'
         ? `保存失败: ${displayedQa.errorMessage || '未知原因'}`
         : displayedQa?.answer?.trim() || (displayedQa ? (displayedQa.isThinking ? '思考中…' : '正在组织回答…') : '')
+  const activeVisionVerify =
+    displayedQa?.status !== 'cancelled' && displayedQa?.status !== 'error'
+      ? displayedQa?.visionVerify
+      : undefined
+  const activeVisionVerifyKey = activeVisionVerify
+    ? `${activeVisionVerify.verdict}:${activeVisionVerify.reason}`
+    : ''
   const isStreaming = displayedQa ? streamingIds.includes(displayedQa.id) : false
   const hasContent = Boolean(displayedQa)
   const liveGeneratingQa = useMemo(
@@ -137,7 +149,9 @@ export default function InterviewOverlay() {
     if (!enabled || overlayMode !== 'prompt') return
     const el = answerScrollRef.current
     if (!el) return
-    const contentEl = el.querySelector<HTMLElement>('.ov-markdown') ?? el
+    const contentEl = el.querySelector<HTMLElement>('.ov-answer-stack')
+      ?? el.querySelector<HTMLElement>('.ov-markdown')
+      ?? el
     const contentWidth = Math.ceil(Math.max(
       contentEl.scrollWidth,
       contentEl.getBoundingClientRect().width,
@@ -150,7 +164,7 @@ export default function InterviewOverlay() {
     const nextWidth = Math.max(180, targetWidth)
     const nextHeight = Math.max(72, Math.min(420, contentHeight + 12))
     window.electronAPI?.resizeOverlayWindow?.({ width: nextWidth, height: nextHeight })?.catch(() => {})
-  }, [answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth])
+  }, [activeVisionVerifyKey, answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth])
 
   const refreshShortcuts = useCallback(() => {
     window.electronAPI?.getShortcuts?.()
@@ -341,15 +355,16 @@ export default function InterviewOverlay() {
   ]
 
   const renderedAnswer = hasContent ? (
-    <>
+    <div className="ov-answer-stack">
       {displayedQa && qaPairs.length > 1 && (
         <div className="ov-review-line">
           {isReviewingHistory ? '回看' : '当前'} {displayedQaIndex + 1}/{qaPairs.length} · {displayedQa.question}
         </div>
       )}
+      {activeVisionVerify && <OverlayVisionVerify verify={activeVisionVerify} />}
       <OverlayMarkdown content={overlayAnswerSlice.text} />
       {isStreaming && <span className="ov-caret" />}
-    </>
+    </div>
   ) : (
     <span className="ov-standby-hint" style={{ fontSize: `${answerFontSize}px` }}>
       {isRecording ? (isExamMode ? '笔试中…' : '正在聆听…') : (isExamMode ? '点击开始笔试' : '等待面试开始')}
@@ -425,6 +440,7 @@ export default function InterviewOverlay() {
           >
             {hasContent ? (
               <div className="ov-focus-active-pane" key={`${displayedQaKey}:${activeSection.key}`}>
+                {activeVisionVerify && <OverlayVisionVerify verify={activeVisionVerify} />}
                 <FocusSection
                   title={activeSection.label}
                   section={sliceMaxLines(activeSection.content, maxLines)}
@@ -629,6 +645,28 @@ function OverlayMarkdown({ content }: { content: string }) {
   return (
     <div className="ov-markdown markdown-body">
       <ReactMarkdown components={OVERLAY_MARKDOWN_COMPONENTS}>{content}</ReactMarkdown>
+    </div>
+  )
+}
+
+function OverlayVisionVerify({ verify }: { verify: VisionVerifyState }) {
+  const label =
+    verify.verdict === 'PASS'
+      ? '自检通过'
+      : verify.verdict === 'FAIL'
+        ? '自检不一致 · 人工复核'
+        : '自检无定论'
+  const reason = verify.reason.trim()
+  const tone = verify.verdict.toLowerCase()
+  return (
+    <div
+      className={`ov-verify ov-verify--${tone}`}
+      role={verify.verdict === 'FAIL' ? 'alert' : 'status'}
+      aria-live={verify.verdict === 'FAIL' ? 'assertive' : 'polite'}
+    >
+      <span className="ov-verify-dot" aria-hidden />
+      <span className="ov-verify-label">{label}</span>
+      {reason && <span className="ov-verify-reason">{reason}</span>}
     </div>
   )
 }

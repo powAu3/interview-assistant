@@ -65,6 +65,28 @@ describe('InterviewOverlay', () => {
     expect(document.querySelector('.ov-shell--nobg')).toBeInTheDocument()
   })
 
+  it('shows failed screenshot self-checks inside prompt overlay mode', () => {
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        question: '两张截图里的代码题怎么修？',
+        answer: '```python\nprint(0)\n```',
+        visionVerify: {
+          verdict: 'FAIL',
+          reason: '第二张截图里的样例不通过',
+        },
+      }],
+    })
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('自检不一致 · 人工复核')
+    expect(screen.getByText('第二张截图里的样例不通过')).toBeInTheDocument()
+  })
+
   it('does not auto-follow streamed prompt overlay content by default', () => {
     useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
     localStorage.setItem('ia_overlay_mode', 'prompt')
@@ -331,6 +353,27 @@ describe('InterviewOverlay', () => {
     expect(screen.getByText('切换题目')).toBeInTheDocument()
     expect(screen.getByText(/双指针维护左右最大高度/)).toBeInTheDocument()
     expect(document.querySelector('.ov-shell--focus')).toBeInTheDocument()
+  })
+
+  it('shows screenshot self-check status inside focus overlay mode', () => {
+    useInterviewStore.setState({
+      qaPairs: [{
+        ...qa,
+        answer: '## 结论\n双指针可通过样例。',
+        visionVerify: {
+          verdict: 'PASS',
+          reason: '样例与约束匹配',
+        },
+      }],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('自检通过')
+    expect(screen.getByText('样例与约束匹配')).toBeInTheDocument()
   })
 
   it('uses real accessible buttons for focus tools and section tabs', () => {

@@ -1056,6 +1056,91 @@ code, pre, .font-mono {
   text-overflow: ellipsis;
 }
 
+.ov-answer-stack {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ov-root--prompt .ov-answer-stack {
+  display: inline-flex;
+  width: fit-content;
+  max-width: min(520px, calc(100vw - 12px));
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.ov-verify {
+  display: flex;
+  max-width: 100%;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 5px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(71, 85, 105, 0.9);
+  font-size: 0.78em;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ov-verify-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 0.38em;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.ov-verify-label {
+  flex: 0 0 auto;
+}
+
+.ov-verify-reason {
+  min-width: 0;
+  color: currentColor;
+  font-weight: 600;
+  opacity: 0.78;
+}
+
+.ov-verify--pass {
+  border-color: rgba(16, 185, 129, 0.38);
+  background: rgba(16, 185, 129, 0.12);
+  color: rgb(4, 120, 87);
+}
+
+.ov-verify--fail {
+  border-color: rgba(245, 158, 11, 0.58);
+  background: rgba(245, 158, 11, 0.16);
+  color: rgb(146, 64, 14);
+}
+
+.ov-verify--unknown {
+  border-color: rgba(148, 163, 184, 0.34);
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(71, 85, 105, 0.86);
+}
+
+.ov-shell--bg .ov-verify--pass,
+.ov-shell--nobg .ov-verify--pass {
+  color: rgb(52, 211, 153);
+}
+
+.ov-shell--bg .ov-verify--fail,
+.ov-shell--nobg .ov-verify--fail {
+  color: rgb(251, 191, 36);
+}
+
+.ov-shell--bg .ov-verify--unknown,
+.ov-shell--nobg .ov-verify--unknown {
+  color: rgba(226, 232, 240, 0.82);
+}
+
 .ov-focus-section h2::before {
   content: '';
   position: absolute;
