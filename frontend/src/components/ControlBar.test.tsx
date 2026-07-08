@@ -345,6 +345,47 @@ describe('ControlBar', () => {
     expect(apiMock.ask).not.toHaveBeenCalled()
   })
 
+  it('prevents duplicate manual submissions while a question is in flight', async () => {
+    let resolveAsk: ((value: unknown) => void) | null = null
+    const pendingAsk = new Promise((resolve) => {
+      resolveAsk = resolve
+    })
+    apiMock.ask.mockReturnValueOnce(pendingAsk)
+
+    render(<ControlBar />)
+
+    const input = screen.getByPlaceholderText('输入问题，Enter 发送…')
+    fireEvent.change(input, {
+      target: { value: '解释一下 Redis 持久化' },
+    })
+
+    const send = screen.getByRole('button', { name: '发送问题' })
+    fireEvent.click(send)
+
+    await waitFor(() => {
+      expect(apiMock.ask).toHaveBeenCalledWith('解释一下 Redis 持久化', undefined)
+    })
+    await waitFor(() => {
+      expect(send).toBeDisabled()
+    })
+    expect(send).toHaveAttribute('title', '正在提交问题')
+
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
+
+    expect(apiMock.ask).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      if (!resolveAsk) throw new Error('ask resolver was not captured')
+      resolveAsk({ ok: true })
+      await pendingAsk
+    })
+
+    await waitFor(() => {
+      expect(input).toHaveValue('')
+    })
+  })
+
   it('surfaces stop failures instead of swallowing them', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     apiMock.stop.mockRejectedValue(new Error('stop down'))

@@ -101,6 +101,7 @@ export default function ControlBar() {
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [cancellingAsk, setCancellingAsk] = useState(false)
+  const [asking, setAsking] = useState(false)
   const [refreshingDevices, setRefreshingDevices] = useState(false)
   const [testingOutput, setTestingOutput] = useState(false)
   const [testingInput, setTestingInput] = useState(false)
@@ -128,6 +129,7 @@ export default function ControlBar() {
   const showExamStartHint = isExamMode && !isRecording && qaPairs.length === 0
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
+  const askingRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
   const [quickPromptRecent, setQuickPromptRecent] = useState<Record<string, number>>(readQuickPromptRecent)
   const orderedQuickPrompts = useMemo(
@@ -345,6 +347,7 @@ export default function ControlBar() {
   }, [setToastMessage])
 
   const handleAsk = useCallback(async () => {
+    if (askingRef.current) return
     if (!manualQuestion.trim() && !pastedImage) return
     if (noEnabledModels) {
       setError('请先在设置中启用至少一个模型')
@@ -358,11 +361,18 @@ export default function ControlBar() {
       setError('请先在设置中启用至少一个带 👁 的识图模型')
       return
     }
+    askingRef.current = true
+    setAsking(true)
     try {
       await api.ask(manualQuestion.trim(), pastedImage || undefined)
       setManualQuestion('')
       setPastedImage(null)
-    } catch (e: unknown) { setError(getErrorMessage(e, '提交问题失败')) }
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, '提交问题失败'))
+    } finally {
+      askingRef.current = false
+      setAsking(false)
+    }
   }, [manualQuestion, pastedImage, noEnabledModels, allModelsUnavailable, hasEnabledVisionModel])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -738,9 +748,11 @@ export default function ControlBar() {
         </div>
         <button
           onClick={handleAsk}
-          disabled={answerModelUnavailable || (pastedImage && !hasEnabledVisionModel) || (!manualQuestion.trim() && !pastedImage)}
+          disabled={asking || answerModelUnavailable || (pastedImage && !hasEnabledVisionModel) || (!manualQuestion.trim() && !pastedImage)}
           title={
-            noEnabledModels
+            asking
+              ? '正在提交问题'
+              : noEnabledModels
               ? '请先在设置中启用至少一个模型'
               : allModelsUnavailable
               ? '所有启用模型不可用，请先检查模型连接'
@@ -753,7 +765,7 @@ export default function ControlBar() {
           aria-label="发送问题"
           className="px-3 py-2.5 btn-primary text-xs rounded-xl disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
         >
-          <Send className="w-3.5 h-3.5" />
+          {asking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
         </button>
       </div>
 
