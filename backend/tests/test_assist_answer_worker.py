@@ -669,6 +669,68 @@ def test_realtime_asr_source_uses_candidate_context_and_opens_next_window(monkey
     assert session.current_candidate_qa_id == answer_start["id"]
 
 
+def test_candidate_context_waits_for_final_when_partial_already_exists(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    waited: list[tuple[str, int]] = []
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：缓存项目。",
+        qa_id="qa-prev",
+        source="conversation_loopback",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控",
+        qa_id="qa-prev",
+        provider="whisper",
+        segment_id="cand-1",
+        is_final=False,
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    cfg.candidate_context_wait_ms = 250
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: True)
+
+    def fake_wait(_session, qa_id, wait_ms):
+        waited.append((qa_id, wait_ms))
+        _session.add_candidate_transcription(
+            "我实际讲的是风控规则引擎，核心是灰度发布和回滚。",
+            qa_id=qa_id,
+            provider="whisper",
+            segment_id="cand-1",
+            is_final=True,
+        )
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "继续追问。")
+
+    monkeypatch.setattr(answer_worker, "_wait_for_candidate_context_if_pending", fake_wait)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        (
+            "那这个怎么验证？",
+            None,
+            False,
+            "conversation_loopback",
+            {"origin": "asr", "asr_turn_id": 2},
+        ),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert waited == [("qa-prev", 250)]
+    assert "风控规则引擎" in seen["user"]
+    assert "我实际讲的是风控\n" not in seen["user"]
+
+
 def test_followup_prompt_uses_anchor_only_when_question_is_self_contained(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     seen: dict[str, Any] = {}

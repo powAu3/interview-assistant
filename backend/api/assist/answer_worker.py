@@ -528,7 +528,7 @@ def process_question_parallel(
             else ""
         )
 
-    if should_use_candidate_context and last_qa and not actual_spoken_answer:
+    if should_use_candidate_context and last_qa:
         _wait_for_candidate_context_if_pending(session_ref, last_qa.id, candidate_wait_ms)
         with conversation_lock:
             actual_spoken_answer = session_ref.get_candidate_answer_for_qa(
