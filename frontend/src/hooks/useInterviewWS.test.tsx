@@ -77,6 +77,8 @@ describe('useInterviewWS', () => {
       resumeOptStreaming: '',
       resumeOptResult: '',
       resumeOptJobId: null,
+      toastMessage: null,
+      toasts: [],
       lastWSError: null,
     } as any)
     useUiPrefsStore.setState({ appMode: 'assist' } as any)
@@ -150,6 +152,76 @@ describe('useInterviewWS', () => {
     const state = useInterviewStore.getState()
     expect(state.candidateSttLoaded).toBe(false)
     expect(state.toastMessage).toContain('候选人口述记录已关闭，不影响面试录音')
+  })
+
+  it('warns immediately when screenshot self-check fails', () => {
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({
+        type: 'answer_start',
+        id: 'qa-screen',
+        question: '多图截图代码题',
+        source: 'server_screen_multi',
+        model_name: 'Lite Ark',
+      })
+      ws.emitMessage({
+        type: 'answer_done',
+        id: 'qa-screen',
+        question: '多图截图代码题',
+        answer: '```python\nprint(0)\n```',
+        think: '',
+        model_name: 'Lite Ark',
+      })
+      ws.emitMessage({
+        type: 'vision_verify',
+        id: 'qa-screen',
+        verdict: 'FAIL',
+        reason: '截图里的第二个样例不通过',
+      })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.qaPairs[0].visionVerify).toEqual({
+      verdict: 'FAIL',
+      reason: '截图里的第二个样例不通过',
+    })
+    expect(state.toasts[state.toasts.length - 1]).toMatchObject({
+      level: 'warn',
+      message: '截图自检不一致，请人工复核：截图里的第二个样例不通过',
+      ttlMs: 6000,
+    })
+  })
+
+  it('keeps successful screenshot self-check quiet', () => {
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({
+        type: 'answer_start',
+        id: 'qa-screen',
+        question: '截图代码题',
+        source: 'server_screen_left',
+        model_name: 'Lite Ark',
+      })
+      ws.emitMessage({
+        type: 'vision_verify',
+        id: 'qa-screen',
+        verdict: 'PASS',
+        reason: '样例与约束匹配',
+      })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.qaPairs[0].visionVerify).toEqual({
+      verdict: 'PASS',
+      reason: '样例与约束匹配',
+    })
+    expect(state.toasts).toEqual([])
   })
 
   it('ignores stale resume optimization chunks from older jobs', () => {

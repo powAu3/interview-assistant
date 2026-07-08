@@ -165,11 +165,19 @@ export function useInterviewWS() {
         s.pushToast(`答案保存失败: ${(msg.message as string) || '未知原因'}`, 'error')
         break
       case 'vision_verify':
-        s.setVisionVerify(
-          msg.id as string,
-          msg.verdict as Parameters<typeof s.setVisionVerify>[1],
-          msg.reason as string,
-        )
+        {
+          const verdict = msg.verdict as Parameters<typeof s.setVisionVerify>[1]
+          const reason = String(msg.reason || '').trim()
+          const reasonHint = reason ? `：${reason.slice(0, 80)}` : ''
+          if (verdict === 'FAIL') {
+            s.pushToast(`截图自检不一致，请人工复核${reasonHint}`, 'warn', 6000)
+          }
+          s.setVisionVerify(
+            msg.id as string,
+            verdict,
+            reason,
+          )
+        }
         break
       case 'stt_status':
         s.setSttStatus((msg.loaded as boolean) ?? false, (msg.loading as boolean) ?? false, msg.provider as string | undefined)
