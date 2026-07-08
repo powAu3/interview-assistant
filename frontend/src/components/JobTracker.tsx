@@ -344,6 +344,8 @@ export default function JobTracker() {
   const [reviewItems, setReviewItems] = useState<ApplicationReviewItem[]>([])
   const [reviewLoading, setReviewLoading] = useState(false)
   const [reviewModalHighlightId, setReviewModalHighlightId] = useState<number | null>(null)
+  const listLoadSeqRef = useRef(0)
+  const listMutationSeqRef = useRef(0)
   const reviewRequestSeqRef = useRef(0)
   const [showSecondaryFilters, setShowSecondaryFilters] = useState(false)
   const isCompactLayout = useCompactLayout()
@@ -383,23 +385,40 @@ export default function JobTracker() {
     if (view !== 'table') setView('table')
   }, [isCompactLayout, view])
 
+  const markListMutated = useCallback(() => {
+    listMutationSeqRef.current += 1
+  }, [])
+
   const load = useCallback(async () => {
+    const requestSeq = listLoadSeqRef.current + 1
+    listLoadSeqRef.current = requestSeq
+    const mutationSeq = listMutationSeqRef.current
+    const isCurrentLoad = () =>
+      listLoadSeqRef.current === requestSeq &&
+      listMutationSeqRef.current === mutationSeq
+
     setLoading(true)
     try {
       const [aRes, oRes] = await Promise.all([
         api.jobTrackerApplications(),
         api.jobTrackerListOffers(),
       ])
+      if (!isCurrentLoad()) return
       const nextApplications = (aRes.items as Record<string, unknown>[]).map(parseApplication)
       const nextOffers = (oRes.items as Record<string, unknown>[]).map(parseOffer)
       startTransition(() => {
+        if (!isCurrentLoad()) return
         setApplications(nextApplications)
         setOffers(nextOffers)
       })
     } catch (e) {
-      setToastMessage(e instanceof Error ? e.message : '加载失败')
+      if (isCurrentLoad()) {
+        setToastMessage(e instanceof Error ? e.message : '加载失败')
+      }
     } finally {
-      setLoading(false)
+      if (listLoadSeqRef.current === requestSeq) {
+        setLoading(false)
+      }
     }
   }, [setToastMessage])
 
@@ -428,6 +447,7 @@ export default function JobTracker() {
       try {
         const raw = await api.jobTrackerPatchApplication(id, patch as Record<string, unknown>)
         const rawRecord = raw as Record<string, unknown>
+        markListMutated()
         startTransition(() => {
           setApplications((prev) => prev.map((item) => (
             item.id === id ? parseApplicationResponse(rawRecord, item.review_summary) : item
@@ -440,13 +460,14 @@ export default function JobTracker() {
         return false
       }
     },
-    [load, setToastMessage],
+    [load, markListMutated, setToastMessage],
   )
 
   const onDelete = useCallback(
     async (id: number) => {
       try {
         await api.jobTrackerDeleteApplication(id)
+        markListMutated()
         startTransition(() => {
           setApplications((prev) => prev.filter((item) => item.id !== id))
           setOffers((prev) => prev.filter((offer) => offer.application_id !== id))
@@ -455,7 +476,7 @@ export default function JobTracker() {
         setToastMessage(e instanceof Error ? e.message : '删除失败')
       }
     },
-    [setToastMessage],
+    [markListMutated, setToastMessage],
   )
 
   const onStageChange = useCallback(
@@ -470,6 +491,7 @@ export default function JobTracker() {
 
   const onReorderInStage = useCallback(
     async (stage: string, orderedIds: number[]) => {
+      markListMutated()
       setApplications((prev) =>
         prev.map((app) => {
           const index = orderedIds.indexOf(app.id)
@@ -484,7 +506,7 @@ export default function JobTracker() {
         load()
       }
     },
-    [load, setToastMessage],
+    [load, markListMutated, setToastMessage],
   )
 
   const terminalApplicationsCount = useMemo(() => applications.filter((app) => isTerminalStage(app.stage)).length, [applications])
@@ -536,6 +558,7 @@ export default function JobTracker() {
         applied_at: fromDateInput(createDraft.appliedAtInput),
       })
       const row = parseApplicationResponse(raw as Record<string, unknown>)
+      markListMutated()
       setApplications((prev) => [row, ...prev])
       setSearch('')
       setSelectedAppId(row.id)
@@ -559,7 +582,7 @@ export default function JobTracker() {
     } finally {
       setCreating(false)
     }
-  }, [createDraft, setToastMessage])
+  }, [createDraft, markListMutated, setToastMessage])
 
   const openOfferModal = useCallback((app: Application) => {
     setOfferModalApp(app)
@@ -627,6 +650,7 @@ export default function JobTracker() {
     async (payload: Record<string, unknown>) => {
       const raw = await api.jobTrackerUpsertOffer(payload)
       const offer = parseOffer(raw as Record<string, unknown>)
+      markListMutated()
       startTransition(() => {
         setOffers((prev) => {
           const index = prev.findIndex((item) => item.application_id === offer.application_id)
@@ -638,7 +662,7 @@ export default function JobTracker() {
       })
       setToastMessage('Offer 已保存')
     },
-    [setToastMessage],
+    [markListMutated, setToastMessage],
   )
 
   const offerForModal = offerModalApp ? offerByAppId.get(offerModalApp.id) ?? null : null

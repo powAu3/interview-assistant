@@ -62,6 +62,33 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
+function applicationRow(id: number, company: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    company,
+    position: 'Frontend',
+    city: 'Shanghai',
+    notes: '',
+    stage: 'applied',
+    updated_at: 1710000000 + id,
+    created_at: 1710000000 + id,
+    applied_at: null,
+    next_followup_at: null,
+    interviewer_info: '',
+    feedback: '',
+    todos: [],
+    sort_order: 0,
+    review_summary: {
+      review_count: 0,
+      latest_review_id: null,
+      latest_avg_score: null,
+      latest_review_at: null,
+      latest_status: null,
+    },
+    ...overrides,
+  }
+}
+
 describe('JobTracker', () => {
   beforeEach(() => {
     setViewportWidth(1280)
@@ -148,6 +175,33 @@ describe('JobTracker', () => {
   it('loads and renders application rows', async () => {
     render(<JobTracker />)
     await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+  })
+
+  it('keeps locally created applications when an older refresh returns later', async () => {
+    const staleRefresh = deferred<{ items: Record<string, unknown>[] }>()
+    apiMock.jobTrackerApplications
+      .mockResolvedValueOnce({ items: [applicationRow(1, 'Acme')] })
+      .mockReturnValueOnce(staleRefresh.promise)
+
+    render(<JobTracker />)
+
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByTitle('刷新'))
+    fireEvent.click(screen.getByRole('button', { name: '新增记录' }))
+    fireEvent.change(screen.getByPlaceholderText('例如 OpenAI'), { target: { value: 'OpenAI' } })
+    fireEvent.change(screen.getByPlaceholderText('例如 Frontend Engineer'), { target: { value: 'Research Engineer' } })
+    fireEvent.change(screen.getByPlaceholderText('例如 上海 / Remote'), { target: { value: 'Remote' } })
+    fireEvent.click(screen.getByRole('button', { name: '创建记录' }))
+
+    await waitFor(() => expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0))
+
+    await act(async () => {
+      staleRefresh.resolve({ items: [applicationRow(1, 'Acme')] })
+      await Promise.resolve()
+    })
+
+    expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Acme').length).toBeGreaterThan(0)
   })
 
   it('lets desktop row body focus the application detail panel', async () => {
