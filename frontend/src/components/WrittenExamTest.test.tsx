@@ -189,6 +189,49 @@ describe('WrittenExamTest', () => {
     expect(FakeWebSocket.instances).toHaveLength(1)
   })
 
+  it('marks answer errors on the LLM and UI preflight steps', async () => {
+    render(<WrittenExamTest />)
+
+    const ws = FakeWebSocket.instances[0]
+    await act(async () => {
+      ws.emit({
+        type: 'answer_start',
+        exam_preflight_id: 'preflight-error',
+        model_name: 'GPT-4.1 Vision',
+      })
+      ws.emit({
+        type: 'answer_error',
+        exam_preflight_id: 'preflight-error',
+        message: '模型调用超时',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getAllByText('模型调用超时').length).toBeGreaterThan(0)
+    expect(screen.getByText('已收到真实答题错误事件')).toBeInTheDocument()
+    expect(screen.getByText('未收到可展示的笔试答案')).toBeInTheDocument()
+    expect(screen.getByText('部分环节异常，请检查配置后重试')).toBeInTheDocument()
+  })
+
+  it('hydrates failed preflight status into visible failed steps', async () => {
+    apiMock.examPreflightStatus.mockResolvedValueOnce({
+      running: false,
+      error: '检测异常: 模型回答为空',
+      preflight_id: 'preflight-failed',
+      steps: {
+        screenshot: { status: 'pass', detail: '已生成固定截图代码题' },
+        submit: { status: 'pass', detail: '已进入真实截图答题 worker' },
+        error: { status: 'fail', detail: '检测异常: 模型回答为空' },
+      },
+    })
+
+    render(<WrittenExamTest />)
+
+    expect((await screen.findAllByText('检测异常: 模型回答为空')).length).toBeGreaterThan(0)
+    expect(screen.getByText('未收到可展示的笔试答案')).toBeInTheDocument()
+    expect(screen.getByText('部分环节异常，请检查配置后重试')).toBeInTheDocument()
+  })
+
   it('warns when no vision model is configured', () => {
     useInterviewStore.setState({
       config: {

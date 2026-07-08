@@ -91,6 +91,25 @@ function normalizeStatusSteps(value: unknown): Record<string, Partial<StepState>
   ) as Record<string, Partial<StepState>>
 }
 
+function applyFailureSteps(prev: Record<string, StepState>, message: string): Record<string, StepState> {
+  const next = { ...prev }
+  if (next.llm?.status !== 'pass') {
+    next.llm = {
+      ...(next.llm ?? { status: 'idle', detail: '' }),
+      status: 'fail',
+      detail: message,
+    }
+  }
+  if (next.ui?.status !== 'pass') {
+    next.ui = {
+      ...(next.ui ?? { status: 'idle', detail: '' }),
+      status: 'fail',
+      detail: '未收到可展示的笔试答案',
+    }
+  }
+  return next
+}
+
 export default function WrittenExamTest() {
   const config = useInterviewStore((s) => s.config)
   const [running, setRunning] = useState(false)
@@ -107,23 +126,33 @@ export default function WrittenExamTest() {
     try {
       const status = await api.examPreflightStatus() as ExamPreflightStatus
       const statusSteps = normalizeStatusSteps(status?.steps)
+      const statusPreflightId = status?.preflight_id ? String(status.preflight_id) : null
+      const currentPreflightId = activePreflightIdRef.current
+      if (currentPreflightId && statusPreflightId && statusPreflightId !== currentPreflightId) return
+      if (currentPreflightId && !statusPreflightId && Object.keys(statusSteps).length === 0 && !status?.error) return
       const isRunning = Boolean(status?.running)
       const isDone = !isRunning && statusSteps.done?.status === 'done'
-      if (status?.preflight_id) {
-        setCurrentPreflightId(String(status.preflight_id))
+      const statusError = status?.error ? String(status.error) : null
+      const errorStep = isRecord(statusSteps.error) ? statusSteps.error : null
+      const failureMessage = statusError || (errorStep?.detail ? String(errorStep.detail) : null)
+      if (statusPreflightId) {
+        setCurrentPreflightId(statusPreflightId)
       }
-      setSteps((prev) => ({
-        ...prev,
-        ...Object.fromEntries(
-          Object.entries(statusSteps).map(([key, value]) => [
-            key,
-            { ...(prev[key] ?? { status: 'idle', detail: '' }), ...value },
-          ]),
-        ),
-      }))
+      setSteps((prev) => {
+        const hydrated = {
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(statusSteps).map(([key, value]) => [
+              key,
+              { ...(prev[key] ?? { status: 'idle', detail: '' }), ...value },
+            ]),
+          ),
+        } as Record<string, StepState>
+        return failureMessage ? applyFailureSteps(hydrated, failureMessage) : hydrated
+      })
       setRunning(isRunning)
-      setDone(isDone)
-      setErrorMsg(status?.error ? String(status.error) : null)
+      setDone(isDone || Boolean(failureMessage && !isRunning))
+      setErrorMsg(failureMessage)
     } catch {
       /* status hydration is best-effort; WS has the primary progress stream */
     }
@@ -188,8 +217,14 @@ export default function WrittenExamTest() {
           return
         }
         if (msg.type === 'answer_error' || msg.type === 'answer_cancelled') {
+          const message = msg.message || '笔试链路检测被取消或失败'
           setRunning(false)
-          setErrorMsg(msg.message || '笔试链路检测被取消或失败')
+          setDone(true)
+          setErrorMsg(message)
+          setSteps((prev) => ({
+            ...applyFailureSteps(prev, message),
+            ws: { status: 'pass', detail: '已收到真实答题错误事件' },
+          }))
           return
         }
         return
@@ -209,8 +244,11 @@ export default function WrittenExamTest() {
         return
       }
       if (step === 'error') {
+        const message = detail || '笔试链路检测失败，请检查模型配置'
         setRunning(false)
-        setErrorMsg(detail || '笔试链路检测失败，请检查模型配置')
+        setDone(true)
+        setErrorMsg(message)
+        setSteps((prev) => applyFailureSteps(prev, message))
         return
       }
       setSteps((prev) => ({
