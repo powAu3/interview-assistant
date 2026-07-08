@@ -920,6 +920,47 @@ def test_followup_prompt_uses_legacy_context_when_candidate_context_disabled(mon
     assert session.current_candidate_qa_id == ""
 
 
+def test_short_followup_keeps_tail_of_long_previous_answer(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    long_answer = (
+        "开头结论：先用 Redis 缓存热点配置。"
+        + "中间展开：按业务域拆分权限、缓存键和降级策略。" * 18
+        + "最终验证：用 trace_id 串联灰度命中、回滚开关和误杀率看板。"
+    )
+    session.add_qa(
+        "讲讲你做过的风控项目",
+        long_answer,
+        qa_id="qa-prev",
+        source="asr",
+        model_name="模型一",
+    )
+
+    cfg = _cfg()
+    cfg.candidate_context_enabled = False
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "验证回答。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("那这个怎么验证？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert "你上次回答的要点：开头结论" in prompt
+    assert "最终验证：用 trace_id 串联灰度命中、回滚开关和误杀率看板" in prompt
+    assert len(prompt) < len(long_answer) + 160
+
+
 def test_followup_prompt_uses_legacy_context_when_candidate_asr_disabled(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     seen: dict[str, str] = {}

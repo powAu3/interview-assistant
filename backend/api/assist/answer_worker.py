@@ -89,6 +89,18 @@ def _clip_text(text: str, max_chars: int) -> str:
     return cleaned[: max(0, max_chars - 1)].rstrip() + "…"
 
 
+def _context_excerpt(text: str, max_chars: int) -> str:
+    cleaned = " ".join(str(text or "").split())
+    budget = max(80, int(max_chars or 0))
+    if len(cleaned) <= budget:
+        return cleaned
+    if budget <= 140:
+        return _clip_text(cleaned, budget)
+    head_budget = max(60, min(120, budget // 2))
+    tail_budget = max(60, budget - head_budget - 3)
+    return f"{cleaned[:head_budget].rstrip()}…{cleaned[-tail_budget:].lstrip()}"
+
+
 def _written_exam_question_context_label(question: str, source: str) -> str:
     cleaned = " ".join(str(question or "").split())
     if (
@@ -554,7 +566,7 @@ def process_question_parallel(
         prev_answer_summary = ""
         if followup_needs_bridge:
             prev_answer_budget = max(160, min(280, candidate_max_chars // 3 if candidate_max_chars > 0 else 160))
-            prev_answer_summary = last_qa.answer[:prev_answer_budget]
+            prev_answer_summary = _context_excerpt(last_qa.answer, prev_answer_budget)
         if not followup_needs_bridge:
             user_for_llm = (
                 f"[追问上下文] 上一个问题：{last_qa.question}\n"
