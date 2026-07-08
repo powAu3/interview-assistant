@@ -169,6 +169,43 @@ describe('SpeechTab', () => {
     })
   })
 
+  it('normalizes runtime numeric fields before saving speech settings', async () => {
+    useInterviewStore.setState((state) => ({
+      config: {
+        ...(state.config as any),
+        stt_provider: 'whisper',
+        candidate_context_wait_ms: -20,
+        candidate_context_max_chars: 99999,
+        candidate_context_min_chars: 'not-a-number',
+        candidate_streaming_asr_interval_ms: 10,
+        silence_threshold: 'not-a-number',
+        silence_duration: 99,
+        transcription_min_sig_chars: -4,
+        assist_transcription_merge_gap_sec: 99,
+        assist_transcription_merge_max_sec: -3,
+      },
+    }) as any)
+
+    render(<SpeechTab />)
+
+    fireEvent.click(screen.getByText('保存语音配置'))
+
+    await waitFor(() => {
+      expect(updateConfigAndRefresh).toHaveBeenCalledWith(expect.objectContaining({
+        candidate_context_wait_ms: 0,
+        candidate_context_max_chars: 4000,
+        candidate_context_min_chars: 6,
+        candidate_streaming_asr_interval_ms: 800,
+        silence_threshold: 0.01,
+        silence_duration: 10,
+        transcription_min_sig_chars: 1,
+        assist_transcription_merge_gap_sec: 15,
+        assist_transcription_merge_max_sec: 1,
+      }))
+    })
+    expect(screen.queryByDisplayValue('NaN')).not.toBeInTheDocument()
+  })
+
   it('marks speech settings dirty and clears after saving', async () => {
     useInterviewStore.setState((state) => ({
       config: {

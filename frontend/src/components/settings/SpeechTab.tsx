@@ -28,6 +28,16 @@ import {
 import SttGuideCard from './SttGuideCard'
 import BetaBadge from '@/components/kb/BetaBadge'
 
+function clampNumberInput(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, Math.min(max, parsed))
+}
+
+function clampIntegerInput(value: unknown, min: number, max: number, fallback: number): number {
+  return Math.floor(clampNumberInput(value, min, max, fallback))
+}
+
 export default function SpeechTab() {
   const config = useInterviewStore((s) => s.config)
   const options = useInterviewStore((s) => s.options)
@@ -95,17 +105,17 @@ export default function SpeechTab() {
         candidate_whisper_language: config.candidate_whisper_language ?? '',
         candidate_remote_stt_enabled: config.candidate_remote_stt_enabled ?? false,
         candidate_context_enabled: config.candidate_context_enabled ?? true,
-        candidate_context_wait_ms: config.candidate_context_wait_ms ?? 200,
-        candidate_context_max_chars: config.candidate_context_max_chars ?? 900,
-        candidate_context_min_chars: config.candidate_context_min_chars ?? 6,
+        candidate_context_wait_ms: clampIntegerInput(config.candidate_context_wait_ms, 0, 2000, 200),
+        candidate_context_max_chars: clampIntegerInput(config.candidate_context_max_chars, 100, 4000, 900),
+        candidate_context_min_chars: clampIntegerInput(config.candidate_context_min_chars, 1, 100, 6),
         candidate_streaming_asr_enabled: config.candidate_streaming_asr_enabled ?? true,
-        candidate_streaming_asr_interval_ms: config.candidate_streaming_asr_interval_ms ?? 1500,
+        candidate_streaming_asr_interval_ms: clampIntegerInput(config.candidate_streaming_asr_interval_ms, 800, 5000, 1500),
         candidate_mic_compatibility_mode: config.candidate_mic_compatibility_mode ?? true,
-        silence_threshold: config.silence_threshold,
-        silence_duration: config.silence_duration,
-        transcription_min_sig_chars: config.transcription_min_sig_chars ?? 2,
-        assist_transcription_merge_gap_sec: config.assist_transcription_merge_gap_sec ?? 2.0,
-        assist_transcription_merge_max_sec: config.assist_transcription_merge_max_sec ?? 12.0,
+        silence_threshold: clampNumberInput(config.silence_threshold, 0.001, 0.1, 0.01),
+        silence_duration: clampNumberInput(config.silence_duration, 0.5, 10, 1.2),
+        transcription_min_sig_chars: clampIntegerInput(config.transcription_min_sig_chars, 1, 50, 2),
+        assist_transcription_merge_gap_sec: clampNumberInput(config.assist_transcription_merge_gap_sec, 0, 15, 2.0),
+        assist_transcription_merge_max_sec: clampNumberInput(config.assist_transcription_merge_max_sec, 1, 120, 12.0),
         assist_high_churn_short_answer: config.assist_high_churn_short_answer ?? false,
         auto_detect: config.auto_detect,
       }
@@ -124,6 +134,15 @@ export default function SpeechTab() {
       const savedForm = {
         ...form,
         candidate_remote_stt_enabled: form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper',
+        candidate_context_wait_ms: clampIntegerInput(form.candidate_context_wait_ms, 0, 2000, 200),
+        candidate_context_max_chars: clampIntegerInput(form.candidate_context_max_chars, 100, 4000, 900),
+        candidate_context_min_chars: clampIntegerInput(form.candidate_context_min_chars, 1, 100, 6),
+        candidate_streaming_asr_interval_ms: clampIntegerInput(form.candidate_streaming_asr_interval_ms, 800, 5000, 1500),
+        silence_threshold: clampNumberInput(form.silence_threshold, 0.001, 0.1, 0.01),
+        silence_duration: clampNumberInput(form.silence_duration, 0.5, 10, 1.2),
+        transcription_min_sig_chars: clampIntegerInput(form.transcription_min_sig_chars, 1, 50, 2),
+        assist_transcription_merge_gap_sec: clampNumberInput(form.assist_transcription_merge_gap_sec, 0, 15, 2.0),
+        assist_transcription_merge_max_sec: clampNumberInput(form.assist_transcription_merge_max_sec, 1, 120, 12.0),
       }
       await updateConfigAndRefresh(savedForm)
       setForm(savedForm)
@@ -592,7 +611,7 @@ export default function SpeechTab() {
                     max={5000}
                     step={100}
                     value={form.candidate_streaming_asr_interval_ms}
-                    onChange={(e) => setForm({ ...form, candidate_streaming_asr_interval_ms: Math.max(800, Math.min(5000, parseInt(e.target.value, 10) || 1500)) })}
+                    onChange={(e) => setForm({ ...form, candidate_streaming_asr_interval_ms: clampIntegerInput(e.target.value, 800, 5000, 1500) })}
                     className="input-field"
                     disabled={!form.candidate_asr_enabled || !form.candidate_streaming_asr_enabled || form.candidate_stt_provider !== 'whisper'}
                   />
@@ -604,7 +623,7 @@ export default function SpeechTab() {
                     max={2000}
                     step={50}
                     value={form.candidate_context_wait_ms}
-                    onChange={(e) => setForm({ ...form, candidate_context_wait_ms: Math.max(0, Math.min(2000, parseInt(e.target.value, 10) || 0)) })}
+                    onChange={(e) => setForm({ ...form, candidate_context_wait_ms: clampIntegerInput(e.target.value, 0, 2000, 200) })}
                     className="input-field"
                     disabled={!form.candidate_asr_enabled || !form.candidate_context_enabled}
                   />
@@ -616,7 +635,7 @@ export default function SpeechTab() {
                     max={4000}
                     step={100}
                     value={form.candidate_context_max_chars}
-                    onChange={(e) => setForm({ ...form, candidate_context_max_chars: Math.max(100, Math.min(4000, parseInt(e.target.value, 10) || 900)) })}
+                    onChange={(e) => setForm({ ...form, candidate_context_max_chars: clampIntegerInput(e.target.value, 100, 4000, 900) })}
                     className="input-field"
                     disabled={!form.candidate_asr_enabled || !form.candidate_context_enabled}
                   />
@@ -628,7 +647,7 @@ export default function SpeechTab() {
                     max={100}
                     step={1}
                     value={form.candidate_context_min_chars}
-                    onChange={(e) => setForm({ ...form, candidate_context_min_chars: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 6)) })}
+                    onChange={(e) => setForm({ ...form, candidate_context_min_chars: clampIntegerInput(e.target.value, 1, 100, 6) })}
                     className="input-field"
                     disabled={!form.candidate_asr_enabled || !form.candidate_context_enabled}
                   />
@@ -649,16 +668,16 @@ export default function SpeechTab() {
         <div className="grid grid-cols-2 gap-3">
           <Field label="静音阈值" hint="环境吵可调高">
             <input type="number" step="0.005" min="0.001" max="0.1" value={form.silence_threshold}
-              onChange={(e) => setForm({ ...form, silence_threshold: parseFloat(e.target.value) })} className="input-field" />
+              onChange={(e) => setForm({ ...form, silence_threshold: clampNumberInput(e.target.value, 0.001, 0.1, 0.01) })} className="input-field" />
           </Field>
           <Field label="静音时长 (秒)" hint="说完判定">
             <input type="number" step="0.1" min="0.5" max="10" value={form.silence_duration}
-              onChange={(e) => setForm({ ...form, silence_duration: parseFloat(e.target.value) || 1.2 })} className="input-field" />
+              onChange={(e) => setForm({ ...form, silence_duration: clampNumberInput(e.target.value, 0.5, 10, 1.2) })} className="input-field" />
           </Field>
         </div>
         <Field label="转写最少有效字" hint="去标点只计汉字/英文/数字；低于则不触发（如过滤「嗯」）">
           <input type="number" min={1} max={50} step={1} value={form.transcription_min_sig_chars}
-            onChange={(e) => setForm({ ...form, transcription_min_sig_chars: Math.max(1, parseInt(e.target.value, 10) || 1) })} className="input-field" />
+            onChange={(e) => setForm({ ...form, transcription_min_sig_chars: clampIntegerInput(e.target.value, 1, 50, 2) })} className="input-field" />
         </Field>
       </Section>
 
@@ -666,12 +685,12 @@ export default function SpeechTab() {
         <div className="grid grid-cols-2 gap-3">
           <Field label="合并间隔 (秒)" hint="上一段结束后静默超过该时间送出；0=每段立即发">
             <input type="number" step="0.1" min={0} max={15} value={form.assist_transcription_merge_gap_sec}
-              onChange={(e) => setForm({ ...form, assist_transcription_merge_gap_sec: Math.max(0, Math.min(15, parseFloat(e.target.value) || 0)) })}
+              onChange={(e) => setForm({ ...form, assist_transcription_merge_gap_sec: clampNumberInput(e.target.value, 0, 15, 2.0) })}
               className="input-field" />
           </Field>
           <Field label="最长等待 (秒)" hint="从首段起超过该时间强制送出">
             <input type="number" step="0.1" min={1} max={120} value={form.assist_transcription_merge_max_sec}
-              onChange={(e) => setForm({ ...form, assist_transcription_merge_max_sec: Math.max(1, Math.min(120, parseFloat(e.target.value) || 12)) })}
+              onChange={(e) => setForm({ ...form, assist_transcription_merge_max_sec: clampNumberInput(e.target.value, 1, 120, 12.0) })}
               className="input-field" />
           </Field>
         </div>
