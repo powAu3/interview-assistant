@@ -376,6 +376,59 @@ def test_written_exam_analysis_worker_uses_written_exam_source(monkeypatch):
     assert detail["avg_score"] == pytest.approx(23 / 3)
 
 
+def test_review_score_values_accepts_numeric_strings():
+    assert review_async_analysis._score_values({
+        "准确性": "8",
+        "深度": "7.5分",
+        "表达": "无法评分",
+        "越界": 11,
+        "布尔": True,
+    }) == [8.0, 7.5]
+
+
+def test_analysis_worker_averages_string_scorecards(monkeypatch):
+    session_id = review.create_session(
+        started_at=1000.0,
+        interviewer_enabled=True,
+        candidate_enabled=True,
+        source="assist",
+    )
+    review.add_turn(
+        session_id=session_id,
+        qa_id="qa-1",
+        seq=1,
+        question_text="Redis 缓存击穿怎么处理？",
+        candidate_answer_text="加互斥锁。",
+        reference_answer_text="互斥锁、逻辑过期和热点保护。",
+    )
+
+    def fake_analyze_turn(**_kwargs):
+        return {
+            "strengths": ["有基础方案"],
+            "risks": [],
+            "evidence": {},
+            "scorecard": {"准确性": "8", "深度": "7.5分", "表达": "无法评分"},
+            "corrected_answer": None,
+        }
+
+    def fake_generate_summary(*, turns, review_source):
+        return {
+            "summary_markdown": "## 总结\n\n评分可用。",
+            "strong_points": [],
+            "weak_points": [],
+        }
+
+    monkeypatch.setattr(review_async_analysis.review_analysis, "analyze_turn", fake_analyze_turn)
+    monkeypatch.setattr(review_async_analysis.review_analysis, "generate_summary", fake_generate_summary)
+
+    review_async_analysis._analyze_session_worker(session_id)
+
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["status"] == "completed"
+    assert detail["avg_score"] == pytest.approx(7.75)
+
+
 def test_on_assist_stop_no_session():
     """测试没有活跃 session 时停止"""
     mock_session = Session()

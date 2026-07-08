@@ -2,7 +2,8 @@
 后台分析任务：异步分析 review session
 """
 import threading
-from typing import Optional
+import re
+from typing import Any, Optional
 
 from core.config import get_config
 from core.logger import get_logger
@@ -10,6 +11,28 @@ from services.storage import review
 from services import review_analysis
 
 logger = get_logger(__name__)
+_SCORE_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _score_values(scorecard: Any) -> list[float]:
+    if not isinstance(scorecard, dict):
+        return []
+    scores: list[float] = []
+    for raw in scorecard.values():
+        value: Optional[float] = None
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            value = float(raw)
+        elif isinstance(raw, str):
+            match = _SCORE_NUMBER_RE.search(raw.strip())
+            if match:
+                try:
+                    value = float(match.group(0))
+                except ValueError:
+                    value = None
+        if value is None or value < 0 or value > 10:
+            continue
+        scores.append(value)
+    return scores
 
 
 def analyze_session_async(session_id: int):
@@ -117,9 +140,7 @@ def _analyze_session_worker(session_id: int):
             # 计算平均分
             all_scores = []
             for t in analyzed_turns:
-                scorecard = t.get("scorecard", {})
-                if scorecard:
-                    all_scores.extend(scorecard.values())
+                all_scores.extend(_score_values(t.get("scorecard", {})))
             avg_score = sum(all_scores) / len(all_scores) if all_scores else None
 
             # 更新 session
