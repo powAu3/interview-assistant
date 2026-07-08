@@ -403,12 +403,30 @@ describe('ControlBar', () => {
 
     render(<ControlBar />)
 
-    expect(screen.getByRole('status', { name: '我的回答上下文状态' })).toHaveTextContent('我的回答上下文已关闭')
+    expect(screen.getByRole('status', { name: '我的回答记录状态' })).toHaveTextContent('我的回答记录已关闭')
     fireEvent.click(screen.getByRole('button', { name: '开始面试' }))
 
     await waitFor(() => {
       expect(apiMock.start).toHaveBeenCalledWith(10, null)
     })
+  })
+
+  it('labels the candidate microphone as answer recording when candidate ASR is enabled', () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 10, name: 'System Loopback', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    expect(screen.getByText('我的麦克风 · 记录我的回答')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择我的麦克风' })).toBeInTheDocument()
   })
 
   it('plays a speaker test sound from the meeting audio picker', async () => {

@@ -473,7 +473,7 @@ export default function ControlBar() {
       {!isExamMode && candidateCaptureEnabled && selectedCandidateMic === null && (
         <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>未选择“我的麦克风”：不会记录你的回答，下一题只参考助手建议答案</span>
+          <span>未选择“我的麦克风”：不会把你的回答写入复盘，追问也只能参考助手建议答案</span>
         </div>
       )}
       {!isExamMode && candidateCaptureEnabled && selectedCandidateMic !== null && !selectedCandidateIsMic && (
@@ -527,7 +527,7 @@ export default function ControlBar() {
       {!isExamMode && candidateTranscriptions.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-accent-green bg-accent-green/10 px-3 py-1.5 rounded-lg">
           <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-          <span className="min-w-0 break-all">我的回答上下文：{candidateTranscriptions[candidateTranscriptions.length - 1]}</span>
+          <span className="min-w-0 break-all">我的回答记录：{candidateTranscriptions[candidateTranscriptions.length - 1]}</span>
         </div>
       )}
 
@@ -587,19 +587,19 @@ export default function ControlBar() {
                 <span className="text-[10px] font-medium text-text-muted leading-none">我的麦克风 · 记录我的回答</span>
                 <div
                   role="status"
-                  aria-label="我的回答上下文状态"
+                  aria-label="我的回答记录状态"
                   className="flex h-10 min-w-0 items-center justify-between gap-2 rounded-lg border border-bg-hover bg-bg-tertiary px-3"
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <Mic className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
                     <span className="min-w-0 truncate text-xs font-medium text-text-secondary">
-                      我的回答上下文已关闭
+                      我的回答记录已关闭
                       <span className="hidden lg:inline text-text-muted"> · 不影响会议音频</span>
                     </span>
                   </div>
                   <button
                     type="button"
-                    aria-label="打开我的回答上下文设置"
+                    aria-label="打开我的回答记录设置"
                     className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/10"
                     onClick={() => useInterviewStore.getState().toggleSettings()}
                   >
