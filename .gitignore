@@ -87,8 +87,10 @@ frontend/output/
 output/
 
 # Playwright
+.playwright-cli/
 frontend/playwright-report/
 frontend/test-results/
+frontend/.playwright-cli/
 frontend/blob-report/
 frontend/.last-run.json
 
