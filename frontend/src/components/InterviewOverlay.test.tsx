@@ -5,8 +5,19 @@ import { useInterviewStore } from '@/stores/configStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
+const apiMock = vi.hoisted(() => ({
+  askFromServerScreen: vi.fn(),
+  cancelAsk: vi.fn(),
+  clear: vi.fn(),
+}))
+
 vi.mock('@/hooks/useInterviewWS', () => ({
   useInterviewWS: () => undefined,
+}))
+
+vi.mock('@/lib/api', () => ({
+  api: apiMock,
+  getErrorMessage: (err: unknown, fallback: string) => err instanceof Error ? err.message : fallback,
 }))
 
 const qa = {
@@ -20,6 +31,12 @@ const qa = {
 
 beforeEach(() => {
   localStorage.clear()
+  apiMock.askFromServerScreen.mockReset()
+  apiMock.cancelAsk.mockReset()
+  apiMock.clear.mockReset()
+  apiMock.askFromServerScreen.mockResolvedValue({ ok: true })
+  apiMock.cancelAsk.mockResolvedValue({ ok: true })
+  apiMock.clear.mockResolvedValue({ ok: true })
   delete (window as unknown as { electronAPI?: unknown }).electronAPI
   useShortcutsStore.getState().resetShortcuts()
   useInterviewStore.setState({
@@ -605,6 +622,39 @@ describe('InterviewOverlay', () => {
     act(() => { questionListener?.('next') })
     expect(await screen.findByText(/当前思路/)).toBeInTheDocument()
     expect(useInterviewStore.getState().streamingIds).toEqual(['qa-2'])
+  })
+
+  it('returns to the live question after submitting a screen review from history', async () => {
+    let questionListener: ((direction: 'prev' | 'next') => void) | null = null
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = {
+      onOverlayQuestionCommand: (listener: (direction: 'prev' | 'next') => void) => {
+        questionListener = listener
+        return vi.fn()
+      },
+    }
+    useInterviewStore.setState({
+      qaPairs: [
+        { ...qa, id: 'qa-1', question: '第一题', answer: '第一题答案。' },
+        { ...qa, id: 'qa-2', question: '第二题', answer: '第二题正在生成。', status: 'streaming' },
+      ],
+      streamingIds: ['qa-2'],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    act(() => { questionListener?.('prev') })
+    expect(await screen.findByText(/第一题答案/)).toBeInTheDocument()
+    expect(screen.getByText(/回看 1\/2/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^截图审题/ }))
+
+    await waitFor(() => expect(apiMock.askFromServerScreen).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText(/第二题正在生成/)).toBeInTheDocument()
+    expect(screen.getByText(/当前 2\/2/)).toBeInTheDocument()
+    expect(screen.queryByText(/第一题答案/)).not.toBeInTheDocument()
   })
 
   it('keeps tab state for older questions that are still generating in parallel', async () => {

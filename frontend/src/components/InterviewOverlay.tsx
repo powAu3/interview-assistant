@@ -231,6 +231,7 @@ export default function InterviewOverlay() {
     try {
       if (action === 'screen') {
         await api.askFromServerScreen()
+        setReviewQaId(null)
         setToastMessage('已提交截图审题')
       } else if (action === 'cancel') {
         await api.cancelAsk()
