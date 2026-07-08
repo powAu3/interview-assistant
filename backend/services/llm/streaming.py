@@ -538,19 +538,27 @@ def _stream_via_http(model_cfg, full_messages, cfg, think_params):
             yield SimpleNamespace(choices=chunk_choices, usage=usage_obj)
 
 
+def _config_with_think_override(cfg, override_think_mode: Optional[bool]):
+    if override_think_mode is None:
+        return cfg
+    updates = {"think_mode": override_think_mode}
+    if override_think_mode and getattr(cfg, "think_effort", "off") == "off":
+        updates["think_effort"] = "xhigh"
+    elif not override_think_mode:
+        updates["think_effort"] = "off"
+    return _copy_config_with_updates(cfg, updates)
+
+
 def chat_stream(
     messages: list[dict],
     system_prompt: Optional[str] = None,
     abort_check: Optional[Callable[[], bool]] = None,
+    override_think_mode: Optional[bool] = None,
 ) -> Generator[tuple[str, str], None, None]:
-    """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'.
-
-    TODO: add override_think_mode param (like chat_stream_single_model) if
-    this function is ever used for written-exam tasks.
-    """
+    """Yields (chunk_type, text) tuples. chunk_type is 'think' or 'text'."""
     from api.realtime.ws import broadcast
 
-    cfg = get_config()
+    cfg = _config_with_think_override(get_config(), override_think_mode)
     active_model = cfg.get_active_model()
     clean_messages = _sanitize_messages(messages, active_model.supports_vision)
     full_messages = []
@@ -636,14 +644,7 @@ def chat_stream_single_model(
     override_max_tokens: Optional[int] = None,
 ) -> Generator[tuple[str, str], None, None]:
     """仅使用指定模型流式输出，不做跨模型降级（供并行答题）。"""
-    cfg = get_config()
-    if override_think_mode is not None:
-        updates = {"think_mode": override_think_mode}
-        if override_think_mode and getattr(cfg, "think_effort", "off") == "off":
-            updates["think_effort"] = "xhigh"
-        elif not override_think_mode:
-            updates["think_effort"] = "off"
-        cfg = _copy_config_with_updates(cfg, updates)
+    cfg = _config_with_think_override(get_config(), override_think_mode)
     if override_max_tokens is not None:
         cfg = _copy_config_with_updates(cfg, {"max_tokens": max(1, int(override_max_tokens))})
     clean_messages = _sanitize_messages(messages, model_cfg.supports_vision)

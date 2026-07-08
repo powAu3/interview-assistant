@@ -253,6 +253,86 @@ def test_single_model_override_false_forces_off_effort(monkeypatch):
     assert chunks == [("text", "最终答案")]
 
 
+def test_chat_stream_override_true_promotes_off_effort(monkeypatch):
+    active_model = S(
+        name="GLM",
+        model="glm-5.1",
+        supports_think=True,
+        supports_vision=False,
+    )
+    captured = {}
+    monkeypatch.setattr(streaming, "get_config", lambda: S(
+        think_mode=False,
+        think_effort="off",
+        active_model=0,
+        models=[active_model],
+        get_active_model=lambda: active_model,
+    ))
+    monkeypatch.setattr(streaming, "_broadcast_tokens", lambda: None)
+
+    def fake_stream(_model_cfg, _messages, cfg):
+        captured["think_mode"] = cfg.think_mode
+        captured["think_effort"] = cfg.think_effort
+        yield S(
+            choices=[S(delta=S(reasoning_content="通用路径思考", reasoning=None, content=None))],
+            usage=None,
+        )
+        yield S(
+            choices=[S(delta=S(reasoning_content=None, reasoning=None, content="最终答案"))],
+            usage=None,
+        )
+
+    monkeypatch.setattr(streaming, "_try_stream_with_model", fake_stream)
+
+    chunks = list(streaming.chat_stream(
+        [{"role": "user", "content": "题目"}],
+        override_think_mode=True,
+    ))
+
+    assert captured == {"think_mode": True, "think_effort": "xhigh"}
+    assert chunks == [("think", "通用路径思考"), ("text", "最终答案")]
+
+
+def test_chat_stream_override_false_forces_off_effort(monkeypatch):
+    active_model = S(
+        name="GLM",
+        model="glm-5.1",
+        supports_think=True,
+        supports_vision=False,
+    )
+    captured = {}
+    monkeypatch.setattr(streaming, "get_config", lambda: S(
+        think_mode=True,
+        think_effort="high",
+        active_model=0,
+        models=[active_model],
+        get_active_model=lambda: active_model,
+    ))
+    monkeypatch.setattr(streaming, "_broadcast_tokens", lambda: None)
+
+    def fake_stream(_model_cfg, _messages, cfg):
+        captured["think_mode"] = cfg.think_mode
+        captured["think_effort"] = cfg.think_effort
+        yield S(
+            choices=[S(delta=S(reasoning_content="不应显示的思考", reasoning=None, content=None))],
+            usage=None,
+        )
+        yield S(
+            choices=[S(delta=S(reasoning_content=None, reasoning=None, content="最终答案"))],
+            usage=None,
+        )
+
+    monkeypatch.setattr(streaming, "_try_stream_with_model", fake_stream)
+
+    chunks = list(streaming.chat_stream(
+        [{"role": "user", "content": "题目"}],
+        override_think_mode=False,
+    ))
+
+    assert captured == {"think_mode": False, "think_effort": "off"}
+    assert chunks == [("text", "最终答案")]
+
+
 def test_closed_generic_reasoning_model_sends_disable_params_to_sdk(monkeypatch):
     captured = {}
 
