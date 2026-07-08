@@ -36,6 +36,8 @@ describe('ReviewSessionList', () => {
         review_model_index: 0,
         models: [{ name: 'lite-ark', enabled: true }],
       },
+      toastMessage: null,
+      toasts: [],
       setConfig: vi.fn(),
     } as any)
     useUiPrefsStore.setState({
@@ -223,6 +225,23 @@ describe('ReviewSessionList', () => {
     fireEvent.click(screen.getByRole('button', { name: '收起配置' }))
     expect(screen.getByRole('button', { name: '配置' })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('复盘配置')).not.toBeInTheDocument()
+  })
+
+  it('describes the review toggle as automatic analysis generation', async () => {
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('自动生成未启用')
+    fireEvent.click(screen.getByRole('button', { name: '配置' }))
+
+    expect(screen.getByText('只保存记录，手动生成分析')).toBeInTheDocument()
+    expect(screen.queryByText(/自动记录/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('switch'))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalledWith({ review_enabled: true })
+    })
+    expect(useInterviewStore.getState().toastMessage).toBe('已开启自动生成复盘')
   })
 
   it('quietly refreshes analyzing sessions so completed analysis appears without manual refresh', async () => {

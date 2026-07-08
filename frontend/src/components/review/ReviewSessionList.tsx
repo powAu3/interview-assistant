@@ -141,7 +141,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     try {
       const updated = await api.updateConfig({ review_enabled: enabled })
       setConfig(updated)
-      setToastMessage(enabled ? '已开启自动记录' : '已关闭自动记录')
+      setToastMessage(enabled ? '已开启自动生成复盘' : '已关闭自动生成复盘')
     } catch (err) {
       setToastMessage(getErrorMessage(err, '开关切换失败'))
     }
@@ -298,7 +298,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-xl font-semibold text-text-primary">面试复盘</h2>
               {!reviewEnabled ? (
-                <span className="text-xs text-text-muted">自动记录未启用</span>
+                <span className="text-xs text-text-muted">自动生成未启用</span>
               ) : null}
             </div>
           </div>
@@ -450,7 +450,7 @@ function ReviewZeroState({
         <div className="min-w-0">
           <div className="text-sm font-semibold text-text-primary">暂无复盘记录</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-            <span>自动记录 {reviewEnabled ? '已启用' : '未启用'}</span>
+            <span>自动生成 {reviewEnabled ? '已启用' : '未启用'}</span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -610,7 +610,12 @@ function ReviewSettingsPanel({
   return (
     <div className="rounded-lg border border-bg-hover bg-bg-secondary/35 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="min-w-0 flex-1 text-sm font-semibold text-text-primary">复盘配置</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-text-primary">复盘配置</h3>
+          <div className="mt-0.5 text-[11px] text-text-muted">
+            {reviewEnabled ? '结束后自动生成分析' : '只保存记录，手动生成分析'}
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => onToggle(!reviewEnabled)}
