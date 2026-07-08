@@ -26,6 +26,16 @@ class FakeWebSocket {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('WrittenExamTest', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
@@ -161,6 +171,13 @@ describe('WrittenExamTest', () => {
 
     await act(async () => {
       ws.emit({
+        type: 'exam_preflight_step',
+        preflight_id: 'preflight-old',
+        step: 'screenshot',
+        status: 'pass',
+        detail: 'stale screenshot should also be ignored',
+      })
+      ws.emit({
         type: 'answer_done',
         exam_preflight_id: 'preflight-old',
         answer: 'stale answer should be ignored',
@@ -225,6 +242,68 @@ describe('WrittenExamTest', () => {
     expect(screen.getByText('未收到可展示的笔试答案')).toBeInTheDocument()
     expect(screen.getByText('部分环节异常，请检查配置后重试')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重新' })).toBeEnabled()
+  })
+
+  it('ignores stale stream events while waiting for the new preflight id', async () => {
+    render(<WrittenExamTest />)
+
+    const ws = FakeWebSocket.instances[0]
+    await act(async () => {
+      ws.emit({
+        type: 'answer_start',
+        exam_preflight_id: 'preflight-old',
+        model_name: 'GPT-4.1 Vision',
+      })
+      ws.emit({
+        type: 'answer_done',
+        exam_preflight_id: 'preflight-old',
+        answer: 'old answer is rendered',
+        first_token_ms: 100,
+        total_ms: 500,
+        model_name: 'GPT-4.1 Vision',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('old answer is rendered')).toBeInTheDocument()
+
+    const pendingRun = deferred<{ ok: boolean; preflight_id: string }>()
+    apiMock.examPreflightRun.mockReturnValueOnce(pendingRun.promise)
+    fireEvent.click(screen.getByRole('button', { name: '重新' }))
+
+    await act(async () => {
+      ws.emit({
+        type: 'answer_done',
+        exam_preflight_id: 'preflight-old',
+        answer: 'stale answer should still be ignored',
+        first_token_ms: 9,
+        total_ms: 10,
+        model_name: 'GPT-4.1 Vision',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('stale screenshot should also be ignored')).not.toBeInTheDocument()
+    expect(screen.queryByText('stale answer should still be ignored')).not.toBeInTheDocument()
+
+    await act(async () => {
+      pendingRun.resolve({ ok: true, preflight_id: 'preflight-next' })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      ws.emit({
+        type: 'answer_done',
+        exam_preflight_id: 'preflight-next',
+        answer: 'next answer is rendered',
+        first_token_ms: 120,
+        total_ms: 880,
+        model_name: 'GPT-4.1 Vision',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('next answer is rendered')).toBeInTheDocument()
+    expect(screen.queryByText('old answer is rendered')).not.toBeInTheDocument()
   })
 
   it('hydrates failed preflight status into visible failed steps', async () => {

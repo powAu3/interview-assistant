@@ -115,6 +115,11 @@ def test_run_exam_preflight_broadcasts_steps_and_status(monkeypatch: pytest.Monk
     assert status["steps"]["ui"]["status"] == "pass"
     assert "def two_sum" in status["steps"]["llm"]["answer"]
     assert any(event.get("type") == "exam_preflight_step" for event in events)
+    assert all(
+        event.get("preflight_id") == preflight_id
+        for event in events
+        if event.get("type") == "exam_preflight_step"
+    )
     assert any(event.get("step") == "ws" and event.get("status") == "pass" for event in events)
     assert any(event.get("step") == "ui" and event.get("status") == "pass" for event in events)
     assert any(event.get("step") == "done" for event in events)
@@ -162,3 +167,28 @@ def test_run_exam_preflight_keeps_pass_status_when_worker_returns_fast(monkeypat
     assert status["steps"]["ws"]["status"] == "pass"
     assert status["steps"]["ui"]["status"] == "pass"
     assert status["steps"]["done"]["status"] == "done"
+
+
+def test_start_exam_preflight_returns_thread_preflight_id(monkeypatch: pytest.MonkeyPatch):
+    started: list[str] = []
+
+    def fake_run(preflight_id: str):
+        started.append(preflight_id)
+        exam_test._finish_preflight()
+
+    class FakeThread:
+        def __init__(self, *, target, args=(), daemon=False, name=""):
+            self.target = target
+            self.args = args
+
+        def start(self):
+            self.target(*self.args)
+
+    monkeypatch.setattr(exam_test, "_run_exam_preflight", fake_run)
+    monkeypatch.setattr(exam_test.threading, "Thread", FakeThread)
+
+    preflight_id = exam_test.start_exam_preflight()
+
+    assert isinstance(preflight_id, str)
+    assert preflight_id.startswith("exam-preflight-")
+    assert started == [preflight_id]

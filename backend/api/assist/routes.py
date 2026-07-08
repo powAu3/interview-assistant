@@ -284,10 +284,10 @@ async def api_preflight_replay(body: dict):
 @router.post("/exam-preflight/run")
 async def api_exam_preflight_run():
     from .exam_test import start_exam_preflight
-    ok = start_exam_preflight()
-    if not ok:
+    preflight_id = start_exam_preflight()
+    if not preflight_id:
         raise HTTPException(409, "笔试链路检测已在运行中")
-    return {"ok": True}
+    return {"ok": True, "preflight_id": preflight_id}
 
 
 @router.get("/exam-preflight/status")

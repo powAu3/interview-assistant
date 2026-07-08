@@ -239,7 +239,7 @@ export const api = {
     request('/api/preflight/run', { method: 'POST', body: JSON.stringify({ scenario_id, device_id: device_id ?? undefined }) }),
   preflightStatus: () => request('/api/preflight/status'),
   examPreflightRun: () =>
-    request('/api/exam-preflight/run', { method: 'POST', body: '{}' }),
+    request<{ ok: boolean; preflight_id: string }>('/api/exam-preflight/run', { method: 'POST', body: '{}' }),
   examPreflightStatus: () => request('/api/exam-preflight/status'),
   audioOutputTest: () =>
     request<{ ok: boolean; elapsed_sec: number }>('/api/audio-test/output', { method: 'POST', body: '{}' }),

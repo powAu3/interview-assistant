@@ -43,9 +43,13 @@ def _set_status(**updates) -> None:
 
 def _set_step(step: str, status: str, detail: str = "", extra: Optional[dict] = None) -> None:
     entry = {"status": status, "detail": detail}
-    if extra:
-        entry.update(extra)
     with _lock:
+        extra = dict(extra or {})
+        preflight_id = _status.get("preflight_id")
+        if preflight_id and "preflight_id" not in extra:
+            extra["preflight_id"] = preflight_id
+        if extra:
+            entry.update(extra)
         steps = dict(_status.get("steps") or {})
         steps[step] = entry
         _status["steps"] = steps
@@ -64,9 +68,13 @@ def _set_step_unless_status(
     blocked_statuses: tuple[str, ...] = ("pass", "fail", "done"),
 ) -> bool:
     entry = {"status": status, "detail": detail}
-    if extra:
-        entry.update(extra)
     with _lock:
+        extra = dict(extra or {})
+        preflight_id = _status.get("preflight_id")
+        if preflight_id and "preflight_id" not in extra:
+            extra["preflight_id"] = preflight_id
+        if extra:
+            entry.update(extra)
         steps = dict(_status.get("steps") or {})
         current = steps.get(step) or {}
         if current.get("status") in blocked_statuses:
@@ -290,8 +298,12 @@ def record_exam_preflight_answer_event(event: dict) -> None:
         _finish_preflight()
 
 
-def _run_exam_preflight() -> None:
-    preflight_id = f"exam-preflight-{uuid.uuid4().hex}"
+def _new_preflight_id() -> str:
+    return f"exam-preflight-{uuid.uuid4().hex}"
+
+
+def _run_exam_preflight(preflight_id: Optional[str] = None) -> None:
+    preflight_id = preflight_id or _new_preflight_id()
     _set_status(
         running=True,
         question=EXAM_PREFLIGHT_QUESTION,
@@ -346,12 +358,18 @@ def _run_exam_preflight() -> None:
         _finish_preflight()
 
 
-def start_exam_preflight() -> bool:
+def start_exam_preflight() -> Optional[str]:
     global _running
+    preflight_id = _new_preflight_id()
     with _lock:
         if _running:
-            return False
+            return None
         _running = True
-    thread = threading.Thread(target=_run_exam_preflight, daemon=True, name="exam-preflight")
+    thread = threading.Thread(
+        target=_run_exam_preflight,
+        args=(preflight_id,),
+        daemon=True,
+        name="exam-preflight",
+    )
     thread.start()
-    return True
+    return preflight_id

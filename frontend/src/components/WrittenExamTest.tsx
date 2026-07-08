@@ -37,6 +37,11 @@ interface ExamPreflightStatus {
   preflight_id?: unknown
 }
 
+interface ExamPreflightRunResponse {
+  ok?: boolean
+  preflight_id?: unknown
+}
+
 const FIXED_QUESTION = '代码题：给定整数数组 nums 和目标值 target，返回两数之和的下标。'
 
 const STEP_META: { key: string; label: string; icon: typeof Code2 }[] = [
@@ -132,10 +137,19 @@ export default function WrittenExamTest() {
   const [done, setDone] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const activePreflightIdRef = useRef<string | null>(null)
+  const awaitingPreflightStartRef = useRef(false)
 
   const setCurrentPreflightId = useCallback((preflightId: string | null) => {
     activePreflightIdRef.current = preflightId
   }, [])
+
+  const shouldAcceptPreflightEvent = useCallback((preflightId: string): boolean => {
+    const currentPreflightId = activePreflightIdRef.current
+    if (currentPreflightId) return preflightId === currentPreflightId
+    if (awaitingPreflightStartRef.current) return false
+    setCurrentPreflightId(preflightId)
+    return true
+  }, [setCurrentPreflightId])
 
   const hydrateStatus = useCallback(async () => {
     try {
@@ -143,6 +157,7 @@ export default function WrittenExamTest() {
       const statusSteps = normalizeStatusSteps(status?.steps)
       const statusPreflightId = status?.preflight_id ? String(status.preflight_id) : null
       const currentPreflightId = activePreflightIdRef.current
+      if (!currentPreflightId && awaitingPreflightStartRef.current) return
       if (currentPreflightId && statusPreflightId && statusPreflightId !== currentPreflightId) return
       if (currentPreflightId && !statusPreflightId && Object.keys(statusSteps).length === 0 && !status?.error) return
       const isRunning = Boolean(status?.running)
@@ -178,9 +193,7 @@ export default function WrittenExamTest() {
       const msg = JSON.parse(event.data)
       if (msg.exam_preflight_id) {
         const eventPreflightId = String(msg.exam_preflight_id)
-        const currentPreflightId = activePreflightIdRef.current
-        if (currentPreflightId && eventPreflightId !== currentPreflightId) return
-        if (!currentPreflightId) setCurrentPreflightId(eventPreflightId)
+        if (!shouldAcceptPreflightEvent(eventPreflightId)) return
         if (msg.type === 'answer_start') {
           setRunning(true)
           setSteps((prev) => ({
@@ -248,9 +261,7 @@ export default function WrittenExamTest() {
       const { step, status, detail, answer, question, first_token_ms, total_ms, model_name } = msg
       if (msg.preflight_id) {
         const eventPreflightId = String(msg.preflight_id)
-        const currentPreflightId = activePreflightIdRef.current
-        if (currentPreflightId && eventPreflightId !== currentPreflightId) return
-        if (!currentPreflightId) setCurrentPreflightId(eventPreflightId)
+        if (!shouldAcceptPreflightEvent(eventPreflightId)) return
       }
       if (step === 'done') {
         setDone(true)
@@ -273,7 +284,7 @@ export default function WrittenExamTest() {
     } catch {
       /* ignore malformed WS frames */
     }
-  }, [hydrateStatus, setCurrentPreflightId])
+  }, [hydrateStatus, shouldAcceptPreflightEvent])
 
   useEffect(() => {
     const ws = new WebSocket(buildWsUrl('/ws'))
@@ -291,10 +302,16 @@ export default function WrittenExamTest() {
     setSteps({})
     setErrorMsg(null)
     setCurrentPreflightId(null)
+    awaitingPreflightStartRef.current = true
     try {
-      await api.examPreflightRun()
+      const response = await api.examPreflightRun() as ExamPreflightRunResponse
+      const preflightId = response?.preflight_id ? String(response.preflight_id) : null
+      if (preflightId) setCurrentPreflightId(preflightId)
+      awaitingPreflightStartRef.current = false
+      if (preflightId) void hydrateStatus()
     } catch (error: any) {
       const message = error?.message || '笔试链路检测请求失败，请确认后端服务已启动'
+      awaitingPreflightStartRef.current = false
       setRunning(false)
       setDone(true)
       setErrorMsg(message)
