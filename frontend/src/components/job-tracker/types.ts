@@ -74,36 +74,57 @@ export interface Offer {
   position?: string
 }
 
+function finiteNumber(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseNumber(value: unknown, fallback = 0): number {
+  return finiteNumber(value) ?? fallback
+}
+
+function parseNullableNumber(value: unknown): number | null {
+  return finiteNumber(value)
+}
+
+function parseCount(value: unknown, fallback = 0): number {
+  return Math.max(0, Math.floor(parseNumber(value, fallback)))
+}
+
 export function parseApplication(raw: Record<string, unknown>): Application {
   const todos = raw.todos
   const reviewSummary = (raw.review_summary && typeof raw.review_summary === 'object'
     ? raw.review_summary
     : {}) as Partial<ApplicationReviewSummary>
+  const reviewCount = parseCount(reviewSummary.review_count)
+  const linkedReviewCount = parseCount(reviewSummary.linked_review_count, reviewCount)
   return {
-    id: Number(raw.id),
+    id: parseNumber(raw.id),
     company: String(raw.company ?? ''),
     position: String(raw.position ?? ''),
     city: String(raw.city ?? ''),
     stage: String(raw.stage ?? 'applied'),
-    applied_at: raw.applied_at != null ? Number(raw.applied_at) : null,
-    next_followup_at: raw.next_followup_at != null ? Number(raw.next_followup_at) : null,
+    applied_at: parseNullableNumber(raw.applied_at),
+    next_followup_at: parseNullableNumber(raw.next_followup_at),
     interviewer_info: String(raw.interviewer_info ?? ''),
     feedback: String(raw.feedback ?? ''),
     notes: String(raw.notes ?? ''),
-    created_at: Number(raw.created_at ?? 0),
-    updated_at: Number(raw.updated_at ?? 0),
-    sort_order: Number(raw.sort_order ?? 0),
+    created_at: parseNumber(raw.created_at),
+    updated_at: parseNumber(raw.updated_at),
+    sort_order: parseNumber(raw.sort_order),
     todos: Array.isArray(todos) ? (todos as TodoItem[]) : [],
     review_summary: {
-      review_count: Number(reviewSummary.review_count ?? 0),
-      latest_review_id: reviewSummary.latest_review_id != null ? Number(reviewSummary.latest_review_id) : null,
+      review_count: reviewCount,
+      latest_review_id: parseNullableNumber(reviewSummary.latest_review_id),
       latest_avg_score: parseReviewScore(reviewSummary.latest_avg_score),
-      latest_review_at: reviewSummary.latest_review_at != null ? Number(reviewSummary.latest_review_at) : null,
+      latest_review_at: parseNullableNumber(reviewSummary.latest_review_at),
       latest_status: reviewSummary.latest_status != null ? String(reviewSummary.latest_status) : null,
-      linked_review_count: Number(reviewSummary.linked_review_count ?? reviewSummary.review_count ?? 0),
-      latest_linked_review_id: reviewSummary.latest_linked_review_id != null ? Number(reviewSummary.latest_linked_review_id) : null,
+      linked_review_count: linkedReviewCount,
+      latest_linked_review_id: parseNullableNumber(reviewSummary.latest_linked_review_id),
       latest_linked_avg_score: parseReviewScore(reviewSummary.latest_linked_avg_score),
-      latest_linked_review_at: reviewSummary.latest_linked_review_at != null ? Number(reviewSummary.latest_linked_review_at) : null,
+      latest_linked_review_at: parseNullableNumber(reviewSummary.latest_linked_review_at),
       latest_linked_status: reviewSummary.latest_linked_status != null ? String(reviewSummary.latest_linked_status) : null,
     },
   }
@@ -112,8 +133,8 @@ export function parseApplication(raw: Record<string, unknown>): Application {
 export function parseOffer(raw: Record<string, unknown>): Offer {
   const benefits = raw.benefits
   return {
-    id: Number(raw.id),
-    application_id: Number(raw.application_id),
+    id: parseNumber(raw.id),
+    application_id: parseNumber(raw.application_id),
     base_salary: String(raw.base_salary ?? ''),
     total_pkg_note: String(raw.total_pkg_note ?? ''),
     bonus: String(raw.bonus ?? ''),
@@ -123,8 +144,8 @@ export function parseOffer(raw: Record<string, unknown>): Offer {
     location: String(raw.location ?? ''),
     pros: String(raw.pros ?? ''),
     cons: String(raw.cons ?? ''),
-    deadline: raw.deadline != null ? Number(raw.deadline) : null,
-    created_at: Number(raw.created_at ?? 0),
+    deadline: parseNullableNumber(raw.deadline),
+    created_at: parseNumber(raw.created_at),
     company: raw.company != null ? String(raw.company) : undefined,
     position: raw.position != null ? String(raw.position) : undefined,
   }
