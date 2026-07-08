@@ -2,7 +2,14 @@
 测试 review 分析功能（不需要真实 API key）
 """
 import pytest
+from pathlib import Path
+import sys
 from unittest.mock import patch, MagicMock
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from services import review_analysis
 from core.config import ModelConfig
 
@@ -83,6 +90,47 @@ def test_analyze_turn_preserves_structured_evidence():
     assert result["evidence"]["tags"] == ["Redis", "缓存击穿"]
 
 
+def test_analyze_written_exam_turn_reviews_generated_answer():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content='''```json
+{
+  "strengths": ["复杂度清晰"],
+  "risks": ["缺少空数组用例"],
+  "scorecard": {"正确性": 8, "完整性": 6, "可提交性": 7},
+  "evidence": {
+    "improvement_advice": "先补边界用例",
+    "follow_up_questions": ["空数组时返回什么？"],
+    "tags": ["哈希表"]
+  }
+}
+```'''))]
+    )
+
+    with patch('services.review_analysis.correct_asr_errors') as mock_correct, \
+         patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
+         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+        result = review_analysis.analyze_turn(
+            question="截图题：两数之和",
+            candidate_answer="",
+            reference_answer="用哈希表一次遍历。",
+            review_source="written_exam",
+        )
+
+    mock_correct.assert_not_called()
+    kwargs = mock_client.chat.completions.create.call_args.kwargs
+    messages = kwargs["messages"]
+    assert "笔试辅导教练" in messages[0]["content"]
+    user_prompt = messages[-1]["content"]
+    assert "截图题目/题面" in user_prompt
+    assert "本次生成答案" in user_prompt
+    assert "用哈希表一次遍历。" in user_prompt
+    assert "候选人回答" not in user_prompt
+    assert result["scorecard"]["可提交性"] == 7
+    assert result["evidence"]["review_mode"] == "written_exam"
+    assert result["evidence"]["improvement_advice"] == "先补边界用例"
+
+
 def test_generate_summary_no_active_model():
     """测试没有有效模型配置时返回提示信息"""
     with patch('services.review_analysis.get_active_llm_client') as mock_client:
@@ -104,6 +152,43 @@ def test_generate_summary_empty_turns():
     assert "未录制" in result["summary_markdown"]
     assert result["strong_points"] == []
     assert result["weak_points"] == []
+
+
+def test_generate_summary_for_written_exam_uses_generated_answers():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content='''```json
+{
+  "summary_markdown": "## 笔试答题质量\\n\\n整体可提交。",
+  "strong_points": ["代码可提交"],
+  "weak_points": ["边界用例不足"]
+}
+```'''))]
+    )
+
+    with patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
+         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+        result = review_analysis.generate_summary(
+            turns=[
+                {
+                    "question_text": "截图题：两数之和",
+                    "candidate_answer_text": "",
+                    "reference_answer_text": "用哈希表一次遍历。",
+                    "strengths": ["复杂度清晰"],
+                    "risks": ["缺少空数组用例"],
+                }
+            ],
+            review_source="written_exam",
+        )
+
+    kwargs = mock_client.chat.completions.create.call_args.kwargs
+    messages = kwargs["messages"]
+    assert "笔试辅导教练" in messages[0]["content"]
+    user_prompt = messages[-1]["content"]
+    assert "本次笔试练习共 1 道截图题" in user_prompt
+    assert "生成答案：用哈希表一次遍历。" in user_prompt
+    assert "回答：" not in user_prompt
+    assert result["strong_points"] == ["代码可提交"]
 
 
 def test_run_asr_correction_check_success():

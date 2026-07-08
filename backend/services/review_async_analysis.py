@@ -44,6 +44,7 @@ def _analyze_session_worker(session_id: int):
             return
 
         turns = detail.get("turns", [])
+        review_source = str(detail.get("source") or "assist")
         if not turns:
             logger.info("Session %d has no turns, mark as completed", session_id)
             review.update_session_summary(
@@ -69,6 +70,7 @@ def _analyze_session_worker(session_id: int):
                     candidate_answer=turn["candidate_answer_text"],
                     reference_answer=turn.get("reference_answer_text", ""),
                     code_text=turn.get("code_text", ""),
+                    review_source=review_source,
                 )
 
                 # 更新 turn（包括纠正后的候选人回答）
@@ -109,6 +111,7 @@ def _analyze_session_worker(session_id: int):
         try:
             summary_result = review_analysis.generate_summary(
                 turns=analyzed_turns,
+                review_source=review_source,
             )
 
             # 计算平均分

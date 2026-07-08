@@ -185,6 +185,7 @@ def analyze_turn(
     reference_answer: str,
     code_text: str = "",
     apply_asr_correction: bool = True,
+    review_source: str = "assist",
 ) -> dict[str, Any]:
     """
     分析单个 turn
@@ -197,9 +198,10 @@ def analyze_turn(
         "corrected_answer": "纠正后的回答（如有变化）"
     }
     """
+    is_written_exam = (review_source or "").strip() == "written_exam"
     # 语音识别纠错
     corrected_answer = candidate_answer
-    if apply_asr_correction and candidate_answer:
+    if not is_written_exam and apply_asr_correction and candidate_answer:
         corrected_answer = correct_asr_errors(question, candidate_answer)
     correction_evidence = {}
     if corrected_answer != candidate_answer:
@@ -218,11 +220,24 @@ def analyze_turn(
             "strengths": [],
             "risks": [],
             "scorecard": {},
-            "evidence": correction_evidence,
+            "evidence": {
+                **({"review_mode": "written_exam"} if is_written_exam else {}),
+                **correction_evidence,
+            },
             "corrected_answer": corrected_answer if corrected_answer != candidate_answer else None,
         }
 
-    prompt = f"""你是一位资深的技术面试官，请对候选人的回答进行客观评价。
+    if is_written_exam:
+        prompt = f"""你是一位资深算法与笔试辅导教练，请对一次截图笔试答题结果进行客观复盘。
+
+截图题目/题面：
+{question}
+
+本次生成答案：
+{reference_answer if reference_answer else "(未生成答案)"}
+"""
+    else:
+        prompt = f"""你是一位资深的技术面试官，请对候选人的回答进行客观评价。
 
 问题：
 {question}
@@ -241,7 +256,43 @@ def analyze_turn(
 {code_text}
 """
 
-    prompt += """
+    if is_written_exam:
+        prompt += """
+
+请从以下维度分析：
+1. **亮点（strengths）**：列出本次生成答案中的优点，例如：题意理解、算法正确性、代码可提交性、复杂度分析、边界用例覆盖等
+2. **风险（risks）**：列出可能导致笔试不过的不足，例如：漏读截图条件、边界条件缺失、复杂度不达标、代码不可运行、没有说明假设等
+3. **评分（scorecard）**：给出 1-10 分的评分，包含：正确性、完整性、可提交性三个维度
+4. **补强建议（evidence.improvement_advice）**：给出 1 条下一次截图答题可直接采用的改进动作
+5. **追问练习（evidence.follow_up_questions）**：给出 1-2 个可用于自测的变体或边界用例问题
+6. **知识标签（evidence.tags）**：提取 1-3 个算法/工程主题标签
+
+请以 JSON 格式返回，格式如下：
+```json
+{
+  "strengths": ["亮点1", "亮点2", "亮点3"],
+  "risks": ["风险1", "风险2"],
+  "scorecard": {
+    "正确性": 8,
+    "完整性": 7,
+    "可提交性": 8
+  },
+  "evidence": {
+    "improvement_advice": "先列出截图里的输入输出约束和边界用例",
+    "follow_up_questions": ["如果输入为空或只有一个元素会怎样？"],
+    "tags": ["哈希表", "边界条件"]
+  }
+}
+```
+
+注意：
+- 如果本次生成答案为空，strengths 为空，risks 包含"未生成答案"，scorecard 全部为 0
+- 评分要客观，重点看这份答案能否在笔试平台直接通过
+- 每条亮点/风险限制在 30 字以内
+- 不要假设截图里没有出现的条件；如果答案基于合理假设，请把假设是否充分列为风险或亮点
+"""
+    else:
+        prompt += """
 
 请从以下维度分析：
 1. **亮点（strengths）**：列出候选人回答中的优点，例如：准确性、深度、实战经验、代码质量等
@@ -282,7 +333,11 @@ def analyze_turn(
             messages=[
                 {
                     "role": "system",
-                    "content": "你是一位专业的技术面试官，擅长客观评价候选人的回答。",
+                    "content": (
+                        "你是一位专业的算法与笔试辅导教练，擅长评估截图题解答质量。"
+                        if is_written_exam
+                        else "你是一位专业的技术面试官，擅长客观评价候选人的回答。"
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -315,7 +370,11 @@ def analyze_turn(
             "strengths": result.get("strengths", []),
             "risks": result.get("risks", []),
             "scorecard": result.get("scorecard", {}),
-            "evidence": {**llm_evidence, **correction_evidence},
+            "evidence": {
+                **llm_evidence,
+                **({"review_mode": "written_exam"} if is_written_exam else {}),
+                **correction_evidence,
+            },
             "corrected_answer": corrected_answer if corrected_answer != candidate_answer else None,
         }
 
@@ -325,13 +384,17 @@ def analyze_turn(
             "strengths": [],
             "risks": [f"分析失败: {str(e)[:50]}"],
             "scorecard": {},
-            "evidence": correction_evidence,
+            "evidence": {
+                **({"review_mode": "written_exam"} if is_written_exam else {}),
+                **correction_evidence,
+            },
             "corrected_answer": corrected_answer if corrected_answer != candidate_answer else None,
         }
 
 
 def generate_summary(
     turns: list[dict[str, Any]],
+    review_source: str = "assist",
 ) -> dict[str, Any]:
     """
     生成整场面试的总结
@@ -342,9 +405,10 @@ def generate_summary(
         "weak_points": ["深度不够", "缺少实战案例"]
     }
     """
+    is_written_exam = (review_source or "").strip() == "written_exam"
     if not turns:
         return {
-            "summary_markdown": "本场面试未录制到有效问答",
+            "summary_markdown": "本次笔试未录制到有效题目" if is_written_exam else "本场面试未录制到有效问答",
             "strong_points": [],
             "weak_points": [],
         }
@@ -362,7 +426,14 @@ def generate_summary(
     # 构建输入
     turns_text = ""
     for idx, turn in enumerate(turns, start=1):
-        turns_text += f"""
+        if is_written_exam:
+            turns_text += f"""
+### 第 {idx} 题
+截图题目/题面：{turn.get('question_text', '')}
+生成答案：{turn.get('reference_answer_text', '(未生成)')}
+"""
+        else:
+            turns_text += f"""
 ### 第 {idx} 题
 问题：{turn.get('question_text', '')}
 回答：{turn.get('candidate_answer_text', '(未录制)')}
@@ -374,7 +445,32 @@ def generate_summary(
         if risks:
             turns_text += f"风险：{', '.join(risks)}\n"
 
-    prompt = f"""你是一位资深技术面试官，请对候选人的整场面试表现进行总结。
+    if is_written_exam:
+        prompt = f"""你是一位资深算法与笔试辅导教练，请对本次截图笔试练习进行总结。
+
+本次笔试练习共 {len(turns)} 道截图题：
+{turns_text}
+
+请生成一份 Markdown 格式的整体评价，包含：
+1. 答题质量概述（2-3 句话）
+2. 主要亮点（3-5 条，用列表形式）
+3. 下次截图答题改进方向（2-4 条，用列表形式）
+
+同时，请提取：
+- strong_points：高频亮点关键词（数组，3-5 个词）
+- weak_points：高频风险关键词（数组，2-4 个词）
+
+返回 JSON 格式：
+```json
+{{
+  "summary_markdown": "## 笔试答题质量\n\n...\n\n**亮点：**\n- ...\n\n**改进方向：**\n- ...",
+  "strong_points": ["题意提取准确", "复杂度清晰", "代码可提交"],
+  "weak_points": ["边界用例不足", "截图条件遗漏"]
+}}
+```
+"""
+    else:
+        prompt = f"""你是一位资深技术面试官，请对候选人的整场面试表现进行总结。
 
 本场面试共 {len(turns)} 轮问答：
 {turns_text}
@@ -404,7 +500,11 @@ def generate_summary(
             messages=[
                 {
                     "role": "system",
-                    "content": "你是一位专业的技术面试官，擅长总结候选人的整体表现。",
+                    "content": (
+                        "你是一位专业的算法与笔试辅导教练，擅长总结截图笔试练习表现。"
+                        if is_written_exam
+                        else "你是一位专业的技术面试官，擅长总结候选人的整体表现。"
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],

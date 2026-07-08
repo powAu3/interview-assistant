@@ -11,6 +11,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from services import review_integration
+from services import review_async_analysis
 from services.storage import review
 from core.session import Session, QAPair
 
@@ -275,6 +276,61 @@ def test_written_exam_stop_saves_turns_without_candidate_asr(monkeypatch):
     assert detail["turns"][0]["qa_id"] == "qa-screen-1"
     assert detail["turns"][0]["candidate_answer_text"] == ""
     assert detail["turns"][0]["reference_answer_text"] == "用哈希表一次遍历。"
+
+
+def test_written_exam_analysis_worker_uses_written_exam_source(monkeypatch):
+    """笔试复盘分析按截图题生成答案模式处理，而不是按候选人口述评分"""
+    session_id = review.create_session(
+        started_at=1000.0,
+        interviewer_enabled=False,
+        candidate_enabled=False,
+        source="written_exam",
+    )
+    review.add_turn(
+        session_id=session_id,
+        qa_id="qa-screen-1",
+        seq=1,
+        question_text="截图题：两数之和",
+        candidate_answer_text="",
+        reference_answer_text="用哈希表一次遍历。",
+    )
+
+    calls: dict[str, object] = {}
+
+    def fake_analyze_turn(**kwargs):
+        calls["turn"] = kwargs
+        return {
+            "strengths": ["复杂度清晰"],
+            "risks": [],
+            "evidence": {"review_mode": "written_exam"},
+            "scorecard": {"正确性": 8, "完整性": 7, "可提交性": 8},
+            "corrected_answer": None,
+        }
+
+    def fake_generate_summary(*, turns, review_source):
+        calls["summary"] = {"turns": turns, "review_source": review_source}
+        return {
+            "summary_markdown": "## 笔试答题质量\n\n整体可提交。",
+            "strong_points": ["复杂度清晰"],
+            "weak_points": [],
+        }
+
+    monkeypatch.setattr(review_async_analysis.review_analysis, "analyze_turn", fake_analyze_turn)
+    monkeypatch.setattr(review_async_analysis.review_analysis, "generate_summary", fake_generate_summary)
+
+    review_async_analysis._analyze_session_worker(session_id)
+
+    assert calls["turn"]["review_source"] == "written_exam"
+    assert calls["turn"]["candidate_answer"] == ""
+    assert calls["turn"]["reference_answer"] == "用哈希表一次遍历。"
+    assert calls["summary"]["review_source"] == "written_exam"
+    assert calls["summary"]["turns"][0]["reference_answer_text"] == "用哈希表一次遍历。"
+
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["status"] == "completed"
+    assert detail["summary_markdown"].startswith("## 笔试答题质量")
+    assert detail["avg_score"] == pytest.approx(23 / 3)
 
 
 def test_on_assist_stop_no_session():
