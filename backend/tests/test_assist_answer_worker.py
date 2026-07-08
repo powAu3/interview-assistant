@@ -473,6 +473,34 @@ def test_resume_question_keeps_resume_context_enabled(monkeypatch: pytest.Monkey
     assert captured["include_resume"] is True
 
 
+def test_chinese_project_context_keeps_resume_context_enabled(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "结合项目中权限模型回答。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("讲讲项目中你是怎么拆分权限边界的？", None, False, "conversation_loopback", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is True
+
+
 def test_chinese_self_intro_keeps_resume_context_enabled(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     captured: dict[str, object] = {}
@@ -548,6 +576,34 @@ def test_generic_experience_verb_does_not_force_resume_context(monkeypatch: pyte
 
     answer_worker.process_question_parallel(
         ("一个 HTTP 请求通常会经历哪些过程？", None, False, "conversation_loopback", {"origin": "asr", "asr_turn_id": 1}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    assert captured["include_resume"] is False
+
+
+def test_generic_project_noun_does_not_force_resume_context(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    captured: dict[str, object] = {}
+    cfg = _cfg()
+    cfg.resume_text = "项目A: 多租户权限系统。"
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+
+    def fake_prompt(**kwargs):
+        captured["include_resume"] = kwargs.get("include_resume")
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **_kwargs):
+        yield ("text", "按依赖管理最佳实践回答。")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("Python 项目通常怎么做依赖管理？", None, False, "conversation_loopback", {"origin": "asr", "asr_turn_id": 1}),
         seq=0,
         model_idx=0,
         sess_v=0,
