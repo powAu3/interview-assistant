@@ -1056,19 +1056,26 @@ def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: 
     if should_resume_interviewer:
         audio_capture.start(next_device_id, owner="assist")
         _start_interview_worker_thread_if_needed()
-    next_candidate_id = int(getattr(session, "last_candidate_mic_device_id", 0) or 0)
+    last_candidate_id = int(getattr(session, "last_candidate_mic_device_id", 0) or 0)
+    next_candidate_id = last_candidate_id
     should_resume_candidate = bool(
         candidate_mic_device_id is not None
+        or last_candidate_id > 0
         or (_candidate_thread and _candidate_thread.is_alive())
         or bool(getattr(_candidate_audio_capture, "is_running", False))
     )
     if candidate_mic_device_id is not None:
         next_candidate_id = int(candidate_mic_device_id)
     cfg = get_config()
+    candidate_enabled = bool(getattr(cfg, "candidate_asr_enabled", False))
+    candidate_device_valid = bool(
+        next_candidate_id > 0
+        and candidate_enabled
+        and int(next_candidate_id) != int(next_device_id)
+    )
     if (
         should_resume_candidate
-        and bool(getattr(cfg, "candidate_asr_enabled", False))
-        and int(next_candidate_id) != int(next_device_id)
+        and candidate_device_valid
     ):
         try:
             _candidate_audio_capture.start(
@@ -1090,6 +1097,17 @@ def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: 
                 "error": str(exc)[:160],
                 "reason": "mic_unavailable",
                 "safe_degraded": True,
+            })
+    elif next_candidate_id and not candidate_device_valid:
+        reason = "disabled" if not candidate_enabled else "missing_or_same_device"
+        next_candidate_id = 0
+        if should_resume_candidate or candidate_mic_device_id is not None:
+            broadcast({
+                "type": "candidate_asr_status",
+                "loaded": False,
+                "loading": False,
+                "provider": "off",
+                "reason": reason,
             })
     _candidate_flush_event.clear()
     _pause_event.clear()
