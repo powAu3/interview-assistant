@@ -302,6 +302,50 @@ describe('JobTracker', () => {
     expect((useInterviewStore.getState().setToastMessage as any)).toHaveBeenCalledWith('已打开 Acme · Frontend 的复盘详情')
   })
 
+  it('sorts linked review timeline by latest interview time before rendering summary', async () => {
+    apiMock.jobTrackerApplicationReviews.mockResolvedValueOnce({
+      items: [
+        {
+          id: 10,
+          status: 'completed',
+          started_at: 1710000000,
+          ended_at: 1710001800,
+          title: '旧复盘',
+          company: 'Acme',
+          role: 'Frontend',
+          turn_count: 4,
+          avg_score: 6.1,
+          summary_preview: '旧记录',
+          updated_at: 1710001800,
+        },
+        {
+          id: 12,
+          status: 'completed',
+          started_at: 1710003600,
+          ended_at: 1710007200,
+          title: '新复盘',
+          company: 'Acme',
+          role: 'Frontend',
+          turn_count: 5,
+          avg_score: 8.4,
+          summary_preview: '新记录',
+          updated_at: 1710007200,
+        },
+      ],
+    })
+
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /查看 Acme 的 2 场关联复盘/ })[0])
+
+    expect(await screen.findByText('新复盘')).toBeInTheDocument()
+    expect(screen.getByText((_, node) => node?.textContent === '最近得分 8.4')).toBeInTheDocument()
+    const reviews = screen.getAllByRole('button', { name: '打开复盘' })
+    expect(reviews[0].closest('.relative')).toHaveTextContent('新复盘')
+    expect(reviews[1].closest('.relative')).toHaveTextContent('旧复盘')
+  })
+
   it('keeps the latest review timeline when overlapping review requests finish out of order', async () => {
     apiMock.jobTrackerApplications.mockResolvedValueOnce({
       items: [

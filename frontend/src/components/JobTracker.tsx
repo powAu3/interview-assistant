@@ -160,6 +160,18 @@ function parseApplicationReviewItem(item: Record<string, unknown>): ApplicationR
   }
 }
 
+function reviewItemSortTime(item: ApplicationReviewItem): number {
+  return item.ended_at ?? item.started_at ?? 0
+}
+
+function sortApplicationReviewItems(items: ApplicationReviewItem[]): ApplicationReviewItem[] {
+  return [...items].sort((a, b) => {
+    const byTime = reviewItemSortTime(b) - reviewItemSortTime(a)
+    if (byTime !== 0) return byTime
+    return b.id - a.id
+  })
+}
+
 function useCompactLayout(maxWidth = 640) {
   const read = () => {
     if (typeof window === 'undefined') return false
@@ -564,9 +576,10 @@ export default function JobTracker() {
       try {
         const res = await api.jobTrackerApplicationReviews(app.id)
         if (reviewRequestSeqRef.current !== requestSeq) return
-        setReviewItems((res.items as Record<string, unknown>[])
+        const items = (res.items as Record<string, unknown>[])
           .map(parseApplicationReviewItem)
-          .filter((item): item is ApplicationReviewItem => item !== null))
+          .filter((item): item is ApplicationReviewItem => item !== null)
+        setReviewItems(sortApplicationReviewItems(items))
       } catch (e) {
         if (reviewRequestSeqRef.current !== requestSeq) return
         setToastMessage(e instanceof Error ? e.message : '加载关联复盘失败')
