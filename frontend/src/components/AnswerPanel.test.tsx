@@ -69,4 +69,40 @@ describe('AnswerPanel empty recording state', () => {
       expect(screen.queryByText('written-exam-test-ready')).not.toBeInTheDocument()
     })
   })
+
+  it('labels realtime and multi-screenshot answer sources', async () => {
+    resetStores(false)
+    useInterviewStore.setState({
+      qaPairs: [
+        {
+          id: 'qa-asr',
+          question: 'Redis 怎么持久化？',
+          answer: 'AOF 和 RDB 组合。',
+          thinkContent: '',
+          isThinking: false,
+          timestamp: 1710000000,
+          questionSource: 'asr',
+          modelLabel: 'Lite Ark',
+          status: 'done',
+        },
+        {
+          id: 'qa-screen',
+          question: '两张截图里的代码题怎么修？',
+          answer: '```python\nprint("ok")\n```',
+          thinkContent: '',
+          isThinking: false,
+          timestamp: 1710000001,
+          questionSource: 'server_screen_multi',
+          modelLabel: 'Lite Ark',
+          status: 'done',
+        },
+      ],
+      streamingIds: [],
+    } as any)
+
+    render(<AnswerPanel />)
+
+    expect(screen.getByText('实时转写')).toBeInTheDocument()
+    expect(screen.getByText('连续截图审题')).toBeInTheDocument()
+  })
 })

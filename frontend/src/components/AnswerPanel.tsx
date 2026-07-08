@@ -9,6 +9,12 @@ const SoundTest = lazy(() => import('./SoundTest'))
 const WrittenExamTest = lazy(() => import('./WrittenExamTest'))
 const AnswerMarkdownContent = lazy(() => import('./AnswerMarkdownContent'))
 
+function scrollElementIntoView(element: Element | null, options?: ScrollIntoViewOptions) {
+  if (typeof element?.scrollIntoView === 'function') {
+    element.scrollIntoView(options)
+  }
+}
+
 function VisionVerifyBadge({ verdict, reason }: { verdict: 'PASS' | 'FAIL' | 'UNKNOWN'; reason: string }) {
   const palette =
     verdict === 'PASS'
@@ -86,11 +92,21 @@ function ThinkBlock({ content, isThinking, streamLayout }: { content: string; is
 }
 
 const SOURCE_LABELS: Record<string, string> = {
+  asr: '实时转写',
   conversation_loopback: '会议拾音',
   conversation_mic: '本机麦克风',
   manual_text: '键盘速记',
   manual_image: '截图审题',
   server_screen_left: '服务端截图审题',
+  server_screen_multi: '连续截图审题',
+  server_screen_exam_preflight: '笔试链路检测',
+}
+
+function sourceLabel(source?: string): string | null {
+  if (!source) return null
+  if (SOURCE_LABELS[source]) return SOURCE_LABELS[source]
+  if (source.startsWith('server_screen_')) return '服务端截图审题'
+  return null
 }
 
 function renderAnswerBody(
@@ -162,7 +178,7 @@ type QACardProps = {
 }
 
 const QACard = memo(function QACard({ qa, isStreaming, stream, colorScheme, animate, animateDelayMs }: QACardProps) {
-  const srcLabel = qa.questionSource ? SOURCE_LABELS[qa.questionSource] : null
+  const srcLabel = sourceLabel(qa.questionSource)
   const baseClass = animate ? 'animate-fade-up' : ''
   const animStyle = animate ? { animationDelay: `${animateDelayMs}ms` } : undefined
 
@@ -293,7 +309,7 @@ export default function AnswerPanel() {
     if (!el || !bottomRef.current) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= scrollThreshold
     if (atBottom) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+      scrollElementIntoView(bottomRef.current, { behavior: 'smooth' })
     }
     updateNearBottom()
   }, [qaPairs, streamingIds, scrollThreshold, updateNearBottom])
@@ -317,7 +333,7 @@ export default function AnswerPanel() {
   const showScrollToLatestFab = qaPairs.length > 0 && !nearBottom
 
   const scrollToLatest = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    scrollElementIntoView(bottomRef.current, { behavior: 'smooth' })
     requestAnimationFrame(() => updateNearBottom())
   }
 
