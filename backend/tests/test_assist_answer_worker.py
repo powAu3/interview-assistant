@@ -1086,7 +1086,7 @@ def test_non_followup_prompt_can_include_candidate_spoken_background(monkeypatch
     monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
 
     answer_worker.process_question_parallel(
-        ("MySQL 索引为什么用 B+ 树？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        ("风控规则冲突怎么处理？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
         seq=0,
         model_idx=0,
         sess_v=0,
@@ -1099,7 +1099,49 @@ def test_non_followup_prompt_can_include_candidate_spoken_background(monkeypatch
     assert "风控规则引擎" in prompt
     assert "以当前面试官问题为主" in prompt
     assert "不要把转写当成逐字事实" in prompt
-    assert "现在面试官问题：MySQL 索引为什么用 B+ 树？" in prompt
+    assert "现在面试官问题：风控规则冲突怎么处理？" in prompt
+
+
+def test_non_followup_prompt_skips_unrelated_candidate_spoken_background(monkeypatch: pytest.MonkeyPatch):
+    broadcasts: list[dict] = []
+    seen: dict[str, str] = {}
+    session = get_session()
+    session.add_qa(
+        "讲讲你做过的项目",
+        "助手建议答案：我做了通用缓存项目。",
+        qa_id="qa-prev",
+        source="asr",
+        model_name="模型一",
+    )
+    session.add_candidate_transcription(
+        "我实际讲的是风控规则引擎，里面用了灰度发布和规则回滚。",
+        qa_id="qa-prev",
+        provider="whisper",
+    )
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = True
+    cfg.candidate_context_enabled = True
+    monkeypatch.setattr(answer_worker, "get_config", lambda: cfg)
+    monkeypatch.setattr(answer_worker, "classify_followup", lambda *_args, **_kwargs: False)
+
+    def fake_stream(_model_cfg, messages, **_kwargs):
+        seen["user"] = messages[-1]["content"]
+        yield ("text", "普通问题回答。")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("MySQL 索引为什么用 B+ 树？", None, False, "asr", {"origin": "asr", "asr_turn_id": 2}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    prompt = seen["user"]
+    assert prompt == "MySQL 索引为什么用 B+ 树？"
+    assert "[候选人回答辅助背景]" not in prompt
+    assert "风控规则引擎" not in prompt
 
 
 def test_followup_prompt_uses_legacy_context_when_candidate_context_disabled(monkeypatch: pytest.MonkeyPatch):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -151,6 +152,119 @@ def _candidate_context_settings(cfg) -> tuple[bool, int, int, int]:
         max(100, min(4000, int(getattr(cfg, "candidate_context_max_chars", 900) or 900))),
         max(1, min(100, int(getattr(cfg, "candidate_context_min_chars", 6) or 6))),
     )
+
+
+_CANDIDATE_BACKGROUND_STOP_TERMS = frozenset(
+    {
+        "一个",
+        "一下",
+        "上一个",
+        "上一轮",
+        "上一",
+        "上轮",
+        "上面",
+        "下一个",
+        "这个",
+        "那个",
+        "这些",
+        "那些",
+        "怎么",
+        "如何",
+        "什么",
+        "为什么",
+        "为什",
+        "可以",
+        "能不能",
+        "你们",
+        "我们",
+        "他们",
+        "里面",
+        "就是",
+        "如果",
+        "然后",
+        "还有",
+        "另外",
+        "但是",
+        "不过",
+        "具体",
+        "详细",
+        "展开",
+        "补充",
+        "介绍",
+        "讲讲",
+        "说说",
+        "回答",
+        "问题",
+        "项目",
+        "经历",
+        "业务",
+        "核心",
+        "实现",
+        "处理",
+        "方案",
+        "使用",
+        "用了",
+        "实际",
+        "讲的是",
+        "候选",
+        "候选人",
+    }
+)
+_CANDIDATE_BACKGROUND_EN_STOP_TERMS = frozenset(
+    {
+        "and",
+        "are",
+        "can",
+        "could",
+        "did",
+        "does",
+        "for",
+        "how",
+        "that",
+        "the",
+        "this",
+        "what",
+        "when",
+        "why",
+        "would",
+        "you",
+        "your",
+    }
+)
+
+
+def _candidate_background_topic_terms(text: str) -> set[str]:
+    normalized = normalize_transcription_for_analysis(text).lower()
+    if not normalized:
+        return set()
+    terms: set[str] = set()
+    for token in re.findall(r"[a-z0-9][a-z0-9_+#.-]{1,}", normalized):
+        cleaned = token.strip("._-")
+        if len(cleaned) >= 2 and cleaned not in _CANDIDATE_BACKGROUND_EN_STOP_TERMS:
+            terms.add(cleaned)
+
+    for block in re.findall(r"[\u4e00-\u9fff]+", normalized):
+        max_size = min(4, len(block))
+        for size in range(2, max_size + 1):
+            for start in range(0, len(block) - size + 1):
+                term = block[start: start + size]
+                if term not in _CANDIDATE_BACKGROUND_STOP_TERMS:
+                    terms.add(term)
+    return terms
+
+
+def _candidate_background_matches_current_question(
+    question_text: str,
+    last_qa: Any,
+    actual_spoken_answer: str,
+) -> bool:
+    question_terms = _candidate_background_topic_terms(question_text)
+    if not question_terms:
+        return False
+    previous_terms = _candidate_background_topic_terms(
+        f"{getattr(last_qa, 'question', '')} {actual_spoken_answer}"
+    )
+    return bool(question_terms & previous_terms)
 
 
 _FOLLOWUP_BRIDGE_PREFIXES = (
@@ -711,7 +825,12 @@ def process_question_parallel(
                 "如果转写内容明显识别错、与当前追问冲突或不自然，请降权使用，不要强行套入。\n\n"
                 f"现在面试官追问：{question_text}"
             )
-    elif should_use_candidate_context and last_qa and actual_spoken_answer:
+    elif (
+        should_use_candidate_context
+        and last_qa
+        and actual_spoken_answer
+        and _candidate_background_matches_current_question(question_text, last_qa, actual_spoken_answer)
+    ):
         user_for_llm = (
             f"[候选人回答辅助背景] 上一个问题：{last_qa.question}\n"
             f"候选人上一轮麦克风转写（可能有识别误差）：{actual_spoken_answer[:candidate_max_chars]}\n"
