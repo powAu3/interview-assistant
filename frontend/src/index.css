@@ -789,6 +789,11 @@ code, pre, .font-mono {
   color: rgba(30, 41, 59, 0.92);
 }
 
+.ov-focus-tool:disabled {
+  color: rgba(71, 85, 105, 0.54);
+  cursor: wait;
+}
+
 .ov-focus-tool:focus-visible,
 .ov-focus-tab:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.42);

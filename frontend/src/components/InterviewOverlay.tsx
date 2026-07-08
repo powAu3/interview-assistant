@@ -67,6 +67,7 @@ export default function InterviewOverlay() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [reviewQaId, setReviewQaId] = useState<string | null>(null)
   const [liveFocusQaId, setLiveFocusQaId] = useState<string | null>(null)
+  const busyActionRef = useRef<string | null>(null)
   const pinnedFocusTabsByQaIdRef = useRef<Record<string, boolean>>({})
 
   const latestQa = useMemo(() => {
@@ -227,7 +228,8 @@ export default function InterviewOverlay() {
   }, [])
 
   const runOverlayAction = useCallback(async (action: 'screen' | 'cancel' | 'clear' | 'hide') => {
-    if (busyAction) return
+    if (busyActionRef.current) return
+    busyActionRef.current = action
     setBusyAction(action)
     try {
       if (action === 'screen') {
@@ -247,9 +249,10 @@ export default function InterviewOverlay() {
     } catch (error) {
       setToastMessage(getErrorMessage(error, '操作失败'))
     } finally {
+      busyActionRef.current = null
       setBusyAction(null)
     }
-  }, [busyAction, clearSession, setToastMessage])
+  }, [clearSession, setToastMessage])
 
   useEffect(() => {
     if (reviewQaId && !qaPairs.some((item) => item.id === reviewQaId)) {
@@ -383,6 +386,7 @@ export default function InterviewOverlay() {
               <button
                 key={tool.key}
                 type="button"
+                disabled={Boolean(busyAction)}
                 className={`ov-focus-tool ${busyAction === tool.key ? 'ov-focus-tool--busy' : ''}`}
                 onMouseDown={suppressToolbarMouseDown}
                 onClick={() => runOverlayAction(tool.key)}

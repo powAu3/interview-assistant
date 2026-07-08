@@ -444,6 +444,39 @@ describe('InterviewOverlay', () => {
     expect(screen.getByText(/return 0/)).toBeInTheDocument()
   })
 
+  it('prevents duplicate focus toolbar actions while a request is in flight', async () => {
+    let resolveAsk: ((value: unknown) => void) | null = null
+    const pendingAsk = new Promise((resolve) => {
+      resolveAsk = resolve
+    })
+    apiMock.askFromServerScreen.mockReturnValueOnce(pendingAsk)
+    useUiPrefsStore.setState({ interviewOverlayMode: 'focus', interviewOverlayShowBg: true })
+    localStorage.setItem('ia_overlay_mode', 'focus')
+    localStorage.setItem('ia_overlay_show_bg', '1')
+
+    render(<InterviewOverlay />)
+
+    const screenAction = screen.getByRole('button', { name: /^截图审题/ })
+    fireEvent.click(screenAction)
+    fireEvent.click(screenAction)
+
+    await waitFor(() => {
+      expect(apiMock.askFromServerScreen).toHaveBeenCalledTimes(1)
+    })
+    expect(screenAction).toBeDisabled()
+    expect(screen.getByText('处理中…')).toBeInTheDocument()
+
+    await act(async () => {
+      if (!resolveAsk) throw new Error('overlay action resolver was not captured')
+      resolveAsk({ ok: true })
+      await pendingAsk
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^截图审题/ })).not.toBeDisabled()
+    })
+  })
+
   it('uses a readable dark text color in focus mode regardless of the regular overlay font color', () => {
     useInterviewStore.setState({
       qaPairs: [{ ...qa, answer: '## 结论\n浅色用户字体不应该影响专注面板。' }],
