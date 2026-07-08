@@ -1781,7 +1781,12 @@ def _process_question_parallel(
     my_gen = _capture_generation()
     my_asr_turn = int(_task_meta(task).get("asr_turn_id", 0)) if _is_asr_task(task) else 0
 
+    def session_stale() -> bool:
+        return sess_v != _task_session_version
+
     def aborted() -> bool:
+        if session_stale():
+            return True
         if my_gen != _answer_generation:
             return True
         if (
@@ -1807,6 +1812,7 @@ def _process_question_parallel(
             broadcast=broadcast,
             logger=_ilog,
             error_logger=_elog,
+            start_abort_check=session_stale,
         ),
     )
 

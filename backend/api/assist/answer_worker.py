@@ -35,6 +35,7 @@ class AnswerWorkerDeps:
     broadcast: Callable[[dict], None]
     logger: Any
     error_logger: Any
+    start_abort_check: Optional[Callable[[], bool]] = None
 
 
 def _screen_region_label(region: str) -> str:
@@ -675,6 +676,9 @@ def process_question_parallel(
     if model_idx < 0 or model_idx >= len(cfg.models):
         return
     model_cfg = cfg.models[model_idx]
+    if deps.start_abort_check is not None and deps.start_abort_check():
+        deps.mark_seq_skipped(seq)
+        return
 
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
     written_exam_think = bool(getattr(cfg, "written_exam_think", False))

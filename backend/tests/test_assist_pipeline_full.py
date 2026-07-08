@@ -185,6 +185,31 @@ def test_parallel_answers_commit_in_submit_order_when_workers_finish_out_of_orde
     assert pipeline._commit_buffer == {}
 
 
+def test_cancel_after_dispatch_before_worker_start_suppresses_stale_answer(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    def fail_stream(*_args, **_kwargs):
+        raise AssertionError("cancelled worker must not call the LLM")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fail_stream)
+
+    assert pipeline.submit_answer_task(
+        ("取消前的问题", None, True, "manual_text", {"origin": "manual"})
+    )
+    assert len(_DeferredThread.started) == 1
+
+    pipeline.cancel_answer_work(reset_session_data=False)
+    _DeferredThread.started[0].run()
+
+    assert broadcasts == []
+    assert get_session().qa_pairs == []
+    assert pipeline._pending == []
+    assert pipeline._in_flight_tasks == {}
+
+
 def test_running_asr_worker_is_not_cancelled_by_new_asr_turn_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ):
