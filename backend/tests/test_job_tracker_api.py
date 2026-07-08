@@ -80,6 +80,14 @@ def test_applications_include_review_summary_and_review_list(tmp_path: Path, mon
     with TestClient(app) as client:
         list_res = client.get("/api/job-tracker/applications")
         reviews_res = client.get(f"/api/job-tracker/applications/{app_row['id']}/reviews")
+        patch_res = client.patch(
+            f"/api/job-tracker/applications/{app_row['id']}",
+            json={"notes": "更新备注"},
+        )
+        create_res = client.post(
+            "/api/job-tracker/applications",
+            json={"company": "NewCo", "position": "前端"},
+        )
 
     assert list_res.status_code == 200
     item = list_res.json()["items"][0]
@@ -88,6 +96,18 @@ def test_applications_include_review_summary_and_review_list(tmp_path: Path, mon
     assert item["review_summary"]["latest_avg_score"] == 7.5
     assert item["review_summary"]["linked_review_count"] == 2
     assert item["review_summary"]["latest_linked_review_id"] == short_session_id
+
+    assert patch_res.status_code == 200
+    patched = patch_res.json()
+    assert patched["notes"] == "更新备注"
+    assert patched["review_summary"]["review_count"] == 1
+    assert patched["review_summary"]["linked_review_count"] == 2
+
+    assert create_res.status_code == 200
+    created = create_res.json()
+    assert created["company"] == "NewCo"
+    assert created["review_summary"]["review_count"] == 0
+    assert created["review_summary"]["linked_review_count"] == 0
 
     assert reviews_res.status_code == 200
     review_items = reviews_res.json()["items"]

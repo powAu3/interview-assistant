@@ -10,6 +10,34 @@ from services.storage import review
 router = APIRouter()
 
 
+def _empty_review_summary() -> dict[str, Any]:
+    return {
+        "review_count": 0,
+        "latest_review_id": None,
+        "latest_avg_score": None,
+        "latest_review_at": None,
+        "latest_status": None,
+        "linked_review_count": 0,
+        "latest_linked_review_id": None,
+        "latest_linked_avg_score": None,
+        "latest_linked_review_at": None,
+        "latest_linked_status": None,
+    }
+
+
+def _attach_review_summaries(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not items:
+        return items
+    summaries = review.get_application_review_summaries([int(item["id"]) for item in items])
+    for item in items:
+        item["review_summary"] = summaries.get(int(item["id"]), _empty_review_summary())
+    return items
+
+
+def _attach_review_summary(item: dict[str, Any]) -> dict[str, Any]:
+    return _attach_review_summaries([item])[0]
+
+
 class ApplicationCreate(BaseModel):
     company: str = ""
     position: str = ""
@@ -94,28 +122,13 @@ async def api_list_applications(
     sort_dir: str = "desc",
 ):
     items = jt.list_applications(stage=stage, q=q, sort_by=sort_by, sort_dir=sort_dir)
-    summaries = review.get_application_review_summaries([int(item["id"]) for item in items])
-    empty_summary = {
-        "review_count": 0,
-        "latest_review_id": None,
-        "latest_avg_score": None,
-        "latest_review_at": None,
-        "latest_status": None,
-        "linked_review_count": 0,
-        "latest_linked_review_id": None,
-        "latest_linked_avg_score": None,
-        "latest_linked_review_at": None,
-        "latest_linked_status": None,
-    }
-    for item in items:
-        item["review_summary"] = summaries.get(int(item["id"]), dict(empty_summary))
-    return {"items": items}
+    return {"items": _attach_review_summaries(items)}
 
 
 @router.post("/job-tracker/applications")
 async def api_create_application(body: ApplicationCreate):
     data = body.model_dump(exclude_none=True)
-    return jt.create_application(data)
+    return _attach_review_summary(jt.create_application(data))
 
 
 @router.patch("/job-tracker/applications/batch-stage")
@@ -140,11 +153,11 @@ async def api_patch_application(app_id: int, body: ApplicationPatch):
         row = jt.get_application(app_id)
         if not row:
             raise HTTPException(404, "Not found")
-        return row
+        return _attach_review_summary(row)
     row = jt.patch_application(app_id, patch)
     if not row:
         raise HTTPException(404, "Not found")
-    return row
+    return _attach_review_summary(row)
 
 
 @router.get("/job-tracker/applications/{app_id}/reviews")

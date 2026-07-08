@@ -507,6 +507,37 @@ describe('JobTracker', () => {
     await waitFor(() => expect(screen.queryByText('待保存')).not.toBeInTheDocument())
   })
 
+  it('preserves the current review summary when a patch response omits it', async () => {
+    apiMock.jobTrackerPatchApplication.mockResolvedValueOnce({
+      id: 1,
+      company: 'Acme Labs',
+      position: 'Frontend',
+      city: 'Shanghai',
+      notes: 'react focus',
+      stage: 'applied',
+      updated_at: 1710007202,
+      created_at: 1710000000,
+      applied_at: null,
+      next_followup_at: null,
+      interviewer_info: '',
+      feedback: '',
+      todos: [],
+      sort_order: 0,
+    })
+
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑核心信息' }))
+    fireEvent.change(screen.getByLabelText('公司名称'), { target: { value: 'Acme Labs' } })
+    fireEvent.click(screen.getAllByRole('button', { name: '保存核心信息' })[0])
+
+    await waitFor(() => expect(screen.getAllByText('Acme Labs').length).toBeGreaterThan(0))
+
+    expect(screen.getByRole('button', { name: /查看 Acme Labs 的 2 场关联复盘/ })).toBeInTheDocument()
+    expect(screen.getAllByText(/2 场 · 7\.1/).length).toBeGreaterThan(0)
+  })
+
   it('lets desktop detail update stage and follow-up without opening full core edit', async () => {
     apiMock.jobTrackerPatchApplication.mockResolvedValueOnce({
       id: 1,

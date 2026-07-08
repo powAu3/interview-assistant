@@ -104,6 +104,18 @@ function createInitialDraft(): CreateApplicationDraft {
   }
 }
 
+function parseApplicationResponse(
+  raw: Record<string, unknown>,
+  fallbackReviewSummary?: Application['review_summary'],
+): Application {
+  const parsed = parseApplication(raw)
+  const hasReviewSummary = raw.review_summary != null && typeof raw.review_summary === 'object'
+  if (!hasReviewSummary && fallbackReviewSummary) {
+    return { ...parsed, review_summary: fallbackReviewSummary }
+  }
+  return parsed
+}
+
 function useCompactLayout(maxWidth = 640) {
   const read = () => {
     if (typeof window === 'undefined') return false
@@ -359,9 +371,11 @@ export default function JobTracker() {
     async (id: number, patch: Partial<Application>) => {
       try {
         const raw = await api.jobTrackerPatchApplication(id, patch as Record<string, unknown>)
-        const next = parseApplication(raw as Record<string, unknown>)
+        const rawRecord = raw as Record<string, unknown>
         startTransition(() => {
-          setApplications((prev) => prev.map((item) => (item.id === id ? next : item)))
+          setApplications((prev) => prev.map((item) => (
+            item.id === id ? parseApplicationResponse(rawRecord, item.review_summary) : item
+          )))
         })
         return true
       } catch (e) {
@@ -465,7 +479,7 @@ export default function JobTracker() {
         stage: createDraft.stage,
         applied_at: fromDateInput(createDraft.appliedAtInput),
       })
-      const row = parseApplication(raw as Record<string, unknown>)
+      const row = parseApplicationResponse(raw as Record<string, unknown>)
       setApplications((prev) => [row, ...prev])
       setSearch('')
       setSelectedAppId(row.id)
