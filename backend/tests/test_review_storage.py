@@ -211,6 +211,30 @@ def test_list_sessions():
     assert len(result["items"]) == 2
 
 
+def test_list_sessions_bounds_pagination_inputs():
+    """分页参数异常时仍返回有界、可预测的列表。"""
+    for _i in range(3):
+        review.create_session(
+            started_at=time.time(),
+            interviewer_enabled=True,
+            candidate_enabled=True,
+        )
+
+    result = review.list_sessions(page=-4, page_size=0)
+
+    assert result["page"] == 1
+    assert result["page_size"] == 1
+    assert result["total"] == 3
+    assert len(result["items"]) == 1
+
+    result = review.list_sessions(page="bad", page_size=9999)
+
+    assert result["page"] == 1
+    assert result["page_size"] == review.MAX_REVIEW_PAGE_SIZE
+    assert result["total"] == 3
+    assert len(result["items"]) == 3
+
+
 def test_session_with_partial_capture():
     """测试采集不完整的 session"""
     session_id = review.create_session(

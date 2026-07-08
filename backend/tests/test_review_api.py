@@ -210,6 +210,32 @@ def test_list_sessions_pagination():
     assert len(data["items"]) == 1
 
 
+def test_list_sessions_bounds_out_of_range_pagination():
+    """复盘列表分页参数越界时后端应收口，避免异常大查询。"""
+    for _i in range(3):
+        review.create_session(
+            started_at=time.time(),
+            interviewer_enabled=True,
+            candidate_enabled=True,
+        )
+
+    resp = client.get("/api/review/sessions?page=-3&page_size=0")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["page"] == 1
+    assert data["page_size"] == 1
+    assert data["total"] == 3
+    assert len(data["items"]) == 1
+
+    resp = client.get("/api/review/sessions?page=1&page_size=9999")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["page_size"] == review.MAX_REVIEW_PAGE_SIZE
+    assert len(data["items"]) == 3
+
+
 def test_get_session_detail():
     """测试获取 session 详情"""
     session_id = review.create_session(

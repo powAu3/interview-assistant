@@ -16,6 +16,7 @@ AUTO_REVIEW_SYNC_MIN_TURNS = 5
 _DEFAULT_REVIEW_TITLES = {"", "手动复盘", "面试详情", "复盘"}
 _DEFAULT_COMPANY_VALUES = {"", "新公司", "未命名公司"}
 _DEFAULT_ROLE_VALUES = {"", "岗位", "岗位未填写"}
+MAX_REVIEW_PAGE_SIZE = 100
 _TERMINAL_APPLICATION_STAGES = {
     "written_rejected",
     "interview1_rejected",
@@ -29,6 +30,14 @@ _TERMINAL_APPLICATION_STAGES = {
 
 def _clean_text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _bounded_int(value: Any, *, fallback: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = fallback
+    return max(minimum, min(maximum, parsed))
 
 
 def _is_default_review_title(value: Any) -> bool:
@@ -326,6 +335,8 @@ def add_turn(
 
 def list_sessions(page: int = 1, page_size: int = 20) -> dict[str, Any]:
     """列表页分页"""
+    page = _bounded_int(page, fallback=1, minimum=1, maximum=1_000_000)
+    page_size = _bounded_int(page_size, fallback=20, minimum=1, maximum=MAX_REVIEW_PAGE_SIZE)
     offset = (page - 1) * page_size
     with _db_lock:
         conn = _conn()
