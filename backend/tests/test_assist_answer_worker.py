@@ -620,6 +620,10 @@ def test_generic_project_noun_does_not_force_resume_context(monkeypatch: pytest.
         "rules 和 skills 的区别是什么？不用结合项目，就讲核心区别。",
         "rules 和 skills 的区别是什么？别参考项目，只讲核心概念。",
         "rules 和 skills 的区别是什么？不用看简历，直接讲概念。",
+        "rules 和 skills 的区别是什么？不用参考我的项目，只讲核心概念。",
+        "rules 和 skills 的区别是什么？不用看你的简历，直接讲概念。",
+        "rules 和 skills 的区别是什么？这个问题跟我的项目没关系。",
+        "rules 和 skills 的区别是什么？这个问题与简历没有关系。",
     ],
 )
 def test_manual_question_negating_project_context_disables_resume(
@@ -678,7 +682,7 @@ def test_realtime_resume_negation_overrides_project_context_cue(monkeypatch: pyt
 
     answer_worker.process_question_parallel(
         (
-            "先别结合项目了，讲一下 RBAC 和 ABAC 的核心区别。",
+            "先别结合你刚才的项目了，讲一下 RBAC 和 ABAC 的核心区别。",
             None,
             False,
             "conversation_loopback",

@@ -343,6 +343,56 @@ _RESUME_CONTEXT_NEGATIONS = (
     "do not combine with project",
     "don't combine with project",
 )
+_CHINESE_RESUME_NEGATION_ACTIONS = (
+    "不要结合",
+    "不结合",
+    "不用结合",
+    "别结合",
+    "不要参考",
+    "不参考",
+    "不用参考",
+    "别参考",
+    "不要带",
+    "不带",
+    "不用带",
+    "别带",
+    "不要看",
+    "不看",
+    "不用看",
+    "别看",
+    "不要基于",
+    "不基于",
+    "不用基于",
+    "别基于",
+    "先不说",
+    "先别说",
+)
+_CHINESE_RESUME_NEGATION_TARGETS = ("项目", "简历")
+_CHINESE_RESUME_UNRELATED_PREFIXES = ("和", "跟", "与")
+_CHINESE_RESUME_UNRELATED_MARKERS = ("无关", "没关系", "没有关系")
+
+
+def _contains_resume_context_negation(normalized_lc: str) -> bool:
+    if any(phrase in normalized_lc for phrase in _RESUME_CONTEXT_NEGATIONS):
+        return True
+    for action in _CHINESE_RESUME_NEGATION_ACTIONS:
+        start = normalized_lc.find(action)
+        while start >= 0:
+            tail = normalized_lc[start + len(action): start + len(action) + 14]
+            if any(target in tail for target in _CHINESE_RESUME_NEGATION_TARGETS):
+                return True
+            start = normalized_lc.find(action, start + 1)
+    for prefix in _CHINESE_RESUME_UNRELATED_PREFIXES:
+        start = normalized_lc.find(prefix)
+        while start >= 0:
+            tail = normalized_lc[start + len(prefix): start + len(prefix) + 14]
+            if (
+                any(target in tail for target in _CHINESE_RESUME_NEGATION_TARGETS)
+                and any(marker in tail for marker in _CHINESE_RESUME_UNRELATED_MARKERS)
+            ):
+                return True
+            start = normalized_lc.find(prefix, start + 1)
+    return False
 
 
 def _followup_needs_bridge(question_text: str) -> bool:
@@ -364,7 +414,7 @@ def _question_explicitly_requests_resume_context(question_text: str) -> bool:
     if not normalized:
         return False
     normalized_lc = normalized.lower()
-    if any(phrase in normalized_lc for phrase in _RESUME_CONTEXT_NEGATIONS):
+    if _contains_resume_context_negation(normalized_lc):
         return False
     return any(phrase in normalized_lc for phrase in _RESUME_CONTEXT_CUES)
 
@@ -373,7 +423,7 @@ def _question_rejects_resume_context(question_text: str) -> bool:
     normalized = normalize_transcription_for_analysis(question_text)
     if not normalized:
         return False
-    return any(phrase in normalized.lower() for phrase in _RESUME_CONTEXT_NEGATIONS)
+    return _contains_resume_context_negation(normalized.lower())
 
 
 def _should_include_resume_context(
