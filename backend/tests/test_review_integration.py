@@ -278,6 +278,49 @@ def test_written_exam_stop_saves_turns_without_candidate_asr(monkeypatch):
     assert detail["turns"][0]["reference_answer_text"] == "用哈希表一次遍历。"
 
 
+def test_written_exam_short_session_auto_analyzes_when_review_enabled(monkeypatch):
+    """笔试练习 1 题也应自动生成报告；短样本门槛只用于看板同步"""
+    monkeypatch.setattr(
+        review_integration, "get_config", lambda: _FakeConfig(review_enabled=True)
+    )
+    started_analysis: list[int] = []
+    monkeypatch.setattr(
+        review_integration.review_async_analysis,
+        "analyze_session_async",
+        lambda session_id: started_analysis.append(session_id),
+    )
+
+    session_id = review_integration.on_assist_start(
+        interviewer_device_id=None,
+        candidate_device_id=None,
+        candidate_asr_enabled=False,
+        written_exam_mode=True,
+    )
+    assert session_id is not None
+
+    mock_session = Session()
+    mock_session.qa_pairs = [
+        QAPair(
+            id="qa-screen-1",
+            question="截图题：两数之和怎么写？ [📷 附图]",
+            answer="用哈希表一次遍历。",
+            source="server_screen_single",
+            model_name="lite-ark",
+        ),
+    ]
+
+    ended_session_id = review_integration.on_assist_stop(mock_session)
+
+    assert ended_session_id == session_id
+    assert started_analysis == [session_id]
+    detail = review.get_session_detail(session_id)
+    assert detail is not None
+    assert detail["source"] == "written_exam"
+    assert detail["status"] == "analyzing"
+    assert detail["turn_count"] == 1
+    assert detail["auto_sync_eligible"] is False
+
+
 def test_written_exam_analysis_worker_uses_written_exam_source(monkeypatch):
     """笔试复盘分析按截图题生成答案模式处理，而不是按候选人口述评分"""
     session_id = review.create_session(

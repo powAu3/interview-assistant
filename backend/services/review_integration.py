@@ -124,9 +124,15 @@ def on_assist_stop(session: Session) -> Optional[int]:
 
         # 结束录制。review_enabled 控制是否立即进入分析队列; 关闭时只落盘为
         # recorded, 保留 ended_at, 等待前端手动触发 (POST /review/sessions/{id}/generate)。
+        # 笔试练习即使只有 1 题也自动生成报告；看板自动同步仍由 AUTO_REVIEW_SYNC_MIN_TURNS 控制。
         # completed 只表示分析结果已经生成。
         turn_count = len(session.qa_pairs)
-        auto_analyze = bool(get_config().review_enabled) and turn_count >= review.AUTO_REVIEW_SYNC_MIN_TURNS
+        source = str((review.get_session_detail(session_id) or {}).get("source") or "assist")
+        auto_analyze = _should_auto_analyze(
+            review_enabled=bool(get_config().review_enabled),
+            turn_count=turn_count,
+            source=source,
+        )
         review.end_session(
             session_id=session_id,
             status="analyzing" if auto_analyze else "recorded",
@@ -173,6 +179,14 @@ def _build_turn_evidence(qa) -> dict:
             "reason": str(getattr(qa, "vision_verify_reason", "") or "").strip(),
         },
     }
+
+
+def _should_auto_analyze(*, review_enabled: bool, turn_count: int, source: str = "assist") -> bool:
+    if not review_enabled or turn_count <= 0:
+        return False
+    if str(source or "").strip() == "written_exam":
+        return True
+    return turn_count >= review.AUTO_REVIEW_SYNC_MIN_TURNS
 
 
 def on_assist_pause():
