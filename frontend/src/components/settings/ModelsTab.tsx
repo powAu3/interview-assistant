@@ -217,6 +217,9 @@ export default function ModelsTab() {
   const pendingFocusIdx = useRef<number | null>(null)
   const modelRowsRef = useRef<ModelRow[]>([])
   const remoteModelRequestVersions = useRef<Record<string, number>>({})
+  const savingRef = useRef(false)
+  const testingIdxRef = useRef<number | null>(null)
+  const healthCheckingRef = useRef(false)
 
   const [llmForm, setLlmForm] = useState({
     temperature: DEFAULT_TEMPERATURE,
@@ -466,7 +469,11 @@ export default function ModelsTab() {
     return nextActiveIndex >= 0 ? nextActiveIndex : 0
   }
 
-  const handleSaveModels = async (quiet = false, collapse = true) => {
+  const handleSaveModels = async (quiet = false, collapse = true, options?: { allowDuringAction?: boolean }) => {
+    if (savingRef.current) return { ok: false as const, skipped: true as const }
+    if (!options?.allowDuringAction && (testingIdxRef.current !== null || healthCheckingRef.current)) {
+      return { ok: false as const, skipped: true as const }
+    }
     const invalid = modelRows.find((row) => !row.model.name.trim())
     if (invalid) {
       useInterviewStore.getState().setToastMessage('模型名称不能为空')
@@ -474,6 +481,7 @@ export default function ModelsTab() {
       setQueueSaveError('模型名称不能为空')
       return { ok: false as const }
     }
+    savingRef.current = true
     setSaving(true)
     setQueueSaveState('saving')
     setQueueSaveError(null)
@@ -517,19 +525,22 @@ export default function ModelsTab() {
       useInterviewStore.getState().setToastMessage(message)
       return { ok: false as const }
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
 
   const handleTestModel = async (idx: number) => {
+    if (testingIdxRef.current !== null || healthCheckingRef.current || savingRef.current) return
     if (modelRows[idx]?.model.enabled === false) {
       useInterviewStore.getState().setToastMessage('请先启用该模型，再测试连接')
       return
     }
+    testingIdxRef.current = idx
     setTestingIdx(idx)
     setTestResults((prev) => ({ ...prev, [idx]: 'checking' }))
     try {
-      const saveResult = await handleSaveModels(true, false)
+      const saveResult = await handleSaveModels(true, false, { allowDuringAction: true })
       if (!saveResult.ok) {
         setTestResults((prev) => ({ ...prev, [idx]: 'error' }))
         useInterviewStore.getState().setModelHealth(idx, 'error', '请先修复模型配置保存失败的问题')
@@ -580,14 +591,17 @@ export default function ModelsTab() {
       setExpandedIdx(idx)
       useInterviewStore.getState().setToastMessage(detail)
     } finally {
+      testingIdxRef.current = null
       setTestingIdx(null)
     }
   }
 
   const runHealthCheck = async () => {
+    if (healthCheckingRef.current || testingIdxRef.current !== null || savingRef.current) return
+    healthCheckingRef.current = true
     setHealthChecking(true)
     try {
-      const saveResult = await handleSaveModels(true)
+      const saveResult = await handleSaveModels(true, true, { allowDuringAction: true })
       if (!saveResult.ok) return
       const models = useInterviewStore.getState().config?.models ?? []
       const enabledIndexes = models
@@ -615,6 +629,7 @@ export default function ModelsTab() {
     } catch (e: any) {
       useInterviewStore.getState().setToastMessage(e.message ?? '检测失败')
     } finally {
+      healthCheckingRef.current = false
       setHealthChecking(false)
     }
   }
@@ -723,7 +738,7 @@ export default function ModelsTab() {
               <button
                 type="button"
                 onClick={runHealthCheck}
-                disabled={healthChecking || enabledCount === 0}
+                disabled={healthChecking || saving || testingIdx !== null || enabledCount === 0}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-50"
                 title={enabledCount === 0 ? '请先启用至少一个模型' : '只向已启用模型 API 发探测请求'}
               >
@@ -1040,7 +1055,7 @@ export default function ModelsTab() {
                               <button
                                 type="button"
                                 onClick={() => handleTestModel(idx)}
-                                disabled={testingIdx !== null || !on}
+                                disabled={testingIdx !== null || healthChecking || saving || !on}
                                 className="rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 hover:bg-amber-400/15 disabled:opacity-50"
                                 title="重新保存配置并探测 Think 关闭参数"
                               >
@@ -1077,7 +1092,7 @@ export default function ModelsTab() {
                             <button
                               type="button"
                               onClick={() => handleTestModel(idx)}
-                              disabled={testingIdx !== null || !on}
+                              disabled={testingIdx !== null || healthChecking || saving || !on}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
                               title={on ? '测试该模型连接' : '请先启用该模型'}
                             >
@@ -1109,7 +1124,7 @@ export default function ModelsTab() {
             <button
               type="button"
               onClick={() => void handleSaveModels()}
-              disabled={saving}
+              disabled={saving || testingIdx !== null || healthChecking}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />

@@ -19,6 +19,15 @@ vi.mock('@/lib/api', () => ({
   api: apiMock,
 }))
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
 
 describe('ModelsTab state sync', () => {
   beforeEach(() => {
@@ -130,6 +139,30 @@ describe('ModelsTab state sync', () => {
 
     const payload = apiMock.updateConfig.mock.calls[0][0]
     expect(payload.models[0].enabled).toBe(false)
+  })
+
+  it('ignores rapid duplicate model queue saves while saving is pending', async () => {
+    const save = createDeferred<{ ok: boolean }>()
+    apiMock.updateConfig.mockReturnValueOnce(save.promise)
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+
+    const saveButton = screen.getByRole('button', { name: '保存模型队列' })
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+
+    expect(apiMock.updateConfig).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '检测' })).toBeDisabled()
+
+    await act(async () => {
+      save.resolve({ ok: true })
+      await save.promise
+    })
   })
 
   it('shows model queue dirty state after editing a model field', async () => {
@@ -479,6 +512,36 @@ describe('ModelsTab state sync', () => {
     expect(apiMock.updateConfig.mock.invocationCallOrder[0]).toBeLessThan(
       apiMock.probeModelCapabilities.mock.invocationCallOrder[0],
     )
+  })
+
+  it('ignores rapid duplicate model tests while the save-and-test flow is pending', async () => {
+    const save = createDeferred<{ ok: boolean }>()
+    apiMock.updateConfig.mockReturnValueOnce(save.promise)
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('Main Model'))
+
+    const testButton = screen.getByRole('button', { name: '保存并测试' })
+    act(() => {
+      testButton.click()
+      testButton.click()
+    })
+
+    expect(apiMock.updateConfig).toHaveBeenCalledTimes(1)
+    expect(apiMock.probeModelCapabilities).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '测试中…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled()
+
+    await act(async () => {
+      save.resolve({ ok: true })
+      await save.promise
+    })
+
+    await waitFor(() => {
+      expect(apiMock.probeModelCapabilities).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('auto-checks probed vision and think capabilities when testing a model', async () => {
