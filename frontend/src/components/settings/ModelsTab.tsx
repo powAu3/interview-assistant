@@ -217,6 +217,7 @@ export default function ModelsTab() {
   const pendingFocusIdx = useRef<number | null>(null)
   const modelRowsRef = useRef<ModelRow[]>([])
   const remoteModelRequestVersions = useRef<Record<string, number>>({})
+  const remoteModelInFlightKeys = useRef<Record<string, string>>({})
   const savingRef = useRef(false)
   const testingIdxRef = useRef<number | null>(null)
   const healthCheckingRef = useRef(false)
@@ -370,6 +371,8 @@ export default function ModelsTab() {
     if (!row) return
     const rowId = row.id
     const requestKey = remoteModelRequestKey(row.model)
+    if (remoteModelInFlightKeys.current[rowId] === requestKey) return
+    remoteModelInFlightKeys.current[rowId] = requestKey
     const requestVersion = (remoteModelRequestVersions.current[rowId] ?? 0) + 1
     remoteModelRequestVersions.current[rowId] = requestVersion
     const requestStillCurrent = () => {
@@ -390,10 +393,7 @@ export default function ModelsTab() {
         model_index: row.originalIndex,
       })
       setRemoteModelLists((prev) => {
-        const currentRow = modelRowsRef.current[idx]
-        if (!currentRow || currentRow.id !== rowId || remoteModelRequestKey(currentRow.model) !== requestKey) {
-          return prev
-        }
+        if (!requestStillCurrent()) return prev
         return {
           ...prev,
           [rowId]: {
@@ -411,10 +411,7 @@ export default function ModelsTab() {
     } catch (e: any) {
       const message = formatRemoteModelError(e)
       setRemoteModelLists((prev) => {
-        const currentRow = modelRowsRef.current[idx]
-        if (!currentRow || currentRow.id !== rowId || remoteModelRequestKey(currentRow.model) !== requestKey) {
-          return prev
-        }
+        if (!requestStillCurrent()) return prev
         return {
           ...prev,
           [rowId]: {
@@ -428,6 +425,10 @@ export default function ModelsTab() {
       })
       if (requestStillCurrent()) {
         useInterviewStore.getState().setToastMessage(message)
+      }
+    } finally {
+      if (remoteModelInFlightKeys.current[rowId] === requestKey) {
+        delete remoteModelInFlightKeys.current[rowId]
       }
     }
   }

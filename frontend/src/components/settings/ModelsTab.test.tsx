@@ -286,6 +286,38 @@ describe('ModelsTab state sync', () => {
     expect(screen.getByText('有未保存更改')).toBeInTheDocument()
   })
 
+  it('ignores rapid duplicate remote model fetches for the same connection settings', async () => {
+    const remoteModels = createDeferred<{ models: { id: string }[] }>()
+    apiMock.listRemoteModels.mockReturnValueOnce(remoteModels.promise)
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存模型队列')
+    fireEvent.click(screen.getByText('Main Model'))
+    fireEvent.change(screen.getByPlaceholderText('填入你的 API Key'), { target: { value: 'sk-test' } })
+
+    const fetchButton = screen.getByRole('button', { name: '获取模型' })
+    act(() => {
+      fetchButton.click()
+      fetchButton.click()
+    })
+
+    expect(apiMock.listRemoteModels).toHaveBeenCalledTimes(1)
+    expect(apiMock.listRemoteModels).toHaveBeenCalledWith({
+      api_base_url: 'https://api.openai.com/v1',
+      api_key: 'sk-test',
+      model_index: 0,
+    })
+    expect(screen.getByRole('button', { name: '获取中…' })).toBeDisabled()
+
+    await act(async () => {
+      remoteModels.resolve({ models: [{ id: 'gpt-4o-mini' }] })
+      await remoteModels.promise
+    })
+
+    expect(await screen.findByRole('combobox', { name: '选择远端模型' })).toBeInTheDocument()
+  })
+
   it('shows remote model fetch failures without overwriting existing fields', async () => {
     apiMock.listRemoteModels.mockRejectedValueOnce(new Error('请求失败 (502): upstream 401'))
 
