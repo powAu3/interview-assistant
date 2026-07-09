@@ -332,6 +332,116 @@ describe('ReviewSessionList', () => {
     expect(useInterviewStore.getState().toastMessage).toBe('已开启自动生成复盘')
   })
 
+  it('keeps only the newest review toggle save when responses finish out of order', async () => {
+    const firstToggle = createDeferred<{ review_enabled: boolean; review_model_index: number; models: { name: string; enabled: boolean }[] }>()
+    const secondToggle = createDeferred<{ review_enabled: boolean; review_model_index: number; models: { name: string; enabled: boolean }[] }>()
+    const setConfig = vi.fn()
+    useInterviewStore.setState({ setConfig } as any)
+    apiMock.updateConfig
+      .mockReturnValueOnce(firstToggle.promise)
+      .mockReturnValueOnce(secondToggle.promise)
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('自动生成未启用')
+    fireEvent.click(screen.getByRole('button', { name: '配置' }))
+
+    fireEvent.click(screen.getByRole('switch'))
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.click(screen.getByRole('switch'))
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+
+    expect(apiMock.updateConfig).toHaveBeenNthCalledWith(1, { review_enabled: true })
+    expect(apiMock.updateConfig).toHaveBeenNthCalledWith(2, { review_enabled: false })
+
+    await act(async () => {
+      secondToggle.resolve({
+        review_enabled: false,
+        review_model_index: 0,
+        models: [{ name: 'lite-ark', enabled: true }],
+      })
+      await secondToggle.promise
+    })
+
+    expect(setConfig).toHaveBeenCalledTimes(1)
+    expect(setConfig).toHaveBeenLastCalledWith(expect.objectContaining({ review_enabled: false }))
+    expect(useInterviewStore.getState().toastMessage).toBe('已关闭自动生成复盘')
+
+    await act(async () => {
+      firstToggle.resolve({
+        review_enabled: true,
+        review_model_index: 0,
+        models: [{ name: 'lite-ark', enabled: true }],
+      })
+      await firstToggle.promise
+    })
+
+    expect(setConfig).toHaveBeenCalledTimes(1)
+    expect(useInterviewStore.getState().toastMessage).toBe('已关闭自动生成复盘')
+  })
+
+  it('keeps only the newest review model save when responses finish out of order', async () => {
+    const slowModel = createDeferred<{ review_enabled: boolean; review_model_index: number; models: { name: string; enabled: boolean }[] }>()
+    const fastModel = createDeferred<{ review_enabled: boolean; review_model_index: number; models: { name: string; enabled: boolean }[] }>()
+    const setConfig = vi.fn()
+    const models = [
+      { name: 'lite-ark', enabled: true },
+      { name: 'deepseek', enabled: true },
+    ]
+    useInterviewStore.setState({
+      config: {
+        review_enabled: true,
+        review_model_index: 0,
+        models,
+      },
+      setConfig,
+    } as any)
+    apiMock.updateConfig
+      .mockReturnValueOnce(slowModel.promise)
+      .mockReturnValueOnce(fastModel.promise)
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('OpenAI 一面')
+    fireEvent.click(screen.getByRole('button', { name: '配置' }))
+
+    const select = screen.getByRole('combobox')
+    fireEvent.change(select, { target: { value: '1' } })
+    expect(screen.getByRole('combobox')).toHaveValue('1')
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '0' } })
+    expect(screen.getByRole('combobox')).toHaveValue('0')
+
+    expect(apiMock.updateConfig).toHaveBeenNthCalledWith(1, { review_model_index: 1 })
+    expect(apiMock.updateConfig).toHaveBeenNthCalledWith(2, { review_model_index: 0 })
+
+    await act(async () => {
+      fastModel.resolve({
+        review_enabled: true,
+        review_model_index: 0,
+        models,
+      })
+      await fastModel.promise
+    })
+
+    expect(setConfig).toHaveBeenCalledTimes(1)
+    expect(setConfig).toHaveBeenLastCalledWith(expect.objectContaining({ review_model_index: 0 }))
+    expect(useInterviewStore.getState().toastMessage).toBe('已切换复盘模型为 lite-ark')
+
+    await act(async () => {
+      slowModel.resolve({
+        review_enabled: true,
+        review_model_index: 1,
+        models,
+      })
+      await slowModel.promise
+    })
+
+    expect(setConfig).toHaveBeenCalledTimes(1)
+    expect(useInterviewStore.getState().toastMessage).toBe('已切换复盘模型为 lite-ark')
+  })
+
   it('quietly refreshes analyzing sessions so completed analysis appears without manual refresh', async () => {
     vi.useFakeTimers()
     apiMock.reviewSessions

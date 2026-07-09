@@ -86,6 +86,9 @@ interface Props {
 
 export default function ReviewSessionList({ onViewDetail }: Props) {
   const latestLoadIdRef = useRef(0)
+  const reviewConfigSaveSeqRef = useRef(0)
+  const reviewToggleSaveSeqRef = useRef(0)
+  const reviewModelSaveSeqRef = useRef(0)
   const triggeringIdsRef = useRef<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ReviewSessionsResponse | null>(null)
@@ -94,6 +97,8 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const [showManualImport, setShowManualImport] = useState(false)
   const [triggeringIds, setTriggeringIds] = useState<Set<number>>(new Set())
   const [focusFilter, setFocusFilter] = useState<ReviewListFocus>('all')
+  const [pendingReviewEnabled, setPendingReviewEnabled] = useState<boolean | null>(null)
+  const [pendingReviewModelIndex, setPendingReviewModelIndex] = useState<number | null>(null)
   const pageSize = 20
 
   const config = useInterviewStore((s) => s.config)
@@ -107,6 +112,8 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   const reviewEnabled = config?.review_enabled ?? false
   const reviewModelIndex = config?.review_model_index ?? 0
   const models = config?.models ?? []
+  const displayedReviewEnabled = pendingReviewEnabled ?? reviewEnabled
+  const displayedReviewModelIndex = pendingReviewModelIndex ?? reviewModelIndex
 
   const loadSessions = useCallback(async (p: number, options?: { silent?: boolean }) => {
     const loadId = latestLoadIdRef.current + 1
@@ -156,23 +163,47 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   }, [])
 
   const handleToggleReview = async (enabled: boolean) => {
+    const saveSeq = reviewConfigSaveSeqRef.current + 1
+    reviewConfigSaveSeqRef.current = saveSeq
+    const toggleSaveSeq = reviewToggleSaveSeqRef.current + 1
+    reviewToggleSaveSeqRef.current = toggleSaveSeq
+    setPendingReviewEnabled(enabled)
     try {
       const updated = await api.updateConfig({ review_enabled: enabled })
+      if (saveSeq !== reviewConfigSaveSeqRef.current) return
       setConfig(updated)
       setToastMessage(enabled ? '已开启自动生成复盘' : '已关闭自动生成复盘')
     } catch (err) {
-      setToastMessage(getErrorMessage(err, '开关切换失败'))
+      if (saveSeq === reviewConfigSaveSeqRef.current) {
+        setToastMessage(getErrorMessage(err, '开关切换失败'))
+      }
+    } finally {
+      if (toggleSaveSeq === reviewToggleSaveSeqRef.current) {
+        setPendingReviewEnabled(null)
+      }
     }
   }
 
   const handleChangeModel = async (modelIndex: number) => {
+    const saveSeq = reviewConfigSaveSeqRef.current + 1
+    reviewConfigSaveSeqRef.current = saveSeq
+    const modelSaveSeq = reviewModelSaveSeqRef.current + 1
+    reviewModelSaveSeqRef.current = modelSaveSeq
+    setPendingReviewModelIndex(modelIndex)
     try {
       const updated = await api.updateConfig({ review_model_index: modelIndex })
+      if (saveSeq !== reviewConfigSaveSeqRef.current) return
       setConfig(updated)
       const modelName = updated.models?.[modelIndex]?.name ?? models[modelIndex]?.name ?? '当前模型'
       setToastMessage(`已切换复盘模型为 ${modelName}`)
     } catch (err) {
-      setToastMessage(getErrorMessage(err, '模型切换失败'))
+      if (saveSeq === reviewConfigSaveSeqRef.current) {
+        setToastMessage(getErrorMessage(err, '模型切换失败'))
+      }
+    } finally {
+      if (modelSaveSeq === reviewModelSaveSeqRef.current) {
+        setPendingReviewModelIndex(null)
+      }
     }
   }
 
@@ -281,8 +312,9 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
       )}
       {showSettings && (
         <ReviewSettingsPanel
-          reviewEnabled={reviewEnabled}
-          reviewModelIndex={reviewModelIndex}
+          reviewEnabled={displayedReviewEnabled}
+          reviewModelIndex={displayedReviewModelIndex}
+          reviewToggleSaving={pendingReviewEnabled != null}
           models={models}
           onToggle={handleToggleReview}
           onChangeModel={handleChangeModel}
@@ -598,12 +630,14 @@ function ManualImportPanel({
 function ReviewSettingsPanel({
   reviewEnabled,
   reviewModelIndex,
+  reviewToggleSaving,
   models,
   onToggle,
   onChangeModel,
 }: {
   reviewEnabled: boolean
   reviewModelIndex: number
+  reviewToggleSaving: boolean
   models: { name: string; enabled?: boolean }[]
   onToggle: (enabled: boolean) => void
   onChangeModel: (modelIndex: number) => void
@@ -649,12 +683,15 @@ function ReviewSettingsPanel({
           }`}
           role="switch"
           aria-checked={reviewEnabled}
+          aria-busy={reviewToggleSaving}
         >
           <span
-            className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+            className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm transition-transform ${
               reviewEnabled ? 'translate-x-5' : 'translate-x-0.5'
             }`}
-          />
+          >
+            {reviewToggleSaving ? <Loader2 className="h-3 w-3 animate-spin text-text-muted" /> : null}
+          </span>
         </button>
       </div>
       <label className="mb-2 block text-xs font-medium text-text-secondary">
