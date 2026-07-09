@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import ApplicationsTable from './ApplicationsTable'
@@ -36,7 +36,58 @@ function app(overrides: Partial<Application> = {}): Application {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('ApplicationsTable', () => {
+  it('ignores rapid duplicate progress saves while a patch is pending', async () => {
+    const patch = deferred<boolean>()
+    const onPatch = vi.fn(() => patch.promise)
+
+    render(
+      <ApplicationsTable
+        applications={[app()]}
+        offerByAppId={new Map()}
+        onPatch={onPatch}
+        onDelete={vi.fn()}
+        onOpenOffer={vi.fn()}
+        onOpenReviews={vi.fn()}
+        search=""
+        selectedId={1}
+        onSelect={vi.fn()}
+        compactDetailLayout={false}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('当前阶段'), { target: { value: 'interview2' } })
+
+    const saveButton = screen.getByRole('button', { name: '保存进度' })
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+
+    expect(onPatch).toHaveBeenCalledTimes(1)
+    expect(onPatch).toHaveBeenCalledWith(1, expect.objectContaining({ stage: 'interview2' }))
+    for (const button of screen.getAllByRole('button', { name: '保存中...' })) {
+      expect(button).toBeDisabled()
+    }
+
+    await act(async () => {
+      patch.resolve(true)
+      await patch.promise
+    })
+
+    expect(screen.getByText('已保存核心信息')).toBeInTheDocument()
+  })
+
   it('keeps short linked reviews reachable without promoting them to formal summaries', () => {
     const item = app({
       review_summary: {

@@ -298,6 +298,7 @@ export default function ApplicationsTable({
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
   const [pendingDetailFocusId, setPendingDetailFocusId] = useState<number | null>(null)
   const detailRef = useRef<HTMLElement | null>(null)
+  const savingRef = useRef(false)
   const patch = useMemo(
     () => (current && draft ? buildPatch(current, draft) : {}),
     [current, draft],
@@ -370,6 +371,7 @@ export default function ApplicationsTable({
 
   const handleSave = useCallback(async (scope: 'all' | 'core' | 'extras' = 'all') => {
     if (!current || !draft) return
+    if (savingRef.current) return
     const scopedPatch = scope === 'core'
       ? pickPatchKeys(patch, CORE_PATCH_KEYS)
       : scope === 'extras'
@@ -379,12 +381,17 @@ export default function ApplicationsTable({
       setSaveNotice(scope === 'core' ? '核心无变更' : scope === 'extras' ? '补充无变更' : '没有新变更')
       return
     }
+    savingRef.current = true
     setSaving(true)
-    const result = await Promise.resolve(onPatch(current.id, scopedPatch))
-    setSaving(false)
-    if (result !== false) {
-      setSaveNotice(scope === 'core' ? '已保存核心信息' : scope === 'extras' ? '已保存补充信息' : '已保存')
-      if (scope === 'core' || scope === 'all') setEditCoreOpen(false)
+    try {
+      const result = await Promise.resolve(onPatch(current.id, scopedPatch))
+      if (result !== false) {
+        setSaveNotice(scope === 'core' ? '已保存核心信息' : scope === 'extras' ? '已保存补充信息' : '已保存')
+        if (scope === 'core' || scope === 'all') setEditCoreOpen(false)
+      }
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }, [current, draft, onPatch, patch])
 
