@@ -346,6 +346,7 @@ export default function JobTracker() {
   const [reviewModalHighlightId, setReviewModalHighlightId] = useState<number | null>(null)
   const listLoadSeqRef = useRef(0)
   const listMutationSeqRef = useRef(0)
+  const applicationPatchSeqRef = useRef<Map<number, number>>(new Map())
   const reviewRequestSeqRef = useRef(0)
   const createApplicationRef = useRef(false)
   const [showSecondaryFilters, setShowSecondaryFilters] = useState(false)
@@ -445,19 +446,26 @@ export default function JobTracker() {
 
   const onPatch = useCallback(
     async (id: number, patch: Partial<Application>) => {
+      const patchSeq = (applicationPatchSeqRef.current.get(id) ?? 0) + 1
+      applicationPatchSeqRef.current.set(id, patchSeq)
+      const isCurrentPatch = () => applicationPatchSeqRef.current.get(id) === patchSeq
       try {
         const raw = await api.jobTrackerPatchApplication(id, patch as Record<string, unknown>)
+        if (!isCurrentPatch()) return false
         const rawRecord = raw as Record<string, unknown>
         markListMutated()
         startTransition(() => {
+          if (!isCurrentPatch()) return
           setApplications((prev) => prev.map((item) => (
             item.id === id ? parseApplicationResponse(rawRecord, item.review_summary) : item
           )))
         })
         return true
       } catch (e) {
-        setToastMessage(e instanceof Error ? e.message : '保存失败')
-        load()
+        if (isCurrentPatch()) {
+          setToastMessage(e instanceof Error ? e.message : '保存失败')
+          load()
+        }
         return false
       }
     },
@@ -468,6 +476,7 @@ export default function JobTracker() {
     async (id: number) => {
       try {
         await api.jobTrackerDeleteApplication(id)
+        applicationPatchSeqRef.current.delete(id)
         markListMutated()
         startTransition(() => {
           setApplications((prev) => prev.filter((item) => item.id !== id))

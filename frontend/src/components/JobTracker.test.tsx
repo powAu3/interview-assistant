@@ -17,7 +17,7 @@ const apiMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', () => ({ api: apiMock }))
 vi.mock('./job-tracker/KanbanBoard', () => ({
-  default: ({ applications, search }: any) => {
+  default: ({ applications, search, onStageChange }: any) => {
     const q = search.trim()
     const visible = applications.filter((app: any) => {
       if (!q) return true
@@ -34,7 +34,16 @@ vi.mock('./job-tracker/KanbanBoard', () => ({
     return (
       <div>
         {visible.map((app: any) => (
-          <div key={app.id}>{app.company}</div>
+          <div key={app.id}>
+            <span>{app.company}</span>
+            <span>{`stage: ${app.stage}`}</span>
+            <button type="button" onClick={() => onStageChange?.(app.id, 'interview1')}>
+              移动 {app.company} 到一面
+            </button>
+            <button type="button" onClick={() => onStageChange?.(app.id, 'interview2')}>
+              移动 {app.company} 到二面
+            </button>
+          </div>
         ))}
       </div>
     )
@@ -287,6 +296,47 @@ describe('JobTracker', () => {
 
     expect(screen.getByRole('button', { name: '返回表格' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('Acme')).toBeInTheDocument())
+  })
+
+  it('keeps the newest stage patch when kanban moves finish out of order', async () => {
+    const slowMove = deferred<Record<string, unknown>>()
+    const fastMove = deferred<Record<string, unknown>>()
+    apiMock.jobTrackerPatchApplication
+      .mockReturnValueOnce(slowMove.promise)
+      .mockReturnValueOnce(fastMove.promise)
+
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: '整理模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '移动 Acme 到一面' }))
+    fireEvent.click(screen.getByRole('button', { name: '移动 Acme 到二面' }))
+
+    expect(apiMock.jobTrackerPatchApplication).toHaveBeenNthCalledWith(1, 1, { stage: 'interview1' })
+    expect(apiMock.jobTrackerPatchApplication).toHaveBeenNthCalledWith(2, 1, { stage: 'interview2' })
+
+    await act(async () => {
+      fastMove.resolve(applicationRow(1, 'Acme', {
+        stage: 'interview2',
+        updated_at: 1710007202,
+      }))
+      await fastMove.promise
+    })
+
+    expect(screen.getByText('stage: interview2')).toBeInTheDocument()
+
+    await act(async () => {
+      slowMove.resolve(applicationRow(1, 'Acme', {
+        stage: 'interview1',
+        updated_at: 1710007201,
+      }))
+      await slowMove.promise
+    })
+
+    expect(screen.getByText('stage: interview2')).toBeInTheDocument()
+    expect(screen.queryByText('stage: interview1')).not.toBeInTheDocument()
+    expect(useInterviewStore.getState().setToastMessage).toHaveBeenCalledWith('已移至 二面')
+    expect(useInterviewStore.getState().setToastMessage).not.toHaveBeenCalledWith('已移至 一面')
   })
 
   it('clears search with Escape', async () => {
