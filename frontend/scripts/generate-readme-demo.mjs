@@ -668,7 +668,7 @@ async function runDemo(page) {
     const searchInput = page.getByLabel('搜索设置项')
     if (await searchInput.count().catch(() => 0)) {
       await searchInput.fill('overlay').catch(() => {})
-      await page.getByText('反截图检测为 Beta 能力').waitFor({ timeout: 4000 }).catch(() => {})
+      await page.getByText('反截图检测说明').waitFor({ timeout: 4000 }).catch(() => {})
       await captureFrame(page, frames, BEAT)
       await setCaption(page, '它的强项是桌面端在大多数常见屏幕共享场景下更稳，但不同软件、系统和权限策略差异很大，必须由你自己探索、验证并按环境调整。', '07 / STEALTH')
       await captureFrame(page, frames, { waitMs: 920, displayMs: 1450 })
