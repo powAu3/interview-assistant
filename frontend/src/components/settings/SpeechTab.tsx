@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Save,
   Mic,
@@ -79,6 +79,8 @@ export default function SpeechTab() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [sttTesting, setSttTesting] = useState(false)
   const [sttTestResult, setSttTestResult] = useState<{ ok: boolean; detail?: string; text?: string } | null>(null)
+  const savingRef = useRef(false)
+  const sttTestingRef = useRef(false)
   const { dirty, markSaved, resetBaseline } = useDirtySnapshot(form)
   useSettingsDirtyRegistration('speech', dirty)
 
@@ -126,6 +128,8 @@ export default function SpeechTab() {
   }, [config, dirty, resetBaseline])
 
   const handleSave = async () => {
+    if (savingRef.current) return false
+    savingRef.current = true
     setSaving(true)
     setSaveState('saving')
     setSaveError(null)
@@ -156,11 +160,14 @@ export default function SpeechTab() {
       useInterviewStore.getState().setToastMessage(message)
       return false
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
 
   const handleSttTest = async () => {
+    if (sttTestingRef.current || savingRef.current) return
+    sttTestingRef.current = true
     setSttTesting(true)
     setSttTestResult(null)
     try {
@@ -175,6 +182,7 @@ export default function SpeechTab() {
     } catch (e: any) {
       setSttTestResult({ ok: false, detail: e.message })
     } finally {
+      sttTestingRef.current = false
       setSttTesting(false)
     }
   }
@@ -396,7 +404,7 @@ export default function SpeechTab() {
           <button
             type="button"
             onClick={handleSttTest}
-            disabled={sttTesting}
+            disabled={sttTesting || saving}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
           >
             {sttTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
@@ -725,7 +733,7 @@ export default function SpeechTab() {
 
       <button
         onClick={handleSave}
-        disabled={saving}
+        disabled={saving || sttTesting}
         className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
       >
         <Save className="w-4 h-4" />

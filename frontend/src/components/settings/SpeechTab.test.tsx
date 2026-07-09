@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import SpeechTab from './SpeechTab'
@@ -17,9 +17,21 @@ vi.mock('@/lib/configSync', () => ({
   updateConfigAndRefresh: vi.fn().mockResolvedValue({ ok: true }),
 }))
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 describe('SpeechTab', () => {
   beforeEach(() => {
-    vi.mocked(updateConfigAndRefresh).mockClear()
+    vi.mocked(updateConfigAndRefresh).mockReset()
+    vi.mocked(updateConfigAndRefresh).mockResolvedValue({ ok: true } as any)
+    apiMock.sttTest.mockReset()
     apiMock.sttTest.mockResolvedValue({ ok: true, text: 'demo' })
 
     useInterviewStore.setState({
@@ -226,6 +238,28 @@ describe('SpeechTab', () => {
     expect(await screen.findAllByText('已保存')).not.toHaveLength(0)
   })
 
+  it('ignores rapid duplicate speech saves while saving is pending', async () => {
+    const save = createDeferred<{ ok: boolean }>()
+    vi.mocked(updateConfigAndRefresh).mockReturnValueOnce(save.promise as any)
+
+    render(<SpeechTab />)
+
+    const saveButton = screen.getByRole('button', { name: '保存语音配置' })
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+
+    expect(updateConfigAndRefresh).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '保存并测试' })).toBeDisabled()
+
+    await act(async () => {
+      save.resolve({ ok: true })
+      await save.promise
+    })
+  })
+
   it('keeps unsaved speech edits when config refreshes from another section', () => {
     useInterviewStore.setState((state) => ({
       config: {
@@ -256,5 +290,38 @@ describe('SpeechTab', () => {
       expect(updateConfigAndRefresh).toHaveBeenCalled()
       expect(apiMock.sttTest).toHaveBeenCalled()
     })
+  })
+
+  it('ignores rapid duplicate STT tests while the save-and-test flow is pending', async () => {
+    const save = createDeferred<{ ok: boolean }>()
+    const stt = createDeferred<{ ok: boolean; text: string }>()
+    vi.mocked(updateConfigAndRefresh).mockReturnValueOnce(save.promise as any)
+    apiMock.sttTest.mockReturnValueOnce(stt.promise)
+
+    render(<SpeechTab />)
+
+    const testButton = screen.getByRole('button', { name: '保存并测试' })
+    act(() => {
+      testButton.click()
+      testButton.click()
+    })
+
+    expect(updateConfigAndRefresh).toHaveBeenCalledTimes(1)
+    expect(apiMock.sttTest).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '测试中…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled()
+
+    await act(async () => {
+      save.resolve({ ok: true })
+      await save.promise
+    })
+    expect(apiMock.sttTest).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      stt.resolve({ ok: true, text: 'hello' })
+      await stt.promise
+    })
+
+    expect(screen.getByText('连接成功')).toBeInTheDocument()
   })
 })
