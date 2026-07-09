@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, BookOpen, Files, Search, History, RefreshCw } from 'lucide-react'
 import { useKbStore } from '@/stores/kbStore'
 import { api } from '@/lib/api'
@@ -16,39 +16,61 @@ export default function KnowledgeDrawer() {
   const setDocs = useKbStore((s) => s.setDocs)
   const setRecentHits = useKbStore((s) => s.setRecentHits)
   const drawerRef = useRef<HTMLDivElement>(null)
+  const refreshingRef = useRef(false)
+  const queuedRefreshRef = useRef(false)
+  const mountedRef = useRef(true)
   const [tab, setTab] = useState<Tab>('files')
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = async () => {
-    setRefreshing(true)
-    setError(null)
-    try {
-      const [s, d, r] = await Promise.all([
-        api.kbStatus(),
-        api.kbDocs(),
-        api.kbHitsRecent(50),
-      ])
-      setStatus(s)
-      setDocs(d.items)
-      setRecentHits(r.items)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败')
-    } finally {
-      setRefreshing(false)
+  const refresh = useCallback(async (options?: { queueIfBusy?: boolean }) => {
+    if (refreshingRef.current) {
+      if (options?.queueIfBusy) queuedRefreshRef.current = true
+      return
     }
-  }
+    refreshingRef.current = true
+    if (mountedRef.current) setRefreshing(true)
+    try {
+      do {
+        queuedRefreshRef.current = false
+        if (mountedRef.current) setError(null)
+        try {
+          const [s, d, r] = await Promise.all([
+            api.kbStatus(),
+            api.kbDocs(),
+            api.kbHitsRecent(50),
+          ])
+          if (!mountedRef.current) return
+          setStatus(s)
+          setDocs(d.items)
+          setRecentHits(r.items)
+        } catch (e) {
+          if (!mountedRef.current) return
+          setError(e instanceof Error ? e.message : '加载失败')
+        }
+      } while (queuedRefreshRef.current)
+    } finally {
+      refreshingRef.current = false
+      if (mountedRef.current) setRefreshing(false)
+    }
+  }, [setDocs, setRecentHits, setStatus])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
-    refresh()
+    void refresh()
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, refresh, setOpen])
 
   if (!open) return null
 
@@ -79,7 +101,7 @@ export default function KnowledgeDrawer() {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={refresh}
+                onClick={() => void refresh()}
                 disabled={refreshing}
                 title="刷新"
                 aria-label="刷新"
@@ -135,7 +157,7 @@ export default function KnowledgeDrawer() {
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 p-3">
-          {tab === 'files' && <KbFilesPanel onChanged={refresh} />}
+          {tab === 'files' && <KbFilesPanel onChanged={async () => { await refresh({ queueIfBusy: true }) }} />}
           {tab === 'search' && <KbSearchTestPanel />}
           {tab === 'recent' && <KbRecentHitsPanel />}
         </div>
