@@ -138,6 +138,7 @@ export default function WrittenExamTest() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const activePreflightIdRef = useRef<string | null>(null)
   const awaitingPreflightStartRef = useRef(false)
+  const runRequestRef = useRef(false)
 
   const setCurrentPreflightId = useCallback((preflightId: string | null) => {
     activePreflightIdRef.current = preflightId
@@ -183,6 +184,7 @@ export default function WrittenExamTest() {
       setRunning(isRunning)
       setDone(isDone || Boolean(failureMessage && !isRunning))
       setErrorMsg(failureMessage)
+      if (!isRunning && (isDone || failureMessage)) runRequestRef.current = false
     } catch {
       /* status hydration is best-effort; WS has the primary progress stream */
     }
@@ -224,6 +226,7 @@ export default function WrittenExamTest() {
           return
         }
         if (msg.type === 'answer_done') {
+          runRequestRef.current = false
           setRunning(false)
           setDone(true)
           setErrorMsg(null)
@@ -246,6 +249,7 @@ export default function WrittenExamTest() {
         }
         if (msg.type === 'answer_error' || msg.type === 'answer_cancelled') {
           const message = msg.message || '笔试链路检测被取消或失败'
+          runRequestRef.current = false
           setRunning(false)
           setDone(true)
           setErrorMsg(message)
@@ -264,6 +268,7 @@ export default function WrittenExamTest() {
         if (!shouldAcceptPreflightEvent(eventPreflightId)) return
       }
       if (step === 'done') {
+        runRequestRef.current = false
         setDone(true)
         setRunning(false)
         void hydrateStatus()
@@ -271,6 +276,7 @@ export default function WrittenExamTest() {
       }
       if (step === 'error') {
         const message = detail || '笔试链路检测失败，请检查模型配置'
+        runRequestRef.current = false
         setRunning(false)
         setDone(true)
         setErrorMsg(message)
@@ -297,6 +303,8 @@ export default function WrittenExamTest() {
   }, [hydrateStatus])
 
   const handleRun = async () => {
+    if (runRequestRef.current || running) return
+    runRequestRef.current = true
     setRunning(true)
     setDone(false)
     setSteps({})
@@ -311,6 +319,7 @@ export default function WrittenExamTest() {
       if (preflightId) void hydrateStatus()
     } catch (error: any) {
       const message = error?.message || '笔试链路检测请求失败，请确认后端服务已启动'
+      runRequestRef.current = false
       awaitingPreflightStartRef.current = false
       setRunning(false)
       setDone(true)

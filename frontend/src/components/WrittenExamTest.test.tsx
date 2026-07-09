@@ -117,6 +117,43 @@ describe('WrittenExamTest', () => {
     expect(apiMock.examPreflightStatus).toHaveBeenCalledTimes(2)
   })
 
+  it('ignores rapid duplicate preflight starts while the run request is pending', async () => {
+    const pendingRun = deferred<{ ok: boolean; preflight_id: string }>()
+    apiMock.examPreflightRun.mockReturnValueOnce(pendingRun.promise)
+
+    render(<WrittenExamTest />)
+
+    const startButton = screen.getByRole('button', { name: '开始检测' })
+    act(() => {
+      startButton.click()
+      startButton.click()
+    })
+
+    expect(apiMock.examPreflightRun).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '开始检测' })).toBeDisabled()
+
+    await act(async () => {
+      pendingRun.resolve({ ok: true, preflight_id: 'preflight-guarded' })
+      await pendingRun.promise
+    })
+
+    await act(async () => {
+      FakeWebSocket.instances[0].emit({
+        type: 'exam_preflight_step',
+        preflight_id: 'preflight-guarded',
+        step: 'done',
+        status: 'done',
+        detail: '完成',
+      })
+      await Promise.resolve()
+    })
+
+    const nextStartButton = screen.getByRole('button', { name: '开始检测' })
+    expect(nextStartButton).toBeEnabled()
+    fireEvent.click(nextStartButton)
+    expect(apiMock.examPreflightRun).toHaveBeenCalledTimes(2)
+  })
+
   it('hydrates a completed preflight result on mount', async () => {
     apiMock.examPreflightStatus.mockResolvedValueOnce({
       running: false,
