@@ -136,6 +136,8 @@ export default function ControlBar() {
   const refreshingDevicesRef = useRef(false)
   const testingOutputRef = useRef(false)
   const testingInputRef = useRef(false)
+  const inputMonitorStartSeqRef = useRef(0)
+  const selectedCandidateMicRef = useRef<number | null>(null)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
   const [quickPromptRecent, setQuickPromptRecent] = useState<Record<string, number>>(readQuickPromptRecent)
   const orderedQuickPrompts = useMemo(
@@ -169,6 +171,7 @@ export default function ControlBar() {
 
   const selectedIsLoopback = devices.find((d) => d.id === selectedDevice)?.is_loopback ?? false
   const selectedCandidateDevice = devices.find((d) => d.id === selectedCandidateMic) ?? null
+  selectedCandidateMicRef.current = selectedCandidateMic
   const selectedCandidateIsMic = selectedCandidateDevice?.is_loopback === false
   const candidateCaptureEnabled = config?.candidate_asr_enabled ?? false
   const candidateMicMatchesMeetingAudio = Boolean(
@@ -470,12 +473,22 @@ export default function ControlBar() {
       setError('请先暂停或结束面试，再测试麦克风输入')
       return
     }
+    const targetDeviceId = selectedCandidateMic
+    const startSeq = inputMonitorStartSeqRef.current + 1
+    inputMonitorStartSeqRef.current = startSeq
+    const isCurrentStart = () =>
+      inputMonitorStartSeqRef.current === startSeq &&
+      selectedCandidateMicRef.current === targetDeviceId
     testingInputRef.current = true
     setTestingInput(true)
     setError(null)
     setInputLevel({ level_pct: 0, rms: 0, peak: 0, has_signal: false })
     try {
-      const status = await api.audioInputMonitorStart(selectedCandidateMic)
+      const status = await api.audioInputMonitorStart(targetDeviceId)
+      if (!isCurrentStart()) {
+        void api.audioInputMonitorStop().catch(() => undefined)
+        return
+      }
       setInputLevel({
         level_pct: status.level_pct ?? 0,
         rms: status.rms ?? 0,
@@ -485,10 +498,14 @@ export default function ControlBar() {
       })
       setInputMeterOpen(true)
     } catch (e: unknown) {
-      setError(getErrorMessage(e, '测试麦克风输入失败'))
+      if (isCurrentStart()) {
+        setError(getErrorMessage(e, '测试麦克风输入失败'))
+      }
     } finally {
-      testingInputRef.current = false
-      setTestingInput(false)
+      if (inputMonitorStartSeqRef.current === startSeq) {
+        testingInputRef.current = false
+        setTestingInput(false)
+      }
     }
   }, [selectedCandidateMic, isRecording, isPaused])
 

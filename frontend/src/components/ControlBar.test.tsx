@@ -707,4 +707,58 @@ describe('ControlBar', () => {
 
     expect(await screen.findByText('50%')).toBeInTheDocument()
   })
+
+  it('ignores stale microphone meter starts after switching candidate microphones', async () => {
+    const input = deferred<{
+      running: boolean
+      device_id: number
+      rms: number
+      peak: number
+      level_pct: number
+      has_signal: boolean
+      error: null
+    }>()
+    apiMock.audioInputMonitorStart.mockReturnValueOnce(input.promise)
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 10, name: 'System Loopback', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+        { id: 12, name: 'Desk Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '选择我的麦克风' })).toHaveTextContent('当前：USB Mic')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试麦克风输入' }))
+    expect(apiMock.audioInputMonitorStart).toHaveBeenCalledWith(11)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择我的麦克风' }))
+    fireEvent.click(screen.getByText('Desk Mic'))
+    expect(screen.getByRole('button', { name: '选择我的麦克风' })).toHaveTextContent('当前：Desk Mic')
+
+    await act(async () => {
+      input.resolve({
+        running: true,
+        device_id: 11,
+        rms: 0.04,
+        peak: 0.2,
+        level_pct: 80,
+        has_signal: true,
+        error: null,
+      })
+      await input.promise
+    })
+
+    expect(apiMock.audioInputMonitorStop).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: '麦克风输入测试' })).not.toBeInTheDocument()
+    expect(screen.queryByText('80%')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '测试麦克风输入' })).not.toBeDisabled()
+  })
 })
