@@ -255,6 +255,66 @@ describe('ReviewSessionList', () => {
     expect(screen.queryByText('复盘配置')).not.toBeInTheDocument()
   })
 
+  it('ignores rapid duplicate manual review imports while creation is pending', async () => {
+    const create = createDeferred<{ session_id: number }>()
+    const onViewDetail = vi.fn()
+    apiMock.reviewCreateManual.mockReturnValueOnce(create.promise)
+
+    render(<ReviewSessionList onViewDetail={onViewDetail} />)
+
+    await screen.findByText('OpenAI 一面')
+    fireEvent.click(screen.getByRole('button', { name: '手动复盘' }))
+    fireEvent.change(screen.getByPlaceholderText('标题'), { target: { value: '手动导入复盘' } })
+    fireEvent.change(screen.getByPlaceholderText(/面试官:/), {
+      target: { value: '面试官: 讲一下缓存穿透。\n候选人: 可以用布隆过滤器和空值缓存。' },
+    })
+
+    const submitButton = screen.getByRole('button', { name: '创建并分析' })
+    act(() => {
+      submitButton.click()
+      submitButton.click()
+    })
+
+    expect(apiMock.reviewCreateManual).toHaveBeenCalledTimes(1)
+    expect(apiMock.reviewCreateManual).toHaveBeenCalledWith(expect.objectContaining({
+      title: '手动导入复盘',
+      transcript: expect.stringContaining('缓存穿透'),
+      analyze: true,
+    }))
+    expect(screen.getByRole('button', { name: '创建中' })).toBeDisabled()
+
+    await act(async () => {
+      create.resolve({ session_id: 123 })
+      await create.promise
+    })
+
+    await waitFor(() => expect(onViewDetail).toHaveBeenCalledWith(123))
+  })
+
+  it('ignores rapid duplicate review generation triggers and keeps pending feedback visible', async () => {
+    const trigger = createDeferred<{ status: string }>()
+    apiMock.reviewTriggerAnalysis.mockReturnValueOnce(trigger.promise)
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('OpenAI 一面')
+    const retryButton = screen.getByRole('button', { name: '重试生成' })
+    act(() => {
+      retryButton.click()
+      retryButton.click()
+    })
+
+    expect(apiMock.reviewTriggerAnalysis).toHaveBeenCalledTimes(1)
+    expect(apiMock.reviewTriggerAnalysis).toHaveBeenCalledWith(41)
+    expect(screen.getByText('提交中')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重试生成' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      trigger.resolve({ status: 'started' })
+      await trigger.promise
+    })
+  })
+
   it('describes the review toggle as automatic analysis generation', async () => {
     render(<ReviewSessionList onViewDetail={vi.fn()} />)
 

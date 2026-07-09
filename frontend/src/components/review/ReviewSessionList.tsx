@@ -86,6 +86,7 @@ interface Props {
 
 export default function ReviewSessionList({ onViewDetail }: Props) {
   const latestLoadIdRef = useRef(0)
+  const triggeringIdsRef = useRef<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ReviewSessionsResponse | null>(null)
   const [page, setPage] = useState(1)
@@ -176,6 +177,8 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
   }
 
   const handleTriggerAnalysis = async (sessionId: number) => {
+    if (triggeringIdsRef.current.has(sessionId)) return
+    triggeringIdsRef.current.add(sessionId)
     setTriggeringIds(prev => new Set(prev).add(sessionId))
     try {
       const result = await api.reviewTriggerAnalysis(sessionId)
@@ -194,6 +197,7 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
     } catch (err) {
       setToastMessage(getErrorMessage(err, '触发分析失败'))
     } finally {
+      triggeringIdsRef.current.delete(sessionId)
       setTriggeringIds(prev => {
         const next = new Set(prev)
         next.delete(sessionId)
@@ -517,11 +521,14 @@ function ManualImportPanel({
     transcript: '',
   })
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   const canSubmit = form.transcript.trim().length >= 12
 
   const handleSubmit = async () => {
     if (!canSubmit) return
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       const result = await api.reviewCreateManual({
@@ -536,6 +543,7 @@ function ManualImportPanel({
     } catch (err) {
       onToast(getErrorMessage(err, '创建手动复盘失败'))
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -884,7 +892,7 @@ function ReviewQueueRow({
   const timeText = dayjs.unix(Math.floor(session.started_at)).format('MM-DD HH:mm')
   const turnsText = `${session.turn_count}${sourceMeta.unit}`
   const summary = sessionSummary(session)
-  const hasPrimaryTrigger = showTriggerButton
+  const hasPrimaryTrigger = showTriggerButton || isTriggering
   const linkedApplicationName = `${session.application?.company || '未命名公司'} · ${session.application?.position || '岗位'}`
   const metaParts = [
     showScore ? `${session.avg_score?.toFixed(1)}分` : null,
@@ -968,21 +976,23 @@ function ReviewQueueRow({
 
             {hasPrimaryTrigger ? (
               <div className="flex flex-wrap items-center gap-2 xl:min-w-[188px] xl:flex-col xl:items-end xl:justify-start">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onTriggerAnalysis(session.id)
-                  }}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium ${
-                    session.status === 'analysis_failed'
-                      ? 'border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/15'
-                      : 'border-green-500/20 bg-green-500/10 text-green-500 hover:bg-green-500/15'
-                  }`}
-                >
-                  {session.status === 'analysis_failed' ? <RotateCw className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {session.status === 'analysis_failed' ? '重试生成' : '生成复盘'}
-                </button>
+                {showTriggerButton ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onTriggerAnalysis(session.id)
+                    }}
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium ${
+                      session.status === 'analysis_failed'
+                        ? 'border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/15'
+                        : 'border-green-500/20 bg-green-500/10 text-green-500 hover:bg-green-500/15'
+                    }`}
+                  >
+                    {session.status === 'analysis_failed' ? <RotateCw className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {session.status === 'analysis_failed' ? '重试生成' : '生成复盘'}
+                  </button>
+                ) : null}
 
                 {isTriggering ? (
                   <span className="inline-flex h-9 items-center gap-1.5 px-2 text-xs text-text-muted">
