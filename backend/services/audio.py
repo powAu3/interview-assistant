@@ -54,6 +54,19 @@ _SC_ID_MAP: dict[int, str] = {}   # id -> speaker.id (GUID)
 _SC_DEVICE_CACHE: dict[int, dict[str, str]] = {}   # id -> stable device metadata
 
 
+def _audio_device_sort_key(device: dict) -> tuple[int, str]:
+    """Keep the current system output first, then other loopbacks, then mics."""
+    is_loopback = bool(device.get("is_loopback"))
+    is_default_output = bool(device.get("is_default_output"))
+    if is_loopback and is_default_output:
+        priority = 0
+    elif is_loopback:
+        priority = 1
+    else:
+        priority = 2
+    return (priority, str(device.get("name") or "").lower())
+
+
 def _is_sc_id(device_id) -> bool:
     try:
         return int(device_id) >= _SC_ID_BASE
@@ -108,7 +121,7 @@ def _get_sc_loopback_devices() -> list[dict]:
         _SC_ID_MAP.update(next_map)
         _SC_DEVICE_CACHE.update(next_cache)
     # default output first
-    result.sort(key=lambda d: (0 if d.get("is_default_output") else 1, d["name"]))
+    result.sort(key=_audio_device_sort_key)
     return result
 
 
@@ -230,7 +243,7 @@ class AudioCapture:
             sc_devs = _get_sc_loopback_devices()
             result = sc_devs + [d for d in result if not d["is_loopback"]]
 
-        result.sort(key=lambda d: (0 if d["is_loopback"] else 1, d["name"]))
+        result.sort(key=_audio_device_sort_key)
         return result
 
     @staticmethod
