@@ -571,6 +571,38 @@ describe('ReviewSessionDetail', () => {
     expect(screen.queryByText('(未录制到回答)')).not.toBeInTheDocument()
   })
 
+  it('prevents duplicate analysis trigger requests while one is in flight', async () => {
+    const trigger = createDeferred<{ status: string }>()
+    apiMock.reviewSessionDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      status: 'recorded',
+      avg_score: null,
+      summary_markdown: null,
+      strong_points: [],
+      weak_points: [],
+    })
+    apiMock.reviewTriggerAnalysis.mockReturnValueOnce(trigger.promise)
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    const action = await screen.findByRole('button', { name: /生成复盘/ })
+    fireEvent.click(action)
+    fireEvent.click(action)
+
+    await waitFor(() => {
+      expect(apiMock.reviewTriggerAnalysis).toHaveBeenCalledWith(7)
+    })
+    expect(apiMock.reviewTriggerAnalysis).toHaveBeenCalledTimes(1)
+    expect(action).toBeDisabled()
+
+    await act(async () => {
+      trigger.resolve({ status: 'pending' })
+      await trigger.promise
+    })
+
+    expect(await screen.findByText('复盘分析已开始，请稍后刷新查看结果')).toBeInTheDocument()
+  })
+
   it('refreshes an analyzing review detail until the generated analysis is ready', async () => {
     vi.useFakeTimers()
     apiMock.reviewSessionDetail

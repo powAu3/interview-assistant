@@ -78,6 +78,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [applicationSearch, setApplicationSearch] = useState('')
   const [binding, setBinding] = useState(false)
   const [inlineNotice, setInlineNotice] = useState<InlineNotice | null>(null)
+  const triggerAnalysisRef = useRef(false)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   const setJobTrackerDeepLink = useUiPrefsStore((s) => s.setJobTrackerDeepLink)
   const isActiveSession = (targetSessionId: number) => activeSessionIdRef.current === targetSessionId
@@ -91,6 +92,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       setInlineNotice(null)
       setEditing(false)
       setTriggering(false)
+      triggerAnalysisRef.current = false
       setBinding(false)
       setExpandedTurns(new Set())
       try {
@@ -196,7 +198,9 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   }
 
   const handleTriggerAnalysis = async () => {
+    if (triggerAnalysisRef.current) return
     const targetSessionId = sessionId
+    triggerAnalysisRef.current = true
     setTriggering(true)
     try {
       const result = await api.reviewTriggerAnalysis(targetSessionId)
@@ -211,7 +215,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       if (!isActiveSession(targetSessionId)) return
       setInlineNotice({ tone: 'error', message: getErrorMessage(err, '触发分析失败') })
     } finally {
-      if (isActiveSession(targetSessionId)) setTriggering(false)
+      if (isActiveSession(targetSessionId)) {
+        triggerAnalysisRef.current = false
+        setTriggering(false)
+      }
     }
   }
 
