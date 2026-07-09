@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
 import { api } from '@/lib/api'
-import type { AppConfig, ModelHealthStatus } from '@/stores/configStore'
+import { useInterviewStore, type AppConfig, type ModelHealthStatus } from '@/stores/configStore'
 
 interface ModelPriorityDropdownProps {
   config: AppConfig
@@ -42,6 +42,21 @@ function healthLabel(
   return '未检测，点击下拉菜单「重新检查连接」'
 }
 
+function normalizeHealthStatus(status: unknown): ModelHealthStatus | null {
+  return status === 'checking' || status === 'ok' || status === 'error' ? status : null
+}
+
+function enabledModelIndexes(config: AppConfig) {
+  return config.models
+    .map((model, index) => ({ model, index }))
+    .filter(({ model }) => model.enabled !== false)
+    .map(({ index }) => index)
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : typeof error === 'string' ? error : '健康检查失败'
+}
+
 export function ModelPriorityDropdown({
   config,
   modelHealth,
@@ -50,7 +65,9 @@ export function ModelPriorityDropdown({
   onModelChange,
 }: ModelPriorityDropdownProps) {
   const [open, setOpen] = useState(false)
+  const [checkingHealth, setCheckingHealth] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const checkingHealthRef = useRef(false)
   const activeModel = config.models[config.active_model]
   const activeLabel = healthLabel(config, modelHealth, modelHealthDetail, modelHealthLatency, config.active_model)
 
@@ -62,6 +79,41 @@ export function ModelPriorityDropdown({
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [open])
+
+  const runHealthCheck = async () => {
+    if (checkingHealthRef.current) return
+    checkingHealthRef.current = true
+    setCheckingHealth(true)
+    const indexes = enabledModelIndexes(config)
+    const store = useInterviewStore.getState()
+    indexes.forEach((index) => store.setModelHealth(index, 'checking', '', 0))
+    try {
+      await api.checkModelsHealth()
+      const snapshot = await api.getModelsHealth().catch(() => null)
+      if (snapshot?.health) {
+        const latest = useInterviewStore.getState()
+        Object.entries(snapshot.health).forEach(([rawIndex, rawStatus]) => {
+          const index = Number(rawIndex)
+          const status = normalizeHealthStatus(rawStatus)
+          if (!Number.isInteger(index) || !status) return
+          latest.setModelHealth(
+            index,
+            status,
+            snapshot.detail?.[rawIndex],
+            snapshot.latency?.[rawIndex],
+          )
+        })
+      }
+    } catch (error) {
+      const detail = getErrorMessage(error)
+      const latest = useInterviewStore.getState()
+      indexes.forEach((index) => latest.setModelHealth(index, 'error', detail, 0))
+      latest.pushToast(`模型健康检查失败：${detail}`, 'error')
+    } finally {
+      checkingHealthRef.current = false
+      setCheckingHealth(false)
+    }
+  }
 
   return (
     <div className="relative" ref={rootRef}>
@@ -122,12 +174,12 @@ export function ModelPriorityDropdown({
           })}
           <div className="border-t border-bg-hover/40 mt-1 pt-1 px-3 py-1.5">
             <button
-              onClick={() => {
-                api.checkModelsHealth().catch(() => {})
-              }}
-              className="text-[10px] text-text-muted hover:text-accent-blue transition-colors font-medium"
+              type="button"
+              onClick={runHealthCheck}
+              disabled={checkingHealth}
+              className="text-[10px] text-text-muted hover:text-accent-blue transition-colors font-medium disabled:cursor-wait disabled:opacity-60"
             >
-              重新检查连接
+              {checkingHealth ? '检测中…' : '重新检查连接'}
             </button>
           </div>
         </div>
