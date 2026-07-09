@@ -203,7 +203,7 @@ export default function ControlBar() {
     }
     if (selectedDevice !== null && devices.some((d) => d.id === selectedDevice)) return
     const defaultDevices = visibleDevices.length > 0 ? visibleDevices : devices
-    const loopback = defaultDevices.find((d) => d.is_loopback)
+    const loopback = defaultDevices.find((d) => d.is_loopback && d.is_default_output) ?? defaultDevices.find((d) => d.is_loopback)
     setSelectedDevice(loopback?.id ?? defaultDevices[0]?.id ?? null)
   }, [devices, visibleDevices, selectedDevice])
 

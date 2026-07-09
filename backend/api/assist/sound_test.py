@@ -534,9 +534,12 @@ def _run_preflight(device_id: Optional[int], scenario_id: str):
         try:
             cap.start(device_id)
             time.sleep(0.15)
-            playback_elapsed = play_preflight_audio()
+            captured, playback_elapsed = collect_capture_audio_during_playback(
+                cap,
+                play_preflight_audio,
+                trailing_sec=0.45,
+            )
             _set_step("playback", "pass", f"测试音频已播放（{playback_elapsed:.2f}s）")
-            captured = collect_capture_audio(cap, duration_sec=max(0.8, playback_elapsed + 0.45))
         finally:
             cap.stop()
 
@@ -547,7 +550,7 @@ def _run_preflight(device_id: Optional[int], scenario_id: str):
         energy = float(AudioCapture.compute_energy(captured))
         if energy <= 0.003:
             _set_step("capture", "fail", f"捕获音量过低（RMS {energy:.4f}）")
-            raise RuntimeError("捕获音量过低，请检查输出音量或设备选择")
+            raise RuntimeError("捕获音量过低，请确认选择带 ★ 的当前系统输出设备，并调高播放音量；Windows soundcard 模式无需 Stereo Mix")
         _set_step("capture", "pass", f"已捕获真实音频（RMS {energy:.4f}）")
 
         _set_step("stt", "running", "正在识别测试音频…")

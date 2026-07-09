@@ -73,6 +73,23 @@ describe('SoundTest', () => {
     expect(screen.getAllByText('请介绍一下你最近做过的项目').length).toBeGreaterThan(0)
   })
 
+  it('prefers the default output loopback device for preflight', async () => {
+    useInterviewStore.setState({
+      devices: [
+        { id: 20000, name: 'Monitor Speakers', channels: 2, is_loopback: true, is_default_output: false, host_api: 'WASAPI (soundcard)' },
+        { id: 20001, name: 'Headphones', channels: 2, is_loopback: true, is_default_output: true, host_api: 'WASAPI (soundcard)' },
+        { id: 3, name: 'Microphone', channels: 1, is_loopback: false, host_api: 'WASAPI' },
+      ],
+    } as any)
+
+    render(<SoundTest />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '开始检测' }))
+
+    expect(apiMock.preflightRun).toHaveBeenCalledWith('self_intro', 20001)
+  })
+
   it('starts another preflight when clicking retry after completion', async () => {
     render(<SoundTest />)
     await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())

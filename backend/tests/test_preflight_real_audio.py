@@ -137,7 +137,14 @@ def test_run_preflight_updates_status_and_completes(monkeypatch: pytest.MonkeyPa
     llm_questions: list[str] = []
     monkeypatch.setattr(sound_test, 'broadcast', lambda data: events.append(data))
     monkeypatch.setattr(sound_test, 'play_preflight_audio', lambda: 1.0)
-    monkeypatch.setattr(sound_test, 'collect_capture_audio', lambda cap, duration_sec, poll_interval=0.05: np.ones(1600, dtype=np.float32) * 0.1)
+    monkeypatch.setattr(
+        sound_test,
+        'collect_capture_audio_during_playback',
+        lambda cap, play_fn, trailing_sec=0.45, poll_interval=0.02: (
+            np.ones(1600, dtype=np.float32) * 0.1,
+            float(play_fn()),
+        ),
+    )
     monkeypatch.setattr(sound_test, 'match_phrase', lambda expected, actual: (True, '识别匹配'))
 
     class FakeCapture:

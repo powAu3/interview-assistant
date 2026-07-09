@@ -173,7 +173,7 @@ export default function SoundTest() {
   }, [handleMessage])
 
   const selectedDevice = (() => {
-    const loopback = devices.find((d) => d.is_loopback)
+    const loopback = devices.find((d) => d.is_loopback && d.is_default_output) ?? devices.find((d) => d.is_loopback)
     return loopback?.id ?? devices[0]?.id ?? null
   })()
 
