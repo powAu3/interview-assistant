@@ -121,6 +121,44 @@ describe('ReviewSessionDetail', () => {
     expect(await screen.findByText('已关联求职记录，并同步复盘待办')).toBeInTheDocument()
   })
 
+  it('prevents duplicate bind requests while syncing a job tracker application', async () => {
+    const bindUpdate = createDeferred<{ success: boolean; synced_todos: boolean }>()
+    apiMock.reviewUpdateSession.mockReturnValueOnce(bindUpdate.promise)
+    apiMock.reviewSessionDetail
+      .mockResolvedValueOnce(baseDetail)
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        application_id: application.id,
+        application: {
+          id: application.id,
+          company: application.company,
+          position: application.position,
+          city: application.city,
+          stage: application.stage,
+        },
+      })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    const bindButton = await screen.findByRole('button', { name: /ByteDance/ })
+    fireEvent.click(bindButton)
+    fireEvent.click(bindButton)
+
+    await waitFor(() => {
+      expect(apiMock.reviewUpdateSession).toHaveBeenCalledWith(7, { application_id: 2 })
+    })
+    expect(apiMock.reviewUpdateSession).toHaveBeenCalledTimes(1)
+    expect(bindButton).toBeDisabled()
+
+    await act(async () => {
+      bindUpdate.resolve({ success: true, synced_todos: true })
+      await bindUpdate.promise
+    })
+
+    expect(await screen.findByText(/ByteDance · AI Engineer/)).toBeInTheDocument()
+    expect(await screen.findByText('已关联求职记录，并同步复盘待办')).toBeInTheDocument()
+  })
+
   it('shows closed-stage copy for rejected linked applications', async () => {
     apiMock.reviewSessionDetail.mockResolvedValueOnce({
       ...baseDetail,

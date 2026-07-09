@@ -79,6 +79,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [binding, setBinding] = useState(false)
   const [inlineNotice, setInlineNotice] = useState<InlineNotice | null>(null)
   const triggerAnalysisRef = useRef(false)
+  const bindApplicationRef = useRef(false)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   const setJobTrackerDeepLink = useUiPrefsStore((s) => s.setJobTrackerDeepLink)
   const isActiveSession = (targetSessionId: number) => activeSessionIdRef.current === targetSessionId
@@ -94,6 +95,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       setTriggering(false)
       triggerAnalysisRef.current = false
       setBinding(false)
+      bindApplicationRef.current = false
       setExpandedTurns(new Set())
       try {
         const data = parseReviewSessionDetail(await api.reviewSessionDetail(targetSessionId) as Record<string, unknown>)
@@ -223,7 +225,9 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   }
 
   const handleBindApplication = async (applicationId: number | null) => {
+    if (bindApplicationRef.current) return
     const targetSessionId = sessionId
+    bindApplicationRef.current = true
     setBinding(true)
     try {
       const result = await api.reviewUpdateSession(targetSessionId, { application_id: applicationId }) as {
@@ -243,7 +247,10 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       if (!isActiveSession(targetSessionId)) return
       setInlineNotice({ tone: 'error', message: getErrorMessage(err, '关联求职记录失败') })
     } finally {
-      if (isActiveSession(targetSessionId)) setBinding(false)
+      if (isActiveSession(targetSessionId)) {
+        bindApplicationRef.current = false
+        setBinding(false)
+      }
     }
   }
 
