@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { Mic, MicOff, Activity, Volume2, Radio, Languages, ClipboardPaste, Keyboard, Brain } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Mic, MicOff, Activity, Volume2, Radio, Languages, ClipboardPaste, Keyboard, Brain, ArrowDown } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 
 export default function TranscriptionPanel() {
@@ -9,11 +9,37 @@ export default function TranscriptionPanel() {
   const isTranscribing = useInterviewStore((s) => s.isTranscribing)
   const config = useInterviewStore((s) => s.config)
   const isExamMode = config?.written_exam_mode === true
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const autoFollowRef = useRef(true)
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+
+  const updateAutoFollow = useCallback(() => {
+    const el = contentRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 36
+    autoFollowRef.current = nearBottom
+    setShowJumpToLatest(!nearBottom && transcriptions.length > 0)
+  }, [transcriptions.length])
+
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const el = contentRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+    autoFollowRef.current = true
+    setShowJumpToLatest(false)
+  }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [transcriptions])
+    if (!autoFollowRef.current) {
+      setShowJumpToLatest(transcriptions.length > 0)
+      return
+    }
+    requestAnimationFrame(() => scrollToLatest('auto'))
+  }, [scrollToLatest, transcriptions])
+
+  useEffect(() => {
+    updateAutoFollow()
+  }, [updateAutoFollow])
 
   const levelPercent = Math.min(audioLevel * 500, 100)
 
@@ -60,7 +86,12 @@ export default function TranscriptionPanel() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div
+        ref={contentRef}
+        aria-label="转写记录"
+        className="relative flex-1 overflow-y-auto p-4 space-y-2"
+        onScroll={updateAutoFollow}
+      >
         {transcriptions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <div className="relative w-14 h-14">
@@ -125,7 +156,17 @@ export default function TranscriptionPanel() {
             </div>
           ))
         )}
-        <div ref={bottomRef} />
+        {showJumpToLatest && (
+          <button
+            type="button"
+            onClick={() => scrollToLatest()}
+            className="sticky bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-accent-blue/35 bg-bg-secondary/95 px-3 py-1.5 text-[11px] font-medium text-accent-blue shadow-lg shadow-black/10 backdrop-blur"
+            aria-label="回到最新转写"
+          >
+            <ArrowDown className="h-3 w-3" />
+            回到最新转写
+          </button>
+        )}
       </div>
     </div>
   )
