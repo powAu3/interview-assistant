@@ -103,6 +103,7 @@ export default function SoundTest() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const runRequestRef = useRef(false)
 
   useEffect(() => {
     api.preflightScenarios().then((res) => {
@@ -129,6 +130,7 @@ export default function SoundTest() {
       if (msg.type !== 'preflight_step') return
       const { step, status, detail, answer, question, transcript, expected_phrase, first_token_ms, total_ms, model_name } = msg
       if (step === 'done') {
+        runRequestRef.current = false
         setDone(true)
         setRunning(false)
         void api.preflightStatus().then((status) => {
@@ -152,6 +154,7 @@ export default function SoundTest() {
         return
       }
       if (step === 'error') {
+        runRequestRef.current = false
         setRunning(false)
         setErrorMsg(detail || '\u8bd5\u97f3\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u8bbe\u5907\u548c\u914d\u7f6e')
         return
@@ -175,6 +178,8 @@ export default function SoundTest() {
   })()
 
   const handleRun = async () => {
+    if (runRequestRef.current || running) return
+    runRequestRef.current = true
     setRunning(true)
     setDone(false)
     setSteps({})
@@ -182,6 +187,7 @@ export default function SoundTest() {
     try {
       await api.preflightRun(selectedScenario, selectedDevice)
     } catch (e: any) {
+      runRequestRef.current = false
       setRunning(false)
       setErrorMsg(e?.message || '\u8bd5\u97f3\u8bf7\u6c42\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u670d\u52a1\u662f\u5426\u542f\u52a8')
     }

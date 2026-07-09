@@ -24,6 +24,16 @@ class FakeWebSocket {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('SoundTest', () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
@@ -81,6 +91,37 @@ describe('SoundTest', () => {
 
     expect(apiMock.preflightRun).toHaveBeenCalledTimes(2)
     expect(apiMock.preflightRun).toHaveBeenLastCalledWith('self_intro', 1)
+  })
+
+  it('ignores rapid duplicate preflight starts while the run request is pending', async () => {
+    const pendingRun = deferred<{ ok: boolean }>()
+    apiMock.preflightRun.mockReturnValueOnce(pendingRun.promise)
+
+    render(<SoundTest />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())
+
+    const startButton = screen.getByRole('button', { name: '开始检测' })
+    act(() => {
+      startButton.click()
+      startButton.click()
+    })
+
+    expect(apiMock.preflightRun).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '开始检测' })).toBeDisabled()
+
+    await act(async () => {
+      pendingRun.resolve({ ok: true })
+      await pendingRun.promise
+    })
+    await act(async () => {
+      FakeWebSocket.instances[0].emit({ type: 'preflight_step', step: 'done', status: 'done', detail: '完成' })
+      await Promise.resolve()
+    })
+
+    const retryButton = await screen.findByRole('button', { name: '重新' })
+    expect(retryButton).toBeEnabled()
+    fireEvent.click(retryButton)
+    expect(apiMock.preflightRun).toHaveBeenCalledTimes(2)
   })
 
   it('hydrates the generated llm answer from status after completion', async () => {
