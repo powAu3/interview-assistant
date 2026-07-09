@@ -105,7 +105,7 @@ class ConfigUpdate(BaseModel):
     candidate_streaming_asr_enabled: Optional[bool] = None
     candidate_streaming_asr_interval_ms: Optional[int] = None
     candidate_mic_compatibility_mode: Optional[bool] = None
-    # KB (Beta) - 详细字段(min_score / OCR / Vision / chunk_size 等)仍走 config.json
+    # KB - 详细字段(min_score / OCR / Vision / chunk_size 等)仍走 config.json
     kb_enabled: Optional[bool] = None
     kb_top_k: Optional[int] = None
     kb_deadline_ms: Optional[int] = None

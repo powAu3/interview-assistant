@@ -1,4 +1,4 @@
-"""Knowledge base (Beta) — 本地笔记检索, 可选开启, 不影响主流程."""
+"""Knowledge base — 本地笔记检索, 可选开启, 不影响主流程."""
 from .indexer import (  # noqa: F401
     list_docs,
     reindex,

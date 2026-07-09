@@ -1,8 +1,8 @@
-"""KB Beta HTTP API:
+"""Knowledge base HTTP API:
 
 - GET  /api/kb/status         总开关 + 文档/分块计数 + 依赖可用性
 - GET  /api/kb/docs           已索引文档列表
-- POST /api/kb/search         手动检索 (Beta 面板用)
+- POST /api/kb/search         手动检索 (知识库面板用)
 - GET  /api/kb/hits/recent    最近一段时间的命中历史
 - POST /api/kb/upload         上传单个文件 (.md/.txt/.docx/.pdf 等),自动 reindex
 - POST /api/kb/reindex        强制全量重建索引

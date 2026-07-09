@@ -21,14 +21,12 @@ import { Section, Field, SaveStateBadge, matchSettingsSearch, useAutoSaveSetting
 import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
-import BetaBadge from '@/components/kb/BetaBadge'
 
-function Collapsible({ title, searchTitle, icon, defaultOpen = false, badge, keywords, children }: {
+function Collapsible({ title, searchTitle, icon, defaultOpen = false, keywords, children }: {
   title: React.ReactNode
   searchTitle?: string
   icon?: React.ReactNode
   defaultOpen?: boolean
-  badge?: React.ReactNode
   keywords?: string
   children: React.ReactNode
 }) {
@@ -46,7 +44,6 @@ function Collapsible({ title, searchTitle, icon, defaultOpen = false, badge, key
       >
         {icon && <span className="text-text-muted flex-shrink-0">{icon}</span>}
         <span className="text-sm font-semibold text-text-primary">{title}</span>
-        {badge && <span className="flex-shrink-0">{badge}</span>}
         <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${effectiveOpen ? 'rotate-180' : ''}`} />
       </button>
       {effectiveOpen && <div className="px-4 pb-4 space-y-3 border-t border-bg-hover/50">{children}</div>}
@@ -536,12 +533,11 @@ export default function PreferencesTab() {
         )}
       </Collapsible>
 
-      {/* ── 3. 知识库 (Beta) ── */}
+      {/* ── 3. 知识库 ── */}
       <Collapsible
         title="知识库与引用"
         icon={<BookOpen className="w-3.5 h-3.5" />}
         keywords="kb knowledge base 笔记 参考 rag retrieval 引用"
-        badge={<BetaBadge title="知识库 — 仍在测试中" className="ml-1" />}
       >
         <Field
           label="主流程引用本地笔记"

@@ -161,7 +161,7 @@ class AppConfig(BaseModel):
     # 笔试模式下是否开启 think（深度思考），默认关闭以加快响应
     written_exam_think: bool = False
 
-    # --- Knowledge Base (Beta) ---
+    # --- Knowledge Base ---
     # 路径相对 backend/ 目录解析; 默认值与 .gitignore (backend/data/kb/) 对齐。
     kb_enabled: bool = False
     kb_dir: str = "data/kb"

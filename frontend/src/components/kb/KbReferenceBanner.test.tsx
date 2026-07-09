@@ -35,6 +35,7 @@ describe('KbReferenceBanner', () => {
     render(<KbReferenceBanner qaId="qa-1" />)
 
     expect(screen.getByText('引用 1 条本地笔记')).toBeInTheDocument()
+    expect(screen.queryByText(/BETA/i)).not.toBeInTheDocument()
     expect(screen.getByText('Redis 持久化')).toBeInTheDocument()
     expect(screen.getByText('AOF 和 RDB 可以组合使用。')).toBeInTheDocument()
 

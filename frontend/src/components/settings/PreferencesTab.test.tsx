@@ -109,6 +109,24 @@ describe('PreferencesTab', () => {
     expect(updateConfigAndRefresh).toHaveBeenCalledTimes(1)
   })
 
+  it('auto-saves knowledge retrieval deadlines from preferences', async () => {
+    vi.useFakeTimers()
+    render(<PreferencesTab />)
+
+    fireEvent.click(screen.getByText('知识库与引用'))
+    fireEvent.change(screen.getByDisplayValue('150'), { target: { value: '220' } })
+    fireEvent.change(screen.getByDisplayValue('80'), { target: { value: '60' } })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600)
+    })
+
+    expect(updateConfigAndRefresh).toHaveBeenCalledWith({
+      kb_deadline_ms: 220,
+      kb_asr_deadline_ms: 60,
+    })
+  })
+
   it('serializes immediate auto-save writes so older requests cannot finish last', async () => {
     let resolveFirst: ((value: unknown) => void) | null = null
     const firstSave = new Promise((resolve) => {

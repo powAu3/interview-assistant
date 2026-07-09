@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react'
 import { useKbStore } from '@/stores/kbStore'
-import BetaBadge from './BetaBadge'
 
 interface Props {
   qaId: string | null | undefined
@@ -56,7 +55,6 @@ export default function KbReferenceBanner({ qaId }: Props) {
         <span className="text-xs font-medium text-amber-300">
           引用 {payload.hit_count} 条本地笔记
         </span>
-        <BetaBadge className="flex-shrink-0" />
         <span className="text-[10px] text-text-muted ml-auto whitespace-nowrap">
           {payload.latency_ms}ms
           {payload.degraded && ' · 降级'}

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { X, BookOpen, Files, Search, History, RefreshCw } from 'lucide-react'
 import { useKbStore } from '@/stores/kbStore'
 import { api } from '@/lib/api'
-import BetaBadge from './BetaBadge'
 import KbFilesPanel from './KbFilesPanel'
 import KbSearchTestPanel from './KbSearchTestPanel'
 import KbRecentHitsPanel from './KbRecentHitsPanel'
@@ -76,7 +75,6 @@ export default function KnowledgeDrawer() {
             <h2 id="kb-drawer-title" className="text-base font-semibold text-text-primary flex items-center gap-2">
               <BookOpen className="w-4.5 h-4.5 text-amber-400" />
               知识库
-              <BetaBadge />
             </h2>
             <div className="flex items-center gap-1">
               <button

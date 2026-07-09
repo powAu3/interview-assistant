@@ -106,7 +106,7 @@ export interface AppConfig {
   written_exam_mode?: boolean
   /** 笔试模式下是否开启深度思考 */
   written_exam_think?: boolean
-  // --- Knowledge Base (Beta) ---
+  // --- Knowledge Base ---
   /** KB 总开关; 关闭后 pipeline 不查 KB,但 Drawer 里的手动测试仍可用 (force=True) */
   kb_enabled?: boolean
   /** 主流程检索 deadline (ms),超时直接返回空,不阻塞首字 */

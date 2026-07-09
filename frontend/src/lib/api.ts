@@ -113,7 +113,7 @@ export type ResumeHistoryDetail = ResumeHistoryItem & {
   summary_is_full?: boolean
 }
 
-// --- Knowledge Base (Beta) ---
+// --- Knowledge Base ---
 export type KBOrigin = 'text' | 'ocr' | 'vision' | 'mixed'
 
 export interface KBHit {
@@ -397,7 +397,7 @@ export const api = {
       body: JSON.stringify({ offer_ids }),
     }),
 
-  // Knowledge Base (Beta)
+  // Knowledge Base
   kbStatus: () => request<KBStatus>('/api/kb/status'),
   kbDocs: (limit?: number) =>
     request<{ items: KBDoc[] }>(`/api/kb/docs${limit ? `?limit=${limit}` : ''}`),
