@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { api, type KBHit } from '@/lib/api'
 
@@ -23,21 +23,32 @@ export default function KbSearchTestPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [latency, setLatency] = useState<number | null>(null)
+  const loadingRef = useRef(false)
+  const qRef = useRef(q)
+  const kRef = useRef(k)
 
   const run = async (e?: React.FormEvent) => {
     e?.preventDefault()
-    if (!q.trim()) return
+    const query = q.trim()
+    const topK = k
+    if (!query || loadingRef.current) return
+    loadingRef.current = true
     setLoading(true)
     setError(null)
+    setHits([])
+    setLatency(null)
     const t0 = performance.now()
     try {
-      const res = await api.kbSearch(q.trim(), k, 0)
+      const res = await api.kbSearch(query, topK, 0)
+      if (qRef.current.trim() !== query || kRef.current !== topK) return
       setHits(res.hits)
       setLatency(Math.round(performance.now() - t0))
     } catch (err) {
+      if (qRef.current.trim() !== query || kRef.current !== topK) return
       setError(err instanceof Error ? err.message : '检索失败')
       setHits([])
     } finally {
+      loadingRef.current = false
       setLoading(false)
     }
   }
@@ -48,14 +59,21 @@ export default function KbSearchTestPanel() {
         <input
           type="text"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            qRef.current = e.target.value
+            setQ(e.target.value)
+          }}
           placeholder="输入关键词测试 KB 检索…"
           className="flex-1 px-2.5 py-1.5 rounded-lg bg-bg-tertiary/60 border border-bg-hover/40 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-amber-500/60"
         />
         <input
           type="number"
           value={k}
-          onChange={(e) => setK(Math.max(1, Math.min(20, Number(e.target.value) || 4)))}
+          onChange={(e) => {
+            const nextK = Math.max(1, Math.min(20, Number(e.target.value) || 4))
+            kRef.current = nextK
+            setK(nextK)
+          }}
           min={1}
           max={20}
           title="返回 top_k"
