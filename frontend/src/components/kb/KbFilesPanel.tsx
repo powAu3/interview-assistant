@@ -45,6 +45,33 @@ export default function KbFilesPanel({ onChanged }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadingRef = useRef(false)
+  const busyPathRef = useRef<string | null>(null)
+
+  const beginUpload = () => {
+    if (uploadingRef.current || busyPathRef.current) return false
+    uploadingRef.current = true
+    setUploading(true)
+    return true
+  }
+
+  const endUpload = () => {
+    uploadingRef.current = false
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const beginBusy = (path: string) => {
+    if (uploadingRef.current || busyPathRef.current) return false
+    busyPathRef.current = path
+    setBusyPath(path)
+    return true
+  }
+
+  const endBusy = () => {
+    busyPathRef.current = null
+    setBusyPath(null)
+  }
 
   const handleUpload = async (file: File) => {
     if (!isSupported(file.name)) {
@@ -53,7 +80,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
       toast(msg)
       return
     }
-    setUploading(true)
+    if (!beginUpload()) return
     setError(null)
     try {
       await api.kbUpload(file, '')
@@ -64,8 +91,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
       setError(msg)
       toast(`上传失败: ${msg}`)
     } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      endUpload()
     }
   }
 
@@ -78,7 +104,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
       await handleUpload(files[0])
       return
     }
-    setUploading(true)
+    if (!beginUpload()) return
     setError(null)
     let ok = 0
     let skipped = 0
@@ -103,8 +129,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
         /* ignore: 上传已完成, 只是列表刷新失败; 不影响 uploading 状态复位 */
       }
     } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      endUpload()
     }
     const parts: string[] = []
     if (ok) parts.push(`成功 ${ok}`)
@@ -117,14 +142,15 @@ export default function KbFilesPanel({ onChanged }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    if (uploading) return // 正在上传时忽略新 drop, 避免两批并发交错
+    if (uploadingRef.current) return // 正在上传时忽略新 drop, 避免两批并发交错
     const files = Array.from(e.dataTransfer.files ?? [])
     if (files.length) await handleUploadMany(files)
   }
 
   const handleDelete = async (path: string) => {
+    if (uploadingRef.current || busyPathRef.current) return
     if (!confirm(`确定删除 ${path}? 文件和索引都会被移除。`)) return
-    setBusyPath(path)
+    if (!beginBusy(path)) return
     setError(null)
     try {
       await api.kbDelete(path)
@@ -135,12 +161,12 @@ export default function KbFilesPanel({ onChanged }: Props) {
       setError(msg)
       toast(`删除失败: ${msg}`)
     } finally {
-      setBusyPath(null)
+      endBusy()
     }
   }
 
   const handleReindex = async () => {
-    setBusyPath('__reindex__')
+    if (!docs.length || !beginBusy('__reindex__')) return
     setError(null)
     try {
       const r = await api.kbReindex()
@@ -151,7 +177,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
       setError(msg)
       toast(`重建失败: ${msg}`)
     } finally {
-      setBusyPath(null)
+      endBusy()
     }
   }
 
@@ -173,7 +199,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
         <button
           type="button"
           onClick={handleReindex}
-          disabled={busyPath === '__reindex__' || !hasDocs}
+          disabled={uploading || busyPath === '__reindex__' || !hasDocs}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-bg-tertiary border border-bg-hover/40 text-text-muted hover:text-text-primary hover:border-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           title={hasDocs ? '重建全量索引 (按 mtime 增量)' : '还没有文档可重建'}
         >
@@ -290,7 +316,7 @@ export default function KbFilesPanel({ onChanged }: Props) {
               <button
                 type="button"
                 onClick={() => handleDelete(d.path)}
-                disabled={busyPath === d.path}
+                disabled={uploading || busyPath === d.path || (busyPath !== null && busyPath !== d.path)}
                 className="p-1 rounded text-text-muted hover:text-accent-red hover:bg-accent-red/10 disabled:opacity-50"
                 title="删除"
                 aria-label={`删除 ${d.path}`}
