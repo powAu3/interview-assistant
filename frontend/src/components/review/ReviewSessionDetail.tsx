@@ -73,12 +73,14 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   const [expandedTurns, setExpandedTurns] = useState<Set<number>>(new Set())
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ title: '', company: '', role: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
   const [triggering, setTriggering] = useState(false)
   const [applications, setApplications] = useState<Application[]>([])
   const [applicationSearch, setApplicationSearch] = useState('')
   const [binding, setBinding] = useState(false)
   const [inlineNotice, setInlineNotice] = useState<InlineNotice | null>(null)
   const triggerAnalysisRef = useRef(false)
+  const saveEditRef = useRef(false)
   const bindApplicationRef = useRef(false)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   const setJobTrackerDeepLink = useUiPrefsStore((s) => s.setJobTrackerDeepLink)
@@ -92,6 +94,8 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
       setError(null)
       setInlineNotice(null)
       setEditing(false)
+      setSavingEdit(false)
+      saveEditRef.current = false
       setTriggering(false)
       triggerAnalysisRef.current = false
       setBinding(false)
@@ -126,10 +130,11 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
     if (detail?.status !== 'analyzing') return undefined
 
     let cancelled = false
+    const targetSessionId = sessionId
     const pollDetail = async () => {
       try {
-        const data = parseReviewSessionDetail(await api.reviewSessionDetail(sessionId) as Record<string, unknown>)
-        if (cancelled) return
+        const data = parseReviewSessionDetail(await api.reviewSessionDetail(targetSessionId) as Record<string, unknown>)
+        if (cancelled || !isActiveSession(targetSessionId)) return
         setDetail(data)
         if (data.status === 'completed') {
           setInlineNotice({ tone: 'success', message: '复盘分析已完成' })
@@ -185,8 +190,11 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
   }
 
   const handleSaveEdit = async () => {
+    if (saveEditRef.current) return
     const targetSessionId = sessionId
     const nextForm = { ...editForm }
+    saveEditRef.current = true
+    setSavingEdit(true)
     try {
       await api.reviewUpdateSession(targetSessionId, nextForm)
       if (!isActiveSession(targetSessionId)) return
@@ -196,6 +204,11 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
     } catch (err) {
       if (!isActiveSession(targetSessionId)) return
       setInlineNotice({ tone: 'error', message: getErrorMessage(err, '保存失败') })
+    } finally {
+      if (isActiveSession(targetSessionId)) {
+        saveEditRef.current = false
+        setSavingEdit(false)
+      }
     }
   }
 
@@ -349,35 +362,41 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                         type="text"
                         value={editForm.title}
                         onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                        disabled={savingEdit}
                         placeholder="面试标题（可选）"
-                        className="w-full rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/15"
+                        className="w-full rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/15 disabled:cursor-not-allowed disabled:opacity-60"
                       />
                       <div className="grid gap-3 sm:grid-cols-2">
                         <input
                           type="text"
                           value={editForm.company}
                           onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                          disabled={savingEdit}
                           placeholder="公司名称"
-                          className="w-full rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/15"
+                          className="w-full rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/15 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                         <input
                           type="text"
                           value={editForm.role}
                           onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                          disabled={savingEdit}
                           placeholder="岗位名称"
-                          className="w-full rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/15"
+                          className="w-full rounded-xl border border-bg-hover bg-bg-secondary px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/15 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={handleSaveEdit}
-                          className="rounded-xl bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                          disabled={savingEdit}
+                          className="inline-flex items-center gap-2 rounded-xl bg-accent-blue px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          保存信息
+                          {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                          {savingEdit ? '保存中' : '保存信息'}
                         </button>
                         <button
                           type="button"
+                          disabled={savingEdit}
                           onClick={() => {
                             setEditing(false)
                             setEditForm({
@@ -386,7 +405,7 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
                               role: detail.role || '',
                             })
                           }}
-                          className="rounded-xl border border-bg-hover px-4 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
+                          className="rounded-xl border border-bg-hover px-4 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           取消
                         </button>

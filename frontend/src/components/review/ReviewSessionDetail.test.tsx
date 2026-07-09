@@ -261,6 +261,39 @@ describe('ReviewSessionDetail', () => {
     })
   })
 
+  it('prevents duplicate detail info saves while one is pending', async () => {
+    const save = createDeferred<{ success: boolean }>()
+    apiMock.reviewSessionDetail.mockResolvedValueOnce(baseDetail)
+    apiMock.reviewUpdateSession.mockReturnValueOnce(save.promise)
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await screen.findByText('一面复盘')
+    fireEvent.click(screen.getByTitle('编辑信息'))
+    fireEvent.change(screen.getByPlaceholderText('面试标题（可选）'), {
+      target: { value: '更新后复盘' },
+    })
+
+    const saveButton = screen.getByRole('button', { name: '保存信息' })
+    fireEvent.click(saveButton)
+    fireEvent.click(saveButton)
+
+    expect(apiMock.reviewUpdateSession).toHaveBeenCalledTimes(1)
+    expect(apiMock.reviewUpdateSession).toHaveBeenCalledWith(7, expect.objectContaining({
+      title: '更新后复盘',
+    }))
+    expect(screen.getByRole('button', { name: '保存中' })).toBeDisabled()
+    expect(screen.getByPlaceholderText('面试标题（可选）')).toBeDisabled()
+
+    await act(async () => {
+      save.resolve({ success: true })
+      await save.promise
+    })
+
+    expect(await screen.findByText('更新后复盘')).toBeInTheDocument()
+    expect(screen.getByText('已保存复盘标题与岗位信息')).toBeInTheDocument()
+  })
+
   it('ignores stale bind refreshes after switching review sessions', async () => {
     const bindUpdate = createDeferred<{ success: boolean; synced_todos: boolean }>()
     apiMock.reviewUpdateSession.mockReturnValueOnce(bindUpdate.promise)
@@ -673,5 +706,58 @@ describe('ReviewSessionDetail', () => {
     expect(apiMock.reviewSessionDetail).toHaveBeenCalledTimes(2)
     expect(screen.getByText('复盘分析已完成')).toBeInTheDocument()
     expect(screen.getByText('自动生成的复盘已经完成。')).toBeInTheDocument()
+  })
+
+  it('ignores stale analysis polling responses after switching review sessions', async () => {
+    vi.useFakeTimers()
+    const stalePoll = createDeferred<typeof baseDetail>()
+    apiMock.reviewSessionDetail
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        status: 'analyzing',
+        avg_score: null,
+        summary_markdown: null,
+      })
+      .mockReturnValueOnce(stalePoll.promise)
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        id: 8,
+        title: '二面复盘',
+        company: 'Nova',
+        role: 'Backend',
+        status: 'completed',
+      })
+
+    const { rerender } = render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getAllByText('分析中').length).toBeGreaterThan(0)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+    expect(apiMock.reviewSessionDetail).toHaveBeenCalledTimes(2)
+
+    rerender(<ReviewSessionDetail sessionId={8} onBack={vi.fn()} />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByText('二面复盘')).toBeInTheDocument()
+
+    await act(async () => {
+      stalePoll.resolve({
+        ...baseDetail,
+        status: 'completed',
+        title: '旧复盘已完成',
+        summary_markdown: '旧轮询结果',
+      })
+      await stalePoll.promise
+    })
+
+    expect(screen.getByText('二面复盘')).toBeInTheDocument()
+    expect(screen.queryByText('旧复盘已完成')).not.toBeInTheDocument()
+    expect(screen.queryByText('旧轮询结果')).not.toBeInTheDocument()
   })
 })
