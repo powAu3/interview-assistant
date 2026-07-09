@@ -130,6 +130,9 @@ export default function ControlBar() {
   const inputRef = useRef<HTMLInputElement>(null)
   const isComposingRef = useRef(false)
   const askingRef = useRef(false)
+  const lifecycleActionRef = useRef(false)
+  const clearingRef = useRef(false)
+  const cancellingAskRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
   const [quickPromptRecent, setQuickPromptRecent] = useState<Record<string, number>>(readQuickPromptRecent)
   const orderedQuickPrompts = useMemo(
@@ -272,7 +275,9 @@ export default function ControlBar() {
   }, [])
 
   const handleStart = useCallback(async () => {
+    if (lifecycleActionRef.current) return
     if (!isExamMode && selectedDevice === null) { setError('请先选择音频设备'); return }
+    lifecycleActionRef.current = true
     setLoading(true); setError(null)
     try {
       await api.start(
@@ -302,40 +307,65 @@ export default function ControlBar() {
       }
     }
     catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '开始失败' : '开始面试失败')) }
-    finally { setLoading(false) }
+    finally {
+      lifecycleActionRef.current = false
+      setLoading(false)
+    }
   }, [selectedDevice, effectiveCandidateMic, isExamMode])
   const handleStop = useCallback(async () => {
+    if (lifecycleActionRef.current) return
     if (isRecording && !window.confirm(isExamMode ? '结束本次笔试？当前答案会保留在页面上。' : '结束本次面试？将停止录音，当前转录与答案会保留在页面上。')) return
+    lifecycleActionRef.current = true
     setLoading(true)
     try {
       await api.stop()
       window.electronAPI?.syncOverlayWindow?.({ visible: false }).catch(() => {})
     } catch (e: unknown) {
       setError(`结束${isExamMode ? '笔试' : '面试'}失败：${getErrorMessage(e)}`)
-    } finally { setLoading(false) }
+    } finally {
+      lifecycleActionRef.current = false
+      setLoading(false)
+    }
   }, [isExamMode, isRecording])
   const handlePause = useCallback(async () => {
+    if (lifecycleActionRef.current) return
+    lifecycleActionRef.current = true
     setLoading(true)
-    try { await api.pause() } catch (e: unknown) { setError(getErrorMessage(e, '暂停失败')) } finally { setLoading(false) }
+    try { await api.pause() } catch (e: unknown) { setError(getErrorMessage(e, '暂停失败')) } finally {
+      lifecycleActionRef.current = false
+      setLoading(false)
+    }
   }, [])
   const handleResume = useCallback(async () => {
+    if (lifecycleActionRef.current) return
+    lifecycleActionRef.current = true
     setLoading(true)
-    try { await api.resume(selectedDevice ?? undefined, effectiveCandidateMic) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally { setLoading(false) }
+    try { await api.resume(selectedDevice ?? undefined, effectiveCandidateMic) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally {
+      lifecycleActionRef.current = false
+      setLoading(false)
+    }
   }, [selectedDevice, effectiveCandidateMic, isExamMode])
   const handleClear = useCallback(async () => {
+    if (clearingRef.current) return
     if (qaPairs.length > 0 || transcriptions.length > 0 || candidateTranscriptions.length > 0) {
       if (!window.confirm('确定要清空当前页的转录与答案吗？清空后不可恢复。')) return
     }
+    clearingRef.current = true
     setClearing(true)
     try {
       await api.clear()
       clearSession()
       setToastMessage('已清空')
     } catch (e: unknown) { setError(getErrorMessage(e, '清空失败')) }
-    finally { setClearing(false) }
+    finally {
+      clearingRef.current = false
+      setClearing(false)
+    }
   }, [qaPairs.length, transcriptions.length, candidateTranscriptions.length, clearSession, setToastMessage])
 
   const handleCancelAsk = useCallback(async () => {
+    if (cancellingAskRef.current) return
+    cancellingAskRef.current = true
     setCancellingAsk(true)
     try {
       await api.cancelAsk()
@@ -343,7 +373,10 @@ export default function ControlBar() {
     } catch (e: unknown) {
       setError(`取消生成失败：${getErrorMessage(e)}`)
     }
-    setTimeout(() => setCancellingAsk(false), 500)
+    setTimeout(() => {
+      cancellingAskRef.current = false
+      setCancellingAsk(false)
+    }, 500)
   }, [setToastMessage])
 
   const handleAsk = useCallback(async () => {

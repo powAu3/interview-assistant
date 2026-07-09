@@ -451,6 +451,36 @@ describe('ControlBar', () => {
     })
   })
 
+  it('prevents duplicate start requests while the interview is starting', async () => {
+    let resolveStart: ((value: unknown) => void) | null = null
+    const pendingStart = new Promise((resolve) => {
+      resolveStart = resolve
+    })
+    apiMock.start.mockReturnValueOnce(pendingStart)
+
+    render(<ControlBar />)
+
+    const start = screen.getByRole('button', { name: '开始面试' })
+    fireEvent.click(start)
+    fireEvent.click(start)
+
+    await waitFor(() => {
+      expect(apiMock.start).toHaveBeenCalledWith(1, null)
+    })
+    expect(apiMock.start).toHaveBeenCalledTimes(1)
+    expect(start).toBeDisabled()
+
+    await act(async () => {
+      if (!resolveStart) throw new Error('start resolver was not captured')
+      resolveStart({ ok: true })
+      await pendingStart
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '开始面试' })).not.toBeDisabled()
+    })
+  })
+
   it('prefers a candidate microphone different from the meeting audio device', async () => {
     useInterviewStore.setState({
       config: {
