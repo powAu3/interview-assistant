@@ -42,6 +42,16 @@ class MockFileReader {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('ControlBar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -301,6 +311,33 @@ describe('ControlBar', () => {
     fireEvent.click(screen.getByRole('button', { name: '刷新设备列表' }))
 
     expect(apiMock.getDevices).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('USB Headset Mic')).toBeInTheDocument()
+  })
+
+  it('ignores rapid duplicate audio device refreshes while refresh is pending', async () => {
+    const refresh = deferred<{ devices: any[]; platform: null }>()
+    apiMock.getDevices.mockReturnValueOnce(refresh.promise)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '选择会议音频设备' }))
+    const refreshButton = screen.getByRole('button', { name: '刷新设备列表' })
+    act(() => {
+      refreshButton.click()
+      refreshButton.click()
+    })
+
+    expect(apiMock.getDevices).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '刷新设备列表' })).toBeDisabled()
+
+    await act(async () => {
+      refresh.resolve({
+        devices: [{ id: 9, name: 'USB Headset Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' }],
+        platform: null,
+      })
+      await refresh.promise
+    })
+
     expect(await screen.findByText('USB Headset Mic')).toBeInTheDocument()
   })
 
@@ -577,6 +614,27 @@ describe('ControlBar', () => {
     })
   })
 
+  it('ignores rapid duplicate speaker tests while playback test is pending', async () => {
+    const output = deferred<{ ok: boolean; elapsed_sec: number }>()
+    apiMock.audioOutputTest.mockReturnValueOnce(output.promise)
+
+    render(<ControlBar />)
+
+    const outputButton = screen.getByRole('button', { name: '测试音频输出' })
+    act(() => {
+      outputButton.click()
+      outputButton.click()
+    })
+
+    expect(apiMock.audioOutputTest).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '测试音频输出' })).toBeDisabled()
+
+    await act(async () => {
+      output.resolve({ ok: true, elapsed_sec: 1 })
+      await output.promise
+    })
+  })
+
   it('opens a live candidate microphone meter and renders the input level', async () => {
     useInterviewStore.setState({
       config: {
@@ -598,5 +656,55 @@ describe('ControlBar', () => {
     })
     expect(await screen.findByText('50%')).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: '麦克风输入测试' })).toBeInTheDocument()
+  })
+
+  it('ignores rapid duplicate microphone meter starts while input test is pending', async () => {
+    const input = deferred<{
+      running: boolean
+      device_id: number
+      rms: number
+      peak: number
+      level_pct: number
+      has_signal: boolean
+      error: null
+    }>()
+    apiMock.audioInputMonitorStart.mockReturnValueOnce(input.promise)
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        candidate_asr_enabled: true,
+      },
+      devices: [
+        { id: 10, name: 'System Loopback', channels: 2, is_loopback: true, host_api: 'Core Audio' },
+        { id: 11, name: 'USB Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+    } as any)
+
+    render(<ControlBar />)
+
+    const inputButton = screen.getByRole('button', { name: '测试麦克风输入' })
+    act(() => {
+      inputButton.click()
+      inputButton.click()
+    })
+
+    expect(apiMock.audioInputMonitorStart).toHaveBeenCalledTimes(1)
+    expect(apiMock.audioInputMonitorStart).toHaveBeenCalledWith(11)
+    expect(screen.getByRole('button', { name: '测试麦克风输入' })).toBeDisabled()
+
+    await act(async () => {
+      input.resolve({
+        running: true,
+        device_id: 11,
+        rms: 0.02,
+        peak: 0.1,
+        level_pct: 50,
+        has_signal: true,
+        error: null,
+      })
+      await input.promise
+    })
+
+    expect(await screen.findByText('50%')).toBeInTheDocument()
   })
 })

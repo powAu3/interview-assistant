@@ -133,6 +133,9 @@ export default function ControlBar() {
   const lifecycleActionRef = useRef(false)
   const clearingRef = useRef(false)
   const cancellingAskRef = useRef(false)
+  const refreshingDevicesRef = useRef(false)
+  const testingOutputRef = useRef(false)
+  const testingInputRef = useRef(false)
   const [quickPrompts, setQuickPrompts] = useState<string[]>(getQuickPrompts)
   const [quickPromptRecent, setQuickPromptRecent] = useState<Record<string, number>>(readQuickPromptRecent)
   const orderedQuickPrompts = useMemo(
@@ -421,6 +424,8 @@ export default function ControlBar() {
   }, [])
 
   const handleRefreshDevices = useCallback(async () => {
+    if (refreshingDevicesRef.current) return
+    refreshingDevicesRef.current = true
     setRefreshingDevices(true)
     setError(null)
     try {
@@ -430,15 +435,18 @@ export default function ControlBar() {
     } catch (e: unknown) {
       setError(getErrorMessage(e, '刷新音频设备失败'))
     } finally {
+      refreshingDevicesRef.current = false
       setRefreshingDevices(false)
     }
   }, [setDevices, setToastMessage])
 
   const handleOutputTest = useCallback(async () => {
+    if (testingOutputRef.current) return
     if (isRecording && !isPaused) {
       setError('请先暂停或结束面试，再测试音频输出')
       return
     }
+    testingOutputRef.current = true
     setTestingOutput(true)
     setError(null)
     try {
@@ -447,11 +455,13 @@ export default function ControlBar() {
     } catch (e: unknown) {
       setError(getErrorMessage(e, '测试音频输出失败'))
     } finally {
+      testingOutputRef.current = false
       setTestingOutput(false)
     }
   }, [isRecording, isPaused, setToastMessage])
 
   const handleOpenInputMeter = useCallback(async () => {
+    if (testingInputRef.current) return
     if (selectedCandidateMic === null) {
       setError('请先选择麦克风')
       return
@@ -460,6 +470,7 @@ export default function ControlBar() {
       setError('请先暂停或结束面试，再测试麦克风输入')
       return
     }
+    testingInputRef.current = true
     setTestingInput(true)
     setError(null)
     setInputLevel({ level_pct: 0, rms: 0, peak: 0, has_signal: false })
@@ -476,6 +487,7 @@ export default function ControlBar() {
     } catch (e: unknown) {
       setError(getErrorMessage(e, '测试麦克风输入失败'))
     } finally {
+      testingInputRef.current = false
       setTestingInput(false)
     }
   }, [selectedCandidateMic, isRecording, isPaused])
