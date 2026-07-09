@@ -25,7 +25,7 @@ import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
 import { oneDark, oneLight, a11yDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, X } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ColorSchemeId } from '@/lib/colorScheme'
 
@@ -94,28 +94,61 @@ function prismThemeForScheme(id: ColorSchemeId) {
 }
 
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
   useEffect(() => {
     // 卸载时清掉残留 timer, 避免已卸载组件仍触发 setState
     return () => {
+      mountedRef.current = false
       if (timerRef.current !== null) clearTimeout(timerRef.current)
     }
   }, [])
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
+  const settle = (nextState: 'copied' | 'failed') => {
+    if (!mountedRef.current) return
+    setCopyState(nextState)
     if (timerRef.current !== null) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setCopied(false), 2000)
+    timerRef.current = setTimeout(() => {
+      if (mountedRef.current) setCopyState('idle')
+    }, 2000)
   }
+  const handleCopy = async () => {
+    if (copyState === 'copying') return
+    if (timerRef.current !== null) clearTimeout(timerRef.current)
+    setCopyState('copying')
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
+      await navigator.clipboard.writeText(text)
+      settle('copied')
+    } catch {
+      settle('failed')
+    }
+  }
+  const isCopying = copyState === 'copying'
+  const label = copyState === 'copied'
+    ? '已复制'
+    : copyState === 'failed'
+      ? '复制失败'
+      : isCopying
+        ? '复制中…'
+        : '复制'
   return (
     <button
+      type="button"
       onClick={handleCopy}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-bg-hover text-text-muted hover:text-text-primary transition-colors text-[11px]"
-      title="复制代码"
+      disabled={isCopying}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-bg-hover text-text-muted hover:text-text-primary transition-colors text-[11px] disabled:cursor-wait disabled:opacity-70"
+      title={copyState === 'failed' ? '复制失败，请检查浏览器权限' : '复制代码'}
+      aria-label={label}
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-accent-green" /> : <Copy className="w-3.5 h-3.5" />}
-      <span>{copied ? '已复制' : '复制'}</span>
+      {copyState === 'copied' ? (
+        <Check className="w-3.5 h-3.5 text-accent-green" />
+      ) : copyState === 'failed' ? (
+        <X className="w-3.5 h-3.5 text-accent-red" />
+      ) : (
+        <Copy className="w-3.5 h-3.5" />
+      )}
+      <span>{label}</span>
     </button>
   )
 }
