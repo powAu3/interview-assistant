@@ -135,6 +135,7 @@ export interface DeviceItem {
   name: string
   channels: number
   is_loopback: boolean
+  is_default_output?: boolean
   host_api: string
 }
 
