@@ -347,6 +347,7 @@ export default function JobTracker() {
   const listLoadSeqRef = useRef(0)
   const listMutationSeqRef = useRef(0)
   const reviewRequestSeqRef = useRef(0)
+  const createApplicationRef = useRef(false)
   const [showSecondaryFilters, setShowSecondaryFilters] = useState(false)
   const isCompactLayout = useCompactLayout()
   const isNarrowDetailLayout = useCompactLayout(1024)
@@ -548,6 +549,8 @@ export default function JobTracker() {
       setToastMessage('先填公司名，再创建记录')
       return
     }
+    if (createApplicationRef.current) return
+    createApplicationRef.current = true
     setCreating(true)
     try {
       const raw = await api.jobTrackerCreateApplication({
@@ -580,6 +583,7 @@ export default function JobTracker() {
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : '新增失败')
     } finally {
+      createApplicationRef.current = false
       setCreating(false)
     }
   }, [createDraft, markListMutated, setToastMessage])

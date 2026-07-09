@@ -736,6 +736,64 @@ describe('JobTracker', () => {
     expect(screen.queryByText('已创建 OpenAI')).not.toBeInTheDocument()
   })
 
+  it('ignores rapid duplicate quick-add submits while creation is pending', async () => {
+    const create = deferred<Record<string, unknown>>()
+    apiMock.jobTrackerCreateApplication.mockReturnValueOnce(create.promise)
+
+    render(<JobTracker />)
+    await waitFor(() => expect(screen.getAllByText('Acme').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: '新增记录' }))
+    const quickAdd = screen.getByText('快速新增').closest('section')
+    expect(quickAdd).not.toBeNull()
+    const scoped = within(quickAdd as HTMLElement)
+
+    fireEvent.change(scoped.getByPlaceholderText('例如 OpenAI'), { target: { value: 'OpenAI' } })
+    fireEvent.change(scoped.getByPlaceholderText('例如 Frontend Engineer'), { target: { value: 'Research Engineer' } })
+    fireEvent.change(scoped.getByPlaceholderText('例如 上海 / Remote'), { target: { value: 'Remote' } })
+
+    const createButton = scoped.getByRole('button', { name: '创建记录' })
+    act(() => {
+      createButton.click()
+      createButton.click()
+    })
+
+    expect(apiMock.jobTrackerCreateApplication).toHaveBeenCalledTimes(1)
+    expect(apiMock.jobTrackerCreateApplication).toHaveBeenCalledWith(expect.objectContaining({
+      company: 'OpenAI',
+      position: 'Research Engineer',
+      city: 'Remote',
+    }))
+    expect(scoped.getByRole('button', { name: '创建中...' })).toBeDisabled()
+
+    create.resolve({
+      id: 4,
+      company: 'OpenAI',
+      position: 'Research Engineer',
+      city: 'Remote',
+      notes: '',
+      stage: 'applied',
+      updated_at: 1710008200,
+      created_at: 1710008200,
+      applied_at: null,
+      next_followup_at: null,
+      interviewer_info: '',
+      feedback: '',
+      todos: [],
+      sort_order: 0,
+      review_summary: {
+        review_count: 0,
+        latest_review_id: null,
+        latest_avg_score: null,
+        latest_review_at: null,
+        latest_status: null,
+      },
+    })
+
+    await waitFor(() => expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0))
+    expect(screen.getByText('已创建 OpenAI')).toBeInTheDocument()
+  })
+
   it('allows quick add to capture rejected interview stages directly', async () => {
     apiMock.jobTrackerCreateApplication.mockResolvedValueOnce({
       id: 4,
