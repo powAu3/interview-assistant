@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Section } from './shared'
 import { useInterviewStore } from '@/stores/configStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
@@ -15,6 +15,8 @@ export default function GlobalShortcutsEditor() {
   const [recordingAction, setRecordingAction] = useState<ShortcutAction | null>(null)
   const [savingAction, setSavingAction] = useState<ShortcutAction | null>(null)
   const [resetting, setResetting] = useState(false)
+  const savingShortcutRef = useRef(false)
+  const resettingRef = useRef(false)
 
   useEffect(() => {
     if (!window.electronAPI?.getShortcuts) return
@@ -28,12 +30,14 @@ export default function GlobalShortcutsEditor() {
     const handleKeyDown = async (e: KeyboardEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      if (savingShortcutRef.current) return
       if (e.key === 'Escape') {
         setRecordingAction(null)
         return
       }
       const accelerator = getShortcutAccelerator(e)
       if (!accelerator || !window.electronAPI?.updateShortcuts) return
+      savingShortcutRef.current = true
       setSavingAction(recordingAction)
       try {
         const res = await window.electronAPI.updateShortcuts([
@@ -48,6 +52,7 @@ export default function GlobalShortcutsEditor() {
       } catch (err) {
         useInterviewStore.getState().setToastMessage(err instanceof Error ? err.message : '快捷键保存失败')
       } finally {
+        savingShortcutRef.current = false
         setSavingAction(null)
         setRecordingAction(null)
       }
@@ -62,6 +67,8 @@ export default function GlobalShortcutsEditor() {
 
   const resetDefaults = async () => {
     if (!window.electronAPI?.resetShortcuts) return
+    if (resettingRef.current) return
+    resettingRef.current = true
     setResetting(true)
     try {
       const res = await window.electronAPI.resetShortcuts()
@@ -74,6 +81,7 @@ export default function GlobalShortcutsEditor() {
     } catch (err) {
       useInterviewStore.getState().setToastMessage(err instanceof Error ? err.message : '重置失败')
     } finally {
+      resettingRef.current = false
       setResetting(false)
     }
   }
