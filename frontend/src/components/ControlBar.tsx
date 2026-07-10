@@ -133,6 +133,7 @@ export default function ControlBar() {
   const lifecycleActionRef = useRef(false)
   const clearingRef = useRef(false)
   const cancellingAskRef = useRef(false)
+  const cancellingAskResetTimerRef = useRef<number | null>(null)
   const refreshingDevicesRef = useRef(false)
   const testingOutputRef = useRef(false)
   const testingInputRef = useRef(false)
@@ -342,6 +343,14 @@ export default function ControlBar() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => () => {
+    if (cancellingAskResetTimerRef.current !== null) {
+      window.clearTimeout(cancellingAskResetTimerRef.current)
+      cancellingAskResetTimerRef.current = null
+    }
+    cancellingAskRef.current = false
+  }, [])
   const handleResume = useCallback(async () => {
     if (lifecycleActionRef.current) return
     lifecycleActionRef.current = true
@@ -379,7 +388,11 @@ export default function ControlBar() {
     } catch (e: unknown) {
       setError(`取消生成失败：${getErrorMessage(e)}`)
     }
-    setTimeout(() => {
+    if (cancellingAskResetTimerRef.current !== null) {
+      window.clearTimeout(cancellingAskResetTimerRef.current)
+    }
+    cancellingAskResetTimerRef.current = window.setTimeout(() => {
+      cancellingAskResetTimerRef.current = null
       cancellingAskRef.current = false
       setCancellingAsk(false)
     }, 500)

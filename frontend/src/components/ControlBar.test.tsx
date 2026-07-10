@@ -500,6 +500,25 @@ describe('ControlBar', () => {
     expect(await screen.findByText('取消生成失败：cancel down')).toBeInTheDocument()
   })
 
+  it('cleans up the cancel-generation reset timer on unmount', async () => {
+    vi.useFakeTimers()
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+    try {
+      useInterviewStore.setState({ streamingIds: ['qa-1'] } as any)
+      const { unmount } = render(<ControlBar />)
+
+      fireEvent.click(screen.getByRole('button', { name: '取消正在生成的回答' }))
+      await act(async () => {})
+
+      unmount()
+
+      expect(clearTimeoutSpy).toHaveBeenCalled()
+    } finally {
+      clearTimeoutSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('starts assist mode with meeting audio and candidate microphone devices', async () => {
     useInterviewStore.setState({
       config: {
