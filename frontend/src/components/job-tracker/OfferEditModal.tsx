@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import dayjs from 'dayjs'
 import { X } from 'lucide-react'
 import type { Application, Offer } from './types'
@@ -23,9 +23,12 @@ export default function OfferEditModal({ open, application, offer, onClose, onSa
   const [cons, setCons] = useState('')
   const [deadline, setDeadline] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (!open || !application) return
+    setSaveError(null)
     if (offer) {
       setBaseSalary(offer.base_salary)
       setTotalPkg(offer.total_pkg_note)
@@ -54,7 +57,10 @@ export default function OfferEditModal({ open, application, offer, onClose, onSa
   if (!open || !application) return null
 
   const submit = async () => {
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
+    setSaveError(null)
     try {
       const benefits = benefitsText
         .split('\n')
@@ -74,7 +80,10 @@ export default function OfferEditModal({ open, application, offer, onClose, onSa
         deadline: deadline ? dayjs(deadline).unix() : null,
       })
       onClose()
+    } catch (error) {
+      setSaveError(error instanceof Error && error.message ? error.message : '保存 Offer 失败，请重试')
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -92,6 +101,7 @@ export default function OfferEditModal({ open, application, offer, onClose, onSa
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             className="p-2 rounded-lg hover:bg-bg-tertiary text-text-muted"
             aria-label="关闭"
           >
@@ -148,18 +158,21 @@ export default function OfferEditModal({ open, application, offer, onClose, onSa
             />
           </Field>
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-bg-hover bg-bg-tertiary/20">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-xs rounded-xl border border-bg-hover hover:bg-bg-tertiary">
-            取消
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={submit}
-            className="px-4 py-2 text-xs rounded-xl bg-accent-blue text-white font-medium disabled:opacity-50"
-          >
-            {saving ? '保存中…' : '保存'}
-          </button>
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-bg-hover bg-bg-tertiary/20">
+          {saveError ? <p role="alert" className="min-w-0 text-xs text-accent-red">{saveError}</p> : <span />}
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={onClose} disabled={saving} className="px-4 py-2 text-xs rounded-xl border border-bg-hover hover:bg-bg-tertiary disabled:opacity-50">
+              取消
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={submit}
+              className="px-4 py-2 text-xs rounded-xl bg-accent-blue text-white font-medium disabled:opacity-50"
+            >
+              {saving ? '保存中…' : '保存'}
+            </button>
+          </div>
         </div>
       </div>
       <style>{`
