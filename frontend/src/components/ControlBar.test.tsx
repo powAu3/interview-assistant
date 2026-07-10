@@ -314,6 +314,39 @@ describe('ControlBar', () => {
     expect(await screen.findByText('USB Headset Mic')).toBeInTheDocument()
   })
 
+  it('uses fresh interview copy when refreshing devices after mode changes', async () => {
+    apiMock.getDevices.mockResolvedValue({
+      devices: [
+        { id: 9, name: 'USB Headset Mic', channels: 1, is_loopback: false, host_api: 'Core Audio' },
+      ],
+      platform: { platform: 'Darwin', needs_virtual_device: false, instructions: '' },
+    })
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        written_exam_mode: true,
+      },
+    } as any)
+
+    render(<ControlBar />)
+
+    act(() => {
+      useInterviewStore.setState({
+        config: {
+          ...(useInterviewStore.getState().config as object),
+          written_exam_mode: false,
+        },
+      } as any)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '选择会议音频设备' }))
+    fireEvent.click(screen.getByRole('button', { name: '刷新设备列表' }))
+
+    await waitFor(() => {
+      expect(useInterviewStore.getState().toastMessage).toBe('音频设备已刷新')
+    })
+  })
+
   it('ignores rapid duplicate audio device refreshes while refresh is pending', async () => {
     const refresh = deferred<{ devices: any[]; platform: null }>()
     apiMock.getDevices.mockReturnValueOnce(refresh.promise)

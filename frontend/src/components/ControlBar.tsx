@@ -441,7 +441,7 @@ export default function ControlBar() {
       refreshingDevicesRef.current = false
       setRefreshingDevices(false)
     }
-  }, [setDevices, setToastMessage])
+  }, [isExamMode, setDevices, setToastMessage])
 
   const handleOutputTest = useCallback(async () => {
     if (testingOutputRef.current) return
