@@ -674,6 +674,37 @@ describe('ReviewSessionDetail', () => {
     expect(await screen.findByText('复盘分析已开始，请稍后刷新查看结果')).toBeInTheDocument()
   })
 
+  it('refreshes the detail immediately when analysis is already done', async () => {
+    apiMock.reviewSessionDetail
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        status: 'completed',
+        avg_score: null,
+        summary_markdown: null,
+        strong_points: [],
+        weak_points: [],
+      })
+      .mockResolvedValueOnce({
+        ...baseDetail,
+        status: 'completed',
+        avg_score: 8.4,
+        summary_markdown: '已有复盘内容已同步。',
+        strong_points: ['结构清楚'],
+      })
+    apiMock.reviewTriggerAnalysis.mockResolvedValueOnce({ status: 'done' })
+
+    render(<ReviewSessionDetail sessionId={7} onBack={vi.fn()} />)
+
+    const action = await screen.findByRole('button', { name: /生成复盘/ })
+    fireEvent.click(action)
+
+    expect(await screen.findByText('复盘已完成')).toBeInTheDocument()
+    expect(screen.getByText('已有复盘内容已同步。')).toBeInTheDocument()
+    expect(screen.getByText('8.4')).toBeInTheDocument()
+    expect(apiMock.reviewSessionDetail).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: /生成复盘/ })).not.toBeInTheDocument()
+  })
+
   it('refreshes an analyzing review detail until the generated analysis is ready', async () => {
     vi.useFakeTimers()
     apiMock.reviewSessionDetail

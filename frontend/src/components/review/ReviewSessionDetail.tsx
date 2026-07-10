@@ -224,6 +224,14 @@ export default function ReviewSessionDetail({ sessionId, onBack }: Props) {
         setDetail((prev) => prev?.id === targetSessionId ? { ...prev, status: 'analyzing' } : prev)
         setInlineNotice({ tone: 'info', message: '复盘分析已开始，请稍后刷新查看结果' })
       } else if (result.status === 'done') {
+        const data = parseReviewSessionDetail(await api.reviewSessionDetail(targetSessionId) as Record<string, unknown>)
+        if (!isActiveSession(targetSessionId)) return
+        setDetail(data)
+        setEditForm({
+          title: data.title || '',
+          company: data.company || '',
+          role: data.role || '',
+        })
         setInlineNotice({ tone: 'success', message: '复盘已完成' })
       }
     } catch (err) {
