@@ -221,6 +221,7 @@ export default function ModelsTab() {
   const savingRef = useRef(false)
   const testingIdxRef = useRef<number | null>(null)
   const healthCheckingRef = useRef(false)
+  const llmSavingRef = useRef(false)
 
   const [llmForm, setLlmForm] = useState({
     temperature: DEFAULT_TEMPERATURE,
@@ -678,6 +679,8 @@ export default function ModelsTab() {
   }
 
   const handleSaveLlm = async () => {
+    if (llmSavingRef.current) return
+    llmSavingRef.current = true
     setLlmSaving(true)
     setLlmSaveState('saving')
     setLlmSaveError(null)
@@ -694,6 +697,7 @@ export default function ModelsTab() {
       setLlmSaveState('error')
       useInterviewStore.getState().setToastMessage(message)
     } finally {
+      llmSavingRef.current = false
       setLlmSaving(false)
     }
   }

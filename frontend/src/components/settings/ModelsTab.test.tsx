@@ -481,6 +481,29 @@ describe('ModelsTab state sync', () => {
     })
   })
 
+  it('ignores rapid duplicate generation parameter saves while saving is pending', async () => {
+    const save = createDeferred<{ ok: boolean }>()
+    apiMock.updateConfig.mockReturnValueOnce(save.promise)
+
+    render(<ModelsTab />)
+
+    await screen.findByText('保存生成参数')
+    const saveButton = screen.getByRole('button', { name: '保存生成参数' })
+
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+
+    expect(apiMock.updateConfig).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled()
+
+    await act(async () => {
+      save.resolve({ ok: true })
+      await save.promise
+    })
+  })
+
   it('shows model health detail as a tooltip in the model list', async () => {
     apiMock.getModelsHealth.mockResolvedValue({
       health: { 0: 'error' },
