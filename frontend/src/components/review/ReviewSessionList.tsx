@@ -224,6 +224,9 @@ export default function ReviewSessionList({ onViewDetail }: Props) {
           }
         })
         setToastMessage('已加入复盘生成队列')
+      } else if (result.status === 'done') {
+        setToastMessage('复盘已完成')
+        void loadSessions(page, { silent: true })
       }
     } catch (err) {
       setToastMessage(getErrorMessage(err, '触发分析失败'))

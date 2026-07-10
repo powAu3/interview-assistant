@@ -315,6 +315,54 @@ describe('ReviewSessionList', () => {
     })
   })
 
+  it('refreshes sessions when a manual generation trigger is already done', async () => {
+    apiMock.reviewSessions
+      .mockResolvedValueOnce({
+        total: 1,
+        page: 1,
+        page_size: 20,
+        items: [{
+          id: 41,
+          status: 'analysis_failed',
+          started_at: 1710200000,
+          ended_at: 1710202100,
+          source: 'assist',
+          title: 'OpenAI 一面',
+          company: 'OpenAI',
+          role: 'Research Engineer',
+          turn_count: 7,
+          avg_score: null,
+          application_id: null,
+          application: null,
+        }],
+      })
+      .mockResolvedValueOnce({
+        total: 1,
+        page: 1,
+        page_size: 20,
+        items: [{
+          ...reviewSession(41, 'OpenAI 一面'),
+          company: 'OpenAI',
+          role: 'Research Engineer',
+          avg_score: 8.1,
+          summary_markdown: '最新复盘结果已同步。',
+        }],
+      })
+    apiMock.reviewTriggerAnalysis.mockResolvedValueOnce({ status: 'done' })
+
+    render(<ReviewSessionList onViewDetail={vi.fn()} />)
+
+    await screen.findByText('OpenAI 一面')
+    fireEvent.click(screen.getByRole('button', { name: '重试生成' }))
+
+    await waitFor(() => {
+      expect(apiMock.reviewSessions).toHaveBeenCalledTimes(2)
+    })
+    expect(useInterviewStore.getState().toastMessage).toBe('复盘已完成')
+    expect(screen.getByText('最新复盘结果已同步。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重试生成' })).not.toBeInTheDocument()
+  })
+
   it('describes the review toggle as automatic analysis generation', async () => {
     render(<ReviewSessionList onViewDetail={vi.fn()} />)
 
