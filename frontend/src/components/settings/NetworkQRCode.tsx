@@ -9,18 +9,34 @@ export default function NetworkQRCode() {
   const [networkUrl, setNetworkUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(buildApiUrl('/api/network-info'))
-      .then(r => r.json())
-      .then(async (data) => {
-        setNetworkUrl(data.url)
-        const src = await QRCode.toDataURL(data.url, {
+    let cancelled = false
+
+    async function loadNetworkQr() {
+      try {
+        const response = await fetch(buildApiUrl('/api/network-info'))
+        if (cancelled) return
+        const data = await response.json() as { url?: unknown }
+        if (cancelled) return
+        const url = typeof data.url === 'string' ? data.url : ''
+        if (!url) return
+
+        setNetworkUrl(url)
+        const src = await QRCode.toDataURL(url, {
           width: 200,
           margin: 2,
           color: { dark: '#000000', light: '#ffffff' },
         })
+        if (cancelled) return
         setQrSrc(src)
-      })
-      .catch(() => {})
+      } catch {
+        // Network QR is optional; keep settings usable if LAN discovery fails.
+      }
+    }
+
+    void loadNetworkQr()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   if (!networkUrl) return null
