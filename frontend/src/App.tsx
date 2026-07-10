@@ -60,6 +60,7 @@ export default function App() {
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
   const [moduleMenuOpen, setModuleMenuOpen] = useState(false)
+  const serverScreenAskRef = useRef(false)
   const sessionAnchorRef = useRef<HTMLButtonElement | null>(null)
   const moduleMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -137,6 +138,8 @@ export default function App() {
   }, [])
 
   const handleServerScreenAsk = useCallback(async () => {
+    if (serverScreenAskRef.current) return
+    serverScreenAskRef.current = true
     setServerScreenLoading(true)
     try {
       await api.askFromServerScreen()
@@ -144,6 +147,7 @@ export default function App() {
     } catch (e: unknown) {
       useInterviewStore.getState().setToastMessage(e instanceof Error ? e.message : '提交失败')
     } finally {
+      serverScreenAskRef.current = false
       setServerScreenLoading(false)
     }
   }, [])

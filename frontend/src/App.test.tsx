@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { useInterviewStore } from '@/stores/configStore'
+import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 
 const apiMock = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ const apiMock = vi.hoisted(() => ({
   checkModelsHealth: vi.fn(),
   kbStatus: vi.fn(),
   updateConfig: vi.fn(),
+  askFromServerScreen: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -32,6 +34,7 @@ vi.mock('@/components/JobTracker', () => ({ default: () => <div>jobs</div> }))
 
 describe('App bootstrap', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     useInterviewStore.setState({
       config: null,
       devices: [],
@@ -54,6 +57,7 @@ describe('App bootstrap', () => {
       isPaused: false,
       wsConnected: true,
     } as any)
+    useUiPrefsStore.setState({ appMode: 'assist' })
     apiMock.getConfig.mockResolvedValue({
       models: [{ name: 'demo', supports_vision: false }],
       active_model: 0,
@@ -66,6 +70,7 @@ describe('App bootstrap', () => {
     apiMock.getOptions.mockResolvedValue({ positions: [], languages: [] })
     apiMock.checkModelsHealth.mockResolvedValue(undefined)
     apiMock.updateConfig.mockResolvedValue({ ok: true })
+    apiMock.askFromServerScreen.mockResolvedValue({ ok: true })
     apiMock.kbStatus.mockResolvedValue({
       enabled: false,
       total_docs: 0,
@@ -139,6 +144,37 @@ describe('App bootstrap', () => {
     const trigger = await screen.findByRole('button', { name: /连接失败：401 unauthorized/ })
     expect(trigger).toHaveAttribute('title', expect.stringContaining('401 unauthorized'))
   })
+
+  it('prevents duplicate mobile server screen asks while one is in flight', async () => {
+    let resolveAsk: ((value: unknown) => void) | null = null
+    const pendingAsk = new Promise((resolve) => {
+      resolveAsk = resolve
+    })
+    apiMock.askFromServerScreen.mockReturnValueOnce(pendingAsk)
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 答案' }))
+    const screenAsk = screen.getByRole('button', { name: '服务端截图审题' })
+
+    act(() => {
+      screenAsk.click()
+      screenAsk.click()
+    })
+
+    expect(apiMock.askFromServerScreen).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '截图审题提交中…' })).toBeDisabled()
+
+    await act(async () => {
+      if (!resolveAsk) throw new Error('server screen ask resolver was not captured')
+      resolveAsk({ ok: true })
+      await pendingAsk
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '服务端截图审题' })).not.toBeDisabled()
+    })
+  })
 })
 
 describe('Window control buttons', () => {
@@ -147,6 +183,7 @@ describe('Window control buttons', () => {
   const originalElectronAPI = window.electronAPI
 
   beforeEach(() => {
+    vi.clearAllMocks()
     useInterviewStore.setState({
       config: null,
       devices: [],
@@ -169,6 +206,7 @@ describe('Window control buttons', () => {
       isPaused: false,
       wsConnected: true,
     } as any)
+    useUiPrefsStore.setState({ appMode: 'assist' })
     apiMock.getConfig.mockResolvedValue({
       models: [{ name: 'demo', supports_vision: false }],
       active_model: 0,
@@ -181,6 +219,7 @@ describe('Window control buttons', () => {
     apiMock.getOptions.mockResolvedValue({ positions: [], languages: [] })
     apiMock.checkModelsHealth.mockResolvedValue(undefined)
     apiMock.updateConfig.mockResolvedValue({ ok: true })
+    apiMock.askFromServerScreen.mockResolvedValue({ ok: true })
     apiMock.kbStatus.mockResolvedValue({
       enabled: false,
       total_docs: 0,
