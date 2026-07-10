@@ -15,6 +15,16 @@ const apiMock = vi.hoisted(() => ({
   askFromServerScreen: vi.fn(),
 }))
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 vi.mock('@/lib/api', () => ({
   api: apiMock,
 }))
@@ -130,6 +140,53 @@ describe('App bootstrap', () => {
     fireEvent.click(disabledOption)
 
     expect(apiMock.updateConfig).not.toHaveBeenCalled()
+  })
+
+  it('serializes priority model changes so the latest selection wins', async () => {
+    const firstSave = deferred<{ ok: boolean }>()
+    apiMock.getConfig.mockResolvedValue({
+      models: [
+        { name: 'First Model', supports_vision: false, enabled: true },
+        { name: 'Second Model', supports_vision: false, enabled: true },
+        { name: 'Third Model', supports_vision: true, enabled: true },
+      ],
+      active_model: 0,
+      api_key_set: true,
+      think_mode: false,
+      think_effort: 'off',
+      stt_provider: 'whisper',
+    })
+    apiMock.updateConfig
+      .mockReturnValueOnce(firstSave.promise)
+      .mockResolvedValue({ ok: true })
+
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /优先答题模型 First Model/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Second Model/ }))
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalledWith({ active_model: 1 })
+    })
+    expect(apiMock.updateConfig).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /优先答题模型 First Model/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Third Model/ }))
+
+    expect(apiMock.updateConfig).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      firstSave.resolve({ ok: true })
+      await firstSave.promise
+    })
+
+    await waitFor(() => {
+      expect(apiMock.updateConfig).toHaveBeenCalledTimes(2)
+    })
+    expect(apiMock.updateConfig).toHaveBeenNthCalledWith(2, { active_model: 2 })
+    await waitFor(() => {
+      expect(useInterviewStore.getState().toastMessage).toBe('已设为优先答题模型：Third Model')
+    })
   })
 
   it('surfaces model health detail in the priority model tooltip', async () => {

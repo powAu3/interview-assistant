@@ -61,6 +61,8 @@ export default function App() {
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
   const [moduleMenuOpen, setModuleMenuOpen] = useState(false)
   const serverScreenAskRef = useRef(false)
+  const modelChangeSavingRef = useRef(false)
+  const pendingModelChangeRef = useRef<number | null>(null)
   const sessionAnchorRef = useRef<HTMLButtonElement | null>(null)
   const moduleMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -128,13 +130,33 @@ export default function App() {
   }, [appMode, toggleAssistTranscriptCollapsed])
 
   const handleModelChange = useCallback(async (active_model: number) => {
-    const targetModel = useInterviewStore.getState().config?.models?.[active_model]
-    if (targetModel?.enabled === false) {
-      useInterviewStore.getState().setToastMessage('该模型已停用，请先在设置中启用后再设为优先')
-      return
+    pendingModelChangeRef.current = active_model
+    if (modelChangeSavingRef.current) return
+
+    modelChangeSavingRef.current = true
+    try {
+      while (pendingModelChangeRef.current !== null) {
+        const nextActiveModel = pendingModelChangeRef.current
+        pendingModelChangeRef.current = null
+        const targetModel = useInterviewStore.getState().config?.models?.[nextActiveModel]
+        if (!targetModel) {
+          useInterviewStore.getState().setToastMessage('未找到该模型，请刷新配置后重试')
+          continue
+        }
+        if (targetModel.enabled === false) {
+          useInterviewStore.getState().setToastMessage('该模型已停用，请先在设置中启用后再设为优先')
+          continue
+        }
+        try {
+          await updateConfigAndRefresh({ active_model: nextActiveModel })
+          useInterviewStore.getState().setToastMessage(`已设为优先答题模型：${targetModel.name}`)
+        } catch (error) {
+          useInterviewStore.getState().setToastMessage(error instanceof Error ? error.message : '设置优先模型失败')
+        }
+      }
+    } finally {
+      modelChangeSavingRef.current = false
     }
-    await updateConfigAndRefresh({ active_model })
-    useInterviewStore.getState().setToastMessage('已设为优先答题模型（实时辅助优先占用该路）')
   }, [])
 
   const handleServerScreenAsk = useCallback(async () => {
