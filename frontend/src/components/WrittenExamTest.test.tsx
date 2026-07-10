@@ -154,6 +154,42 @@ describe('WrittenExamTest', () => {
     expect(apiMock.examPreflightRun).toHaveBeenCalledTimes(2)
   })
 
+  it('ignores a stale status hydration after a new preflight starts', async () => {
+    const staleStatus = deferred<Record<string, unknown>>()
+    apiMock.examPreflightStatus
+      .mockReturnValueOnce(staleStatus.promise)
+      .mockResolvedValueOnce({
+        running: true,
+        preflight_id: 'preflight-new',
+        steps: {
+          screenshot: { status: 'running', detail: 'new preflight is running' },
+        },
+      })
+    apiMock.examPreflightRun.mockResolvedValueOnce({ ok: true, preflight_id: 'preflight-new' })
+
+    render(<WrittenExamTest />)
+
+    fireEvent.click(screen.getByRole('button', { name: '开始检测' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('new preflight is running')).toBeInTheDocument()
+    })
+
+    await act(async () => {
+      staleStatus.resolve({
+        running: false,
+        steps: {
+          screenshot: { status: 'pass', detail: 'stale preflight result' },
+        },
+      })
+      await staleStatus.promise
+    })
+
+    expect(screen.queryByText('stale preflight result')).not.toBeInTheDocument()
+    expect(screen.getByText('new preflight is running')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重新' })).toBeDisabled()
+  })
+
   it('hydrates a completed preflight result on mount', async () => {
     apiMock.examPreflightStatus.mockResolvedValueOnce({
       running: false,

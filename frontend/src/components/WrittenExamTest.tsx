@@ -139,6 +139,7 @@ export default function WrittenExamTest() {
   const activePreflightIdRef = useRef<string | null>(null)
   const awaitingPreflightStartRef = useRef(false)
   const runRequestRef = useRef(false)
+  const preflightGenerationRef = useRef(0)
 
   const setCurrentPreflightId = useCallback((preflightId: string | null) => {
     activePreflightIdRef.current = preflightId
@@ -153,8 +154,10 @@ export default function WrittenExamTest() {
   }, [setCurrentPreflightId])
 
   const hydrateStatus = useCallback(async () => {
+    const generation = preflightGenerationRef.current
     try {
       const status = await api.examPreflightStatus() as ExamPreflightStatus
+      if (generation !== preflightGenerationRef.current) return
       const statusSteps = normalizeStatusSteps(status?.steps)
       const statusPreflightId = status?.preflight_id ? String(status.preflight_id) : null
       const currentPreflightId = activePreflightIdRef.current
@@ -302,8 +305,14 @@ export default function WrittenExamTest() {
     void hydrateStatus()
   }, [hydrateStatus])
 
+  useEffect(() => () => {
+    preflightGenerationRef.current += 1
+  }, [])
+
   const handleRun = async () => {
     if (runRequestRef.current || running) return
+    const generation = preflightGenerationRef.current + 1
+    preflightGenerationRef.current = generation
     runRequestRef.current = true
     setRunning(true)
     setDone(false)
@@ -313,11 +322,13 @@ export default function WrittenExamTest() {
     awaitingPreflightStartRef.current = true
     try {
       const response = await api.examPreflightRun() as ExamPreflightRunResponse
+      if (generation !== preflightGenerationRef.current) return
       const preflightId = response?.preflight_id ? String(response.preflight_id) : null
       if (preflightId) setCurrentPreflightId(preflightId)
       awaitingPreflightStartRef.current = false
       if (preflightId) void hydrateStatus()
     } catch (error: any) {
+      if (generation !== preflightGenerationRef.current) return
       const message = error?.message || '笔试链路检测请求失败，请确认后端服务已启动'
       runRequestRef.current = false
       awaitingPreflightStartRef.current = false
