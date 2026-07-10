@@ -34,6 +34,11 @@ type EditorDraft = {
   todoText: string
 }
 
+type SaveNotice = {
+  message: string
+  tone: 'info' | 'error'
+}
+
 type Props = {
   applications: Application[]
   offerByAppId: Map<number, Offer>
@@ -198,6 +203,10 @@ function getScheduleMeta(app: Application) {
   }
 }
 
+function getSaveErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : '保存失败，请重试'
+}
+
 function linkedReviewCount(summary: ApplicationReviewSummary | null | undefined): number {
   return Number(summary?.linked_review_count ?? summary?.review_count ?? 0)
 }
@@ -292,7 +301,7 @@ export default function ApplicationsTable({
 
   const [draft, setDraft] = useState<EditorDraft | null>(null)
   const [saving, setSaving] = useState(false)
-  const [saveNotice, setSaveNotice] = useState<string | null>(null)
+  const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null)
   const [editCoreOpen, setEditCoreOpen] = useState(false)
   const [extrasOpen, setExtrasOpen] = useState(false)
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
@@ -364,7 +373,7 @@ export default function ApplicationsTable({
     } else {
       setEditCoreOpen(false)
       setExtrasOpen(false)
-      setSaveNotice('进度已打开')
+      setSaveNotice({ message: '进度已打开', tone: 'info' })
     }
     onConsumeDetailIntent?.()
   }, [compactDetailLayout, current?.id, detailIntent, onConsumeDetailIntent])
@@ -378,7 +387,10 @@ export default function ApplicationsTable({
         ? pickPatchKeys(patch, EXTRA_PATCH_KEYS)
         : patch
     if (Object.keys(scopedPatch).length === 0) {
-      setSaveNotice(scope === 'core' ? '核心无变更' : scope === 'extras' ? '补充无变更' : '没有新变更')
+      setSaveNotice({
+        message: scope === 'core' ? '核心无变更' : scope === 'extras' ? '补充无变更' : '没有新变更',
+        tone: 'info',
+      })
       return
     }
     savingRef.current = true
@@ -386,9 +398,16 @@ export default function ApplicationsTable({
     try {
       const result = await Promise.resolve(onPatch(current.id, scopedPatch))
       if (result !== false) {
-        setSaveNotice(scope === 'core' ? '已保存核心信息' : scope === 'extras' ? '已保存补充信息' : '已保存')
+        setSaveNotice({
+          message: scope === 'core' ? '已保存核心信息' : scope === 'extras' ? '已保存补充信息' : '已保存',
+          tone: 'info',
+        })
         if (scope === 'core' || scope === 'all') setEditCoreOpen(false)
+      } else {
+        setSaveNotice({ message: '保存失败，请重试', tone: 'error' })
       }
+    } catch (error) {
+      setSaveNotice({ message: getSaveErrorMessage(error), tone: 'error' })
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -901,8 +920,12 @@ export default function ApplicationsTable({
                     </span>
                   </div>
                   {saveNotice ? (
-                    <div className="mt-2 text-[11px] font-medium text-accent-blue">
-                      {saveNotice}
+                    <div
+                      className={`mt-2 text-[11px] font-medium ${
+                        saveNotice.tone === 'error' ? 'text-accent-red' : 'text-accent-blue'
+                      }`}
+                    >
+                      {saveNotice.message}
                     </div>
                   ) : null}
                 </div>

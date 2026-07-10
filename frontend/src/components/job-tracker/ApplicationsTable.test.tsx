@@ -88,6 +88,57 @@ describe('ApplicationsTable', () => {
     expect(screen.getByText('已保存核心信息')).toBeInTheDocument()
   })
 
+  it('shows an inline failure notice when a progress save is rejected by the parent', async () => {
+    const onPatch = vi.fn().mockResolvedValue(false)
+
+    render(
+      <ApplicationsTable
+        applications={[app()]}
+        offerByAppId={new Map()}
+        onPatch={onPatch}
+        onDelete={vi.fn()}
+        onOpenOffer={vi.fn()}
+        onOpenReviews={vi.fn()}
+        search=""
+        selectedId={1}
+        onSelect={vi.fn()}
+        compactDetailLayout={false}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('当前阶段'), { target: { value: 'interview2' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存进度' }))
+
+    expect(onPatch).toHaveBeenCalledWith(1, expect.objectContaining({ stage: 'interview2' }))
+    expect(await screen.findByText('保存失败，请重试')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存进度' })).toBeEnabled()
+  })
+
+  it('shows thrown save errors inline near the active application', async () => {
+    const onPatch = vi.fn().mockRejectedValue(new Error('后端保存失败'))
+
+    render(
+      <ApplicationsTable
+        applications={[app()]}
+        offerByAppId={new Map()}
+        onPatch={onPatch}
+        onDelete={vi.fn()}
+        onOpenOffer={vi.fn()}
+        onOpenReviews={vi.fn()}
+        search=""
+        selectedId={1}
+        onSelect={vi.fn()}
+        compactDetailLayout={false}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('当前阶段'), { target: { value: 'interview2' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存进度' }))
+
+    expect(await screen.findByText('后端保存失败')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存进度' })).toBeEnabled()
+  })
+
   it('keeps short linked reviews reachable without promoting them to formal summaries', () => {
     const item = app({
       review_summary: {
