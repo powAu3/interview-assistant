@@ -683,4 +683,9 @@ def chat_stream_single_model(
             "LLM single-model error model=%s kind=%s: %s",
             model_name, type(err).__name__, err, exc_info=True,
         )
-        yield ("text", f"\n\n[{err.user_msg}]")
+        # Keep transport failures out of the answer text. The answer worker
+        # needs a terminal error state so a failed request is not persisted or
+        # presented as a successful answer card.
+        if err is e:
+            raise
+        raise err from e

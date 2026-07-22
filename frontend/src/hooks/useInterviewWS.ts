@@ -163,8 +163,12 @@ export function useInterviewWS(active = true) {
         break
       case 'answer_error':
         if (msg.exam_preflight_id) return
-        s.errorAnswer(msg.id as string, (msg.message as string) || '答案保存失败')
-        s.pushToast(`答案保存失败: ${(msg.message as string) || '未知原因'}`, 'error')
+        {
+          const message = (msg.message as string) || '答案处理失败'
+          const prefix = msg.stage === 'persistence' ? '答案保存失败' : '答案生成失败'
+          s.errorAnswer(msg.id as string, message)
+          s.pushToast(message.startsWith(prefix) ? message : `${prefix}: ${message}`, 'error')
+        }
         break
       case 'vision_verify':
         {

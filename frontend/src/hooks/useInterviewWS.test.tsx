@@ -122,6 +122,39 @@ describe('useInterviewWS', () => {
     expect(state.qaPairs[1].answer).toContain('part')
   })
 
+  it('labels generation and persistence answer failures accurately', () => {
+    render(<Harness />)
+    const ws = FakeWebSocket.instances[0]
+
+    act(() => {
+      ws.emitOpen()
+      ws.emitMessage({ type: 'answer_start', id: 'q-generation', question: '生成失败题' })
+      ws.emitMessage({
+        type: 'answer_error',
+        id: 'q-generation',
+        stage: 'generation',
+        message: '大模型响应超时',
+      })
+      ws.emitMessage({ type: 'answer_start', id: 'q-persistence', question: '保存失败题' })
+      ws.emitMessage({
+        type: 'answer_error',
+        id: 'q-persistence',
+        stage: 'persistence',
+        message: '答案保存失败',
+      })
+    })
+
+    const state = useInterviewStore.getState()
+    expect(state.qaPairs).toMatchObject([
+      { id: 'q-generation', status: 'error', errorMessage: '大模型响应超时' },
+      { id: 'q-persistence', status: 'error', errorMessage: '答案保存失败' },
+    ])
+    expect(state.toasts.slice(-2).map((toast) => toast.message)).toEqual([
+      '答案生成失败: 大模型响应超时',
+      '答案保存失败',
+    ])
+  })
+
   it('does not connect while inactive and connects after activation', () => {
     const { rerender } = render(<Harness active={false} />)
 

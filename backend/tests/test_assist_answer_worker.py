@@ -1290,7 +1290,12 @@ def test_process_question_parallel_flushes_clean_tail_before_error(
 
     chunks = [event["chunk"] for event in broadcasts if event["type"] == "answer_chunk"]
     assert chunks[0] == "用 AOF"
-    assert "生成答案出错" in chunks[1]
+    assert len(chunks) == 1
+    error = next(event for event in broadcasts if event["type"] == "answer_error")
+    assert error["stage"] == "generation"
+    assert error["message"] == "生成答案失败，请稍后重试。"
+    assert not any(event["type"] == "answer_done" for event in broadcasts)
+    assert get_session().qa_pairs == []
 
 
 def test_process_question_parallel_flushes_batched_chunks_before_error(
@@ -1323,7 +1328,41 @@ def test_process_question_parallel_flushes_batched_chunks_before_error(
 
     chunks = [event["chunk"] for event in broadcasts if event["type"] == "answer_chunk"]
     assert chunks[0] == "chunk-1chunk-2"
-    assert "生成答案出错" in chunks[1]
+    assert len(chunks) == 1
+    error = next(event for event in broadcasts if event["type"] == "answer_error")
+    assert error["stage"] == "generation"
+    assert error["message"] == "生成答案失败，请稍后重试。"
+    assert not any(event["type"] == "answer_done" for event in broadcasts)
+    assert get_session().qa_pairs == []
+
+
+def test_process_question_parallel_exposes_typed_llm_error_without_persisting_it(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from services.llm import LLMTimeout
+
+    broadcasts: list[dict] = []
+
+    def fake_stream(*_args, **_kwargs):
+        yield ("text", "已生成的部分")
+        raise LLMTimeout("provider timeout")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("超时的问题？", None, True, "manual_text", {"origin": "manual"}),
+        seq=3,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    error = next(event for event in broadcasts if event["type"] == "answer_error")
+    assert error["stage"] == "generation"
+    assert error["message"] == "大模型响应超时（请检查网络或更换模型）。"
+    assert "provider timeout" not in error["message"]
+    assert not any(event["type"] == "answer_done" for event in broadcasts)
+    assert get_session().qa_pairs == []
 
 
 def test_process_question_parallel_broadcasts_answer_error_when_commit_fails(
@@ -1353,6 +1392,7 @@ def test_process_question_parallel_broadcasts_answer_error_when_commit_fails(
     assert "answer_error" in event_types
     err_event = next(e for e in broadcasts if e["type"] == "answer_error")
     assert err_event["id"] is not None
+    assert err_event["stage"] == "persistence"
     assert "保存失败" in err_event["message"]
     assert get_session().qa_pairs == []
     assert get_session().conversation_history == []

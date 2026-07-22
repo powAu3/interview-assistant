@@ -48,6 +48,7 @@ const {
   getPromptOverlayInitialWidth,
   relayChildOutput,
 } = require('./windowOptions');
+const { createMultiScreenBatch } = require('./multiScreenBatch');
 
 const pkg = require('./package.json');
 
@@ -581,12 +582,6 @@ function getBackend(pathname) {
   });
 }
 
-const multiServerScreenBatch = {
-  images: [],
-  timer: null,
-  submitting: false,
-};
-
 async function getMultiScreenIdleMs() {
   try {
     const cfg = await getBackend('/api/config');
@@ -597,34 +592,21 @@ async function getMultiScreenIdleMs() {
   }
 }
 
-async function flushMultiServerScreenBatch() {
-  if (multiServerScreenBatch.submitting) return;
-  if (multiServerScreenBatch.timer) {
-    clearTimeout(multiServerScreenBatch.timer);
-    multiServerScreenBatch.timer = null;
-  }
-  const images = multiServerScreenBatch.images.splice(0);
-  if (!images.length) return;
-  multiServerScreenBatch.submitting = true;
-  try {
-    await postBackend('/api/ask-from-server-screens', JSON.stringify({ images }));
-  } catch (error) {
+const multiServerScreenBatch = createMultiScreenBatch({
+  submitImages: (images) => (
+    postBackend('/api/ask-from-server-screens', JSON.stringify({ images }))
+  ),
+  onError: (error) => {
     console.error('flushMultiServerScreenBatch failed:', error);
-  } finally {
-    multiServerScreenBatch.submitting = false;
-  }
-}
+  },
+});
 
 async function addMultiServerScreenShot() {
   try {
     const res = await postBackend('/api/capture-server-screen');
     if (!res?.image) throw new Error('capture response missing image');
-    multiServerScreenBatch.images.push(res.image);
-    if (multiServerScreenBatch.timer) clearTimeout(multiServerScreenBatch.timer);
     const idleMs = await getMultiScreenIdleMs();
-    multiServerScreenBatch.timer = setTimeout(() => {
-      flushMultiServerScreenBatch();
-    }, idleMs);
+    multiServerScreenBatch.add(res.image, idleMs);
   } catch (error) {
     console.error('addMultiServerScreenShot failed:', error);
   }

@@ -49,8 +49,10 @@ export default function App() {
   const sttFallbackLoaded = useInterviewStore((s) => s.sttFallbackLoaded)
   const isRecording = useInterviewStore((s) => s.isRecording)
   const isPaused = useInterviewStore((s) => s.isPaused)
+  const currentStreamingId = useInterviewStore((s) => s.currentStreamingId)
   const isExamMode = config?.written_exam_mode === true
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
+  const lastMobileStreamingIdRef = useRef<string | null>(null)
   const appMode = useUiPrefsStore((s) => s.appMode)
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   const assistTranscriptCollapsed = useUiPrefsStore((s) => s.assistTranscriptCollapsed)
@@ -90,6 +92,28 @@ export default function App() {
   useEffect(() => {
     setModuleMenuOpen(false)
   }, [appMode])
+
+  // 笔试题提交后优先展示答案流，避免手机端仍停留在「答题记录」而看不到
+  // 正在生成的结果。用户仍可手动切回记录页；同一题的后续 token 不会强制抢回焦点。
+  useEffect(() => {
+    if (!isExamMode) {
+      lastMobileStreamingIdRef.current = currentStreamingId
+      return
+    }
+    // During the very first layout pass some embedded/browser surfaces briefly
+    // report width 0. Treat that as unknown rather than mobile; otherwise a
+    // desktop answer panel can be mounted twice and duplicate its cards.
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0
+    const isMobileViewport = viewportWidth > 0 && viewportWidth < 768
+    if (
+      isMobileViewport
+      && currentStreamingId
+      && currentStreamingId !== lastMobileStreamingIdRef.current
+    ) {
+      setMobileTab('answer')
+    }
+    lastMobileStreamingIdRef.current = currentStreamingId
+  }, [currentStreamingId, isExamMode])
 
   useEffect(() => {
     if (!window.electronAPI?.getShortcuts) return
