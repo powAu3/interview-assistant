@@ -234,7 +234,16 @@ jobs:
   # ── End-to-end smoke (real backend boot + API contracts) ─
   e2e-smoke:
     needs: [changes, backend, frontend]
-    if: needs.changes.outputs.e2e == 'true'
+    # This job builds the frontend itself, so a path-filtered frontend job
+    # being skipped must not prevent backend-only smoke coverage.  Keep the
+    # smoke test out of runs where either prerequisite actually failed.
+    if: |
+      always() &&
+      needs.changes.outputs.e2e == 'true' &&
+      needs.backend.result != 'failure' &&
+      needs.backend.result != 'cancelled' &&
+      needs.frontend.result != 'failure' &&
+      needs.frontend.result != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
