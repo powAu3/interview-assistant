@@ -20,6 +20,7 @@ from services.llm import (
     chat_stream_single_model,
     create_answer_stream_sanitizer,
     get_token_stats,
+    LLMError,
     postprocess_answer_for_mode,
 )
 from api.assist.scheduler import TaskPayload
@@ -1035,15 +1036,27 @@ def process_question_parallel(
             chunk_buffer.clear()
     except Exception as exc:
         deps.error_logger.error("LLM stream error id=%s: %s", qa_id, exc, exc_info=True)
-        err = f"\n\n[生成答案出错: {exc}]"
-        raw_full_answer += err
         if chunk_buffer:
             _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
             chunk_buffer.clear()
         tail = stream_sanitizer.finish()
         if tail:
             _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
-        _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": err})
+        message = (
+            exc.user_msg
+            if isinstance(exc, LLMError)
+            else "生成答案失败，请稍后重试。"
+        )
+        _broadcast({
+            "type": "answer_error",
+            "id": qa_id,
+            "stage": "generation",
+            "message": message,
+        })
+        # The commit queue must advance past a failed generation, but the
+        # failed answer itself must never be written as a successful QA pair.
+        deps.mark_seq_skipped(seq)
+        return
 
     gen_elapsed = (time.monotonic() - gen_start) * 1000
     first_token_ms = (
@@ -1190,6 +1203,11 @@ def process_question_parallel(
                 "_commit failed for id=%s seq=%d: %s",
                 qa_id, seq, exc, exc_info=True,
             )
-            _broadcast({"type": "answer_error", "id": qa_id, "message": "答案保存失败"})
+            _broadcast({
+                "type": "answer_error",
+                "id": qa_id,
+                "stage": "persistence",
+                "message": "答案保存失败",
+            })
 
     deps.flush_commit(seq, _commit)

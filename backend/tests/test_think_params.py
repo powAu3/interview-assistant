@@ -16,6 +16,7 @@ from services.llm.streaming import (
     _usage_delta,
     _THINK_DISABLED_BASE_PARAMS,
     _THINK_DISABLED_LOCAL_PARAMS,
+    LLMTimeout,
 )
 
 
@@ -251,6 +252,25 @@ def test_single_model_override_false_forces_off_effort(monkeypatch):
 
     assert captured == {"think_mode": False, "think_effort": "off"}
     assert chunks == [("text", "最终答案")]
+
+
+def test_single_model_raises_typed_error_instead_of_emitting_error_as_answer(monkeypatch):
+    monkeypatch.setattr(streaming, "get_config", lambda: S(
+        think_mode=False,
+        think_effort="off",
+    ))
+
+    def failing_stream(_model_cfg, _messages, _cfg):
+        raise LLMTimeout("provider timeout")
+        yield  # keep this a generator for the same protocol as the real stream
+
+    monkeypatch.setattr(streaming, "_try_stream_with_model", failing_stream)
+
+    with pytest.raises(LLMTimeout):
+        list(streaming.chat_stream_single_model(
+            S(name="GLM", model="glm-5.1", supports_think=True, supports_vision=False),
+            [{"role": "user", "content": "题目"}],
+        ))
 
 
 def test_chat_stream_override_true_promotes_off_effort(monkeypatch):

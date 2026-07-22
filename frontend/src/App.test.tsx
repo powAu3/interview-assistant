@@ -232,6 +232,45 @@ describe('App bootstrap', () => {
       expect(screen.getByRole('button', { name: '服务端截图审题' })).not.toBeDisabled()
     })
   })
+
+  it('switches mobile written-exam view to the answer tab when a question starts', async () => {
+    const originalInnerWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    apiMock.getConfig.mockResolvedValue({
+      models: [{ name: 'demo', supports_vision: true, enabled: true }],
+      active_model: 0,
+      api_key_set: true,
+      written_exam_mode: true,
+      think_mode: false,
+      think_effort: 'off',
+      stt_provider: 'whisper',
+    })
+
+    try {
+      render(<App />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: '答题记录' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'AI 答案' })).toBeInTheDocument()
+      })
+      expect(screen.getByRole('button', { name: '答题记录' })).toHaveClass('border-accent-blue')
+      expect(screen.getByRole('button', { name: 'AI 答案' })).not.toHaveClass('border-accent-blue')
+
+      act(() => {
+        useInterviewStore.getState().startAnswer('qa-exam-1', '截图题', {
+          source: 'server_screen_single',
+          modelName: 'demo',
+        })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'AI 答案' })).toHaveClass('border-accent-blue')
+        expect(screen.getByRole('button', { name: '答题记录' })).not.toHaveClass('border-accent-blue')
+      })
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth })
+    }
+  })
 })
 
 describe('Window control buttons', () => {

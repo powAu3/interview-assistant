@@ -17,6 +17,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      desktop: ${{ steps.filter.outputs.desktop }}
       e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +30,9 @@ jobs:
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            desktop:
+              - 'desktop/**'
               - '.github/workflows/ci.yml'
             e2e:
               - 'backend/**'
@@ -112,6 +116,34 @@ jobs:
           path: frontend/dist
           retention-days: 7
           if-no-files-found: error
+
+  # ── Desktop pure-JavaScript tests ───────────────────────────
+  # Keep the Electron main-process helpers covered even though the desktop
+  # package does not participate in the frontend build.
+  desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        # Tests only need the Electron package to be resolvable; skipping its
+        # binary download keeps this job fast and avoids a flaky external fetch.
+        run: npm ci --ignore-scripts
+
+      - name: Run desktop unit tests
+        run: node --test multiScreenBatch.test.js windowOptions.test.js shortcuts.test.js preload.test.js
 
   # ── Playwright E2E (mocked backend, no live API needed) ──
   e2e-playwright:
@@ -295,7 +327,7 @@ jobs:
   # When this gate fails on visual diff, regenerate baselines on the
   # branch via the `update-visual-snapshots` workflow.
   ci-gate:
-    needs: [backend, frontend, e2e-playwright, e2e-smoke, e2e-visual]
+    needs: [backend, frontend, desktop, e2e-playwright, e2e-smoke, e2e-visual]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -304,6 +336,7 @@ jobs:
           ok=true
           for r in "${{ needs.backend.result }}" \
                    "${{ needs.frontend.result }}" \
+                   "${{ needs.desktop.result }}" \
                    "${{ needs.e2e-playwright.result }}" \
                    "${{ needs.e2e-smoke.result }}" \
                    "${{ needs.e2e-visual.result }}"; do
