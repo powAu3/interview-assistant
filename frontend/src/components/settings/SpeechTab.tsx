@@ -12,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
+import type { AppConfig } from '@/stores/slices/types'
 import { api } from '@/lib/api'
 import { updateConfigAndRefresh } from '@/lib/configSync'
 import {
@@ -37,43 +38,121 @@ function clampIntegerInput(value: unknown, min: number, max: number, fallback: n
   return Math.floor(clampNumberInput(value, min, max, fallback))
 }
 
+type SpeechForm = {
+  stt_provider: string
+  whisper_model: string
+  whisper_language: string
+  whisper_preload: boolean
+  doubao_stt_app_id: string
+  doubao_stt_access_token: string
+  doubao_stt_api_key: string
+  doubao_stt_resource_id: string
+  doubao_stt_boosting_table_id: string
+  generic_stt_api_base_url: string
+  generic_stt_api_key: string
+  generic_stt_model: string
+  generic_stt_custom_headers: string
+  candidate_asr_enabled: boolean
+  candidate_stt_provider: string
+  candidate_whisper_model: string
+  candidate_whisper_language: string
+  candidate_remote_stt_enabled: boolean
+  candidate_context_enabled: boolean
+  candidate_context_wait_ms: number
+  candidate_context_max_chars: number
+  candidate_context_min_chars: number
+  candidate_streaming_asr_enabled: boolean
+  candidate_streaming_asr_interval_ms: number
+  candidate_mic_compatibility_mode: boolean
+  silence_threshold: number
+  silence_duration: number
+  transcription_min_sig_chars: number
+  assist_transcription_merge_gap_sec: number
+  assist_transcription_merge_max_sec: number
+  assist_high_churn_short_answer: boolean
+  auto_detect: boolean
+}
+
+const DEFAULT_SPEECH_FORM: SpeechForm = {
+  stt_provider: 'whisper',
+  whisper_model: 'base',
+  whisper_language: 'auto',
+  whisper_preload: false,
+  doubao_stt_app_id: '',
+  doubao_stt_access_token: '',
+  doubao_stt_api_key: '',
+  doubao_stt_resource_id: 'volc.seedasr.sauc.duration',
+  doubao_stt_boosting_table_id: '',
+  generic_stt_api_base_url: '',
+  generic_stt_api_key: '',
+  generic_stt_model: '',
+  generic_stt_custom_headers: '',
+  candidate_asr_enabled: false,
+  candidate_stt_provider: 'whisper',
+  candidate_whisper_model: '',
+  candidate_whisper_language: '',
+  candidate_remote_stt_enabled: false,
+  candidate_context_enabled: true,
+  candidate_context_wait_ms: 200,
+  candidate_context_max_chars: 900,
+  candidate_context_min_chars: 6,
+  candidate_streaming_asr_enabled: true,
+  candidate_streaming_asr_interval_ms: 1500,
+  candidate_mic_compatibility_mode: true,
+  silence_threshold: 0.01,
+  silence_duration: 1.2,
+  transcription_min_sig_chars: 2,
+  assist_transcription_merge_gap_sec: 2.0,
+  assist_transcription_merge_max_sec: 12.0,
+  assist_high_churn_short_answer: false,
+  auto_detect: true,
+}
+
+function speechFormFromConfig(config: AppConfig): SpeechForm {
+  return {
+    stt_provider: config.stt_provider ?? DEFAULT_SPEECH_FORM.stt_provider,
+    whisper_model: config.whisper_model ?? DEFAULT_SPEECH_FORM.whisper_model,
+    whisper_language: config.whisper_language ?? DEFAULT_SPEECH_FORM.whisper_language,
+    whisper_preload: config.whisper_preload ?? DEFAULT_SPEECH_FORM.whisper_preload,
+    doubao_stt_app_id: config.doubao_stt_app_id ?? DEFAULT_SPEECH_FORM.doubao_stt_app_id,
+    doubao_stt_access_token: config.doubao_stt_access_token ?? DEFAULT_SPEECH_FORM.doubao_stt_access_token,
+    doubao_stt_api_key: config.doubao_stt_api_key ?? DEFAULT_SPEECH_FORM.doubao_stt_api_key,
+    doubao_stt_resource_id: config.doubao_stt_resource_id ?? DEFAULT_SPEECH_FORM.doubao_stt_resource_id,
+    doubao_stt_boosting_table_id: config.doubao_stt_boosting_table_id ?? DEFAULT_SPEECH_FORM.doubao_stt_boosting_table_id,
+    generic_stt_api_base_url: config.generic_stt_api_base_url ?? DEFAULT_SPEECH_FORM.generic_stt_api_base_url,
+    generic_stt_api_key: config.generic_stt_api_key ?? DEFAULT_SPEECH_FORM.generic_stt_api_key,
+    generic_stt_model: config.generic_stt_model ?? DEFAULT_SPEECH_FORM.generic_stt_model,
+    generic_stt_custom_headers: config.generic_stt_custom_headers ?? DEFAULT_SPEECH_FORM.generic_stt_custom_headers,
+    candidate_asr_enabled: config.candidate_asr_enabled ?? DEFAULT_SPEECH_FORM.candidate_asr_enabled,
+    candidate_stt_provider: config.candidate_stt_provider ?? DEFAULT_SPEECH_FORM.candidate_stt_provider,
+    candidate_whisper_model: config.candidate_whisper_model ?? DEFAULT_SPEECH_FORM.candidate_whisper_model,
+    candidate_whisper_language: config.candidate_whisper_language ?? DEFAULT_SPEECH_FORM.candidate_whisper_language,
+    candidate_remote_stt_enabled: config.candidate_remote_stt_enabled ?? DEFAULT_SPEECH_FORM.candidate_remote_stt_enabled,
+    candidate_context_enabled: config.candidate_context_enabled ?? DEFAULT_SPEECH_FORM.candidate_context_enabled,
+    candidate_context_wait_ms: clampIntegerInput(config.candidate_context_wait_ms, 0, 2000, DEFAULT_SPEECH_FORM.candidate_context_wait_ms),
+    candidate_context_max_chars: clampIntegerInput(config.candidate_context_max_chars, 100, 4000, DEFAULT_SPEECH_FORM.candidate_context_max_chars),
+    candidate_context_min_chars: clampIntegerInput(config.candidate_context_min_chars, 1, 100, DEFAULT_SPEECH_FORM.candidate_context_min_chars),
+    candidate_streaming_asr_enabled: config.candidate_streaming_asr_enabled ?? DEFAULT_SPEECH_FORM.candidate_streaming_asr_enabled,
+    candidate_streaming_asr_interval_ms: clampIntegerInput(config.candidate_streaming_asr_interval_ms, 800, 5000, DEFAULT_SPEECH_FORM.candidate_streaming_asr_interval_ms),
+    candidate_mic_compatibility_mode: config.candidate_mic_compatibility_mode ?? DEFAULT_SPEECH_FORM.candidate_mic_compatibility_mode,
+    silence_threshold: clampNumberInput(config.silence_threshold, 0.001, 0.1, DEFAULT_SPEECH_FORM.silence_threshold),
+    silence_duration: clampNumberInput(config.silence_duration, 0.5, 10, DEFAULT_SPEECH_FORM.silence_duration),
+    transcription_min_sig_chars: clampIntegerInput(config.transcription_min_sig_chars, 1, 50, DEFAULT_SPEECH_FORM.transcription_min_sig_chars),
+    assist_transcription_merge_gap_sec: clampNumberInput(config.assist_transcription_merge_gap_sec, 0, 15, DEFAULT_SPEECH_FORM.assist_transcription_merge_gap_sec),
+    assist_transcription_merge_max_sec: clampNumberInput(config.assist_transcription_merge_max_sec, 1, 120, DEFAULT_SPEECH_FORM.assist_transcription_merge_max_sec),
+    assist_high_churn_short_answer: config.assist_high_churn_short_answer ?? DEFAULT_SPEECH_FORM.assist_high_churn_short_answer,
+    auto_detect: config.auto_detect ?? DEFAULT_SPEECH_FORM.auto_detect,
+  }
+}
+
+function speechFormSnapshot(value: SpeechForm): string {
+  return JSON.stringify(value)
+}
+
 export default function SpeechTab() {
   const config = useInterviewStore((s) => s.config)
   const options = useInterviewStore((s) => s.options)
-  const [form, setForm] = useState({
-    stt_provider: 'whisper' as string,
-    whisper_model: 'base',
-    whisper_language: 'auto',
-    whisper_preload: false,
-    doubao_stt_app_id: '',
-    doubao_stt_access_token: '',
-    doubao_stt_api_key: '',
-    doubao_stt_resource_id: 'volc.seedasr.sauc.duration',
-    doubao_stt_boosting_table_id: '',
-    generic_stt_api_base_url: '',
-    generic_stt_api_key: '',
-    generic_stt_model: '',
-    generic_stt_custom_headers: '',
-    candidate_asr_enabled: false,
-    candidate_stt_provider: 'whisper',
-    candidate_whisper_model: '',
-    candidate_whisper_language: '',
-    candidate_remote_stt_enabled: false,
-    candidate_context_enabled: true,
-    candidate_context_wait_ms: 200,
-    candidate_context_max_chars: 900,
-    candidate_context_min_chars: 6,
-    candidate_streaming_asr_enabled: true,
-    candidate_streaming_asr_interval_ms: 1500,
-    candidate_mic_compatibility_mode: true,
-    silence_threshold: 0.01,
-    silence_duration: 1.2,
-    transcription_min_sig_chars: 2,
-    assist_transcription_merge_gap_sec: 2.0,
-    assist_transcription_merge_max_sec: 12.0,
-    assist_high_churn_short_answer: false,
-    auto_detect: true,
-  })
+  const [form, setForm] = useState<SpeechForm>(() => (config ? speechFormFromConfig(config) : DEFAULT_SPEECH_FORM))
   const [saving, setSaving] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -83,48 +162,18 @@ export default function SpeechTab() {
   const sttTestingRef = useRef(false)
   const { dirty, markSaved, resetBaseline } = useDirtySnapshot(form)
   useSettingsDirtyRegistration('speech', dirty)
+  const formRef = useRef(form)
+  const dirtyRef = useRef(dirty)
+  formRef.current = form
+  dirtyRef.current = dirty
 
   useEffect(() => {
-    if (config) {
-      const nextForm = {
-        stt_provider: config.stt_provider ?? 'whisper',
-        whisper_model: config.whisper_model,
-        whisper_language: config.whisper_language ?? 'auto',
-        whisper_preload: config.whisper_preload ?? false,
-        doubao_stt_app_id: config.doubao_stt_app_id ?? '',
-        doubao_stt_access_token: config.doubao_stt_access_token ?? '',
-        doubao_stt_api_key: config.doubao_stt_api_key ?? '',
-        doubao_stt_resource_id: config.doubao_stt_resource_id ?? 'volc.seedasr.sauc.duration',
-        doubao_stt_boosting_table_id: config.doubao_stt_boosting_table_id ?? '',
-        generic_stt_api_base_url: config.generic_stt_api_base_url ?? '',
-        generic_stt_api_key: config.generic_stt_api_key ?? '',
-        generic_stt_model: config.generic_stt_model ?? '',
-        generic_stt_custom_headers: config.generic_stt_custom_headers ?? '',
-        candidate_asr_enabled: config.candidate_asr_enabled ?? false,
-        candidate_stt_provider: config.candidate_stt_provider ?? 'whisper',
-        candidate_whisper_model: config.candidate_whisper_model ?? '',
-        candidate_whisper_language: config.candidate_whisper_language ?? '',
-        candidate_remote_stt_enabled: config.candidate_remote_stt_enabled ?? false,
-        candidate_context_enabled: config.candidate_context_enabled ?? true,
-        candidate_context_wait_ms: clampIntegerInput(config.candidate_context_wait_ms, 0, 2000, 200),
-        candidate_context_max_chars: clampIntegerInput(config.candidate_context_max_chars, 100, 4000, 900),
-        candidate_context_min_chars: clampIntegerInput(config.candidate_context_min_chars, 1, 100, 6),
-        candidate_streaming_asr_enabled: config.candidate_streaming_asr_enabled ?? true,
-        candidate_streaming_asr_interval_ms: clampIntegerInput(config.candidate_streaming_asr_interval_ms, 800, 5000, 1500),
-        candidate_mic_compatibility_mode: config.candidate_mic_compatibility_mode ?? true,
-        silence_threshold: clampNumberInput(config.silence_threshold, 0.001, 0.1, 0.01),
-        silence_duration: clampNumberInput(config.silence_duration, 0.5, 10, 1.2),
-        transcription_min_sig_chars: clampIntegerInput(config.transcription_min_sig_chars, 1, 50, 2),
-        assist_transcription_merge_gap_sec: clampNumberInput(config.assist_transcription_merge_gap_sec, 0, 15, 2.0),
-        assist_transcription_merge_max_sec: clampNumberInput(config.assist_transcription_merge_max_sec, 1, 120, 12.0),
-        assist_high_churn_short_answer: config.assist_high_churn_short_answer ?? false,
-        auto_detect: config.auto_detect,
-      }
-      if (dirty) return
-      setForm(nextForm)
-      resetBaseline(nextForm)
-      setSttTestResult(null)
-    }
+    if (!config || dirtyRef.current) return
+    const nextForm = speechFormFromConfig(config)
+    if (speechFormSnapshot(formRef.current) === speechFormSnapshot(nextForm)) return
+    setForm(nextForm)
+    resetBaseline(nextForm)
+    setSttTestResult(null)
   }, [config, dirty, resetBaseline])
 
   const handleSave = async () => {
