@@ -224,7 +224,7 @@ export default function WrittenExamTest() {
         if (msg.type === 'answer_think_chunk' || msg.type === 'answer_chunk') {
           setSteps((prev) => ({
             ...prev,
-            ws: { status: 'pass', detail: '已收到真实答题 WebSocket 流式片段' },
+            ws: { status: 'running', detail: '已收到真实答题 WebSocket 流式片段，等待模型生成完成…' },
           }))
           return
         }

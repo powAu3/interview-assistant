@@ -19,6 +19,7 @@ from .answer_worker import prompt_server_screen_code
 
 EXAM_PREFLIGHT_QUESTION = "代码题：给定整数数组 nums 和目标值 target，返回两数之和的下标。"
 EXAM_PREFLIGHT_EVENT_TYPE = "exam_preflight_step"
+EXAM_PREFLIGHT_TIMEOUT_SEC = 180.0
 
 _running = False
 _lock = threading.Lock()
@@ -236,7 +237,11 @@ def _finish_preflight() -> None:
 def record_exam_preflight_answer_event(event: dict) -> None:
     preflight_id = str(event.get("exam_preflight_id") or "")
     with _lock:
-        if not preflight_id or preflight_id != _status.get("preflight_id"):
+        if (
+            not preflight_id
+            or preflight_id != _status.get("preflight_id")
+            or not _status.get("running", False)
+        ):
             return
     event_type = event.get("type")
     if event_type == "answer_start":
@@ -263,8 +268,8 @@ def record_exam_preflight_answer_event(event: dict) -> None:
     if event_type in ("answer_think_chunk", "answer_chunk"):
         _set_step_unless_status(
             "ws",
-            "pass",
-            "已收到真实答题 WebSocket 流式片段",
+            "running",
+            "已收到真实答题 WebSocket 流式片段，等待模型生成完成…",
             {"preflight_id": preflight_id},
         )
         return
@@ -312,6 +317,52 @@ def record_exam_preflight_answer_event(event: dict) -> None:
         _finish_preflight()
 
 
+def _expire_exam_preflight(preflight_id: str, timeout_sec: float = EXAM_PREFLIGHT_TIMEOUT_SEC) -> bool:
+    """Terminate a stuck preflight once its worker stops producing events."""
+    global _running
+    timeout_sec = max(1.0, float(timeout_sec or EXAM_PREFLIGHT_TIMEOUT_SEC))
+    message = f"笔试链路检测超时（{int(timeout_sec)} 秒），请检查模型网络后重试。"
+    with _lock:
+        if (
+            not _status.get("running", False)
+            or _status.get("preflight_id") != preflight_id
+        ):
+            return False
+        _status["running"] = False
+        _status["finished_at"] = time.time()
+        _status["error"] = message
+        steps = dict(_status.get("steps") or {})
+        steps["error"] = {
+            "status": "fail",
+            "detail": f"检测异常: {message}",
+            "preflight_id": preflight_id,
+        }
+        _status["steps"] = steps
+        _running = False
+    broadcast(
+        {
+            "type": EXAM_PREFLIGHT_EVENT_TYPE,
+            "step": "error",
+            "status": "fail",
+            "detail": f"检测异常: {message}",
+            "preflight_id": preflight_id,
+        }
+    )
+    _log.error("EXAM_PREFLIGHT_TIMEOUT id=%s timeout_sec=%.0f", preflight_id, timeout_sec)
+    return True
+
+
+def _schedule_exam_preflight_timeout(preflight_id: str) -> None:
+    timer = threading.Timer(
+        EXAM_PREFLIGHT_TIMEOUT_SEC,
+        _expire_exam_preflight,
+        args=(preflight_id, EXAM_PREFLIGHT_TIMEOUT_SEC),
+    )
+    timer.daemon = True
+    timer.name = "exam-preflight-timeout"
+    timer.start()
+
+
 def _new_preflight_id() -> str:
     return f"exam-preflight-{uuid.uuid4().hex}"
 
@@ -347,6 +398,7 @@ def _run_exam_preflight(preflight_id: Optional[str] = None) -> None:
         queued = submit_answer_task(task)
         if not queued:
             raise RuntimeError("没有可用的识图模型，请检查启用状态与 API Key")
+        _schedule_exam_preflight_timeout(preflight_id)
         _set_step_unless_status(
             "submit",
             "running",

@@ -252,7 +252,7 @@ describe('WrittenExamTest', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText('已收到真实答题 WebSocket 流式片段')).toBeInTheDocument()
+    expect(screen.getByText('已收到真实答题 WebSocket 流式片段，等待模型生成完成…')).toBeInTheDocument()
 
     await act(async () => {
       ws.emit({

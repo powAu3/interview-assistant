@@ -38,12 +38,13 @@ def _cfg(written_exam_mode=False, written_exam_think=False):
     )
 
 
-def _deps(broadcasts):
+def _deps(broadcasts, skipped=None):
+    skipped = skipped if skipped is not None else []
     return answer_worker.AnswerWorkerDeps(
         abort_check=lambda: False,
         is_session_current=lambda _v: True,
         flush_commit=lambda _s, fn: fn(),
-        mark_seq_skipped=lambda _s: None,
+        mark_seq_skipped=skipped.append,
         submit_knowledge_record=lambda _q, _a, *_rest: True,
         broadcast=broadcasts.append,
         logger=_Logger(),
@@ -142,7 +143,7 @@ def test_no_think_override_when_not_written_exam(monkeypatch):
     assert captured["override_think_mode"] is None
 
 
-def test_model_idx_out_of_range_is_noop(monkeypatch):
+def test_model_idx_out_of_range_reports_error_and_advances_commit_queue(monkeypatch):
     monkeypatch.setattr(answer_worker, "get_config", lambda: _cfg())
     monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kw: "sys")
     monkeypatch.setattr(answer_worker, "get_token_stats", lambda: {
@@ -150,10 +151,19 @@ def test_model_idx_out_of_range_is_noop(monkeypatch):
     })
 
     broadcasts = []
+    skipped = []
 
     answer_worker.process_question_parallel(
         ("题目", None, True, "manual_text", {"origin": "manual"}),
-        seq=0, model_idx=5, sess_v=0, deps=_deps(broadcasts),
+        seq=4, model_idx=5, sess_v=0, deps=_deps(broadcasts, skipped),
     )
 
-    assert broadcasts == []
+    assert skipped == [4]
+    assert broadcasts == [
+        {
+            "type": "answer_error",
+            "id": broadcasts[0]["id"],
+            "stage": "generation",
+            "message": "答题模型配置已变更，请重新提交问题。",
+        }
+    ]
