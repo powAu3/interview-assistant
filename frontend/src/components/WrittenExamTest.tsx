@@ -217,11 +217,11 @@ export default function WrittenExamTest() {
               question: FIXED_QUESTION,
               model_name: msg.model_name,
             },
-            ws: { status: 'pass', detail: '已收到真实答题 WebSocket 事件' },
+            ws: { status: 'running', detail: '已收到答题启动事件，等待模型流式片段…' },
           }))
           return
         }
-        if (msg.type === 'answer_chunk') {
+        if (msg.type === 'answer_think_chunk' || msg.type === 'answer_chunk') {
           setSteps((prev) => ({
             ...prev,
             ws: { status: 'pass', detail: '已收到真实答题 WebSocket 流式片段' },

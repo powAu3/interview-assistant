@@ -1312,11 +1312,7 @@ def _interview_worker():
                 total_samples / AudioCapture.SAMPLE_RATE,
             )
             for chunk in chunks:
-                chunk_started_mono = batch_start_mono + (offset_samples / AudioCapture.SAMPLE_RATE)
-                chunk_offset = 0
                 for vad_chunk in _iter_vad_feed_chunks(chunk):
-                    sub_started_mono = chunk_started_mono + (chunk_offset / AudioCapture.SAMPLE_RATE)
-                    chunk_offset += len(vad_chunk)
                     offset_samples += len(vad_chunk)
                     sub_ended_mono = batch_start_mono + (offset_samples / AudioCapture.SAMPLE_RATE)
                     speech_audio = vad.feed(vad_chunk)

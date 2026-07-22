@@ -96,6 +96,21 @@ def test_run_exam_preflight_broadcasts_steps_and_status(monkeypatch: pytest.Monk
         "exam_preflight_id": preflight_id,
         "model_name": "vision",
     })
+    status = exam_test.get_exam_preflight_status()
+    assert status["steps"]["submit"]["status"] == "pass"
+    assert status["steps"]["llm"]["status"] == "running"
+    assert status["steps"]["ws"]["status"] == "running"
+
+    exam_test.record_exam_preflight_answer_event({
+        "type": "answer_chunk",
+        "id": "qa-preflight",
+        "exam_preflight_id": preflight_id,
+        "chunk": "def two_sum",
+    })
+    status = exam_test.get_exam_preflight_status()
+    assert status["steps"]["llm"]["status"] == "running"
+    assert status["steps"]["ws"]["status"] == "pass"
+
     exam_test.record_exam_preflight_answer_event({
         "type": "answer_done",
         "id": "qa-preflight",

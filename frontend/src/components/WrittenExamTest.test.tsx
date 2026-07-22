@@ -241,6 +241,18 @@ describe('WrittenExamTest', () => {
     expect(FakeWebSocket.instances).toHaveLength(1)
     expect(ws.closed).toBe(false)
     expect(screen.getByText('真实答题 worker 已开始流式回答')).toBeInTheDocument()
+    expect(screen.getByText('已收到答题启动事件，等待模型流式片段…')).toBeInTheDocument()
+
+    await act(async () => {
+      ws.emit({
+        type: 'answer_think_chunk',
+        exam_preflight_id: 'preflight-current',
+        chunk: '思考中...',
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('已收到真实答题 WebSocket 流式片段')).toBeInTheDocument()
 
     await act(async () => {
       ws.emit({

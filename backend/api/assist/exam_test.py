@@ -253,6 +253,20 @@ def record_exam_preflight_answer_event(event: dict) -> None:
             },
         )
         _set_step("llm", "running", "正在通过真实答题流生成代码答案…")
+        _set_step(
+            "ws",
+            "running",
+            "已收到答题启动事件，等待模型流式片段…",
+            {"preflight_id": preflight_id},
+        )
+        return
+    if event_type in ("answer_think_chunk", "answer_chunk"):
+        _set_step_unless_status(
+            "ws",
+            "pass",
+            "已收到真实答题 WebSocket 流式片段",
+            {"preflight_id": preflight_id},
+        )
         return
     if event_type == "answer_done":
         answer = str(event.get("answer") or "").strip()

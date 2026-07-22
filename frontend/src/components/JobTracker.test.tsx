@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import dayjs from 'dayjs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import JobTracker from './JobTracker'
 import { useInterviewStore } from '@/stores/configStore'
@@ -742,7 +743,7 @@ describe('JobTracker', () => {
 
     await waitFor(() => expect(apiMock.jobTrackerPatchApplication).toHaveBeenCalledWith(1, expect.objectContaining({
       stage: 'interview1',
-      next_followup_at: 1710259200,
+      next_followup_at: dayjs('2024-03-13').startOf('day').unix(),
     })))
     expect(screen.getAllByText('一面').length).toBeGreaterThan(0)
   })
