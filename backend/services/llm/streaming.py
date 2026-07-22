@@ -2,6 +2,7 @@
 
 import threading
 import json
+import re
 from types import SimpleNamespace
 from openai import OpenAI
 import openai
@@ -55,34 +56,49 @@ class LLMProtocolError(LLMError):
     user_msg = "大模型返回格式异常。"
 
 
+def _compact_error_detail(error: BaseException, max_chars: int = 240) -> str:
+    """Keep provider diagnostics useful without logging an HTML challenge page."""
+    raw = str(error or "").strip()
+    response = getattr(error, "response", None)
+    status = getattr(error, "status_code", None) or getattr(response, "status_code", None)
+    lowered = raw.lower()
+    if any(marker in lowered for marker in ("<!doctype html", "<html", "just a moment", "cloudflare")):
+        status_text = f"HTTP {status} " if status else ""
+        return f"{status_text}provider returned an HTML challenge page"
+    compact = re.sub(r"\s+", " ", raw)
+    if len(compact) > max_chars:
+        return compact[: max_chars - 1].rstrip() + "…"
+    return compact or error.__class__.__name__
+
+
 def _classify_exception(e: BaseException) -> LLMError:
     """Map any underlying SDK/HTTP exception to a typed LLMError."""
     if isinstance(e, LLMError):
         return e
     if isinstance(e, openai.APITimeoutError):
-        return LLMTimeout(str(e), cause=e)
+        return LLMTimeout(_compact_error_detail(e), cause=e)
     if isinstance(e, openai.AuthenticationError):
-        return LLMAuthError(str(e), cause=e)
+        return LLMAuthError(_compact_error_detail(e), cause=e)
     if isinstance(e, openai.PermissionDeniedError):
-        return LLMAuthError(str(e), cause=e)
+        return LLMAuthError(_compact_error_detail(e), cause=e)
     if isinstance(e, openai.RateLimitError):
-        return LLMRateLimit(str(e), cause=e)
+        return LLMRateLimit(_compact_error_detail(e), cause=e)
     if isinstance(e, openai.BadRequestError):
         msg = str(e).lower()
         if "context" in msg or "maximum context" in msg or "token" in msg:
-            return LLMContextExceeded(str(e), cause=e)
-        return LLMError(str(e), cause=e)
+            return LLMContextExceeded(_compact_error_detail(e), cause=e)
+        return LLMError(_compact_error_detail(e), cause=e)
     if isinstance(e, openai.InternalServerError):
-        return LLMServerError(str(e), cause=e)
+        return LLMServerError(_compact_error_detail(e), cause=e)
     if isinstance(e, openai.APIConnectionError):
-        return LLMConnectionError(str(e), cause=e)
+        return LLMConnectionError(_compact_error_detail(e), cause=e)
     if isinstance(e, requests.exceptions.Timeout):
-        return LLMTimeout(str(e), cause=e)
+        return LLMTimeout(_compact_error_detail(e), cause=e)
     if isinstance(e, requests.exceptions.ConnectionError):
-        return LLMConnectionError(str(e), cause=e)
+        return LLMConnectionError(_compact_error_detail(e), cause=e)
     if isinstance(e, requests.exceptions.RequestException):
-        return LLMConnectionError(str(e), cause=e)
-    return LLMError(str(e) or e.__class__.__name__, cause=e)
+        return LLMConnectionError(_compact_error_detail(e), cause=e)
+    return LLMError(_compact_error_detail(e), cause=e)
 
 
 # ---------------------------------------------------------------------------
@@ -681,11 +697,11 @@ def chat_stream_single_model(
         err = _classify_exception(e)
         _log.error(
             "LLM single-model error model=%s kind=%s: %s",
-            model_name, type(err).__name__, err, exc_info=True,
+            model_name, type(err).__name__, _compact_error_detail(err),
         )
         # Keep transport failures out of the answer text. The answer worker
         # needs a terminal error state so a failed request is not persisted or
         # presented as a successful answer card.
         if err is e:
             raise
-        raise err from e
+        raise err from None

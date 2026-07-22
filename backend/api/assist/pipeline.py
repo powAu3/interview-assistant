@@ -1,5 +1,6 @@
 """Interview assist pipeline: ASR buffering, task dispatch, parallel answer workers."""
 
+import copy
 import gc
 import numpy as np
 import queue
@@ -791,16 +792,40 @@ def _append_transcription_fragment(cfg, session, pub: str, now_mono: float, forc
 
 def _try_dispatch():
     while True:
+        # Keep model selection and the model object passed to the worker tied
+        # to one immutable configuration snapshot. Settings updates replace
+        # the global config while a worker may still be waiting to start.
+        cfg = get_config()
+
+        def _pick_from_snapshot(
+            task: TaskPayload,
+            busy: set[int],
+            avoid_models: Optional[set[int]] = None,
+            cfg_snapshot=cfg,
+        ) -> Optional[int]:
+            return scheduler_pick_model_index(
+                task,
+                busy,
+                cfg_snapshot,
+                get_model_health,
+                avoid_models=avoid_models,
+            )
+
         with _dispatch_lock:
             step = claim_next_dispatch(
                 _pending,
                 _in_flight_tasks,
                 _latest_asr_turn_id,
-                _max_parallel_slots(),
-                pick_model_index,
-                interrupt_stale_asr=_should_interrupt_stale_asr(),
+                scheduler_max_parallel_slots(cfg, get_model_health),
+                _pick_from_snapshot,
+                interrupt_stale_asr=_should_interrupt_stale_asr(cfg),
                 now_mono=time.monotonic(),
             )
+            model_cfg_snapshot = None
+            if step.claim is not None:
+                selected_idx = step.claim.model_idx
+                if 0 <= selected_idx < len(cfg.models):
+                    model_cfg_snapshot = copy.deepcopy(cfg.models[selected_idx])
         if step.skipped_seq is not None:
             _mark_seq_skipped(step.skipped_seq)
             continue
@@ -813,6 +838,7 @@ def _try_dispatch():
                 step.claim.seq,
                 step.claim.model_idx,
                 step.claim.session_version,
+                model_cfg_snapshot,
             ),
             daemon=True,
         ).start()
@@ -823,9 +849,10 @@ def _run_answer_worker(
     seq: int,
     model_idx: int,
     sess_v: int,
+    model_cfg_snapshot=None,
 ):
     try:
-        _process_question_parallel(task, seq, model_idx, sess_v)
+        _process_question_parallel(task, seq, model_idx, sess_v, model_cfg_snapshot)
     finally:
         with _dispatch_lock:
             _in_flight_tasks.pop(seq, None)
@@ -1772,6 +1799,7 @@ def _process_question_parallel(
     seq: int,
     model_idx: int,
     sess_v: int,
+    model_cfg_snapshot=None,
 ):
     cfg = get_config()
     my_gen = _capture_generation()
@@ -1809,6 +1837,7 @@ def _process_question_parallel(
             logger=_ilog,
             error_logger=_elog,
             start_abort_check=session_stale,
+            model_cfg_snapshot=model_cfg_snapshot,
         ),
     )
 

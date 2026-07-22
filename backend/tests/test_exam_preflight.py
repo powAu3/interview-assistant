@@ -109,7 +109,7 @@ def test_run_exam_preflight_broadcasts_steps_and_status(monkeypatch: pytest.Monk
     })
     status = exam_test.get_exam_preflight_status()
     assert status["steps"]["llm"]["status"] == "running"
-    assert status["steps"]["ws"]["status"] == "pass"
+    assert status["steps"]["ws"]["status"] == "running"
 
     exam_test.record_exam_preflight_answer_event({
         "type": "answer_done",
@@ -182,6 +182,46 @@ def test_run_exam_preflight_keeps_pass_status_when_worker_returns_fast(monkeypat
     assert status["steps"]["ws"]["status"] == "pass"
     assert status["steps"]["ui"]["status"] == "pass"
     assert status["steps"]["done"]["status"] == "done"
+
+
+def test_exam_preflight_timeout_unlocks_retry_and_ignores_late_worker_events(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    events: list[dict] = []
+    monkeypatch.setattr(exam_test, "broadcast", events.append)
+    preflight_id = "preflight-timeout"
+    exam_test._running = True
+    exam_test._set_status(
+        running=True,
+        preflight_id=preflight_id,
+        qa_id="qa-timeout",
+        steps={"llm": {"status": "running", "detail": "等待模型"}},
+        error=None,
+        finished_at=None,
+    )
+
+    assert exam_test._expire_exam_preflight(preflight_id, timeout_sec=180.0) is True
+
+    timed_out = exam_test.get_exam_preflight_status()
+    assert timed_out["running"] is False
+    assert exam_test._running is False
+    assert timed_out["steps"]["error"]["status"] == "fail"
+    assert "180 秒" in timed_out["error"]
+
+    exam_test.record_exam_preflight_answer_event({
+        "type": "answer_done",
+        "id": "qa-timeout",
+        "exam_preflight_id": preflight_id,
+        "answer": "迟到的答案",
+        "model_name": "vision",
+        "first_token_ms": 1,
+        "total_ms": 181000,
+    })
+
+    after_late_event = exam_test.get_exam_preflight_status()
+    assert after_late_event["steps"]["error"]["status"] == "fail"
+    assert "done" not in after_late_event["steps"]
+    assert any(event.get("step") == "error" and event.get("status") == "fail" for event in events)
 
 
 def test_start_exam_preflight_returns_thread_preflight_id(monkeypatch: pytest.MonkeyPatch):

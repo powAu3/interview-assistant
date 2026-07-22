@@ -37,6 +37,7 @@ class AnswerWorkerDeps:
     logger: Any
     error_logger: Any
     start_abort_check: Optional[Callable[[], bool]] = None
+    model_cfg_snapshot: Any = None
 
 
 def _screen_region_label(region: str) -> str:
@@ -673,19 +674,8 @@ def process_question_parallel(
     deps: AnswerWorkerDeps,
 ):
     question_text, image, manual_input, source, meta = task
-    cfg = get_config()
-    if model_idx < 0 or model_idx >= len(cfg.models):
-        return
-    model_cfg = cfg.models[model_idx]
-    if deps.start_abort_check is not None and deps.start_abort_check():
-        deps.mark_seq_skipped(seq)
-        return
-
-    written_exam = bool(getattr(cfg, "written_exam_mode", False))
-    written_exam_think = bool(getattr(cfg, "written_exam_think", False))
-    prompt_mode = prompt_mode_for_task(source, manual_input, written_exam=written_exam)
     exam_preflight_id = str(meta.get("exam_preflight_id") or "") if meta.get("exam_preflight") else ""
-    high_churn_short_answer = bool(meta.get("high_churn_short_answer", False))
+    qa_id = f"qa-{seq}-{int(time.time() * 1000)}"
 
     def _broadcast(data: dict) -> None:
         if exam_preflight_id:
@@ -698,6 +688,37 @@ def process_question_parallel(
                 record_exam_preflight_answer_event(data)
             except Exception as exc:  # noqa: BLE001
                 deps.error_logger.warning("exam preflight event record failed: %s", exc)
+
+    cfg = get_config()
+    model_cfg = deps.model_cfg_snapshot
+    if model_cfg is None and (model_idx < 0 or model_idx >= len(cfg.models)):
+        deps.error_logger.warning(
+            "ANSWER_MODEL_STALE id=%s seq=%d model_idx=%d model_count=%d",
+            qa_id,
+            seq,
+            model_idx,
+            len(cfg.models),
+        )
+        _broadcast(
+            {
+                "type": "answer_error",
+                "id": qa_id,
+                "stage": "generation",
+                "message": "答题模型配置已变更，请重新提交问题。",
+            }
+        )
+        deps.mark_seq_skipped(seq)
+        return
+    if model_cfg is None:
+        model_cfg = cfg.models[model_idx]
+    if deps.start_abort_check is not None and deps.start_abort_check():
+        deps.mark_seq_skipped(seq)
+        return
+
+    written_exam = bool(getattr(cfg, "written_exam_mode", False))
+    written_exam_think = bool(getattr(cfg, "written_exam_think", False))
+    prompt_mode = prompt_mode_for_task(source, manual_input, written_exam=written_exam)
+    high_churn_short_answer = bool(meta.get("high_churn_short_answer", False))
 
     kb_hits: list = []
     kb_latency_ms = 0
@@ -914,7 +935,6 @@ def process_question_parallel(
         display_question = f"{question_text} [📷 多图 x{len(images)}]"
     else:
         display_question = question_text + (" [📷 附图]" if images else "")
-    qa_id = f"qa-{seq}-{int(time.time() * 1000)}"
     deps.logger.info(
         "ANSWER_START id=%s model=%s source=%s followup=%s q=%r",
         qa_id,
@@ -1035,7 +1055,12 @@ def process_question_parallel(
             _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
             chunk_buffer.clear()
     except Exception as exc:
-        deps.error_logger.error("LLM stream error id=%s: %s", qa_id, exc, exc_info=True)
+        deps.error_logger.error(
+            "LLM stream error id=%s: %s",
+            qa_id,
+            exc,
+            exc_info=not isinstance(exc, LLMError),
+        )
         if chunk_buffer:
             _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": "".join(chunk_buffer)})
             chunk_buffer.clear()
@@ -1074,6 +1099,25 @@ def process_question_parallel(
         _broadcast({"type": "answer_chunk", "id": qa_id, "chunk": tail})
 
     full_answer = postprocess_answer_for_mode(raw_full_answer, prompt_mode)
+    if not full_answer.strip():
+        deps.error_logger.warning(
+            "ANSWER_EMPTY id=%s model=%s source=%s think_len=%d raw_len=%d",
+            qa_id,
+            model_cfg.name,
+            source,
+            len(full_think),
+            len(raw_full_answer),
+        )
+        _broadcast(
+            {
+                "type": "answer_error",
+                "id": qa_id,
+                "stage": "generation",
+                "message": "模型未返回有效答案，请重试或更换模型。",
+            }
+        )
+        deps.mark_seq_skipped(seq)
+        return
 
     def _commit():
         if not deps.is_session_current(sess_v):

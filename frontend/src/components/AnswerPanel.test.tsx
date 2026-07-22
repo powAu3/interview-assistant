@@ -105,4 +105,47 @@ describe('AnswerPanel empty recording state', () => {
     expect(screen.getByText('实时转写')).toBeInTheDocument()
     expect(screen.getByText('连续截图审题')).toBeInTheDocument()
   })
+
+  it('starts auto-follow when the first answer arrives after an empty state', async () => {
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000)
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(280)
+
+    try {
+      render(<AnswerPanel />)
+
+      act(() => {
+        useInterviewStore.setState({
+          qaPairs: [{
+            id: 'qa-first',
+            question: '第一道题',
+            answer: '正在生成',
+            thinkContent: '',
+            isThinking: false,
+            timestamp: Date.now(),
+            status: 'streaming',
+          }],
+          streamingIds: ['qa-first'],
+        } as any)
+      })
+
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(Element.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: originalScrollIntoView,
+        })
+      } else {
+        delete (Element.prototype as any).scrollIntoView
+      }
+      scrollHeightSpy.mockRestore()
+      clientHeightSpy.mockRestore()
+    }
+  })
 })

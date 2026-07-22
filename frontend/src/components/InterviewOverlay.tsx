@@ -47,6 +47,7 @@ export default function InterviewOverlay() {
   const clearSession = useInterviewStore((s) => s.clearSession)
   const setToastMessage = useInterviewStore((s) => s.setToastMessage)
   const config = useInterviewStore((s) => s.config)
+  const setConfig = useInterviewStore((s) => s.setConfig)
   const shortcuts = useShortcutsStore((s) => s.shortcuts)
   const setShortcuts = useShortcutsStore((s) => s.setShortcuts)
   const isExamMode = config?.written_exam_mode === true
@@ -69,6 +70,22 @@ export default function InterviewOverlay() {
   const [liveFocusQaId, setLiveFocusQaId] = useState<string | null>(null)
   const busyActionRef = useRef<string | null>(null)
   const pinnedFocusTabsByQaIdRef = useRef<Record<string, boolean>>({})
+
+  // The overlay is a standalone entry point (it does not mount App's
+  // useAppBootstrap hook), so it must hydrate config itself. Without this,
+  // a second Electron window stays in interview mode even while the main
+  // window has switched to written-exam mode.
+  useEffect(() => {
+    let active = true
+    api.getConfig()
+      .then((nextConfig) => {
+        if (active) setConfig(nextConfig)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [setConfig])
 
   const latestQa = useMemo(() => {
     if (streamingIds.length > 0) {

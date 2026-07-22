@@ -293,49 +293,70 @@ export default function AnswerPanel() {
   const stream = answerPanelLayout === 'stream'
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const autoFollowRef = useRef(true)
 
   const scrollThreshold = Math.max(4, Math.min(400, config?.answer_autoscroll_bottom_px ?? 40))
   const [nearBottom, setNearBottom] = useState(true)
 
-  const updateNearBottom = useCallback(() => {
+  const updateNearBottom = useCallback((fromUserScroll = true) => {
     const el = scrollContainerRef.current
     if (!el) return
     const d = el.scrollHeight - el.scrollTop - el.clientHeight
-    setNearBottom(d <= scrollThreshold)
+    const nextNearBottom = d <= scrollThreshold
+    if (fromUserScroll) {
+      autoFollowRef.current = nextNearBottom
+      setNearBottom(nextNearBottom)
+      return
+    }
+    // ResizeObserver and layout changes are not user intent. Preserve the
+    // follow preference instead of falsely showing “manual scroll paused”.
+    setNearBottom(autoFollowRef.current ? true : nextNearBottom)
   }, [scrollThreshold])
+
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    autoFollowRef.current = true
+    setNearBottom(true)
+    scrollElementIntoView(bottomRef.current, { behavior })
+    requestAnimationFrame(() => updateNearBottom(false))
+  }, [updateNearBottom])
 
   useEffect(() => {
     const el = scrollContainerRef.current
     if (!el || !bottomRef.current) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= scrollThreshold
-    if (atBottom) {
-      scrollElementIntoView(bottomRef.current, { behavior: 'smooth' })
+    if (autoFollowRef.current) {
+      // Streaming/layout updates should never temporarily mark the user as
+      // scrolled away from the latest answer. `auto` also avoids intermediate
+      // scroll events from smooth scrolling toggling the follow state.
+      requestAnimationFrame(() => scrollToLatest('auto'))
+    } else {
+      setNearBottom(false)
     }
-    updateNearBottom()
-  }, [qaPairs, streamingIds, scrollThreshold, updateNearBottom])
+  }, [qaPairs, streamingIds, scrollToLatest])
 
   useEffect(() => {
     const el = scrollContainerRef.current
     if (!el) return
-    updateNearBottom()
-    el.addEventListener('scroll', updateNearBottom, { passive: true })
-    const ro = new ResizeObserver(() => updateNearBottom())
+    updateNearBottom(false)
+    const onScroll = () => updateNearBottom(true)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    const ro = new ResizeObserver(() => {
+      if (autoFollowRef.current) {
+        requestAnimationFrame(() => scrollToLatest('auto'))
+      } else {
+        updateNearBottom(false)
+      }
+    })
     ro.observe(el)
     return () => {
-      el.removeEventListener('scroll', updateNearBottom)
+      el.removeEventListener('scroll', onScroll)
       ro.disconnect()
     }
-  }, [updateNearBottom])
+  }, [qaPairs.length, scrollToLatest, updateNearBottom])
 
   const hasActiveGeneration =
     streamingIds.length > 0 || qaPairs.some((q) => q.isThinking)
   // 用户向上滚动且远离底部时即显示 "回到最新"; 生成中则补充旋转指示器
   const showScrollToLatestFab = qaPairs.length > 0 && !nearBottom
-
-  const scrollToLatest = () => {
-    scrollElementIntoView(bottomRef.current, { behavior: 'smooth' })
-    requestAnimationFrame(() => updateNearBottom())
-  }
 
   const needsConfig = config && (!config.models?.length || !config.api_key_set)
   const multiStream = streamingIds.length > 1
@@ -462,7 +483,7 @@ export default function AnswerPanel() {
           )}
           <button
             type="button"
-            onClick={scrollToLatest}
+            onClick={() => scrollToLatest()}
             title={hasActiveGeneration ? '下方正在生成，点击继续跟随' : '回到最新答案'}
             aria-label={hasActiveGeneration ? '继续跟随最新生成内容' : '滚动到最新答案'}
             className="pointer-events-auto flex h-[52px] w-[52px] items-center justify-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-transform hover:scale-105 active:scale-95"

@@ -16,6 +16,8 @@ from services.llm.streaming import (
     _usage_delta,
     _THINK_DISABLED_BASE_PARAMS,
     _THINK_DISABLED_LOCAL_PARAMS,
+    _compact_error_detail,
+    _classify_exception,
     LLMTimeout,
 )
 
@@ -402,3 +404,18 @@ def test_http_fallback_merges_disable_params(monkeypatch):
     assert captured["json"]["thinking"] == {"type": "disabled"}
     assert captured["json"]["think_mode"] is False
     assert captured["json"]["enable_thinking"] is False
+
+
+def test_provider_html_challenge_error_is_compacted_for_interview_logs():
+    import requests
+
+    error = requests.exceptions.RequestException(
+        "<!doctype html><html>Just a moment...</html>" * 1000
+    )
+
+    detail = _compact_error_detail(error)
+    classified = _classify_exception(error)
+
+    assert detail == "provider returned an HTML challenge page"
+    assert str(classified) == detail
+    assert len(str(classified)) < 100

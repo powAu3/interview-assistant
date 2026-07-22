@@ -6,6 +6,7 @@ import { useShortcutsStore } from '@/stores/shortcutsStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 
 const apiMock = vi.hoisted(() => ({
+  getConfig: vi.fn(),
   askFromServerScreen: vi.fn(),
   cancelAsk: vi.fn(),
   clear: vi.fn(),
@@ -32,10 +33,12 @@ const qa = {
 
 beforeEach(() => {
   localStorage.clear()
+  apiMock.getConfig.mockReset()
   apiMock.askFromServerScreen.mockReset()
   apiMock.cancelAsk.mockReset()
   apiMock.clear.mockReset()
   useInterviewWSMock.mockReset()
+  apiMock.getConfig.mockResolvedValue({ written_exam_mode: false })
   apiMock.askFromServerScreen.mockResolvedValue({ ok: true })
   apiMock.cancelAsk.mockResolvedValue({ ok: true })
   apiMock.clear.mockResolvedValue({ ok: true })
@@ -108,6 +111,16 @@ describe('InterviewOverlay', () => {
 
     expect(screen.getByText(/双指针维护左右最大高度/)).toBeInTheDocument()
     expect(document.querySelector('.ov-shell--nobg')).toBeInTheDocument()
+  })
+
+  it('hydrates written-exam mode in the standalone overlay window', async () => {
+    apiMock.getConfig.mockResolvedValue({ written_exam_mode: true })
+    useInterviewStore.setState({ qaPairs: [], isRecording: true, config: null })
+
+    render(<InterviewOverlay />)
+
+    await waitFor(() => expect(screen.getByText('笔试中…')).toBeInTheDocument())
+    expect(apiMock.getConfig).toHaveBeenCalledTimes(1)
   })
 
   it('shows failed screenshot self-checks inside prompt overlay mode', () => {

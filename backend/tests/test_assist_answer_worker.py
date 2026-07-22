@@ -1298,6 +1298,44 @@ def test_process_question_parallel_flushes_clean_tail_before_error(
     assert get_session().qa_pairs == []
 
 
+@pytest.mark.parametrize(
+    "stream_chunks",
+    [
+        [],
+        [("think", "只返回了思考过程")],
+        [("text", "   \n\t")],
+    ],
+    ids=["empty-stream", "think-only", "whitespace-only"],
+)
+def test_process_question_parallel_rejects_empty_model_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    stream_chunks: list[tuple[str, str]],
+):
+    broadcasts: list[dict] = []
+    skipped: list[int] = []
+
+    def fake_stream(*_args, **_kwargs):
+        yield from stream_chunks
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("没有正文的问题？", None, True, "manual_text", {"origin": "manual"}),
+        seq=7,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts, skipped=skipped),
+    )
+
+    error = next(event for event in broadcasts if event["type"] == "answer_error")
+    assert error["stage"] == "generation"
+    assert error["message"] == "模型未返回有效答案，请重试或更换模型。"
+    assert skipped == [7]
+    assert not any(event["type"] == "answer_done" for event in broadcasts)
+    assert get_session().qa_pairs == []
+    assert get_session().conversation_history == []
+
+
 def test_process_question_parallel_flushes_batched_chunks_before_error(
     monkeypatch: pytest.MonkeyPatch,
 ):

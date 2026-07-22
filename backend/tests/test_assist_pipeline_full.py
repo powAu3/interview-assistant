@@ -150,6 +150,31 @@ def test_submit_answer_task_runs_through_dispatch_worker_and_commit(
     assert [qa.answer for qa in session.qa_pairs] == ["模型一:Redis 怎么持久化？"]
 
 
+def test_dispatched_worker_keeps_selected_model_when_settings_reorder_models(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(pipeline, "broadcast", lambda _data: None)
+
+    def fake_stream(model_cfg, messages, **_kwargs):
+        question = messages[-1]["content"]
+        yield ("text", f"{model_cfg.name}:{question}")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    cfg = pipeline.get_config()
+    assert pipeline.submit_answer_task(
+        ("配置更新期间的问题", None, True, "manual_text", {"origin": "manual"})
+    )
+    assert len(_DeferredThread.started) == 1
+
+    cfg.models = [cfg.models[1], cfg.models[0]]
+    cfg.active_model = 0
+    _DeferredThread.started[0].run()
+
+    session = get_session()
+    assert [qa.answer for qa in session.qa_pairs] == ["模型一:配置更新期间的问题"]
+
+
 def test_parallel_answers_commit_in_submit_order_when_workers_finish_out_of_order(
     monkeypatch: pytest.MonkeyPatch,
 ):
