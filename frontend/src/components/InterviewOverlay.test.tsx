@@ -339,6 +339,57 @@ describe('InterviewOverlay', () => {
     }
   })
 
+  it('measures prompt height from its content instead of a stale tall scroll viewport', async () => {
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 260, height: 92 })
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function () {
+      return this.classList.contains('ov-answer') ? 400 : 80
+    })
+    const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(244)
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+
+    try {
+      render(<InterviewOverlay />)
+
+      await waitFor(() => {
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 260, height: 92 })
+      })
+    } finally {
+      scrollHeightSpy.mockRestore()
+      scrollWidthSpy.mockRestore()
+    }
+  })
+
+  it('does not let an overflowing review question stretch prompt width', async () => {
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 260, height: 130 })
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
+    const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function () {
+      if (this.classList.contains('ov-answer-stack')) return 1200
+      return 244
+    })
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
+    useUiPrefsStore.setState({ interviewOverlayMode: 'prompt', interviewOverlayShowBg: false })
+    useInterviewStore.setState({
+      qaPairs: [
+        qa,
+        { ...qa, id: 'qa-2', question: '这是一条非常长的题目'.repeat(30) },
+      ],
+    })
+
+    try {
+      render(<InterviewOverlay />)
+
+      await waitFor(() => {
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 260, height: 130 })
+      })
+    } finally {
+      scrollHeightSpy.mockRestore()
+      scrollWidthSpy.mockRestore()
+    }
+  })
+
   it('caps prompt overlay auto width so long content wraps', async () => {
     const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 900, height: 130 })
     const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)

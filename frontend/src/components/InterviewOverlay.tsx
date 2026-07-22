@@ -154,12 +154,15 @@ export default function InterviewOverlay() {
     const contentEl = el.querySelector<HTMLElement>('.ov-answer-stack')
       ?? el.querySelector<HTMLElement>('.ov-markdown')
       ?? el
+    const widthEl = contentEl.querySelector<HTMLElement>('.ov-markdown') ?? contentEl
     const contentWidth = Math.ceil(Math.max(
-      contentEl.scrollWidth,
-      contentEl.getBoundingClientRect().width,
-      el.scrollWidth,
+      widthEl.scrollWidth,
+      widthEl.getBoundingClientRect().width,
     ))
-    const contentHeight = Math.ceil(el.scrollHeight)
+    const contentHeight = Math.ceil(Math.max(
+      contentEl.scrollHeight,
+      contentEl.getBoundingClientRect().height,
+    ))
     // 有内容时按内容宽度自适应 (上限 promptMaxWidth); 无内容时直接用 promptMaxWidth,
     // 避免开窗瞬间被空内容收窄成最小宽、再随答案流式撑开的视觉跳变。
     const targetWidth = hasContent ? Math.min(overlayPromptMaxWidth, contentWidth + 16) : overlayPromptMaxWidth

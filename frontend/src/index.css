@@ -714,7 +714,7 @@ code, pre, .font-mono {
   width: fit-content;
   min-width: 0;
   max-width: min(520px, calc(100vw - 12px));
-  max-height: calc(100vh - 8px);
+  max-height: min(408px, calc(100vh - 8px));
   padding: 2px 4px;
   line-height: 1.5;
 }
