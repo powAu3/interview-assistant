@@ -224,6 +224,7 @@ def test_generate_preflight_answer_uses_real_answer_pipeline(monkeypatch: pytest
 def test_replay_preflight_capture_stt_collects_round_stats(monkeypatch: pytest.MonkeyPatch):
     starts: list[tuple[int, str | None, dict]] = []
     stops: list[str | None] = []
+    playback_paths: list[str | Path | None] = []
     transcripts = iter([
         sound_test.PREFLIGHT_EXPECTED_PHRASE,
         "识别失败内容",
@@ -263,7 +264,17 @@ def test_replay_preflight_capture_stt_collects_round_stats(monkeypatch: pytest.M
         "transcribe_with_fallback",
         lambda *args, **kwargs: next(transcripts),
     )
-    monkeypatch.setattr(sound_test, "play_preflight_audio", lambda: 0.5)
+
+    def fake_play_audio_fixture(audio_path=None):
+        playback_paths.append(audio_path)
+        return 0.5
+
+    monkeypatch.setattr(sound_test, "play_audio_fixture", fake_play_audio_fixture)
+    monkeypatch.setattr(
+        sound_test,
+        "play_audio_file",
+        lambda *_args, **_kwargs: pytest.fail("replay unit test reached real audio playback"),
+    )
     monkeypatch.setattr(
         sound_test,
         "collect_capture_audio_during_playback",
@@ -292,6 +303,7 @@ def test_replay_preflight_capture_stt_collects_round_stats(monkeypatch: pytest.M
     assert all("capture" in round_item for round_item in result["rounds"])
     assert starts == [(12, "audio-preflight-replay", {"mic_compatibility_mode": True})]
     assert stops == ["audio-preflight-replay"]
+    assert playback_paths == [None, None, None]
 
 
 def test_collect_capture_audio_during_playback_captures_while_playing(monkeypatch: pytest.MonkeyPatch):
