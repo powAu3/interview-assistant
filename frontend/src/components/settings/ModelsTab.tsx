@@ -253,12 +253,12 @@ export default function ModelsTab() {
 
   const syncHealthFromServer = useCallback(async () => {
     try {
-      const { health, detail, latency } = await api.getModelsHealth()
+      const { health, detail, latency, fingerprint } = await api.getModelsHealth()
       const setH = useInterviewStore.getState().setModelHealth
       Object.entries(health ?? {}).forEach(([k, v]) => {
         if (v === 'ok' || v === 'error' || v === 'checking') {
           const index = Number(k)
-          setH(index, v, detail?.[k], latency?.[k])
+          setH(index, v, detail?.[k], latency?.[k], fingerprint?.[k])
         }
       })
     } catch {

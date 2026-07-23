@@ -201,24 +201,42 @@ export const createInterviewSlice: StateCreator<RootState, [], [], InterviewSlic
     _chunkBuffer.delete(id)
     set((s) => {
       const next = s.streamingIds.filter((x) => x !== id)
+      const existing = s.qaPairs.some((qa) => qa.id === id)
+      const qaPairs = existing
+        ? s.qaPairs.map((qa) =>
+            qa.id === id
+              ? {
+                  ...qa,
+                  question,
+                  answer,
+                  thinkContent: thinkContent ?? qa.thinkContent,
+                  isThinking: false,
+                  modelLabel: modelName ?? qa.modelLabel,
+                  firstTokenMs: firstTokenMs ?? qa.firstTokenMs,
+                  totalMs: totalMs ?? qa.totalMs,
+                  status: 'done' as QAStatus,
+                }
+              : qa,
+          )
+        : [
+            ...s.qaPairs,
+            {
+              id,
+              question,
+              answer,
+              thinkContent: thinkContent ?? '',
+              isThinking: false,
+              timestamp: Date.now() / 1000,
+              modelLabel: modelName,
+              firstTokenMs,
+              totalMs,
+              status: 'done' as QAStatus,
+            },
+          ]
       return {
         currentStreamingId: next.length ? next[next.length - 1] : null,
         streamingIds: next,
-        qaPairs: s.qaPairs.map((qa) =>
-          qa.id === id
-            ? {
-                ...qa,
-                question,
-                answer,
-                thinkContent: thinkContent ?? qa.thinkContent,
-                isThinking: false,
-                modelLabel: modelName ?? qa.modelLabel,
-                firstTokenMs: firstTokenMs ?? qa.firstTokenMs,
-                totalMs: totalMs ?? qa.totalMs,
-                status: 'done' as QAStatus,
-              }
-            : qa,
-        ),
+        qaPairs,
       }
     })
   },

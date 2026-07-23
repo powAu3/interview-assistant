@@ -112,3 +112,18 @@ def test_config_payload_includes_realtime_voice_runtime_knobs():
     assert payload["assist_realtime_high_churn_max_tokens"] == 360
     assert payload["assist_stop_answer_wait_sec"] == 2.5
     assert payload["assist_interviewer_asr_drain_timeout_sec"] == 8.0
+
+
+def test_config_payload_model_health_fingerprint_changes_with_credentials():
+    cfg = AppConfig()
+    cfg.models[0].api_key = "sk-first"
+    first = build_config_payload(cfg)["models"][0]["health_fingerprint"]
+
+    cfg.models[0].api_key = "sk-second"
+    second = build_config_payload(cfg)["models"][0]["health_fingerprint"]
+
+    assert first
+    assert second
+    assert first != second
+    assert "sk-first" not in first
+    assert "sk-second" not in second

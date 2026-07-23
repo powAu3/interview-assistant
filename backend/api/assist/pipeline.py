@@ -822,10 +822,17 @@ def _try_dispatch():
                 now_mono=time.monotonic(),
             )
             model_cfg_snapshot = None
+            config_snapshot = None
             if step.claim is not None:
                 selected_idx = step.claim.model_idx
                 if 0 <= selected_idx < len(cfg.models):
-                    model_cfg_snapshot = copy.deepcopy(cfg.models[selected_idx])
+                    # Keep model selection and every prompt/generation option
+                    # tied to the same immutable configuration generation.
+                    # update_config() replaces the global object while a
+                    # worker may be queued; copying only the model used to
+                    # let written-exam/KB/token settings drift underneath it.
+                    config_snapshot = copy.deepcopy(cfg)
+                    model_cfg_snapshot = copy.deepcopy(config_snapshot.models[selected_idx])
         if step.skipped_seq is not None:
             _mark_seq_skipped(step.skipped_seq)
             continue
@@ -839,6 +846,7 @@ def _try_dispatch():
                 step.claim.model_idx,
                 step.claim.session_version,
                 model_cfg_snapshot,
+                config_snapshot,
             ),
             daemon=True,
         ).start()
@@ -850,9 +858,17 @@ def _run_answer_worker(
     model_idx: int,
     sess_v: int,
     model_cfg_snapshot=None,
+    config_snapshot=None,
 ):
     try:
-        _process_question_parallel(task, seq, model_idx, sess_v, model_cfg_snapshot)
+        _process_question_parallel(
+            task,
+            seq,
+            model_idx,
+            sess_v,
+            model_cfg_snapshot,
+            config_snapshot,
+        )
     finally:
         with _dispatch_lock:
             _in_flight_tasks.pop(seq, None)
@@ -1800,8 +1816,9 @@ def _process_question_parallel(
     model_idx: int,
     sess_v: int,
     model_cfg_snapshot=None,
+    config_snapshot=None,
 ):
-    cfg = get_config()
+    cfg = config_snapshot if config_snapshot is not None else get_config()
     my_gen = _capture_generation()
     my_asr_turn = int(_task_meta(task).get("asr_turn_id", 0)) if _is_asr_task(task) else 0
 
@@ -1838,6 +1855,7 @@ def _process_question_parallel(
             error_logger=_elog,
             start_abort_check=session_stale,
             model_cfg_snapshot=model_cfg_snapshot,
+            config_snapshot=config_snapshot,
         ),
     )
 

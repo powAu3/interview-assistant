@@ -19,7 +19,13 @@ export interface SttSliceState {
 export interface SttSliceActions {
   setSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
   setCandidateSttStatus: (loaded: boolean, loading: boolean, provider?: string) => void
-  setModelHealth: (index: number, status: ModelHealthStatus, detail?: string, latencyMs?: number) => void
+  setModelHealth: (
+    index: number,
+    status: ModelHealthStatus,
+    detail?: string,
+    latencyMs?: number,
+    modelFingerprint?: string,
+  ) => void
   setTokenUsage: (usage: TokenUsage) => void
 }
 
@@ -53,11 +59,15 @@ export const createSttSlice: StateCreator<RootState, [], [], SttSlice> = (set) =
     candidateSttLoading: loading,
     ...(provider != null ? { candidateSttProvider: provider } : {}),
   })),
-  setModelHealth: (index, status, detail, latencyMs) => set((s) => ({
-    modelHealth: { ...s.modelHealth, [index]: status },
-    ...(detail != null ? { modelHealthDetail: { ...s.modelHealthDetail, [index]: detail } } : {}),
-    ...(latencyMs != null ? { modelHealthLatency: { ...s.modelHealthLatency, [index]: latencyMs } } : {}),
-  })),
+  setModelHealth: (index, status, detail, latencyMs, modelFingerprint) => set((s) => {
+    const currentFingerprint = s.config?.models?.[index]?.health_fingerprint
+    if (modelFingerprint && currentFingerprint && modelFingerprint !== currentFingerprint) return {}
+    return {
+      modelHealth: { ...s.modelHealth, [index]: status },
+      ...(detail != null ? { modelHealthDetail: { ...s.modelHealthDetail, [index]: detail } } : {}),
+      ...(latencyMs != null ? { modelHealthLatency: { ...s.modelHealthLatency, [index]: latencyMs } } : {}),
+    }
+  }),
   setTokenUsage: (usage) =>
     set({
       tokenUsage: {

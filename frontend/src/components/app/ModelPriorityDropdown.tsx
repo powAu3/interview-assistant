@@ -101,6 +101,7 @@ export function ModelPriorityDropdown({
             status,
             snapshot.detail?.[rawIndex],
             snapshot.latency?.[rawIndex],
+            snapshot.fingerprint?.[rawIndex],
           )
         })
       }

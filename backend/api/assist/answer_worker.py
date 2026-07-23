@@ -38,6 +38,11 @@ class AnswerWorkerDeps:
     error_logger: Any
     start_abort_check: Optional[Callable[[], bool]] = None
     model_cfg_snapshot: Any = None
+    # The dispatcher captures the complete immutable configuration that was
+    # active when the task claimed a model.  Runtime/session state is still
+    # read through the callbacks above, but prompt and generation settings
+    # must not drift while a queued worker is waiting to start.
+    config_snapshot: Any = None
 
 
 def _screen_region_label(region: str) -> str:
@@ -689,7 +694,9 @@ def process_question_parallel(
             except Exception as exc:  # noqa: BLE001
                 deps.error_logger.warning("exam preflight event record failed: %s", exc)
 
-    cfg = get_config()
+    # Prefer the dispatch-time snapshot.  Falling back to get_config keeps
+    # this worker usable from older callers/tests that invoke it directly.
+    cfg = deps.config_snapshot if deps.config_snapshot is not None else get_config()
     model_cfg = deps.model_cfg_snapshot
     if model_cfg is None and (model_idx < 0 or model_idx >= len(cfg.models)):
         deps.error_logger.warning(
@@ -996,6 +1003,9 @@ def process_question_parallel(
 
     exam_think_notified = False
     gen_start = time.monotonic()
+    # User-facing "首字" latency means the first answer token, not a hidden
+    # reasoning token.  This matters for written-exam mode where Think output
+    # may arrive seconds before any usable code/answer text.
     first_token_mono: Optional[float] = None
     chunk_buffer: list[str] = []
     batch_size = 5
@@ -1019,8 +1029,6 @@ def process_question_parallel(
         ):
             if deps.abort_check():
                 break
-            if first_token_mono is None:
-                first_token_mono = time.monotonic()
             if chunk_type == "think":
                 full_think += chunk_text
                 if prompt_mode == PROMPT_MODE_WRITTEN_EXAM:
@@ -1042,6 +1050,8 @@ def process_question_parallel(
                         }
                     )
             else:
+                if first_token_mono is None and chunk_text:
+                    first_token_mono = time.monotonic()
                 raw_full_answer += chunk_text
                 clean_chunk = stream_sanitizer.push(chunk_text)
                 if clean_chunk:

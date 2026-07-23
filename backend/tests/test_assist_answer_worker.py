@@ -131,6 +131,35 @@ def test_process_question_parallel_streams_and_commits_answer(monkeypatch: pytes
     assert session.qa_pairs[0].model_name == "模型一"
 
 
+def test_first_token_latency_starts_on_answer_not_hidden_think(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+    clock = {"now": 0.0}
+    monkeypatch.setattr(answer_worker.time, "monotonic", lambda: clock["now"])
+
+    def fake_stream(*_args, **_kwargs):
+        clock["now"] = 1.0
+        yield ("think", "先分析")
+        clock["now"] = 3.0
+        yield ("text", "最终答案")
+        clock["now"] = 4.0
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    answer_worker.process_question_parallel(
+        ("问题", None, True, "manual_text", {"origin": "manual"}),
+        seq=0,
+        model_idx=0,
+        sess_v=0,
+        deps=_deps(broadcasts=broadcasts),
+    )
+
+    done = next(event for event in broadcasts if event["type"] == "answer_done")
+    assert done["first_token_ms"] == 3000
+    assert done["total_ms"] == 4000
+
+
 def test_process_question_parallel_submits_candidate_answer_to_knowledge(monkeypatch: pytest.MonkeyPatch):
     broadcasts: list[dict] = []
     knowledge: list[tuple[str, str, str, str]] = []

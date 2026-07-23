@@ -175,6 +175,59 @@ def test_dispatched_worker_keeps_selected_model_when_settings_reorder_models(
     assert [qa.answer for qa in session.qa_pairs] == ["模型一:配置更新期间的问题"]
 
 
+def test_dispatched_worker_keeps_full_config_snapshot_when_settings_change(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Queued work must not switch prompt/generation settings mid-flight."""
+
+    cfg = pipeline.get_config()
+    cfg.written_exam_mode = True
+    cfg.written_exam_think = False
+    cfg.screen_capture_region = "left_half"
+    cfg.max_tokens = 777
+    cfg.models[0].supports_vision = True
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(pipeline, "broadcast", lambda _data: None)
+
+    def fake_prompt(**kwargs):
+        captured["prompt_mode"] = kwargs["mode"]
+        captured["screen_region"] = kwargs["screen_region"]
+        return "system"
+
+    def fake_stream(_model_cfg, _messages, **kwargs):
+        captured["override_think_mode"] = kwargs.get("override_think_mode")
+        captured["override_max_tokens"] = kwargs.get("override_max_tokens")
+        yield ("text", "截图答案")
+
+    monkeypatch.setattr(answer_worker, "build_system_prompt", fake_prompt)
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+
+    assert pipeline.submit_answer_task(
+        (
+            "截图题",
+            "data:image/png;base64,queued",
+            True,
+            "server_screen_left",
+            {"origin": "server_screen", "image_count": 1},
+        )
+    )
+    assert len(_DeferredThread.started) == 1
+
+    # Simulate a settings save while the worker is queued.
+    cfg.written_exam_mode = False
+    cfg.written_exam_think = True
+    cfg.screen_capture_region = "right_half"
+    cfg.max_tokens = 2048
+
+    _DeferredThread.started[0].run()
+
+    assert captured["prompt_mode"] == answer_worker.PROMPT_MODE_WRITTEN_EXAM
+    assert captured["screen_region"] == "left_half"
+    assert captured["override_think_mode"] is False
+    assert captured["override_max_tokens"] == 777
+
+
 def test_parallel_answers_commit_in_submit_order_when_workers_finish_out_of_order(
     monkeypatch: pytest.MonkeyPatch,
 ):
