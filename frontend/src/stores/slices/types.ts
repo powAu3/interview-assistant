@@ -12,6 +12,8 @@ export interface ModelInfo {
   supports_think: boolean
   supports_vision: boolean
   enabled?: boolean
+  /** Opaque backend identity used to discard health results for old models. */
+  health_fingerprint?: string
   think_enabled_params?: Record<string, unknown>
   think_disabled_params?: Record<string, unknown>
 }

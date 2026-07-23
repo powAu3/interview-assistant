@@ -71,7 +71,12 @@ def test_model_health_checks_are_submitted_to_low_priority_lane(monkeypatch):
     )
 
     assert model_health.start_single_model_check(2) is True
-    assert submitted == [(model_health._check_single_model, (2,))]
+    assert len(submitted) == 1
+    fn, args = submitted[0]
+    assert fn is model_health._check_single_model
+    assert args[0] == 2
+    assert args[1].enabled is True
+    assert args[2] == model_health.model_health_fingerprint(cfg.models[2])
 
 
 def test_all_model_health_checks_skip_disabled_models(monkeypatch):
@@ -101,9 +106,14 @@ def test_all_model_health_checks_skip_disabled_models(monkeypatch):
 
     assert model_health.start_all_model_checks() is True
 
-    assert submitted == [
-        (model_health._check_single_model, (0,)),
-        (model_health._check_single_model, (2,)),
+    assert [entry[0] for entry in submitted] == [
+        model_health._check_single_model,
+        model_health._check_single_model,
+    ]
+    assert [entry[1][0] for entry in submitted] == [0, 2]
+    assert [entry[1][2] for entry in submitted] == [
+        model_health.model_health_fingerprint(cfg.models[0]),
+        model_health.model_health_fingerprint(cfg.models[2]),
     ]
     assert 1 not in model_health._model_health
     assert 1 not in model_health._model_health_detail

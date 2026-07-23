@@ -103,6 +103,25 @@ describe('configStore answer streaming', () => {
     })
   })
 
+  it('reconstructs a completed answer when answer_start was missed during reconnect', () => {
+    const store = useInterviewStore.getState()
+
+    store.finalizeAnswer('qa-lost-start', '重连后的问题', '重连后的完整答案', '思考', '模型', 120, 800)
+
+    const state = useInterviewStore.getState()
+    expect(state.qaPairs).toMatchObject([{
+      id: 'qa-lost-start',
+      question: '重连后的问题',
+      answer: '重连后的完整答案',
+      thinkContent: '思考',
+      modelLabel: '模型',
+      firstTokenMs: 120,
+      totalMs: 800,
+      status: 'done',
+    }])
+    expect(state.streamingIds).toEqual([])
+  })
+
   it('ignores duplicate answer_start events after completion', () => {
     const store = useInterviewStore.getState()
 
@@ -139,6 +158,47 @@ describe('configStore toast queue', () => {
     const state = useInterviewStore.getState()
     expect(state.toastMessage).toBeNull()
     expect(state.toasts.map((toast) => toast.message)).toEqual(['旧提示', '新提示'])
+  })
+})
+
+describe('configStore model health identity', () => {
+  beforeEach(() => {
+    useInterviewStore.setState({
+      config: {
+        models: [
+          { name: 'A', supports_think: false, supports_vision: false, health_fingerprint: 'fp-a' },
+          { name: 'B', supports_think: false, supports_vision: false, health_fingerprint: 'fp-b' },
+        ],
+        active_model: 0,
+      },
+      modelHealth: { 0: 'error', 1: 'ok' },
+      modelHealthDetail: { 0: 'old failure' },
+      modelHealthLatency: { 1: 120 },
+    } as any)
+  })
+
+  it('clears index-based health state when model ownership changes', () => {
+    useInterviewStore.getState().setConfig({
+      models: [
+        { name: 'B', supports_think: false, supports_vision: false, health_fingerprint: 'fp-b' },
+        { name: 'A', supports_think: false, supports_vision: false, health_fingerprint: 'fp-a' },
+      ],
+      active_model: 0,
+    } as any)
+
+    const state = useInterviewStore.getState()
+    expect(state.modelHealth).toEqual({})
+    expect(state.modelHealthDetail).toEqual({})
+    expect(state.modelHealthLatency).toEqual({})
+  })
+
+  it('ignores a late websocket health event for the previous model', () => {
+    useInterviewStore.getState().setModelHealth(0, 'ok', '', 88, 'fp-old')
+    expect(useInterviewStore.getState().modelHealth[0]).toBe('error')
+
+    useInterviewStore.getState().setModelHealth(0, 'ok', '', 88, 'fp-a')
+    expect(useInterviewStore.getState().modelHealth[0]).toBe('ok')
+    expect(useInterviewStore.getState().modelHealthLatency[0]).toBe(88)
   })
 })
 

@@ -290,6 +290,7 @@ export const api = {
     health: Record<string, string>
     detail?: Record<string, string>
     latency?: Record<string, number>
+    fingerprint?: Record<string, string>
   }>('/api/models/health'),
   listRemoteModels: (payload: { api_base_url: string; api_key: string; model_index?: number }) =>
     request<{ models: { id: string; owned_by?: string | null }[] }>('/api/models/list', { method: 'POST', body: JSON.stringify(payload) }),

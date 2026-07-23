@@ -1,3 +1,4 @@
+from core.config import model_health_fingerprint
 from services.storage.resume_history import get_filename_for_id
 
 
@@ -11,6 +12,7 @@ def build_config_payload(cfg) -> dict:
                 "supports_think": model.supports_think,
                 "supports_vision": model.supports_vision,
                 "enabled": getattr(model, "enabled", True),
+                "health_fingerprint": model_health_fingerprint(model),
             }
             for model in cfg.models
         ],

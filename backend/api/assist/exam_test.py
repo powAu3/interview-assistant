@@ -14,6 +14,7 @@ from api.common.model_health import get_model_health
 from api.realtime.ws import broadcast
 from core.config import get_config
 from core.logger import get_logger
+from core.session import get_session
 from .answer_worker import prompt_server_screen_code
 
 
@@ -102,6 +103,11 @@ def get_exam_preflight_status() -> dict:
             "started_at": _status.get("started_at"),
             "finished_at": _status.get("finished_at"),
         }
+
+
+def is_exam_preflight_running() -> bool:
+    with _lock:
+        return bool(_running)
 
 
 def _font_candidates() -> list[str]:
@@ -428,7 +434,9 @@ def start_exam_preflight() -> Optional[str]:
     global _running
     preflight_id = _new_preflight_id()
     with _lock:
-        if _running:
+        # A preflight submits through the real answer queue.  Never let it
+        # compete with an active (including paused) interview/exam session.
+        if _running or get_session().is_recording:
             return None
         _running = True
     thread = threading.Thread(

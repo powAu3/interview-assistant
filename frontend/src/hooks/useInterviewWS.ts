@@ -204,6 +204,7 @@ export function useInterviewWS(active = true) {
           msg.status as Parameters<typeof s.setModelHealth>[1],
           msg.detail as string | undefined,
           msg.latency_ms as number | undefined,
+          msg.model_fingerprint as string | undefined,
         )
         break
       case 'token_update':

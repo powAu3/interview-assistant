@@ -226,6 +226,12 @@ def test_exam_preflight_timeout_unlocks_retry_and_ignores_late_worker_events(
 
 def test_start_exam_preflight_returns_thread_preflight_id(monkeypatch: pytest.MonkeyPatch):
     started: list[str] = []
+    exam_test._running = False
+    monkeypatch.setattr(
+        exam_test,
+        "get_session",
+        lambda: SimpleNamespace(is_recording=False, is_paused=False),
+    )
 
     def fake_run(preflight_id: str):
         started.append(preflight_id)
@@ -247,3 +253,23 @@ def test_start_exam_preflight_returns_thread_preflight_id(monkeypatch: pytest.Mo
     assert isinstance(preflight_id, str)
     assert preflight_id.startswith("exam-preflight-")
     assert started == [preflight_id]
+
+
+def test_start_exam_preflight_does_not_spawn_during_active_session(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    exam_test._running = False
+    monkeypatch.setattr(
+        exam_test,
+        "get_session",
+        lambda: SimpleNamespace(is_recording=True, is_paused=True),
+    )
+
+    class FailThread:
+        def __init__(self, **_kwargs):
+            raise AssertionError("preflight thread must not be created")
+
+    monkeypatch.setattr(exam_test.threading, "Thread", FailThread)
+
+    assert exam_test.start_exam_preflight() is None
+    assert exam_test._running is False

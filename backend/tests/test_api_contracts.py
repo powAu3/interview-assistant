@@ -173,3 +173,39 @@ def test_api_preflight_replay_rejects_when_recording(monkeypatch: pytest.MonkeyP
         asyncio.run(assist_routes.api_preflight_replay({"device_id": 7}))
 
     assert exc_info.value.status_code == 409
+
+
+def test_api_exam_preflight_rejects_active_or_paused_session(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        assist_routes,
+        "get_session",
+        lambda: SimpleNamespace(is_recording=True, is_paused=True),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(assist_routes.api_exam_preflight_run())
+
+    assert exc_info.value.status_code == 409
+    assert "结束当前面试或笔试" in str(exc_info.value.detail)
+
+
+def test_api_start_rejects_while_exam_preflight_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    exam_test = importlib.import_module("api.assist.exam_test")
+    monkeypatch.setattr(exam_test, "is_exam_preflight_running", lambda: True)
+    started: list[object] = []
+    monkeypatch.setattr(
+        assist_routes,
+        "start_nonblocking",
+        lambda device_id: started.append(device_id),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(assist_routes.api_start({"device_id": 1}))
+
+    assert exc_info.value.status_code == 409
+    assert "链路检测正在运行" in str(exc_info.value.detail)
+    assert started == []

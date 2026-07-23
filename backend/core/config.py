@@ -1,8 +1,11 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional, Any
+import hashlib
+import hmac
 import json
 import math
 import os
+import secrets
 
 from core.logger import get_logger
 
@@ -14,6 +17,7 @@ logger = get_logger(__name__)
 
 DEFAULT_TEMPERATURE = 0.5
 DEFAULT_MAX_TOKENS = 4096
+_MODEL_HEALTH_FINGERPRINT_KEY = secrets.token_bytes(32)
 
 
 def _finite_number(value: Any, fallback: float) -> float:
@@ -50,6 +54,28 @@ class ModelConfig(BaseModel):
     enabled: bool = True
     think_enabled_params: dict[str, Any] = Field(default_factory=dict)
     think_disabled_params: dict[str, Any] = Field(default_factory=dict)
+
+
+def model_health_fingerprint(model: Any) -> str:
+    """Return a process-local opaque identity for health-check ownership.
+
+    The API key participates so changing credentials invalidates an old
+    health result, but the key itself (and a reusable unsalted hash of it) is
+    never exposed to the frontend.
+    """
+
+    fields = (
+        str(getattr(model, "name", "") or "").strip(),
+        str(getattr(model, "api_base_url", "") or "").strip().rstrip("/"),
+        str(getattr(model, "model", "") or "").strip(),
+        str(getattr(model, "api_key", "") or ""),
+    )
+    payload = "\x1f".join(fields).encode("utf-8", errors="surrogatepass")
+    return hmac.new(
+        _MODEL_HEALTH_FINGERPRINT_KEY,
+        payload,
+        hashlib.sha256,
+    ).hexdigest()[:24]
 
 
 def _default_model_config() -> ModelConfig:

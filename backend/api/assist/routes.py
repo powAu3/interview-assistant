@@ -38,6 +38,10 @@ class MultiServerScreenQuestion(BaseModel):
 
 @router.post("/start")
 async def api_start(body: dict):
+    from .exam_test import is_exam_preflight_running
+
+    if is_exam_preflight_running():
+        raise HTTPException(409, "笔试链路检测正在运行，请等待检测结束后再开始")
     cfg = get_config()
     written_exam = bool(getattr(cfg, "written_exam_mode", False))
     device_id = body.get("device_id")
@@ -284,8 +288,14 @@ async def api_preflight_replay(body: dict):
 @router.post("/exam-preflight/run")
 async def api_exam_preflight_run():
     from .exam_test import start_exam_preflight
+
+    session = get_session()
+    if session.is_recording:
+        raise HTTPException(409, "请先结束当前面试或笔试，再运行链路检测")
     preflight_id = start_exam_preflight()
     if not preflight_id:
+        if get_session().is_recording:
+            raise HTTPException(409, "请先结束当前面试或笔试，再运行链路检测")
         raise HTTPException(409, "笔试链路检测已在运行中")
     return {"ok": True, "preflight_id": preflight_id}
 

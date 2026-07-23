@@ -1,9 +1,11 @@
+import copy
 import json
+import threading
 from typing import Optional
 
 import requests
 
-from core.config import get_config
+from core.config import get_config, model_health_fingerprint
 from core.resource_lanes import submit_low_priority_background
 from services.llm.streaming import (
     _build_think_params,
@@ -16,6 +18,8 @@ from services.llm.streaming import (
 _model_health: dict[int, str] = {}
 _model_health_detail: dict[int, str] = {}
 _model_health_latency: dict[int, int] = {}
+_model_health_fingerprint: dict[int, str] = {}
+_model_health_lock = threading.RLock()
 
 _VISION_PROBE_IMAGE_DATA_URL = (
     "data:image/png;base64,"
@@ -136,12 +140,94 @@ def _has_reasoning_tokens(value: object) -> bool:
     return False
 
 
+def _clear_model_health(
+    index: int,
+    expected_fingerprint: Optional[str] = None,
+) -> bool:
+    with _model_health_lock:
+        stored_fingerprint = _model_health_fingerprint.get(index)
+        if (
+            expected_fingerprint
+            and stored_fingerprint
+            and stored_fingerprint != expected_fingerprint
+        ):
+            return False
+        _model_health.pop(index, None)
+        _model_health_detail.pop(index, None)
+        _model_health_latency.pop(index, None)
+        _model_health_fingerprint.pop(index, None)
+    return True
+
+
+def _current_model_fingerprint(index: int) -> Optional[str]:
+    cfg = get_config()
+    if index < 0 or index >= len(cfg.models):
+        return None
+    return model_health_fingerprint(cfg.models[index])
+
+
+def _fingerprint_is_current(index: int, fingerprint: str) -> bool:
+    return bool(fingerprint) and _current_model_fingerprint(index) == fingerprint
+
+
+def _store_model_health(
+    index: int,
+    fingerprint: str,
+    status: str,
+    detail: str = "",
+    latency_ms: int = 0,
+) -> bool:
+    """Store a result only while the index still owns the probed model."""
+
+    if not _fingerprint_is_current(index, fingerprint):
+        return False
+    with _model_health_lock:
+        # Recheck after taking the state lock so a concurrent config save
+        # cannot leave a stale result attached to a reused array index.
+        if not _fingerprint_is_current(index, fingerprint):
+            return False
+        _model_health[index] = status
+        _model_health_detail[index] = detail
+        _model_health_latency[index] = latency_ms
+        _model_health_fingerprint[index] = fingerprint
+    return True
+
+
 def get_model_health(index: int) -> Optional[str]:
-    return _model_health.get(index)
+    fingerprint = _current_model_fingerprint(index)
+    with _model_health_lock:
+        if (
+            not fingerprint
+            or not _fingerprint_is_current(index, fingerprint)
+            or _model_health_fingerprint.get(index) != fingerprint
+        ):
+            _clear_model_health(index)
+            return None
+        return _model_health.get(index)
 
 
 def get_model_health_snapshot() -> dict:
-    return {"health": _model_health, "detail": _model_health_detail, "latency": _model_health_latency}
+    cfg = get_config()
+    current = {
+        index: model_health_fingerprint(model)
+        for index, model in enumerate(cfg.models)
+    }
+    with _model_health_lock:
+        indexes = (
+            set(_model_health)
+            | set(_model_health_detail)
+            | set(_model_health_latency)
+            | set(_model_health_fingerprint)
+        )
+        for index in indexes:
+            if _model_health_fingerprint.get(index) != current.get(index):
+                _clear_model_health(index)
+        return {
+            "health": dict(_model_health),
+            "detail": dict(_model_health_detail),
+            "latency": dict(_model_health_latency),
+            "fingerprint": dict(_model_health_fingerprint),
+        }
 
 
 def _build_headers(model) -> dict:
@@ -383,27 +469,21 @@ def probe_single_model(index: int) -> dict:
     cfg = get_config()
     if index < 0 or index >= len(cfg.models):
         raise ValueError(f"模型 index {index} 超出范围")
-    model = cfg.models[index]
+    model = copy.deepcopy(cfg.models[index])
+    fingerprint = model_health_fingerprint(model)
     if getattr(model, "enabled", True) is False:
-        _model_health.pop(index, None)
-        _model_health_detail.pop(index, None)
-        _model_health_latency.pop(index, None)
+        if _fingerprint_is_current(index, fingerprint):
+            _clear_model_health(index, fingerprint)
         return _probe_result(False, detail="模型已停用")
     if not model.api_key or model.api_key in ("", "sk-your-api-key-here"):
-        _model_health[index] = "error"
-        _model_health_detail[index] = "未配置 API Key"
-        _model_health_latency[index] = 0
+        _store_model_health(index, fingerprint, "error", "未配置 API Key", 0)
         return _probe_result(False, detail="未配置 API Key")
     try:
         _ok, _detail, latency_ms = _probe_basic(model, reject_reasoning=False)
-        _model_health[index] = "ok"
-        _model_health_detail[index] = ""
-        _model_health_latency[index] = latency_ms
+        _store_model_health(index, fingerprint, "ok", "", latency_ms)
     except Exception as e:
         detail = str(e)[:120]
-        _model_health[index] = "error"
-        _model_health_detail[index] = detail
-        _model_health_latency[index] = 0
+        _store_model_health(index, fingerprint, "error", detail, 0)
         return _probe_result(False, detail=detail)
     supports_vision, vision_detail = _probe_vision(model)
     think_disabled_params, think_disabled_detail = _probe_disable_think(model)
@@ -423,42 +503,76 @@ def probe_single_model(index: int) -> dict:
     )
 
 
-def _check_single_model(index: int):
+def _check_single_model(
+    index: int,
+    model_snapshot=None,
+    expected_fingerprint: Optional[str] = None,
+):
     from api.realtime.ws import broadcast
 
-    cfg = get_config()
-    if index >= len(cfg.models):
+    if model_snapshot is None:
+        cfg = get_config()
+        if index < 0 or index >= len(cfg.models):
+            return
+        model = copy.deepcopy(cfg.models[index])
+    else:
+        model = model_snapshot
+    fingerprint = expected_fingerprint or model_health_fingerprint(model)
+    if not _fingerprint_is_current(index, fingerprint):
         return
-    model = cfg.models[index]
     if getattr(model, "enabled", True) is False:
-        _model_health.pop(index, None)
-        _model_health_detail.pop(index, None)
-        _model_health_latency.pop(index, None)
+        _clear_model_health(index, fingerprint)
         return
-    _model_health[index] = "checking"
-    _model_health_detail[index] = ""
-    _model_health_latency[index] = 0
-    broadcast({"type": "model_health", "index": index, "status": "checking"})
+    if _store_model_health(index, fingerprint, "checking", "", 0):
+        broadcast(
+            {
+                "type": "model_health",
+                "index": index,
+                "status": "checking",
+                "model_fingerprint": fingerprint,
+            }
+        )
+    else:
+        return
 
     if not model.api_key or model.api_key in ("", "sk-your-api-key-here"):
-        _model_health[index] = "error"
-        _model_health_detail[index] = "未配置 API Key"
-        _model_health_latency[index] = 0
-        broadcast({"type": "model_health", "index": index, "status": "error", "detail": "未配置 API Key"})
+        if _store_model_health(index, fingerprint, "error", "未配置 API Key", 0):
+            broadcast(
+                {
+                    "type": "model_health",
+                    "index": index,
+                    "status": "error",
+                    "detail": "未配置 API Key",
+                    "model_fingerprint": fingerprint,
+                }
+            )
         return
 
     try:
         _ok, _detail, latency_ms = _probe_basic(model)
-        _model_health[index] = "ok"
-        _model_health_detail[index] = ""
-        _model_health_latency[index] = latency_ms
-        broadcast({"type": "model_health", "index": index, "status": "ok", "latency_ms": latency_ms})
+        if _store_model_health(index, fingerprint, "ok", "", latency_ms):
+            broadcast(
+                {
+                    "type": "model_health",
+                    "index": index,
+                    "status": "ok",
+                    "latency_ms": latency_ms,
+                    "model_fingerprint": fingerprint,
+                }
+            )
     except Exception as e:
-        latency_ms_val = _model_health_latency.get(index, 0)
-        _model_health[index] = "error"
         detail = str(e)[:120]
-        _model_health_detail[index] = detail
-        broadcast({"type": "model_health", "index": index, "status": "error", "detail": detail, "latency_ms": latency_ms_val})
+        if _store_model_health(index, fingerprint, "error", detail, 0):
+            broadcast(
+                {
+                    "type": "model_health",
+                    "index": index,
+                    "status": "error",
+                    "detail": detail,
+                    "latency_ms": 0,
+                    "model_fingerprint": fingerprint,
+                }
+            )
 
 
 def start_all_model_checks() -> bool:
@@ -470,26 +584,37 @@ def start_all_model_checks() -> bool:
         if getattr(model, "enabled", True) is not False
     ]
     disabled_indexes = set(range(len(cfg.models))) - set(enabled_indexes)
-    for i in disabled_indexes:
-        _model_health.pop(i, None)
-        _model_health_detail.pop(i, None)
-        _model_health_latency.pop(i, None)
+    stale_indexes = set(_model_health) - set(range(len(cfg.models)))
+    for i in disabled_indexes | stale_indexes:
+        _clear_model_health(i)
     for i in enabled_indexes:
         if start_single_model_check(i):
             accepted += 1
         else:
-            _model_health[i] = "error"
-            _model_health_detail[i] = "后台队列繁忙，请稍后重试"
+            fingerprint = model_health_fingerprint(cfg.models[i])
+            _store_model_health(
+                i,
+                fingerprint,
+                "error",
+                "后台队列繁忙，请稍后重试",
+                0,
+            )
     return accepted > 0 or not enabled_indexes
 
 
 def start_single_model_check(index: int) -> bool:
     cfg = get_config()
-    if index < 0:
+    if index < 0 or index >= len(cfg.models):
         return False
-    if index < len(cfg.models) and getattr(cfg.models[index], "enabled", True) is False:
-        _model_health.pop(index, None)
-        _model_health_detail.pop(index, None)
-        _model_health_latency.pop(index, None)
+    model = copy.deepcopy(cfg.models[index])
+    fingerprint = model_health_fingerprint(model)
+    if getattr(model, "enabled", True) is False:
+        if _fingerprint_is_current(index, fingerprint):
+            _clear_model_health(index, fingerprint)
         return True
-    return submit_low_priority_background(_check_single_model, index)
+    return submit_low_priority_background(
+        _check_single_model,
+        index,
+        model,
+        fingerprint,
+    )
