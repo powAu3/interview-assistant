@@ -42,8 +42,9 @@ class Session:
     last_llm_history_stats: dict = field(default_factory=dict)
     is_recording: bool = False
     is_paused: bool = False
-    last_device_id: int = 0
-    last_candidate_mic_device_id: int = 0
+    # PortAudio device ids are 0-based; use -1 as the unset / no-device sentinel.
+    last_device_id: int = -1
+    last_candidate_mic_device_id: int = -1
     capture_is_loopback: bool = True
     created_at: float = field(default_factory=time.time)
     system_summary: str = ""
@@ -342,8 +343,8 @@ class Session:
         self.candidate_asr_activity_at = 0.0
         self.is_recording = False
         self.is_paused = False
-        self.last_device_id = 0
-        self.last_candidate_mic_device_id = 0
+        self.last_device_id = -1
+        self.last_candidate_mic_device_id = -1
         self.capture_is_loopback = True
         self.created_at = time.time()
         self.system_summary = ""

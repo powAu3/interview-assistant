@@ -44,6 +44,9 @@ const {
   validateShortcutMap,
 } = require('./shortcuts');
 const {
+  PROMPT_OVERLAY_DEFAULT_WIDTH,
+  PROMPT_OVERLAY_MAX_WIDTH,
+  consumePendingOverlayShow,
   createOverlayChromeOptions,
   getPromptOverlayInitialWidth,
   relayChildOutput,
@@ -89,6 +92,7 @@ let _overlayDragging = false;
 let _blurTimer = null;
 let overlayAutoResizeUntil = 0;
 let overlayPositionSaveTimer = null;
+let overlayToggleBlockedUntil = 0;
 let lastOverlayState = {
   initialized: false,
   enabled: false,
@@ -100,7 +104,7 @@ let lastOverlayState = {
   mode: 'glass',
   focusWidthPct: 96,
   focusHeightPct: 90,
-  promptMaxWidth: 900,
+  promptMaxWidth: PROMPT_OVERLAY_DEFAULT_WIDTH,
   promptAutoFollow: false,
   maxLines: 0,
 };
@@ -455,8 +459,7 @@ function createOverlayWindow() {
     setTimeout(() => {
       if (!overlayWindow || overlayWindow.isDestroyed()) return;
       overlayWindow._overlayReady = true;
-      if (overlayWindow._pendingShow) {
-        overlayWindow._pendingShow = false;
+      if (consumePendingOverlayShow(overlayWindow, lastOverlayState?.visible)) {
         showOverlayWindow();
       }
     }, process.platform === 'win32' ? 120 : 0);
@@ -506,6 +509,11 @@ function sendShortcutsState() {
 
 function showOverlayWindow() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (!lastOverlayState?.visible) {
+    overlayWindow._pendingShow = false;
+    overlayWindow.hide();
+    return;
+  }
   if (!overlayWindow._overlayReady) {
     overlayWindow._pendingShow = true;
     return;
@@ -528,6 +536,23 @@ function toggleWindow() {
   } else {
     mainWindow.show();
     mainWindow.focus();
+  }
+}
+
+function notifyMainWindow(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function notifyDesktopToast(message, level = 'info') {
+  if (!message) return;
+  notifyMainWindow('desktop-toast', { message: String(message), level });
+}
+
+function notifyConfigUpdated(config) {
+  if (config && typeof config === 'object') {
+    notifyMainWindow('config-updated', config);
   }
 }
 
@@ -790,6 +815,50 @@ const shortcutCallbacks = {
       console.error('askFromServerScreen failed:', error);
     }
   },
+  askScreenForceThink: async () => {
+    try {
+      await postBackend('/api/ask-from-server-screen', JSON.stringify({ override_think_mode: true }));
+      notifyDesktopToast('已提交强制思考截图审题', 'success');
+    } catch (error) {
+      console.error('askScreenForceThink failed:', error);
+      notifyDesktopToast(error?.message || '强制思考截图失败', 'error');
+    }
+  },
+  askScreenForceNoThink: async () => {
+    try {
+      await postBackend('/api/ask-from-server-screen', JSON.stringify({ override_think_mode: false }));
+      notifyDesktopToast('已提交强制非思考截图审题', 'success');
+    } catch (error) {
+      console.error('askScreenForceNoThink failed:', error);
+      notifyDesktopToast(error?.message || '强制非思考截图失败', 'error');
+    }
+  },
+  toggleThinkMode: async () => {
+    try {
+      const cfg = await getBackend('/api/config');
+      let nextPayload;
+      let toastMsg;
+      if (cfg?.written_exam_mode) {
+        const next = !Boolean(cfg.written_exam_think);
+        nextPayload = await postBackend('/api/config', JSON.stringify({
+          written_exam_think: next,
+        }));
+        toastMsg = next ? '笔试思考模式已开启' : '笔试思考模式已关闭';
+      } else {
+        const next = !Boolean(cfg?.think_mode);
+        nextPayload = await postBackend('/api/config', JSON.stringify({
+          think_mode: next,
+          think_effort: next ? 'xhigh' : 'off',
+        }));
+        toastMsg = next ? '全局思考模式已开启' : '全局思考模式已关闭';
+      }
+      notifyConfigUpdated(nextPayload);
+      notifyDesktopToast(toastMsg, 'success');
+    } catch (error) {
+      console.error('toggleThinkMode failed:', error);
+      notifyDesktopToast(error?.message || '切换思考模式失败', 'error');
+    }
+  },
   cancelAnswer: async () => {
     try {
       await postBackend('/api/ask/cancel');
@@ -799,6 +868,10 @@ const shortcutCallbacks = {
   },
   addMultiServerScreenShot,
   toggleInterviewOverlay: () => {
+    // Electron may repeat a global shortcut while the key is held. Debounce
+    // the toggle so one physical press cannot hide and immediately re-show it.
+    if (Date.now() < overlayToggleBlockedUntil) return;
+    overlayToggleBlockedUntil = Date.now() + 350;
     const nextVisible = !Boolean(lastOverlayState.visible);
     const nextState = {
       ...lastOverlayState,
@@ -819,7 +892,10 @@ const shortcutCallbacks = {
     } else {
       // 快捷键仅切换 overlay 可见性, 主窗口保持原状 (用户可通过 Cmd+B 或托盘唤回).
       // 只有 ControlBar 的 "结束面试" 按钮会走 sync-overlay-window IPC 恢复主窗口.
-      if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow._pendingShow = false;
+        overlayWindow.hide();
+      }
     }
   },
   moveOverlayToMouse: () => {
@@ -924,7 +1000,7 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   }
   if ('promptMaxWidth' in payload) {
     const promptMaxWidth = Number(payload.promptMaxWidth);
-    if (Number.isFinite(promptMaxWidth)) style.promptMaxWidth = Math.max(200, Math.min(1500, Math.round(promptMaxWidth)));
+    if (Number.isFinite(promptMaxWidth)) style.promptMaxWidth = Math.max(200, Math.min(PROMPT_OVERLAY_MAX_WIDTH, Math.round(promptMaxWidth)));
   }
   if ('promptAutoFollow' in payload && typeof payload.promptAutoFollow === 'boolean') {
     style.promptAutoFollow = payload.promptAutoFollow;
@@ -961,7 +1037,10 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   }
 
   if (!state.visible) {
-    if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow._pendingShow = false;
+      overlayWindow.hide();
+    }
     return { ok: true, visible: false };
   }
 
@@ -986,7 +1065,7 @@ ipcMain.handle('resize-overlay-window', (_event, payload = {}) => {
   const area = screen.getDisplayNearestPoint(center).workArea;
   const nextWidth = Number(payload.width);
   const nextHeight = Number(payload.height);
-  const promptMaxWidth = Math.max(200, Math.min(1500, Number(lastOverlayState?.promptMaxWidth) || 900));
+  const promptMaxWidth = Math.max(200, Math.min(PROMPT_OVERLAY_MAX_WIDTH, Number(lastOverlayState?.promptMaxWidth) || PROMPT_OVERLAY_DEFAULT_WIDTH));
   const width = Number.isFinite(nextWidth)
     ? Math.max(PROMPT_OVERLAY_MIN_SIZE.width, Math.min(promptMaxWidth, area.width - 16, Math.round(nextWidth)))
     : bounds.width;

@@ -53,3 +53,8 @@ test('preload exposes all required window control methods', () => {
   assert.equal(typeof api.quitApp, 'function');
   assert.equal(typeof api.showWindow, 'function');
 });
+
+test('preload exposes desktop toast and config update listeners', () => {
+  assert.equal(typeof api.onDesktopToast, 'function');
+  assert.equal(typeof api.onConfigUpdated, 'function');
+});

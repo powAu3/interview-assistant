@@ -3,6 +3,9 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 
 const {
+  PROMPT_OVERLAY_DEFAULT_WIDTH,
+  PROMPT_OVERLAY_MAX_WIDTH,
+  consumePendingOverlayShow,
   createOverlayChromeOptions,
   getPromptOverlayInitialWidth,
   relayChildOutput,
@@ -28,11 +31,27 @@ test('non-Windows overlay keeps the existing native resize behavior', () => {
 });
 
 test('prompt overlay width falls back safely when persisted width is invalid', () => {
-  assert.equal(getPromptOverlayInitialWidth(undefined), 900);
-  assert.equal(getPromptOverlayInitialWidth('not-a-number'), 900);
-  assert.equal(getPromptOverlayInitialWidth('880.6'), 881);
+  assert.equal(getPromptOverlayInitialWidth(undefined), PROMPT_OVERLAY_DEFAULT_WIDTH);
+  assert.equal(getPromptOverlayInitialWidth('not-a-number'), PROMPT_OVERLAY_DEFAULT_WIDTH);
+  assert.equal(getPromptOverlayInitialWidth('780.6'), 781);
   assert.equal(getPromptOverlayInitialWidth(10), 180);
-  assert.equal(getPromptOverlayInitialWidth(9999), 1500);
+  assert.equal(getPromptOverlayInitialWidth(9999), PROMPT_OVERLAY_MAX_WIDTH);
+  assert.equal(getPromptOverlayInitialWidth(undefined, 9999), PROMPT_OVERLAY_MAX_WIDTH);
+});
+
+test('pending overlay show is discarded after the overlay was hidden', () => {
+  const win = { _pendingShow: true };
+
+  assert.equal(consumePendingOverlayShow(win, false), false);
+  assert.equal(win._pendingShow, false);
+});
+
+test('pending overlay show is consumed once while the overlay remains visible', () => {
+  const win = { _pendingShow: true };
+
+  assert.equal(consumePendingOverlayShow(win, true), true);
+  assert.equal(win._pendingShow, false);
+  assert.equal(consumePendingOverlayShow(win, true), false);
 });
 
 test('writeToStreamSafely swallows broken pipe writes', () => {

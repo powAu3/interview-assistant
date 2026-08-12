@@ -236,6 +236,38 @@ describe('ControlBar', () => {
     expect(useUiPrefsStore.getState().interviewOverlayMode).toBe('prompt')
   })
 
+  it('resumes written exam mode without passing selected audio devices', async () => {
+    useInterviewStore.setState({
+      config: {
+        ...(useInterviewStore.getState().config as object),
+        written_exam_mode: true,
+      },
+      isRecording: true,
+      isPaused: true,
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '继续' }))
+
+    await waitFor(() => expect(apiMock.resume).toHaveBeenCalledWith())
+  })
+
+  it('blocks interview resume when no audio device is selected', async () => {
+    useInterviewStore.setState({
+      devices: [],
+      isRecording: true,
+      isPaused: true,
+    } as any)
+
+    render(<ControlBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: '继续' }))
+
+    expect(apiMock.resume).not.toHaveBeenCalled()
+    expect(screen.getByText('请先选择音频设备')).toBeInTheDocument()
+  })
+
   it('hides the resume mount in written exam mode', () => {
     useInterviewStore.setState({
       config: {

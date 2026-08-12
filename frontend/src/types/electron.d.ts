@@ -26,6 +26,8 @@ declare global {
       onShortcuts?: (callback: (payload: Record<string, Record<string, unknown>> | undefined) => void) => (() => void)
       onFocusTabCommand?: (callback: (direction: 'prev' | 'next') => void) => (() => void)
       onOverlayQuestionCommand?: (callback: (direction: 'prev' | 'next') => void) => (() => void)
+      onDesktopToast?: (callback: (payload: { message: string; level?: 'info' | 'success' | 'warn' | 'error' } | string) => void) => (() => void)
+      onConfigUpdated?: (callback: (payload: Record<string, unknown>) => void) => (() => void)
       removeOverlayStateListener?: (listener?: (...args: unknown[]) => void) => void
     }
   }

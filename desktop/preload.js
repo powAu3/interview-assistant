@@ -38,6 +38,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('overlay-question-command', wrapped);
     return () => ipcRenderer.removeListener('overlay-question-command', wrapped);
   },
+  onDesktopToast: (listener) => {
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('desktop-toast', wrapped);
+    return () => ipcRenderer.removeListener('desktop-toast', wrapped);
+  },
+  onConfigUpdated: (listener) => {
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('config-updated', wrapped);
+    return () => ipcRenderer.removeListener('config-updated', wrapped);
+  },
   removeOverlayStateListener: (listener) => {
     if (listener) ipcRenderer.removeListener('overlay-state', listener);
   },

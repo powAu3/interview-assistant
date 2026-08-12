@@ -85,6 +85,27 @@ const DEFAULT_SHORTCUTS = {
     label: '悬浮窗下一题',
     category: '悬浮窗',
   },
+  askScreenForceThink: {
+    action: 'askScreenForceThink',
+    key: 'CommandOrControl+Alt+/',
+    defaultKey: 'CommandOrControl+Alt+/',
+    label: '截图审题（强制思考）',
+    category: '实时辅助',
+  },
+  askScreenForceNoThink: {
+    action: 'askScreenForceNoThink',
+    key: 'CommandOrControl+Alt+.',
+    defaultKey: 'CommandOrControl+Alt+.',
+    label: '截图审题（强制非思考）',
+    category: '实时辅助',
+  },
+  toggleThinkMode: {
+    action: 'toggleThinkMode',
+    key: 'CommandOrControl+Shift+T',
+    defaultKey: 'CommandOrControl+Shift+T',
+    label: '切换思考模式',
+    category: '实时辅助',
+  },
 };
 
 const SUPPORTED_KEYS = new Set([

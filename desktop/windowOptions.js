@@ -13,10 +13,21 @@ function createOverlayChromeOptions(platform, preferredResizable) {
   };
 }
 
-function getPromptOverlayInitialWidth(promptMaxWidth, fallbackWidth = 900) {
+const PROMPT_OVERLAY_DEFAULT_WIDTH = 820;
+const PROMPT_OVERLAY_MAX_WIDTH = 820;
+
+function getPromptOverlayInitialWidth(promptMaxWidth, fallbackWidth = PROMPT_OVERLAY_DEFAULT_WIDTH) {
   const value = Number(promptMaxWidth);
-  if (!Number.isFinite(value) || value <= 0) return fallbackWidth;
-  return Math.max(180, Math.min(1500, Math.round(value)));
+  const fallback = Number(fallbackWidth);
+  const effective = Number.isFinite(value) && value > 0 ? value : fallback;
+  return Math.max(180, Math.min(PROMPT_OVERLAY_MAX_WIDTH, Math.round(effective)));
+}
+
+function consumePendingOverlayShow(win, visible) {
+  if (!win) return false;
+  const shouldShow = Boolean(win._pendingShow && visible);
+  win._pendingShow = false;
+  return shouldShow;
 }
 
 function writeToStreamSafely(stream, chunk) {
@@ -44,6 +55,9 @@ function relayChildOutput(childStream, targetStream, prefix = '') {
 }
 
 module.exports = {
+  PROMPT_OVERLAY_DEFAULT_WIDTH,
+  PROMPT_OVERLAY_MAX_WIDTH,
+  consumePendingOverlayShow,
   createOverlayChromeOptions,
   getPromptOverlayInitialWidth,
   relayChildOutput,

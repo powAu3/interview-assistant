@@ -168,7 +168,18 @@ export default function SoundTest() {
 
   useEffect(() => {
     const ws = new WebSocket(buildWsUrl('/ws'))
-    ws.onmessage = handleMessage
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg?.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }))
+          return
+        }
+      } catch {
+        /* malformed frames are ignored by the component message parser */
+      }
+      handleMessage(event)
+    }
     return () => { ws.close() }
   }, [handleMessage])
 

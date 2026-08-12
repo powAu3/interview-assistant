@@ -42,7 +42,10 @@ interface ExamPreflightRunResponse {
   preflight_id?: unknown
 }
 
+type TerminalOutcome = 'success' | 'failure'
+
 const FIXED_QUESTION = '代码题：给定整数数组 nums 和目标值 target，返回两数之和的下标。'
+const STATUS_POLL_INTERVAL_MS = 1000
 
 const STEP_META: { key: string; label: string; icon: typeof Code2 }[] = [
   { key: 'screenshot', label: '固定截图代码题', icon: Camera },
@@ -96,21 +99,61 @@ function normalizeStatusSteps(value: unknown): Record<string, Partial<StepState>
   ) as Record<string, Partial<StepState>>
 }
 
-function applyFailureSteps(prev: Record<string, StepState>, message: string): Record<string, StepState> {
-  const next = { ...prev }
-  if (next.llm?.status !== 'pass') {
-    next.llm = {
-      ...(next.llm ?? { status: 'idle', detail: '' }),
-      status: 'fail',
-      detail: message,
+const TERMINAL_STEP_STATUSES = new Set<StepStatus>(['pass', 'fail', 'skip', 'done'])
+
+function isTerminalStepStatus(status: unknown): status is StepStatus {
+  return typeof status === 'string' && TERMINAL_STEP_STATUSES.has(status as StepStatus)
+}
+
+function normalizeStepStatus(status: unknown, fallback: StepStatus = 'idle'): StepStatus {
+  if (status === 'idle' || status === 'running' || status === 'pass' || status === 'fail' || status === 'warn' || status === 'skip' || status === 'done') {
+    return status
+  }
+  return fallback
+}
+
+/**
+ * WebSocket and status hydration can report the same step through different
+ * paths.  A completed step is a monotonic state: a late `running` event must
+ * never erase its answer or make the panel look unfinished again.
+ */
+function mergeStepState(
+  previous: StepState | undefined,
+  incoming: Partial<StepState>,
+): StepState {
+  const current = previous ?? { status: 'idle' as StepStatus, detail: '' }
+  const nextStatus = normalizeStepStatus(incoming.status, current.status)
+  if (isTerminalStepStatus(current.status)) {
+    if (!isTerminalStepStatus(nextStatus) || nextStatus !== current.status) return current
+  }
+
+  const next = { ...current, status: nextStatus }
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value !== undefined) {
+      ;(next as Record<string, unknown>)[key] = value
     }
   }
-  if (next.ui?.status !== 'pass') {
-    next.ui = {
-      ...(next.ui ?? { status: 'idle', detail: '' }),
-      status: 'fail',
-      detail: '未收到可展示的笔试答案',
-    }
+  return next
+}
+
+function mergeStepEntries(
+  previous: Record<string, StepState>,
+  incoming: Record<string, Partial<StepState>>,
+): Record<string, StepState> {
+  const next = { ...previous }
+  for (const [key, value] of Object.entries(incoming)) {
+    next[key] = mergeStepState(previous[key], value)
+  }
+  return next
+}
+
+function applyFailureSteps(prev: Record<string, StepState>, message: string): Record<string, StepState> {
+  const next = { ...prev }
+  if (!isTerminalStepStatus(next.llm?.status)) {
+    next.llm = mergeStepState(next.llm, { status: 'fail', detail: message })
+  }
+  if (!isTerminalStepStatus(next.ui?.status)) {
+    next.ui = mergeStepState(next.ui, { status: 'fail', detail: '未收到可展示的笔试答案' })
   }
   return next
 }
@@ -119,12 +162,11 @@ function applyRequestFailureSteps(prev: Record<string, StepState>, message: stri
   return applyFailureSteps(
     {
       ...prev,
-      submit: {
-        ...(prev.submit ?? { status: 'idle', detail: '' }),
+      submit: mergeStepState(prev.submit, {
         status: 'fail',
         detail: message,
         question: FIXED_QUESTION,
-      },
+      }),
     },
     message,
   )
@@ -140,10 +182,25 @@ export default function WrittenExamTest() {
   const awaitingPreflightStartRef = useRef(false)
   const runRequestRef = useRef(false)
   const preflightGenerationRef = useRef(0)
+  const terminalPreflightIdRef = useRef<string | null>(null)
+  const terminalOutcomeRef = useRef<TerminalOutcome | null>(null)
+  const hydrationRequestRef = useRef(0)
+  const appliedHydrationRequestRef = useRef(0)
 
   const setCurrentPreflightId = useCallback((preflightId: string | null) => {
     activePreflightIdRef.current = preflightId
   }, [])
+
+  const markTerminal = useCallback((preflightId: string, outcome: TerminalOutcome) => {
+    const currentId = terminalPreflightIdRef.current
+    if (currentId && currentId !== preflightId) return
+    if (!currentId) terminalPreflightIdRef.current = preflightId
+    if (!terminalOutcomeRef.current) terminalOutcomeRef.current = outcome
+  }, [])
+
+  const isTerminalFor = useCallback((preflightId: string): boolean => (
+    terminalPreflightIdRef.current === preflightId && Boolean(terminalOutcomeRef.current)
+  ), [])
 
   const shouldAcceptPreflightEvent = useCallback((preflightId: string): boolean => {
     const currentPreflightId = activePreflightIdRef.current
@@ -155,43 +212,61 @@ export default function WrittenExamTest() {
 
   const hydrateStatus = useCallback(async () => {
     const generation = preflightGenerationRef.current
+    const requestId = ++hydrationRequestRef.current
     try {
       const status = await api.examPreflightStatus() as ExamPreflightStatus
-      if (generation !== preflightGenerationRef.current) return
+      if (
+        generation !== preflightGenerationRef.current
+        || requestId < appliedHydrationRequestRef.current
+      ) return
       const statusSteps = normalizeStatusSteps(status?.steps)
       const statusPreflightId = status?.preflight_id ? String(status.preflight_id) : null
       const currentPreflightId = activePreflightIdRef.current
       if (!currentPreflightId && awaitingPreflightStartRef.current) return
       if (currentPreflightId && statusPreflightId && statusPreflightId !== currentPreflightId) return
       if (currentPreflightId && !statusPreflightId && Object.keys(statusSteps).length === 0 && !status?.error) return
-      const isRunning = Boolean(status?.running)
-      const isDone = !isRunning && statusSteps.done?.status === 'done'
       const statusError = status?.error ? String(status.error) : null
       const errorStep = isRecord(statusSteps.error) ? statusSteps.error : null
       const failureMessage = statusError || (errorStep?.detail ? String(errorStep.detail) : null)
+      const statusIsRunning = Boolean(status?.running)
+      const statusIsDone = !statusIsRunning && statusSteps.done?.status === 'done'
+      const statusOutcome: TerminalOutcome | null = failureMessage
+        ? 'failure'
+        : statusIsDone
+          ? 'success'
+          : null
+      if (statusPreflightId && statusOutcome) markTerminal(statusPreflightId, statusOutcome)
       if (statusPreflightId) {
         setCurrentPreflightId(statusPreflightId)
       }
+      const terminalId = terminalPreflightIdRef.current
+      const terminalOutcome = terminalOutcomeRef.current
+      const terminalStatusMatches = Boolean(
+        terminalId
+        && terminalOutcome
+        && (!statusPreflightId || statusPreflightId === terminalId),
+      )
+      const isRunning = terminalStatusMatches ? false : statusIsRunning
+      const isDone = terminalStatusMatches
+        ? terminalOutcome === 'success'
+        : statusIsDone
+      const effectiveFailureMessage = terminalStatusMatches && terminalOutcome === 'success'
+        ? null
+        : failureMessage
+      appliedHydrationRequestRef.current = requestId
       setSteps((prev) => {
-        const hydrated = {
-          ...prev,
-          ...Object.fromEntries(
-            Object.entries(statusSteps).map(([key, value]) => [
-              key,
-              { ...(prev[key] ?? { status: 'idle', detail: '' }), ...value },
-            ]),
-          ),
-        } as Record<string, StepState>
-        return failureMessage ? applyFailureSteps(hydrated, failureMessage) : hydrated
+        const hydrated = mergeStepEntries(prev, statusSteps)
+        return effectiveFailureMessage ? applyFailureSteps(hydrated, effectiveFailureMessage) : hydrated
       })
       setRunning(isRunning)
-      setDone(isDone || Boolean(failureMessage && !isRunning))
-      setErrorMsg(failureMessage)
-      if (!isRunning && (isDone || failureMessage)) runRequestRef.current = false
+      setDone(isDone || Boolean(effectiveFailureMessage && !isRunning))
+      if (effectiveFailureMessage) setErrorMsg(effectiveFailureMessage)
+      else if (!terminalStatusMatches) setErrorMsg(null)
+      if (!isRunning && (isDone || effectiveFailureMessage)) runRequestRef.current = false
     } catch {
       /* status hydration is best-effort; WS has the primary progress stream */
     }
-  }, [setCurrentPreflightId])
+  }, [markTerminal, setCurrentPreflightId])
 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
@@ -200,42 +275,68 @@ export default function WrittenExamTest() {
         const eventPreflightId = String(msg.exam_preflight_id)
         if (!shouldAcceptPreflightEvent(eventPreflightId)) return
         if (msg.type === 'answer_start') {
+          if (isTerminalFor(eventPreflightId)) return
           setRunning(true)
           setSteps((prev) => ({
             ...prev,
-            submit: {
-              ...(prev.submit ?? { status: 'idle', detail: '' }),
+            submit: mergeStepState(prev.submit, {
               status: 'pass',
               detail: '真实答题 worker 已开始流式回答',
               question: FIXED_QUESTION,
               model_name: msg.model_name,
-            },
-            llm: {
-              ...(prev.llm ?? { status: 'idle', detail: '' }),
+            }),
+            llm: mergeStepState(prev.llm, {
               status: 'running',
               detail: '正在通过真实答题流生成代码答案…',
               question: FIXED_QUESTION,
               model_name: msg.model_name,
-            },
-            ws: { status: 'running', detail: '已收到答题启动事件，等待模型流式片段…' },
+            }),
+            ws: mergeStepState(prev.ws, {
+              status: 'running',
+              detail: '已收到答题启动事件，等待模型流式片段…',
+            }),
           }))
           return
         }
         if (msg.type === 'answer_think_chunk' || msg.type === 'answer_chunk') {
+          if (isTerminalFor(eventPreflightId)) return
           setSteps((prev) => ({
             ...prev,
-            ws: { status: 'running', detail: '已收到真实答题 WebSocket 流式片段，等待模型生成完成…' },
+            ws: mergeStepState(prev.ws, {
+              status: 'running',
+              detail: '已收到真实答题 WebSocket 流式片段，等待模型生成完成…',
+            }),
           }))
           return
         }
         if (msg.type === 'answer_done') {
+          const answer = typeof msg.answer === 'string' ? msg.answer : ''
+          if (!answer.trim()) {
+            if (terminalOutcomeRef.current === 'success') return
+            markTerminal(eventPreflightId, 'failure')
+            const message = '模型未返回有效答案，请重试或更换模型。'
+            runRequestRef.current = false
+            setRunning(false)
+            setDone(true)
+            setErrorMsg(message)
+            setSteps((prev) => ({
+              ...applyFailureSteps(prev, message),
+              ws: mergeStepState(prev.ws, {
+                status: 'pass',
+                detail: '已收到真实答题结果事件',
+              }),
+            }))
+            return
+          }
+          if (terminalOutcomeRef.current === 'failure') return
+          markTerminal(eventPreflightId, 'success')
           runRequestRef.current = false
           setRunning(false)
           setDone(true)
           setErrorMsg(null)
           setSteps((prev) => ({
             ...prev,
-            llm: {
+            llm: mergeStepState(prev.llm, {
               status: 'pass',
               detail: `首 token ${msg.first_token_ms ?? 0}ms · 完整 ${msg.total_ms ?? 0}ms`,
               answer: msg.answer,
@@ -243,22 +344,33 @@ export default function WrittenExamTest() {
               first_token_ms: msg.first_token_ms,
               total_ms: msg.total_ms,
               model_name: msg.model_name,
-            },
-            ws: { status: 'pass', detail: '真实答题 WebSocket 完整推送正常' },
-            ui: { status: 'pass', detail: '真实答题结果已在检测面板渲染' },
+            }),
+            ws: mergeStepState(prev.ws, {
+              status: 'pass',
+              detail: '真实答题 WebSocket 完整推送正常',
+            }),
+            ui: mergeStepState(prev.ui, {
+              status: 'pass',
+              detail: '真实答题结果已在检测面板渲染',
+            }),
           }))
           void hydrateStatus()
           return
         }
         if (msg.type === 'answer_error' || msg.type === 'answer_cancelled') {
+          if (terminalOutcomeRef.current === 'success') return
           const message = msg.message || '笔试链路检测被取消或失败'
+          markTerminal(eventPreflightId, 'failure')
           runRequestRef.current = false
           setRunning(false)
           setDone(true)
           setErrorMsg(message)
           setSteps((prev) => ({
             ...applyFailureSteps(prev, message),
-            ws: { status: 'pass', detail: '已收到真实答题错误事件' },
+            ws: mergeStepState(prev.ws, {
+              status: 'pass',
+              detail: '已收到真实答题错误事件',
+            }),
           }))
           return
         }
@@ -266,11 +378,13 @@ export default function WrittenExamTest() {
       }
       if (msg.type !== 'exam_preflight_step') return
       const { step, status, detail, answer, question, first_token_ms, total_ms, model_name } = msg
+      const eventPreflightId = msg.preflight_id ? String(msg.preflight_id) : null
       if (msg.preflight_id) {
-        const eventPreflightId = String(msg.preflight_id)
         if (!shouldAcceptPreflightEvent(eventPreflightId)) return
       }
       if (step === 'done') {
+        if (terminalOutcomeRef.current === 'failure') return
+        if (eventPreflightId) markTerminal(eventPreflightId, 'success')
         runRequestRef.current = false
         setDone(true)
         setRunning(false)
@@ -278,7 +392,9 @@ export default function WrittenExamTest() {
         return
       }
       if (step === 'error') {
+        if (terminalOutcomeRef.current === 'success') return
         const message = detail || '笔试链路检测失败，请检查模型配置'
+        if (eventPreflightId) markTerminal(eventPreflightId, 'failure')
         runRequestRef.current = false
         setRunning(false)
         setDone(true)
@@ -288,22 +404,49 @@ export default function WrittenExamTest() {
       }
       setSteps((prev) => ({
         ...prev,
-        [step]: { status, detail, answer, question, first_token_ms, total_ms, model_name },
+        [step]: mergeStepState(prev[step], {
+          status,
+          detail,
+          answer,
+          question,
+          first_token_ms,
+          total_ms,
+          model_name,
+        }),
       }))
     } catch {
       /* ignore malformed WS frames */
     }
-  }, [hydrateStatus, shouldAcceptPreflightEvent])
+  }, [hydrateStatus, isTerminalFor, markTerminal, shouldAcceptPreflightEvent])
 
   useEffect(() => {
     const ws = new WebSocket(buildWsUrl('/ws'))
-    ws.onmessage = handleMessage
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg?.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }))
+          return
+        }
+      } catch {
+        /* malformed frames are handled by the component message parser */
+      }
+      handleMessage(event)
+    }
     return () => { ws.close() }
   }, [handleMessage])
 
   useEffect(() => {
     void hydrateStatus()
   }, [hydrateStatus])
+
+  useEffect(() => {
+    if (!running) return
+    const timer = window.setInterval(() => {
+      void hydrateStatus()
+    }, STATUS_POLL_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [hydrateStatus, running])
 
   useEffect(() => () => {
     preflightGenerationRef.current += 1
@@ -319,6 +462,8 @@ export default function WrittenExamTest() {
     setSteps({})
     setErrorMsg(null)
     setCurrentPreflightId(null)
+    terminalPreflightIdRef.current = null
+    terminalOutcomeRef.current = null
     awaitingPreflightStartRef.current = true
     try {
       const response = await api.examPreflightRun() as ExamPreflightRunResponse

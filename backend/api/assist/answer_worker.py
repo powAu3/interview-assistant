@@ -1010,10 +1010,13 @@ def process_question_parallel(
     chunk_buffer: list[str] = []
     batch_size = 5
     try:
-        think_override = (
-            written_exam_think if prompt_mode == PROMPT_MODE_WRITTEN_EXAM and (source or "").startswith("server_screen_")
-            else None
-        )
+        # Precedence: one-shot meta override > written-exam screen think > model/global.
+        if "override_think_mode" in meta and meta.get("override_think_mode") is not None:
+            think_override = bool(meta.get("override_think_mode"))
+        elif prompt_mode == PROMPT_MODE_WRITTEN_EXAM and (source or "").startswith("server_screen_"):
+            think_override = written_exam_think
+        else:
+            think_override = None
         for chunk_type, chunk_text in chat_stream_single_model(
             model_cfg,
             messages_for_llm,

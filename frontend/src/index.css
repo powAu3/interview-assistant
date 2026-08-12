@@ -695,10 +695,11 @@ code, pre, .font-mono {
 }
 
 .ov-root--prompt .ov-shell--nobg {
-  width: fit-content;
+  /* max-content keeps measurement independent from the current (possibly tiny) window viewport. */
+  width: max-content;
   min-width: 0;
   height: auto;
-  max-width: 100%;
+  max-width: var(--ov-prompt-max-width, 804px);
   max-height: 100%;
   overflow: visible;
 }
@@ -711,13 +712,14 @@ code, pre, .font-mono {
 
 .ov-root--prompt .ov-answer {
   flex: 0 1 auto;
-  width: fit-content;
+  width: max-content;
   min-width: 0;
-  max-width: min(520px, calc(100vw - 12px));
+  max-width: var(--ov-prompt-max-width, 804px);
   max-height: min(408px, calc(100vh - 8px));
   padding: 2px 4px;
   line-height: 1.5;
 }
+
 .ov-shell--nobg .ov-answer,
 .ov-shell--nobg .ov-standby-hint {
   /* 三层阴影: 1px 锐利描边 + 2px 近影 + 10px 光晕 -> 任何桌面底色都可读 */
@@ -1069,8 +1071,8 @@ code, pre, .font-mono {
 
 .ov-root--prompt .ov-answer-stack {
   display: inline-flex;
-  width: fit-content;
-  max-width: min(520px, calc(100vw - 12px));
+  width: max-content;
+  max-width: var(--ov-prompt-max-width, 804px);
   flex-direction: column;
   align-items: flex-start;
 }
@@ -1322,8 +1324,8 @@ code, pre, .font-mono {
 
 .ov-root--prompt .ov-markdown {
   display: inline-block;
-  width: fit-content;
-  max-width: min(520px, calc(100vw - 12px));
+  width: max-content;
+  max-width: var(--ov-prompt-max-width, 804px);
 }
 
 .ov-root--prompt .ov-markdown h1,

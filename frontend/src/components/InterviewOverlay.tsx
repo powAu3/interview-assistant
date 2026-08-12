@@ -165,7 +165,7 @@ export default function InterviewOverlay() {
   }, [answerText, activeFocusTab, isStreaming, overlayMode, overlayPromptAutoFollow])
 
   useLayoutEffect(() => {
-    if (!enabled || overlayMode !== 'prompt') return
+    if (!enabled || !overlayVisible || overlayMode !== 'prompt') return
     const el = answerScrollRef.current
     if (!el) return
     const contentEl = el.querySelector<HTMLElement>('.ov-answer-stack')
@@ -186,7 +186,7 @@ export default function InterviewOverlay() {
     const nextWidth = Math.max(180, targetWidth)
     const nextHeight = Math.max(72, Math.min(420, contentHeight + 12))
     window.electronAPI?.resizeOverlayWindow?.({ width: nextWidth, height: nextHeight })?.catch(() => {})
-  }, [activeVisionVerifyKey, answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth])
+  }, [activeVisionVerifyKey, answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth, overlayVisible])
 
   const refreshShortcuts = useCallback(() => {
     window.electronAPI?.getShortcuts?.()
@@ -341,15 +341,27 @@ export default function InterviewOverlay() {
 
   const moveOverlayQuestion = useCallback((direction: 'prev' | 'next') => {
     if (qaPairs.length < 2) return
+    // Functional update so rapid successive next/prev (one act / one key-repeat
+    // burst) advances from the latest pin, not a stale closure.
     setReviewQaId((currentReviewId) => {
       const baseId = currentReviewId ?? displayedQa?.id ?? latestQa?.id ?? qaPairs[qaPairs.length - 1]?.id
       const currentIndex = Math.max(0, qaPairs.findIndex((item) => item.id === baseId))
       const delta = direction === 'next' ? 1 : -1
       const nextIndex = Math.max(0, Math.min(qaPairs.length - 1, currentIndex + delta))
       const nextId = qaPairs[nextIndex]?.id ?? baseId
-      return nextId === liveFocusQaId ? null : nextId
+      // Clear pin when landing on the true latest so live auto-follow resumes.
+      // Also retarget liveFocus: an older still-streaming liveFocus would otherwise
+      // keep currentStillLive and snap the view away from the latest item.
+      const latestId = latestQa?.id ?? qaPairs[qaPairs.length - 1]?.id
+      if (nextId === latestId) {
+        queueMicrotask(() => {
+          setLiveFocusQaId(latestId ?? null)
+        })
+        return null
+      }
+      return nextId
     })
-  }, [displayedQa?.id, latestQa?.id, liveFocusQaId, qaPairs])
+  }, [displayedQa?.id, latestQa?.id, qaPairs])
 
   useEffect(() => {
     return window.electronAPI?.onFocusTabCommand?.((direction) => { moveFocusTab(direction) })
@@ -371,6 +383,11 @@ export default function InterviewOverlay() {
     '--ov-focus-toolbar-alpha': String(Math.max(0.08, Math.min(0.42, focusSurfaceAlpha * 0.48))),
     '--ov-focus-tabs-alpha': String(Math.max(0.12, Math.min(0.58, focusSurfaceAlpha * 0.7))),
     '--ov-focus-key-alpha': String(Math.max(0.2, Math.min(0.76, focusSurfaceAlpha * 0.86))),
+  } as CSSProperties
+  const promptShellStyle = {
+    opacity,
+    color: fontColor,
+    '--ov-prompt-max-width': `${Math.max(164, overlayPromptMaxWidth - 16)}px`,
   } as CSSProperties
   const focusTools = [
     { key: 'screen' as const, label: '截图审题', shortcut: shortcuts.askFromServerScreen?.key },
@@ -490,7 +507,7 @@ export default function InterviewOverlay() {
     <div
       className={`ov-root ${overlayMode === 'prompt' ? 'ov-root--prompt' : ''}`}
     >
-      <div className={shellClass} style={{ opacity, color: fontColor }}>
+      <div className={shellClass} style={overlayMode === 'prompt' ? promptShellStyle : { opacity, color: fontColor }}>
         <div className="ov-grip" aria-hidden />
 
         <div

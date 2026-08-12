@@ -7,6 +7,9 @@ import {
   applyStoredColorSchemeToDocument,
 } from '@/lib/colorScheme'
 import {
+  INTERVIEW_OVERLAY_PROMPT_DEFAULT_WIDTH,
+  INTERVIEW_OVERLAY_PROMPT_MAX_WIDTH,
+  INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH,
   INTERVIEW_OVERLAY_STORAGE_KEYS,
   isOverlayMode,
   overlayModeToShowBg,
@@ -134,10 +137,12 @@ function readOverlayFocusHeightPct(): number {
 function readOverlayPromptMaxWidth(): number {
   try {
     const raw = localStorage.getItem(INTERVIEW_OVERLAY_STORAGE_KEYS.promptMaxWidth)
-    const value = raw == null ? 900 : Number(raw)
-    if (Number.isFinite(value)) return Math.max(200, Math.min(1500, Math.round(value)))
+    const value = raw == null ? INTERVIEW_OVERLAY_PROMPT_DEFAULT_WIDTH : Number(raw)
+    if (Number.isFinite(value)) {
+      return Math.max(INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH, Math.min(INTERVIEW_OVERLAY_PROMPT_MAX_WIDTH, Math.round(value)))
+    }
   } catch { /* ignore */ }
-  return 900
+  return INTERVIEW_OVERLAY_PROMPT_DEFAULT_WIDTH
 }
 
 function readOverlayPromptAutoFollow(): boolean {
@@ -208,7 +213,7 @@ function normalizeOverlayFocusHeightPct(value: unknown): number | null {
 function normalizeOverlayPromptMaxWidth(value: unknown): number | null {
   const next = Number(value)
   if (!Number.isFinite(next)) return null
-  return Math.max(200, Math.min(1500, Math.round(next)))
+  return Math.max(INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH, Math.min(INTERVIEW_OVERLAY_PROMPT_MAX_WIDTH, Math.round(next)))
 }
 
 function normalizeOverlayPromptAutoFollow(value: unknown): boolean | null {
@@ -444,7 +449,7 @@ export const useUiPrefsStore = create<UiPrefsState>((set) => ({
     set({ interviewOverlayFocusHeightPct: next })
   },
   setInterviewOverlayPromptMaxWidth: (width) => {
-    const next = normalizeOverlayPromptMaxWidth(width) ?? 900
+    const next = normalizeOverlayPromptMaxWidth(width) ?? INTERVIEW_OVERLAY_PROMPT_DEFAULT_WIDTH
     persistOverlayPref(INTERVIEW_OVERLAY_STORAGE_KEYS.promptMaxWidth, String(next))
     set({ interviewOverlayPromptMaxWidth: next })
   },

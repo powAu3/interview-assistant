@@ -17,6 +17,10 @@ import { updateConfigAndRefresh } from '@/lib/configSync'
 import { COLOR_SCHEME_OPTIONS } from '@/lib/colorScheme'
 import { prepareExamOverlayPrompt } from '@/lib/examOverlay'
 import { getShortcutDisplay } from '@/lib/shortcuts'
+import {
+  INTERVIEW_OVERLAY_PROMPT_MAX_WIDTH,
+  INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH,
+} from '@/lib/interviewOverlay'
 import { Section, Field, SaveStateBadge, matchSettingsSearch, useAutoSaveSetting, useSettingsSearch } from './shared'
 import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
@@ -361,8 +365,8 @@ export default function PreferencesTab() {
                 <Field label={`提词模式最大宽度: ${overlayPromptMaxWidth}px`}>
                   <input
                     type="range"
-                    min={200}
-                    max={1500}
+                    min={INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH}
+                    max={INTERVIEW_OVERLAY_PROMPT_MAX_WIDTH}
                     step={10}
                     value={overlayPromptMaxWidth}
                     onChange={(e) => setOverlayPromptMaxWidth(Number(e.target.value))}

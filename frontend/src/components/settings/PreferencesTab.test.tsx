@@ -48,7 +48,7 @@ describe('PreferencesTab', () => {
       interviewOverlayEnabled: false,
       interviewOverlayMode: 'glass',
       interviewOverlayShowBg: true,
-      interviewOverlayPromptMaxWidth: 900,
+      interviewOverlayPromptMaxWidth: 820,
       interviewOverlayPromptAutoFollow: false,
     })
   })

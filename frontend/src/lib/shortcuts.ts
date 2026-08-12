@@ -10,6 +10,9 @@ export type ShortcutAction =
   | 'focusNextTab'
   | 'overlayPrevQuestion'
   | 'overlayNextQuestion'
+  | 'askScreenForceThink'
+  | 'askScreenForceNoThink'
+  | 'toggleThinkMode'
 export type ShortcutStatus = 'registered' | 'failed' | 'available'
 
 export type ShortcutConfig = {
@@ -108,6 +111,30 @@ export const defaultShortcuts: Record<ShortcutAction, ShortcutConfig> = {
     defaultKey: 'CommandOrControl+Down',
     label: '悬浮窗下一题',
     category: '悬浮窗',
+    status: 'available',
+  },
+  askScreenForceThink: {
+    action: 'askScreenForceThink',
+    key: 'CommandOrControl+Alt+/',
+    defaultKey: 'CommandOrControl+Alt+/',
+    label: '截图审题（强制思考）',
+    category: '实时辅助',
+    status: 'available',
+  },
+  askScreenForceNoThink: {
+    action: 'askScreenForceNoThink',
+    key: 'CommandOrControl+Alt+.',
+    defaultKey: 'CommandOrControl+Alt+.',
+    label: '截图审题（强制非思考）',
+    category: '实时辅助',
+    status: 'available',
+  },
+  toggleThinkMode: {
+    action: 'toggleThinkMode',
+    key: 'CommandOrControl+Shift+T',
+    defaultKey: 'CommandOrControl+Shift+T',
+    label: '切换思考模式',
+    category: '实时辅助',
     status: 'available',
   },
 }

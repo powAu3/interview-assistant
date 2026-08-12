@@ -59,7 +59,7 @@ beforeEach(() => {
     interviewOverlayMode: 'glass',
     interviewOverlayFocusWidthPct: 96,
     interviewOverlayFocusHeightPct: 90,
-    interviewOverlayPromptMaxWidth: 900,
+    interviewOverlayPromptMaxWidth: 820,
     interviewOverlayPromptAutoFollow: false,
     interviewOverlayMaxLines: 0,
     interviewOverlayVisible: true,
@@ -404,7 +404,7 @@ describe('InterviewOverlay', () => {
   })
 
   it('caps prompt overlay auto width so long content wraps', async () => {
-    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 900, height: 130 })
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 820, height: 130 })
     const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
     const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1200)
     ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
@@ -416,7 +416,7 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 900, height: 130 })
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 820, height: 130 })
       })
     } finally {
       scrollHeightSpy.mockRestore()
@@ -442,6 +442,34 @@ describe('InterviewOverlay', () => {
       await waitFor(() => {
         expect(resizeOverlayWindow).toHaveBeenCalledWith(expect.objectContaining({ width: 700 }))
       })
+    } finally {
+      scrollWidthSpy.mockRestore()
+      scrollHeightSpy.mockRestore()
+    }
+  })
+
+  it('keeps prompt width independent from a previously narrowed viewport', async () => {
+    const resizeOverlayWindow = vi.fn().mockResolvedValue({ ok: true, width: 700, height: 130 })
+    const scrollWidthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(684)
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(118)
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { resizeOverlayWindow }
+    useUiPrefsStore.setState({
+      interviewOverlayMode: 'prompt',
+      interviewOverlayShowBg: false,
+      interviewOverlayPromptMaxWidth: 700,
+      interviewOverlayVisible: true,
+    })
+    localStorage.setItem('ia_overlay_mode', 'prompt')
+    localStorage.setItem('ia_overlay_show_bg', '0')
+    localStorage.setItem('ia_overlay_prompt_max_width', '700')
+
+    try {
+      render(<InterviewOverlay />)
+
+      await waitFor(() => {
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 700, height: 130 })
+      })
+      expect(document.querySelector('.ov-shell--nobg')).toHaveStyle({ '--ov-prompt-max-width': '684px' })
     } finally {
       scrollWidthSpy.mockRestore()
       scrollHeightSpy.mockRestore()
@@ -742,6 +770,47 @@ describe('InterviewOverlay', () => {
     expect(await screen.findByText(/第二题正在生成/)).toBeInTheDocument()
   })
 
+  it('clears review pin when navigating back to the latest question so auto-follow resumes', async () => {
+    let questionListener: ((direction: 'prev' | 'next') => void) | null = null
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = {
+      onOverlayQuestionCommand: (listener: (direction: 'prev' | 'next') => void) => {
+        questionListener = listener
+        return vi.fn()
+      },
+    }
+    useInterviewStore.setState({
+      qaPairs: [
+        { ...qa, id: 'qa-1', question: '第一题', answer: '第一题答案。' },
+        { ...qa, id: 'qa-2', question: '第二题', answer: '第二题答案。' },
+      ],
+      streamingIds: [],
+    })
+    useUiPrefsStore.setState({ interviewOverlayMode: 'glass', interviewOverlayShowBg: true })
+
+    const { rerender } = render(<InterviewOverlay />)
+
+    expect(screen.getByText(/第二题答案/)).toBeInTheDocument()
+    act(() => { questionListener?.('prev') })
+    expect(await screen.findByText(/第一题答案/)).toBeInTheDocument()
+
+    act(() => { questionListener?.('next') })
+    expect(await screen.findByText(/第二题答案/)).toBeInTheDocument()
+
+    act(() => {
+      useInterviewStore.setState({
+        qaPairs: [
+          { ...qa, id: 'qa-1', question: '第一题', answer: '第一题答案。' },
+          { ...qa, id: 'qa-2', question: '第二题', answer: '第二题答案。' },
+          { ...qa, id: 'qa-3', question: '第三题', answer: '第三题最新答案。', status: 'streaming' },
+        ],
+        streamingIds: ['qa-3'],
+      })
+    })
+    rerender(<InterviewOverlay />)
+
+    expect(await screen.findByText(/第三题最新答案/)).toBeInTheDocument()
+  })
+
   it('keeps the streaming question focus tab isolated while reviewing history', async () => {
     let questionListener: ((direction: 'prev' | 'next') => void) | null = null
     ;(window as unknown as { electronAPI: unknown }).electronAPI = {
@@ -870,12 +939,14 @@ describe('InterviewOverlay', () => {
       for (let i = 0; i < 24; i += 1) questionListener?.('next')
     })
     expect(await screen.findByText(/最新题正在生成/)).toBeInTheDocument()
+    expect(screen.getByText(/当前 25\/25/)).toBeInTheDocument()
 
     act(() => {
       for (let i = 0; i < 24; i += 1) questionListener?.('prev')
     })
 
     expect(await screen.findByText(/return 1/)).toBeInTheDocument()
+    expect(screen.getByText(/回看 1\/25|当前 1\/25/)).toBeInTheDocument()
     expect(screen.queryByText(/^O\(n\)$/)).not.toBeInTheDocument()
   })
 

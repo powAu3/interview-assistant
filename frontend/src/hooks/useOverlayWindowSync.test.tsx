@@ -41,7 +41,7 @@ beforeEach(() => {
     interviewOverlayMode: 'glass',
     interviewOverlayFocusWidthPct: 96,
     interviewOverlayFocusHeightPct: 90,
-    interviewOverlayPromptMaxWidth: 900,
+    interviewOverlayPromptMaxWidth: 820,
     interviewOverlayPromptAutoFollow: false,
     interviewOverlayMaxLines: 0,
     interviewOverlayVisible: false,

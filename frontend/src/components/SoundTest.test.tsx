@@ -15,10 +15,14 @@ vi.mock('@/lib/backendUrl', () => ({ buildWsUrl: () => 'ws://example.test/ws' })
 class FakeWebSocket {
   static instances: FakeWebSocket[] = []
   onmessage: ((event: MessageEvent) => void) | null = null
+  sent: string[] = []
   constructor(public url: string) {
     FakeWebSocket.instances.push(this)
   }
   close() {}
+  send(data: string) {
+    this.sent.push(data)
+  }
   emit(data: unknown) {
     this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent)
   }
@@ -71,6 +75,19 @@ describe('SoundTest', () => {
 
     await waitFor(() => expect(screen.getByText('识别匹配')).toBeInTheDocument())
     expect(screen.getAllByText('请介绍一下你最近做过的项目').length).toBeGreaterThan(0)
+  })
+
+  it('replies to backend websocket heartbeats while idle', async () => {
+    render(<SoundTest />)
+    await waitFor(() => expect(screen.getByRole('button', { name: '开始检测' })).toBeInTheDocument())
+
+    const ws = FakeWebSocket.instances[0]
+    await act(async () => {
+      ws.emit({ type: 'ping', ts: 123 })
+      await Promise.resolve()
+    })
+
+    expect(ws.sent).toEqual([JSON.stringify({ type: 'pong' })])
   })
 
   it('prefers the default output loopback device for preflight', async () => {

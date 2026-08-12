@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X, ChevronDown } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { useInterviewStore } from '@/stores/configStore'
+import { useInterviewStore, type AppConfig } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
 import { useShortcutsStore } from '@/stores/shortcutsStore'
 import { useInterviewWS } from '@/hooks/useInterviewWS'
@@ -120,6 +120,29 @@ export default function App() {
     window.electronAPI.getShortcuts()
       .then((shortcuts) => useShortcutsStore.getState().setShortcuts(shortcuts))
       .catch(() => {})
+  }, [])
+
+  // Desktop main-process shortcuts (think toggle / force think) push toast + config
+  // updates over IPC because POST /api/config does not broadcast over WS.
+  useEffect(() => {
+    const unsubToast = window.electronAPI?.onDesktopToast?.((payload) => {
+      const msg = typeof payload === 'string' ? payload : payload?.message
+      if (!msg) return
+      const level = typeof payload === 'object' && payload ? payload.level : undefined
+      if (level) {
+        useInterviewStore.getState().pushToast(msg, level)
+      } else {
+        useInterviewStore.getState().setToastMessage(msg)
+      }
+    })
+    const unsubConfig = window.electronAPI?.onConfigUpdated?.((nextConfig) => {
+      if (!nextConfig || typeof nextConfig !== 'object') return
+      useInterviewStore.getState().setConfig(nextConfig as unknown as AppConfig)
+    })
+    return () => {
+      unsubToast?.()
+      unsubConfig?.()
+    }
   }, [])
 
   const hasGuided = useRef(false)

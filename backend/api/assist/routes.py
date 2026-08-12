@@ -30,10 +30,16 @@ _rlog = get_logger("assist.routes")
 class ManualQuestion(BaseModel):
     text: str = Field(..., max_length=10000)
     image: Optional[str] = None
+    override_think_mode: Optional[bool] = None
 
 
 class MultiServerScreenQuestion(BaseModel):
     images: list[str]
+    override_think_mode: Optional[bool] = None
+
+
+class ServerScreenQuestion(BaseModel):
+    override_think_mode: Optional[bool] = None
 
 
 @router.post("/start")
@@ -146,22 +152,25 @@ async def api_ask_cancel():
 @router.post("/ask")
 async def api_ask(body: ManualQuestion):
     if not body.text.strip() and not body.image:
-        raise HTTPException(400, "\u95ee\u9898\u4e0d\u80fd\u4e3a\u7a7a")
-    text = body.text.strip() or "\u8bf7\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u4e2d\u7684\u9898\u76ee\uff0c\u5e76\u7ed9\u51fa\u9762\u8bd5\u56de\u7b54"
+        raise HTTPException(400, "问题不能为空")
+    text = body.text.strip() or "请分析这张图片中的题目，并给出面试回答"
     src = "manual_image" if body.image else "manual_text"
-    queued = submit_answer_task((text, body.image, True, src, {"origin": "manual"}))
+    meta = {"origin": "manual"}
+    if body.override_think_mode is not None:
+        meta["override_think_mode"] = bool(body.override_think_mode)
+    queued = submit_answer_task((text, body.image, True, src, meta))
     if not queued:
         raise HTTPException(503, "没有可用的答题模型，请先启用并配置至少一个模型")
     return {"ok": True}
 
 
 @router.post("/ask-from-server-screen")
-async def api_ask_from_server_screen():
+async def api_ask_from_server_screen(body: Optional[ServerScreenQuestion] = None):
     from services.llm import has_vision_model
     from services.capture import ScreenCaptureError, capture_primary_left_half_data_url
 
     if not has_vision_model():
-        raise HTTPException(400, "\u8bf7\u81f3\u5c11\u914d\u7f6e\u4e00\u4e2a\u652f\u6301\u8bc6\u56fe\u4e14\u5df2\u586b\u5199 API Key \u7684\u6a21\u578b")
+        raise HTTPException(400, "请至少配置一个支持识图且已填写 API Key 的模型")
     try:
         data_url = capture_primary_left_half_data_url()
     except ScreenCaptureError as e:
@@ -169,10 +178,16 @@ async def api_ask_from_server_screen():
     cfg = get_config()
     region = getattr(cfg, "screen_capture_region", "left_half") or "left_half"
     text = prompt_server_screen_code(cfg.language, region)
-    if pick_model_index((text, data_url, True, "server_screen_left", {"origin": "server_screen"}), set()) is None:
-        raise HTTPException(400, "\u6ca1\u6709\u53ef\u7528\u7684\u8bc6\u56fe\u6a21\u578b\uff0c\u8bf7\u68c0\u67e5\u542f\u7528\u72b6\u6001\u4e0e API Key")
-    cancel_answer_work(reset_session_data=False)
-    queued = submit_answer_task((text, data_url, True, "server_screen_left", {"origin": "server_screen"}))
+    meta = {"origin": "server_screen"}
+    if body is not None and body.override_think_mode is not None:
+        meta["override_think_mode"] = bool(body.override_think_mode)
+    if pick_model_index((text, data_url, True, "server_screen_left", meta), set()) is None:
+        raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
+    # Written exam: keep in-flight answers so multi-shot screenshots can run in parallel.
+    # Non-exam interview: cancel previous generation (screenshot replaces the live answer).
+    if not bool(getattr(cfg, "written_exam_mode", False)):
+        cancel_answer_work(reset_session_data=False)
+    queued = submit_answer_task((text, data_url, True, "server_screen_left", meta))
     if not queued:
         raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")
     return {"ok": True}
@@ -203,10 +218,14 @@ async def api_ask_from_server_screens(body: MultiServerScreenQuestion):
     cfg = get_config()
     region = getattr(cfg, "screen_capture_region", "left_half") or "left_half"
     text = f"{prompt_server_screen_code(cfg.language, region)}\n\n本次包含 {len(images)} 张连续截图，请按页序合并理解题目。"
-    task = (text, images, True, "server_screen_multi", {"origin": "server_screen", "image_count": len(images)})
+    meta = {"origin": "server_screen", "image_count": len(images)}
+    if body.override_think_mode is not None:
+        meta["override_think_mode"] = bool(body.override_think_mode)
+    task = (text, images, True, "server_screen_multi", meta)
     if pick_model_index(task, set()) is None:
         raise HTTPException(400, "没有可用的识图模型，请检查启用状态与 API Key")
-    cancel_answer_work(reset_session_data=False)
+    if not bool(getattr(cfg, "written_exam_mode", False)):
+        cancel_answer_work(reset_session_data=False)
     queued = submit_answer_task(task)
     if not queued:
         raise HTTPException(503, "没有可用的识图模型，请检查启用状态与 API Key")

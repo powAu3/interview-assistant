@@ -64,6 +64,9 @@ test('load and save shortcut config roundtrip', () => {
     focusNextTab: { key: 'CommandOrControl+Right' },
     overlayPrevQuestion: { key: 'CommandOrControl+Up' },
     overlayNextQuestion: { key: 'CommandOrControl+Down' },
+    askScreenForceThink: { key: 'CommandOrControl+Alt+/' },
+    askScreenForceNoThink: { key: 'CommandOrControl+Alt+.' },
+    toggleThinkMode: { key: 'CommandOrControl+Shift+T' },
   });
 
   saveShortcutConfig(app, shortcuts);
@@ -78,5 +81,20 @@ test('load and save shortcut config roundtrip', () => {
   assert.equal(loaded.focusNextTab.key, 'CommandOrControl+Right');
   assert.equal(loaded.overlayPrevQuestion.key, 'CommandOrControl+Up');
   assert.equal(loaded.overlayNextQuestion.key, 'CommandOrControl+Down');
+  assert.equal(loaded.askScreenForceThink.key, 'CommandOrControl+Alt+/');
+  assert.equal(loaded.askScreenForceNoThink.key, 'CommandOrControl+Alt+.');
+  assert.equal(loaded.toggleThinkMode.key, 'CommandOrControl+Shift+T');
   assert.ok(fs.existsSync(getShortcutsFilePath(app)));
+});
+
+test('default think shortcuts are valid and unique', () => {
+  const shortcuts = createShortcutState();
+  assert.equal(shortcuts.askScreenForceThink.key, 'CommandOrControl+Alt+/');
+  assert.equal(shortcuts.askScreenForceNoThink.key, 'CommandOrControl+Alt+.');
+  assert.equal(shortcuts.toggleThinkMode.key, 'CommandOrControl+Shift+T');
+  assert.equal(isValidShortcutKey(shortcuts.askScreenForceThink.key), true);
+  assert.equal(isValidShortcutKey(shortcuts.askScreenForceNoThink.key), true);
+  assert.equal(isValidShortcutKey(shortcuts.toggleThinkMode.key), true);
+  const result = validateShortcutMap(shortcuts);
+  assert.equal(result.ok, true);
 });

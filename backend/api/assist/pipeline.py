@@ -887,6 +887,10 @@ def _flush_commit(seq: int, apply_fn: Callable[[], None]):
 # Interview loop
 # ---------------------------------------------------------------------------
 
+# PortAudio device indices are 0-based. Never reuse 0 as "unset".
+_UNSET_DEVICE_ID = -1
+
+
 def _device_is_loopback(device_id: Optional[int]) -> bool:
     if device_id is None:
         return False
@@ -894,6 +898,24 @@ def _device_is_loopback(device_id: Optional[int]) -> bool:
         if d["id"] == device_id:
             return bool(d["is_loopback"])
     return False
+
+
+def _normalize_stored_device_id(value: Any, *, fallback: int = _UNSET_DEVICE_ID) -> int:
+    """Coerce session/API device ids; negative or invalid → unset sentinel."""
+    if value is None:
+        return fallback
+    try:
+        device_id = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return device_id if device_id >= 0 else fallback
+
+
+def _is_valid_device_id(value: Any) -> bool:
+    try:
+        return value is not None and int(value) >= 0
+    except (TypeError, ValueError):
+        return False
 
 
 def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: Optional[int] = None):
@@ -914,10 +936,14 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
         audio_capture.start(device_id, owner="assist")
 
         with conversation_lock:
-            session.last_device_id = device_id
+            session.last_device_id = int(device_id)
             session.capture_is_loopback = capture_is_loopback
         _ilog.info("INTERVIEW_START device=%s loopback=%s", device_id, capture_is_loopback)
     else:
+        with conversation_lock:
+            session.last_device_id = _UNSET_DEVICE_ID
+            session.last_candidate_mic_device_id = _UNSET_DEVICE_ID
+            session.capture_is_loopback = False
         _ilog.info("INTERVIEW_START no_device (written_exam_mode)")
 
     with conversation_lock:
@@ -951,7 +977,7 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
             _ilog.info("CANDIDATE_ASR_START device=%s", candidate_mic_device_id)
         except Exception as exc:
             with conversation_lock:
-                session.last_candidate_mic_device_id = 0
+                session.last_candidate_mic_device_id = _UNSET_DEVICE_ID
             _elog.warning("CANDIDATE_ASR_START_FAIL device=%s err=%s", candidate_mic_device_id, exc)
             broadcast({
                 "type": "candidate_asr_status",
@@ -964,7 +990,7 @@ def start_nonblocking(device_id: Optional[int] = None, candidate_mic_device_id: 
             })
     elif device_id is not None:
         with conversation_lock:
-            session.last_candidate_mic_device_id = 0
+            session.last_candidate_mic_device_id = _UNSET_DEVICE_ID
         reason = "disabled" if not bool(getattr(cfg, "candidate_asr_enabled", False)) else "missing_or_same_device"
         broadcast({"type": "candidate_asr_status", "loaded": False, "loading": False, "provider": "off", "reason": reason})
 
@@ -1086,33 +1112,57 @@ def pause_interview():
 def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: Optional[int] = None):
     global _interview_thread, _candidate_thread
     session = get_session()
+    cfg = get_config()
+    written_exam = bool(getattr(cfg, "written_exam_mode", False))
+    if written_exam:
+        # A written exam has no audio workers. Ignore stale device IDs from a
+        # previous interview and requests from older clients.
+        device_id = None
+        candidate_mic_device_id = None
     capture_is_loopback = bool(getattr(session, "capture_is_loopback", False))
-    next_device_id = int(getattr(session, "last_device_id", 0) or 0)
-    should_resume_interviewer = bool(
-        device_id is not None
-        or (_interview_thread and _interview_thread.is_alive())
-        or bool(getattr(audio_capture, "is_running", False))
+    last_id = (
+        _UNSET_DEVICE_ID
+        if written_exam
+        else _normalize_stored_device_id(getattr(session, "last_device_id", _UNSET_DEVICE_ID))
     )
+    next_device_id = last_id
     if device_id is not None:
         next_device_id = int(device_id)
         capture_is_loopback = _device_is_loopback(next_device_id)
+    # Mirror candidate resume: prefer last_device_id when the worker/capture died.
+    # Valid capture targets are PortAudio indices >= 0 (including device 0).
+    should_resume_interviewer = bool(
+        not written_exam
+        and _is_valid_device_id(next_device_id)
+        and (
+            device_id is not None
+            or _is_valid_device_id(last_id)
+            or (_interview_thread and _interview_thread.is_alive())
+            or bool(getattr(audio_capture, "is_running", False))
+        )
+    )
     if should_resume_interviewer:
         audio_capture.start(next_device_id, owner="assist")
         _start_interview_worker_thread_if_needed()
-    last_candidate_id = int(getattr(session, "last_candidate_mic_device_id", 0) or 0)
+    last_candidate_id = (
+        _UNSET_DEVICE_ID
+        if written_exam
+        else _normalize_stored_device_id(
+            getattr(session, "last_candidate_mic_device_id", _UNSET_DEVICE_ID)
+        )
+    )
     next_candidate_id = last_candidate_id
     should_resume_candidate = bool(
         candidate_mic_device_id is not None
-        or last_candidate_id > 0
+        or _is_valid_device_id(last_candidate_id)
         or (_candidate_thread and _candidate_thread.is_alive())
         or bool(getattr(_candidate_audio_capture, "is_running", False))
     )
     if candidate_mic_device_id is not None:
         next_candidate_id = int(candidate_mic_device_id)
-    cfg = get_config()
     candidate_enabled = bool(getattr(cfg, "candidate_asr_enabled", False))
     candidate_device_valid = bool(
-        next_candidate_id > 0
+        _is_valid_device_id(next_candidate_id)
         and candidate_enabled
         and int(next_candidate_id) != int(next_device_id)
     )
@@ -1130,7 +1180,7 @@ def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: 
                 _candidate_thread = threading.Thread(target=_candidate_worker, daemon=True)
                 _candidate_thread.start()
         except Exception as exc:
-            next_candidate_id = 0
+            next_candidate_id = _UNSET_DEVICE_ID
             _elog.warning("CANDIDATE_ASR_RESUME_FAIL err=%s", exc)
             broadcast({
                 "type": "candidate_asr_status",
@@ -1141,9 +1191,9 @@ def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: 
                 "reason": "mic_unavailable",
                 "safe_degraded": True,
             })
-    elif next_candidate_id and not candidate_device_valid:
+    elif _is_valid_device_id(next_candidate_id) and not candidate_device_valid:
         reason = "disabled" if not candidate_enabled else "missing_or_same_device"
-        next_candidate_id = 0
+        next_candidate_id = _UNSET_DEVICE_ID
         if should_resume_candidate or candidate_mic_device_id is not None:
             broadcast({
                 "type": "candidate_asr_status",
@@ -1155,9 +1205,13 @@ def unpause_interview(device_id: Optional[int] = None, candidate_mic_device_id: 
     _candidate_flush_event.clear()
     _pause_event.clear()
     with conversation_lock:
-        session.last_device_id = next_device_id
-        session.last_candidate_mic_device_id = int(next_candidate_id or 0)
-        session.capture_is_loopback = capture_is_loopback
+        session.last_device_id = (
+            _UNSET_DEVICE_ID if written_exam else _normalize_stored_device_id(next_device_id)
+        )
+        session.last_candidate_mic_device_id = (
+            _UNSET_DEVICE_ID if written_exam else _normalize_stored_device_id(next_candidate_id)
+        )
+        session.capture_is_loopback = False if written_exam else capture_is_loopback
         session.is_paused = False
     broadcast({"type": "paused", "value": False})
 

@@ -13,7 +13,7 @@ describe('uiPrefsStore overlay state sync', () => {
       interviewOverlayMode: 'glass',
       interviewOverlayFocusWidthPct: 96,
       interviewOverlayFocusHeightPct: 90,
-      interviewOverlayPromptMaxWidth: 900,
+      interviewOverlayPromptMaxWidth: 820,
       interviewOverlayPromptAutoFollow: false,
       interviewOverlayMaxLines: 0,
       interviewOverlayVisible: false,
@@ -123,6 +123,17 @@ describe('uiPrefsStore overlay state sync', () => {
 
     expect(useUiPrefsStore.getState().interviewOverlayPromptAutoFollow).toBe(true)
     expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayPromptAutoFollow)).toBe('1')
+  })
+
+  it('caps persisted and newly selected prompt widths at 820px', () => {
+    localStorage.setItem(__UI_PREFS_TEST_KEYS.overlayPromptMaxWidth, '1500')
+    useUiPrefsStore.getState().syncInterviewOverlayPrefs()
+
+    expect(useUiPrefsStore.getState().interviewOverlayPromptMaxWidth).toBe(820)
+
+    useUiPrefsStore.getState().setInterviewOverlayPromptMaxWidth(1200)
+    expect(useUiPrefsStore.getState().interviewOverlayPromptMaxWidth).toBe(820)
+    expect(localStorage.getItem(__UI_PREFS_TEST_KEYS.overlayPromptMaxWidth)).toBe('820')
   })
 
   it('tracks overlay window visibility without persisting it as a style preference', () => {

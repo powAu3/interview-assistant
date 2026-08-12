@@ -353,9 +353,16 @@ export default function ControlBar() {
   }, [])
   const handleResume = useCallback(async () => {
     if (lifecycleActionRef.current) return
+    if (!isExamMode && selectedDevice === null) {
+      setError('请先选择音频设备')
+      return
+    }
     lifecycleActionRef.current = true
     setLoading(true)
-    try { await api.resume(selectedDevice ?? undefined, effectiveCandidateMic) } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally {
+    try {
+      if (isExamMode) await api.resume()
+      else await api.resume(selectedDevice ?? undefined, effectiveCandidateMic)
+    } catch (e: unknown) { setError(getErrorMessage(e, isExamMode ? '继续失败' : '继续录音失败')) } finally {
       lifecycleActionRef.current = false
       setLoading(false)
     }

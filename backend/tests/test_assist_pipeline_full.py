@@ -688,6 +688,184 @@ def test_unpause_restarts_candidate_audio_from_last_device_when_worker_stopped(
     assert _DeferredThread.started[-1].target is pipeline._candidate_worker
 
 
+def test_unpause_written_exam_ignores_audio_devices_and_clears_stale_state(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    class _Audio:
+        def __init__(self):
+            self.start_calls = []
+            self._is_running = True
+
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
+
+        @property
+        def is_running(self):
+            return self._is_running
+
+    cfg = _cfg()
+    cfg.written_exam_mode = True
+    cfg.candidate_asr_enabled = True
+    main_audio = _Audio()
+    candidate_audio = _Audio()
+    session = get_session()
+    session.last_device_id = 20
+    session.last_candidate_mic_device_id = 21
+    session.capture_is_loopback = True
+    session.is_paused = True
+
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "audio_capture", main_audio)
+    monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    pipeline.unpause_interview(10, 11)
+
+    assert main_audio.start_calls == []
+    assert candidate_audio.start_calls == []
+    assert session.last_device_id == -1
+    assert session.last_candidate_mic_device_id == -1
+    assert session.capture_is_loopback is False
+    assert session.is_paused is False
+    assert broadcasts[-1] == {"type": "paused", "value": False}
+
+
+def test_unpause_restarts_interviewer_from_last_device_when_worker_stopped(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    class _Audio:
+        def __init__(self):
+            self.start_calls = []
+            self._is_running = False
+
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
+            self._is_running = True
+
+        @property
+        def is_running(self):
+            return self._is_running
+
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = False
+    main_audio = _Audio()
+    candidate_audio = _Audio()
+    session = get_session()
+    session.last_device_id = 10
+    session.last_candidate_mic_device_id = -1
+    session.is_paused = True
+
+    pipeline._interview_thread = None
+    pipeline._candidate_thread = None
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "audio_capture", main_audio)
+    monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
+    monkeypatch.setattr(pipeline, "_device_is_loopback", lambda _device_id: True)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    pipeline.unpause_interview()
+
+    assert main_audio.start_calls == [(10, "assist", {})]
+    assert candidate_audio.start_calls == []
+    assert session.last_device_id == 10
+    assert session.is_paused is False
+    assert any(t.target is pipeline._interview_worker for t in _DeferredThread.started)
+    assert broadcasts[-1] == {"type": "paused", "value": False}
+
+
+def test_unpause_skips_interviewer_when_last_device_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    broadcasts: list[dict] = []
+
+    class _Audio:
+        def __init__(self):
+            self.start_calls = []
+            self._is_running = False
+
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
+            self._is_running = True
+
+        @property
+        def is_running(self):
+            return self._is_running
+
+    cfg = _cfg()
+    main_audio = _Audio()
+    candidate_audio = _Audio()
+    session = get_session()
+    session.last_device_id = -1
+    session.last_candidate_mic_device_id = -1
+    session.is_paused = True
+
+    pipeline._interview_thread = None
+    pipeline._candidate_thread = None
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "audio_capture", main_audio)
+    monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    pipeline.unpause_interview()
+
+    assert main_audio.start_calls == []
+    assert candidate_audio.start_calls == []
+    assert session.last_device_id == -1
+    assert session.is_paused is False
+    assert _DeferredThread.started == []
+    assert broadcasts[-1] == {"type": "paused", "value": False}
+
+
+def test_unpause_restarts_interviewer_from_device_zero(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """PortAudio index 0 is a real device; resume must not treat it as unset."""
+    broadcasts: list[dict] = []
+
+    class _Audio:
+        def __init__(self):
+            self.start_calls = []
+            self._is_running = False
+
+        def start(self, device_id, owner=None, **kwargs):
+            self.start_calls.append((device_id, owner, kwargs))
+            self._is_running = True
+
+        @property
+        def is_running(self):
+            return self._is_running
+
+    cfg = _cfg()
+    cfg.candidate_asr_enabled = False
+    main_audio = _Audio()
+    candidate_audio = _Audio()
+    session = get_session()
+    session.last_device_id = 0
+    session.last_candidate_mic_device_id = -1
+    session.is_paused = True
+
+    pipeline._interview_thread = None
+    pipeline._candidate_thread = None
+    monkeypatch.setattr(pipeline, "get_config", lambda: cfg)
+    monkeypatch.setattr(pipeline, "audio_capture", main_audio)
+    monkeypatch.setattr(pipeline, "_candidate_audio_capture", candidate_audio)
+    monkeypatch.setattr(pipeline, "_device_is_loopback", lambda _device_id: True)
+    monkeypatch.setattr(pipeline, "broadcast", broadcasts.append)
+
+    pipeline.unpause_interview()
+
+    assert main_audio.start_calls == [(0, "assist", {})]
+    assert candidate_audio.start_calls == []
+    assert session.last_device_id == 0
+    assert session.is_paused is False
+    assert any(t.target is pipeline._interview_worker for t in _DeferredThread.started)
+    assert broadcasts[-1] == {"type": "paused", "value": False}
+
+
 @pytest.mark.parametrize(
     ("candidate_enabled", "last_candidate_id", "expected_reason"),
     [
@@ -740,7 +918,7 @@ def test_unpause_clears_invalid_candidate_audio_state(
 
     assert main_audio.start_calls == [(10, "assist", {})]
     assert candidate_audio.start_calls == []
-    assert session.last_candidate_mic_device_id == 0
+    assert session.last_candidate_mic_device_id == -1
     assert any(
         event.get("type") == "candidate_asr_status"
         and event.get("provider") == "off"

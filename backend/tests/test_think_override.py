@@ -143,6 +143,78 @@ def test_no_think_override_when_not_written_exam(monkeypatch):
     assert captured["override_think_mode"] is None
 
 
+@pytest.mark.parametrize("meta_value,expect", [
+    (True, True),
+    (False, False),
+])
+def test_meta_override_think_mode_beats_written_exam_think(monkeypatch, meta_value, expect):
+    monkeypatch.setattr(answer_worker, "get_config", lambda: _cfg(
+        written_exam_mode=True, written_exam_think=not meta_value,
+    ))
+    monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kw: "sys")
+    monkeypatch.setattr(answer_worker, "get_token_stats", lambda: {
+        "prompt": 0, "completion": 0, "total": 0, "by_model": {},
+    })
+
+    captured = {}
+
+    def fake_stream(model_cfg, messages, **kwargs):
+        captured["override_think_mode"] = kwargs.get("override_think_mode")
+        yield ("text", "答案")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+    from core.session import reset_session
+    reset_session()
+
+    broadcasts = []
+    answer_worker.process_question_parallel(
+        (
+            "题目",
+            None,
+            True,
+            "server_screen_0",
+            {"origin": "server_screen", "override_think_mode": meta_value},
+        ),
+        seq=0, model_idx=0, sess_v=0, deps=_deps(broadcasts),
+    )
+
+    assert captured["override_think_mode"] is expect
+
+
+def test_meta_override_think_mode_works_outside_written_exam(monkeypatch):
+    monkeypatch.setattr(answer_worker, "get_config", lambda: _cfg(
+        written_exam_mode=False, written_exam_think=False,
+    ))
+    monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kw: "sys")
+    monkeypatch.setattr(answer_worker, "get_token_stats", lambda: {
+        "prompt": 0, "completion": 0, "total": 0, "by_model": {},
+    })
+
+    captured = {}
+
+    def fake_stream(model_cfg, messages, **kwargs):
+        captured["override_think_mode"] = kwargs.get("override_think_mode")
+        yield ("text", "答案")
+
+    monkeypatch.setattr(answer_worker, "chat_stream_single_model", fake_stream)
+    from core.session import reset_session
+    reset_session()
+
+    broadcasts = []
+    answer_worker.process_question_parallel(
+        (
+            "题目",
+            None,
+            True,
+            "manual_text",
+            {"origin": "manual", "override_think_mode": True},
+        ),
+        seq=0, model_idx=0, sess_v=0, deps=_deps(broadcasts),
+    )
+
+    assert captured["override_think_mode"] is True
+
+
 def test_model_idx_out_of_range_reports_error_and_advances_commit_queue(monkeypatch):
     monkeypatch.setattr(answer_worker, "get_config", lambda: _cfg())
     monkeypatch.setattr(answer_worker, "build_system_prompt", lambda **_kw: "sys")

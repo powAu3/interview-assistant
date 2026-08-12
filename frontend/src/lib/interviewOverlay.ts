@@ -1,5 +1,9 @@
 export type OverlayMode = 'glass' | 'prompt' | 'focus'
 
+export const INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH = 200
+export const INTERVIEW_OVERLAY_PROMPT_MAX_WIDTH = 820
+export const INTERVIEW_OVERLAY_PROMPT_DEFAULT_WIDTH = 820
+
 export interface OverlayStatePayload {
   initialized?: boolean
   enabled: boolean
