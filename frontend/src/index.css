@@ -60,6 +60,7 @@ code, pre, .font-mono {
   --c-text-secondary: 80 80 80;
   --c-text-muted: 110 110 110;
   --c-accent-blue: 0 92 197;
+  --c-accent-violet: 109 62 192;
   --c-accent-green: 16 124 16;
   --c-accent-red: 196 43 28;
   --c-accent-amber: 184 134 11;
@@ -99,6 +100,7 @@ code, pre, .font-mono {
   --c-text-secondary: 148 163 184;
   --c-text-muted: 100 116 139;
   --c-accent-blue: 99 102 241;
+  --c-accent-violet: 167 106 249;
   --c-accent-green: 34 197 94;
   --c-accent-red: 239 68 68;
   --c-accent-amber: 245 158 11;
@@ -138,6 +140,7 @@ code, pre, .font-mono {
   --c-text-secondary: 220 220 220;
   --c-text-muted: 180 180 180;
   --c-accent-blue: 58 150 221;
+  --c-accent-violet: 158 110 247;
   --c-accent-green: 106 185 48;
   --c-accent-red: 255 80 80;
   --c-accent-amber: 255 198 0;
@@ -718,6 +721,7 @@ code, pre, .font-mono {
   max-height: min(408px, calc(100vh - 8px));
   padding: 2px 4px;
   line-height: 1.5;
+  scrollbar-gutter: stable;
 }
 
 .ov-shell--nobg .ov-answer,
@@ -1462,3 +1466,40 @@ select:focus-visible {
   display: none !important;
 }
 
+
+/* ── 设置内 InfoHint 提示气泡 ── */
+.info-hint {
+  position: relative;
+  cursor: help;
+  line-height: 0;
+}
+.info-hint:focus {
+  outline: none;
+}
+.info-hint-bubble {
+  position: fixed;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  transform: translateY(2px);
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgb(var(--c-bg-secondary));
+  border: 1px solid rgb(var(--c-bg-hover));
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+  color: rgb(var(--c-text-secondary));
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  /* portal 到 body：必须高于设置弹窗(z-50)/toast(z-60)，否则气泡被弹窗盖住 */
+  z-index: 70;
+}
+/* 气泡 portal 到 body，不靠 CSS hover 后代选择器（匹配不上），由 React open 状态挂 open 类 */
+.info-hint-bubble--open {
+  opacity: 1;
+  transform: translateY(0);
+}

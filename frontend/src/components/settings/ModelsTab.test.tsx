@@ -277,6 +277,7 @@ describe('ModelsTab state sync', () => {
       api_base_url: 'https://api.openai.com/v1',
       api_key: 'sk-test',
       model_index: 0,
+      api_type: 'openai',
     })
 
     fireEvent.change(select, { target: { value: 'gpt-4o-mini' } })
@@ -307,6 +308,7 @@ describe('ModelsTab state sync', () => {
       api_base_url: 'https://api.openai.com/v1',
       api_key: 'sk-test',
       model_index: 0,
+      api_type: 'openai',
     })
     expect(screen.getByRole('button', { name: '获取中…' })).toBeDisabled()
 
@@ -375,6 +377,7 @@ describe('ModelsTab state sync', () => {
         api_base_url: 'https://api.openai.com/v1',
         api_key: 'sk-old',
         model_index: 0,
+        api_type: 'openai',
       })
     })
 

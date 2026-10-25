@@ -26,6 +26,7 @@ import {
   GradientCard,
   SaveStateBadge,
   StatusBadge,
+  ToggleSwitch,
   useDirtySnapshot,
   useSettingsDirtyRegistration,
   type SaveState,
@@ -36,6 +37,7 @@ const EMPTY_MODEL: ModelFullInfo = {
   api_base_url: 'https://api.openai.com/v1',
   api_key: '',
   model: '',
+  api_type: 'openai',
   supports_think: false,
   supports_vision: false,
   enabled: true,
@@ -43,6 +45,33 @@ const EMPTY_MODEL: ModelFullInfo = {
   think_disabled_params: {},
   has_key: false,
 }
+
+/** 接口协议选项：决定后端用哪种 API 形态调用（base URL 带不带 /v1 都能自动适配） */
+const API_TYPE_OPTIONS: {
+  value: NonNullable<ModelFullInfo['api_type']>
+  label: string
+  hint: string
+  urlPlaceholder: string
+}[] = [
+  {
+    value: 'openai',
+    label: 'Chat',
+    hint: 'OpenAI 兼容 Chat Completions（POST /chat/completions）。绝大多数中转站/国产模型（DeepSeek、豆包、GLM、Kimi 等）都是这个协议；Bearer 鉴权；Base URL 带不带 /v1 都能自动适配。',
+    urlPlaceholder: 'https://api.openai.com/v1（可不带 /v1）',
+  },
+  {
+    value: 'anthropic',
+    label: 'Messages',
+    hint: 'Anthropic Messages 原生协议（POST /v1/messages）。Claude 官方 API 和 claudecode 类中转用这个；自动带 x-api-key + anthropic-version 头（网关只认 Bearer 时会自动重试）；Think 用 thinking.budget_tokens。',
+    urlPlaceholder: 'https://api.anthropic.com',
+  },
+  {
+    value: 'responses',
+    label: 'Responses',
+    hint: 'OpenAI 新版 Responses API（POST /responses）。gpt-5/o 系列官方推荐入口；Think 映射为 reasoning.effort；图片用 input_image 格式，自动转换。',
+    urlPlaceholder: 'https://api.openai.com/v1（可不带 /v1）',
+  },
+]
 
 interface ModelRow {
   id: string
@@ -113,6 +142,7 @@ function buildModelPayloadFromRows(rows: ModelRow[]) {
     api_key: m.api_key.trim() ? m.api_key : m.has_key ? KEEP_EXISTING_API_KEY : '',
     model_original_index: originalIndex,
     model: m.model.trim() || 'gpt-4o-mini',
+    api_type: m.api_type || 'openai',
     supports_think: m.supports_think,
     supports_vision: m.supports_vision,
     enabled: m.enabled,
@@ -144,7 +174,7 @@ function groupRemoteModels(models: RemoteModel[]) {
 }
 
 function remoteModelRequestKey(model: ModelFullInfo) {
-  return `${(model.api_base_url || '').trim()}\n${model.api_key || ''}`
+  return `${(model.api_base_url || '').trim()}\n${model.api_key || ''}\n${model.api_type || 'openai'}`
 }
 
 function apiKeyPayloadValue(model: ModelFullInfo) {
@@ -356,10 +386,10 @@ export default function ModelsTab() {
 
   const updateModel = (idx: number, patch: Partial<ModelFullInfo>) => {
     const rowId = modelRows[idx]?.id
-    if (rowId && ('api_base_url' in patch || 'api_key' in patch)) {
+    if (rowId && ('api_base_url' in patch || 'api_key' in patch || 'api_type' in patch)) {
       clearRemoteModelList(rowId)
     }
-    if ('model' in patch) {
+    if ('model' in patch || 'api_type' in patch) {
       clearModelProbeState(idx)
     }
     setModelRows((prev) =>
@@ -392,6 +422,7 @@ export default function ModelsTab() {
         api_base_url: row.model.api_base_url,
         api_key: apiKeyPayloadValue(row.model),
         model_index: row.originalIndex,
+        api_type: row.model.api_type || 'openai',
       })
       setRemoteModelLists((prev) => {
         if (!requestStillCurrent()) return prev
@@ -850,7 +881,7 @@ export default function ModelsTab() {
                       <GripVertical className="w-4 h-4" />
                     </div>
 
-                    <div className="flex items-center justify-center w-8 flex-shrink-0 my-2 rounded-lg bg-indigo-500/20 text-indigo-300 text-sm font-bold tabular-nums">
+                    <div className="flex items-center justify-center w-8 flex-shrink-0 my-2 rounded-lg bg-accent-blue/20 text-accent-blue text-sm font-bold tabular-nums">
                       {idx + 1}
                     </div>
 
@@ -861,8 +892,16 @@ export default function ModelsTab() {
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="truncate font-medium text-text-primary text-sm">{m.name || '(未命名)'}</span>
+                        {(m.api_type || 'openai') !== 'openai' && (
+                          <span
+                            className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-md bg-accent-violet/15 text-accent-violet font-medium"
+                            title={`接口类型：${API_TYPE_OPTIONS.find((t) => t.value === m.api_type)?.label}`}
+                          >
+                            {API_TYPE_OPTIONS.find((t) => t.value === m.api_type)?.label}
+                          </span>
+                        )}
                         {m.supports_vision && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-sky-400/90 flex-shrink-0 px-1.5 py-0.5 rounded-md bg-sky-500/10">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-accent-blue flex-shrink-0 px-1.5 py-0.5 rounded-md bg-accent-blue/10">
                             <Eye className="w-3 h-3" /> 识图
                           </span>
                         )}
@@ -870,7 +909,7 @@ export default function ModelsTab() {
                       <div className="flex flex-wrap items-center gap-2 mt-1">
                         <span className="text-[10px] text-text-muted truncate max-w-[180px]">{m.model || '(未设置)'}</span>
                         <span className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          keyHasValue ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                          keyHasValue ? 'bg-accent-green/15 text-accent-green' : 'bg-accent-red/15 text-accent-red'
                         }`}>
                           <KeyRound className="w-2.5 h-2.5" />
                           {keyLabel}
@@ -884,16 +923,13 @@ export default function ModelsTab() {
                     </button>
 
                     <div className="flex items-center gap-1 py-2 pr-2">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={on}
-                        onClick={() => updateModel(idx, { enabled: !on })}
-                        className={`relative h-6 w-10 rounded-full transition-colors ${on ? 'bg-accent-green/80' : 'bg-bg-hover'}`}
+                      <ToggleSwitch
+                        size="sm"
+                        checked={on}
+                        onChange={(next) => updateModel(idx, { enabled: next })}
                         title={on ? '关闭此模型' : '启用此模型'}
-                      >
-                        <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
-                      </button>
+                        labelOn="启用此模型"
+                      />
                       <button
                         type="button"
                         onClick={() => setExpandedIdx(isExpanded ? null : idx)}
@@ -934,12 +970,35 @@ export default function ModelsTab() {
                             />
                           </Field>
                         </div>
-                        <Field label="API Base URL" hint="OpenAI 兼容接口地址">
+                        <Field label="接口类型" hint={API_TYPE_OPTIONS.find((t) => t.value === (m.api_type || 'openai'))?.hint}>
+                          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="接口类型">
+                            {API_TYPE_OPTIONS.map((t) => {
+                              const selected = (m.api_type || 'openai') === t.value
+                              return (
+                                <button
+                                  key={t.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  onClick={() => updateModel(idx, { api_type: t.value })}
+                                  className={`px-2 py-2 rounded-lg text-xs font-medium transition-all ${
+                                    selected
+                                      ? 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20'
+                                      : 'bg-bg-tertiary/80 text-text-secondary hover:bg-bg-hover border border-bg-hover'
+                                  }`}
+                                >
+                                  {t.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </Field>
+                        <Field label="API Base URL" hint="带不带 /v1、结尾多斜杠都能自动适配">
                           <input
                             type="text"
                             value={m.api_base_url}
                             onChange={(e) => updateModel(idx, { api_base_url: e.target.value })}
-                            placeholder="https://api.openai.com/v1"
+                            placeholder={API_TYPE_OPTIONS.find((t) => t.value === (m.api_type || 'openai'))?.urlPlaceholder}
                             className="input-field"
                           />
                         </Field>
@@ -1042,10 +1101,10 @@ export default function ModelsTab() {
                             title={probeTitle}
                           >
                             <span className="text-text-secondary">自动探测</span>
-                            <span className={probe.supports_vision ? 'text-sky-300' : 'text-text-muted'}>
+                            <span className={probe.supports_vision ? 'text-accent-blue' : 'text-text-muted'}>
                               识图 {probe.supports_vision ? '支持' : '未检测到'}
                             </span>
-                            <span className={probe.supports_think ? 'text-emerald-300' : 'text-text-muted'}>
+                            <span className={probe.supports_think ? 'text-accent-green' : 'text-text-muted'}>
                               Think {probe.supports_think ? (probe.think_style || '支持') : '未检测到'}
                             </span>
                             {probe.supports_think && (
@@ -1053,7 +1112,7 @@ export default function ModelsTab() {
                                 开 {JSON.stringify(probe.think_params)}
                               </span>
                             )}
-                            <span className={`max-w-full truncate font-mono text-[10px] ${needsThinkDisableProbe ? 'text-amber-300' : 'text-text-muted'}`}>
+                            <span className={`max-w-full truncate font-mono text-[10px] ${needsThinkDisableProbe ? 'text-accent-amber' : 'text-text-muted'}`}>
                               {thinkDisabledLabel}
                             </span>
                             {needsThinkDisableProbe && (
@@ -1061,7 +1120,7 @@ export default function ModelsTab() {
                                 type="button"
                                 onClick={() => handleTestModel(idx)}
                                 disabled={testingIdx !== null || healthChecking || saving || !on}
-                                className="rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 hover:bg-amber-400/15 disabled:opacity-50"
+                                className="rounded-md border border-accent-amber/40 bg-accent-amber/10 px-1.5 py-0.5 text-[10px] font-medium text-accent-amber hover:bg-accent-amber/15 disabled:opacity-50"
                                 title="重新保存配置并探测 Think 关闭参数"
                               >
                                 重新探测
@@ -1154,18 +1213,13 @@ export default function ModelsTab() {
               对所有模型同时生效，与顶栏会场开关同步。
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={llmForm.think_mode}
-            onClick={() => {
-              const next = !llmForm.think_mode
+          <ToggleSwitch
+            checked={llmForm.think_mode}
+            onChange={(next) => {
               setLlmForm({ ...llmForm, think_mode: next, think_effort: next ? 'xhigh' : 'off' })
             }}
-            className={`relative h-7 w-11 rounded-full flex-shrink-0 transition-colors ${llmForm.think_mode ? 'bg-accent-green' : 'bg-bg-hover'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${llmForm.think_mode ? 'translate-x-4' : ''}`} />
-          </button>
+            title="全局 Think 开关"
+          />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Temperature" hint="推荐 0.4-0.6">

@@ -50,7 +50,7 @@ export default function KbStatusHeader() {
   const jumpToSettings = () => {
     setKbDrawerOpen(false)
     if (!settingsOpen) toggleSettings()
-    setSettingsTab('general')
+    setSettingsTab('kb')
   }
 
   const enabled = status.enabled

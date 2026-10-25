@@ -3,6 +3,11 @@ import {
   X,
   LayoutGrid,
   Mic,
+  Palette,
+  Monitor,
+  BookOpen,
+  Timer,
+  AudioWaveform,
   BrainCircuit,
   Settings2,
   Search,
@@ -12,6 +17,8 @@ import { INPUT_FIELD_STYLE, SettingsSearchContext } from './shared'
 import PreferencesTab from './PreferencesTab'
 
 const SpeechTab = lazy(() => import('./SpeechTab'))
+const TimingTab = lazy(() => import('./SpeechTab'))
+const HotwordsTab = lazy(() => import('./HotwordsTab'))
 const ModelsTab = lazy(() => import('./ModelsTab'))
 
 export default function SettingsDrawer() {
@@ -142,7 +149,7 @@ export default function SettingsDrawer() {
     initial[0]?.focus()
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         closeSettings()
         return
       }
@@ -170,126 +177,187 @@ export default function SettingsDrawer() {
 
   if (!settingsOpen) return null
 
-  const tabs: { key: typeof settingsDrawerTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'general', label: '常用', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
-    { key: 'config', label: '语音', icon: <Mic className="w-3.5 h-3.5" /> },
-    { key: 'models', label: '模型', icon: <BrainCircuit className="w-3.5 h-3.5" /> },
+  const tabs: { key: typeof settingsDrawerTab; label: string; icon: React.ReactNode; desc: string }[] = [
+    { key: 'general', label: '常用', icon: <LayoutGrid className="w-4 h-4" />, desc: '运行与回答偏好' },
+    { key: 'mode', label: '模式', icon: <Monitor className="w-4 h-4" />, desc: '悬浮窗与笔试' },
+    { key: 'kb', label: '知识库', icon: <BookOpen className="w-4 h-4" />, desc: '本地笔记引用' },
+    { key: 'config', label: '语音', icon: <Mic className="w-4 h-4" />, desc: 'ASR 引擎与降级' },
+    { key: 'timing', label: '节奏', icon: <Timer className="w-4 h-4" />, desc: '延迟与断句' },
+    { key: 'hotwords', label: '热词', icon: <AudioWaveform className="w-4 h-4" />, desc: '岗位术语偏置' },
+    { key: 'models', label: '模型', icon: <BrainCircuit className="w-4 h-4" />, desc: '队列与协议' },
+    { key: 'appearance', label: '外观', icon: <Palette className="w-4 h-4" />, desc: '主题与快捷操作' },
   ]
 
-  const activeTabIdx = tabs.findIndex((t) => t.key === settingsDrawerTab)
+  const speechDirty = !!dirtyExplicitSections.speech
+  const dirtyByTab: Partial<Record<typeof settingsDrawerTab, boolean>> = {
+    config: speechDirty,
+    timing: speechDirty,
+    models: !!dirtyExplicitSections.models,
+  }
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={closeSettings} />
-      <div ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" className="fixed right-0 top-0 bottom-0 w-full sm:w-[520px] lg:w-[560px] bg-bg-secondary z-50 shadow-2xl flex flex-col border-l border-bg-tertiary">
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-bg-tertiary px-4 pt-4 pb-0 bg-bg-secondary/95">
-          <div className="flex items-start justify-between mb-3">
-            <div className="min-w-0">
-              <h2 id="settings-title" className="text-base font-semibold text-text-primary flex items-center gap-2">
-                <Settings2 className="w-4.5 h-4.5 text-accent-blue" />
+      <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] z-40" onClick={closeSettings} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 pointer-events-none">
+        <div
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-title settings-title-mobile"
+          className="pointer-events-auto relative flex w-full max-w-5xl h-full max-h-[94vh] bg-bg-secondary rounded-2xl border border-bg-tertiary shadow-2xl overflow-hidden flex-col md:flex-row"
+        >
+          {/* ── 左侧导航栏（md 及以上）── */}
+          <nav className="hidden md:flex w-52 flex-shrink-0 flex-col bg-bg-primary/50 border-r border-bg-tertiary/70 py-4" aria-label="设置分区">
+            <div className="px-4 pb-4">
+              <h2 id="settings-title" className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-accent-blue" />
                 设置中心
               </h2>
-              <p className="text-[11px] text-text-muted mt-0.5">常用偏好、语音链路、模型队列分区管理</p>
+              <p className="text-[10px] text-text-muted mt-1 leading-relaxed">常用偏好 · 语音链路 · 模型队列</p>
+            </div>
+            <div className="flex flex-col gap-1 px-2">
+              {tabs.map((t) => {
+                const active = settingsDrawerTab === t.key
+                const dirty = dirtyByTab[t.key]
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => changeTab(t.key)}
+                    aria-current={active ? 'page' : undefined}
+                    className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                      active
+                        ? 'bg-accent-blue/12 text-accent-blue'
+                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60'
+                    }`}
+                  >
+                    <span className={`flex-shrink-0 ${active ? 'text-accent-blue' : 'text-text-muted group-hover:text-text-secondary'}`}>
+                      {t.icon}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-medium leading-tight">{t.label}</span>
+                      <span className={`block text-[10px] leading-tight mt-0.5 ${active ? 'text-accent-blue/70' : 'text-text-muted'}`}>
+                        {t.desc}
+                      </span>
+                    </span>
+                    {dirty && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent-amber" title="有未保存更改" />}
+                  </button>
+                )
+              })}
+            </div>
+            {dirtyExplicitLabels.length > 0 && (
+              <div className="mt-auto px-4 pt-3 text-[10px] leading-relaxed text-accent-amber">
+                未保存：{dirtyExplicitLabels.join(' · ')}
+              </div>
+            )}
+          </nav>
+
+          {/* ── 主列：标题 + 搜索 + 内容 ── */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex-shrink-0 border-b border-bg-tertiary/70 px-4 pt-3.5 pb-3 md:pb-3.5 bg-bg-secondary/95">
+              <div className="flex items-center gap-3">
+                <h2 id="settings-title-mobile" className="md:hidden text-sm font-semibold text-text-primary flex items-center gap-2 flex-shrink-0">
+                  <Settings2 className="w-4 h-4 text-accent-blue" />
+                  设置
+                </h2>
+                {/* 搜索框: 快速过滤 Section/Collapsible (模型页直接在队列中编辑) */}
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape' && searchQuery) {
+                        e.stopPropagation()
+                        setSearchQuery('')
+                      }
+                    }}
+                    placeholder={settingsDrawerTab === 'models' ? '模型页直接在队列中编辑' : '搜索设置项，如 VAD / 知识库 / 截图 / 主题'}
+                    aria-label="搜索设置项"
+                    className="w-full text-xs pl-8 pr-8 py-2 rounded-lg bg-bg-tertiary/60 border border-bg-hover/60 text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-blue/60 focus:ring-2 focus:ring-accent-blue/20 transition"
+                    disabled={settingsDrawerTab === 'models'}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-text-muted hover:text-accent-red hover:bg-bg-hover/50"
+                      aria-label="清空搜索"
+                      title="清空搜索 (Esc)"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button type="button" onClick={closeSettings} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary flex-shrink-0" aria-label="关闭">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               {dirtyExplicitLabels.length > 0 && (
-                <p className="mt-1 text-[11px] font-medium text-accent-amber">
+                <p className="md:hidden mt-2 text-[11px] font-medium text-accent-amber">
                   未保存：{dirtyExplicitLabels.join(' · ')}
                 </p>
               )}
-            </div>
-            <button type="button" onClick={closeSettings} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary" aria-label="关闭">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          {/* 搜索框: 快速过滤 Section/Collapsible (仅 general/config tab 支持结构化过滤) */}
-          <div className="relative mb-3">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape' && searchQuery) {
-                  e.stopPropagation()
-                  setSearchQuery('')
-                }
-              }}
-              placeholder={settingsDrawerTab === 'models' ? '模型页直接在队列中编辑' : '搜索设置项，如 VAD / 知识库 / 截图 / 主题'}
-              aria-label="搜索设置项"
-              className="w-full text-xs pl-8 pr-8 py-2 rounded-lg bg-bg-tertiary/60 border border-bg-hover/60 text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-blue/60 focus:ring-2 focus:ring-accent-blue/20 transition"
-              disabled={settingsDrawerTab === 'models'}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-text-muted hover:text-accent-red hover:bg-bg-hover/50"
-                aria-label="清空搜索"
-                title="清空搜索 (Esc)"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
 
-          {/* Tab bar with animated indicator */}
-          <div className="relative">
-            <div className="flex rounded-xl bg-bg-tertiary/80 p-1 gap-1">
-              {tabs.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => changeTab(t.key)}
-                  className={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-medium transition-all z-10 ${
-                    settingsDrawerTab === t.key
-                      ? 'text-accent-blue'
-                      : 'text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  {t.icon}
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            {/* Sliding indicator */}
-            <div
-              className="absolute top-1 bottom-1 rounded-lg bg-bg-secondary shadow-sm transition-all duration-200 ease-out"
-              style={{
-                left: `calc(${activeTabIdx} * ${100 / tabs.length}% + 4px)`,
-                width: `calc(${100 / tabs.length}% - 8px)`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Content */}
-        <div ref={contentRef} className="flex-1 overflow-y-auto min-h-0">
-          <SettingsSearchContext.Provider value={settingsDrawerTab === 'models' ? '' : searchQuery}>
-            <Suspense fallback={<div className="flex items-center justify-center py-12 text-text-muted text-sm">加载中…</div>}>
-              {settingsDrawerTab === 'general' && <PreferencesTab />}
-              {settingsDrawerTab === 'config' && <SpeechTab />}
-              {settingsDrawerTab === 'models' && <ModelsTab />}
-            </Suspense>
-            {noResults && (
-              <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-                <Search className="w-8 h-8 text-text-muted/40" />
-                <div>
-                  <p className="text-sm text-text-primary font-medium">没有找到匹配 "{searchQuery}" 的设置项</p>
-                  <p className="text-[11px] text-text-muted mt-1">
-                    可以试试 "VAD / KB / 截图 / 主题 / 快捷词"，或切到其它 Tab
-                  </p>
+              {/* 移动端 tab（md 起由左侧导航取代）：分区多于 4 个时两行网格 */}
+              <div className="md:hidden mt-2.5">
+                <div className="grid grid-cols-4 rounded-xl bg-bg-tertiary/80 p-1 gap-1">
+                  {tabs.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => changeTab(t.key)}
+                      aria-current={settingsDrawerTab === t.key ? 'page' : undefined}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                        settingsDrawerTab === t.key
+                          ? 'bg-bg-secondary text-accent-blue shadow-sm'
+                          : 'text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      {t.icon}
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bg-tertiary/60 border border-bg-hover/60 text-xs text-text-primary hover:bg-bg-hover/60 transition"
-                >
-                  <X className="w-3 h-3" />
-                  清空搜索
-                </button>
               </div>
-            )}
-          </SettingsSearchContext.Provider>
+            </div>
+
+            {/* 内容区：整宽展示，不再被侧栏挤压 */}
+            <div ref={contentRef} className="flex-1 overflow-y-auto min-h-0">
+              <SettingsSearchContext.Provider value={settingsDrawerTab === 'models' ? '' : searchQuery}>
+                <Suspense fallback={<div className="flex items-center justify-center py-12 text-text-muted text-sm">加载中…</div>}>
+                  {settingsDrawerTab === 'general' && <PreferencesTab variant="main" />}
+                  {settingsDrawerTab === 'mode' && <PreferencesTab variant="mode" />}
+                  {settingsDrawerTab === 'kb' && <PreferencesTab variant="kb" />}
+                  {settingsDrawerTab === 'appearance' && <PreferencesTab variant="appearance" />}
+                  {settingsDrawerTab === 'config' && <SpeechTab variant="engines" />}
+                  {settingsDrawerTab === 'timing' && <TimingTab variant="timing" />}
+                  {settingsDrawerTab === 'hotwords' && <HotwordsTab />}
+                  {settingsDrawerTab === 'models' && <ModelsTab />}
+                </Suspense>
+                {noResults && (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                    <Search className="w-8 h-8 text-text-muted/40" />
+                    <div>
+                      <p className="text-sm text-text-primary font-medium">没有找到匹配 "{searchQuery}" 的设置项</p>
+                      <p className="text-[11px] text-text-muted mt-1">
+                        可以试试 "VAD / KB / 截图 / 主题 / 快捷词"，或切到其它分区
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bg-tertiary/60 border border-bg-hover/60 text-xs text-text-primary hover:bg-bg-hover/60 transition"
+                    >
+                      <X className="w-3 h-3" />
+                      清空搜索
+                    </button>
+                  </div>
+                )}
+              </SettingsSearchContext.Provider>
+            </div>
+          </div>
         </div>
       </div>
 

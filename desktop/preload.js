@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getWindowState: () => ipcRenderer.invoke('get-window-state'),
   syncOverlayWindow: (payload) => ipcRenderer.invoke('sync-overlay-window', payload),
   resizeOverlayWindow: (payload) => ipcRenderer.invoke('resize-overlay-window', payload),
+  setShortcutsSuspended: (on) => ipcRenderer.invoke('set-shortcuts-suspended', on),
   destroyOverlay: () => ipcRenderer.invoke('destroy-overlay'),
   moveOverlayWindow: (dx, dy) => ipcRenderer.invoke('move-overlay-window', dx, dy),
   overlayDragStart: () => ipcRenderer.sendSync('overlay-drag-start'),

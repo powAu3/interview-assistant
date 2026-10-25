@@ -168,13 +168,17 @@ export default function InterviewOverlay() {
     if (!enabled || !overlayVisible || overlayMode !== 'prompt') return
     const el = answerScrollRef.current
     if (!el) return
-    const contentEl = el.querySelector<HTMLElement>('.ov-answer-stack')
-      ?? el.querySelector<HTMLElement>('.ov-markdown')
-      ?? el
-    const widthEl = contentEl.querySelector<HTMLElement>('.ov-markdown') ?? contentEl
+    // 宽度量外壳（width: max-content，已含 .ov-answer 的 padding），再补 .ov-root--prompt
+    // 的 padding（水平 12px）+ 字形亚像素/DPI 取整安全边——旧实现按内容宽 +16 计，
+    // 比实际需要的少 ~4px，右侧最后一个字符会被窗口边缘裁掉一半。
+    // 高度必须量内容（.ov-answer-stack）：外壳/滚动容器受 max-height:100vh 钳制，
+    // 量它们会让窗口一次只能长 ~6px。
+    const shellEl = el.parentElement
+    const measureWidthEl = shellEl ?? el
+    const contentEl = el.querySelector<HTMLElement>('.ov-answer-stack') ?? el
     const contentWidth = Math.ceil(Math.max(
-      widthEl.scrollWidth,
-      widthEl.getBoundingClientRect().width,
+      measureWidthEl.scrollWidth,
+      measureWidthEl.getBoundingClientRect().width,
     ))
     const contentHeight = Math.ceil(Math.max(
       contentEl.scrollHeight,
@@ -182,9 +186,11 @@ export default function InterviewOverlay() {
     ))
     // 有内容时按内容宽度自适应 (上限 promptMaxWidth); 无内容时直接用 promptMaxWidth,
     // 避免开窗瞬间被空内容收窄成最小宽、再随答案流式撑开的视觉跳变。
-    const targetWidth = hasContent ? Math.min(overlayPromptMaxWidth, contentWidth + 16) : overlayPromptMaxWidth
+    const widthMargin = (shellEl ? 12 : 8) + 8
+    const heightMargin = 8 + 6
+    const targetWidth = hasContent ? Math.min(overlayPromptMaxWidth, contentWidth + widthMargin) : overlayPromptMaxWidth
     const nextWidth = Math.max(180, targetWidth)
-    const nextHeight = Math.max(72, Math.min(420, contentHeight + 12))
+    const nextHeight = Math.max(72, Math.min(420, contentHeight + heightMargin))
     window.electronAPI?.resizeOverlayWindow?.({ width: nextWidth, height: nextHeight })?.catch(() => {})
   }, [activeVisionVerifyKey, answerText, enabled, fontSize, hasContent, maxLines, overlayMode, overlayAnswerSlice.text, overlayPromptMaxWidth, overlayVisible])
 
@@ -387,7 +393,8 @@ export default function InterviewOverlay() {
   const promptShellStyle = {
     opacity,
     color: fontColor,
-    '--ov-prompt-max-width': `${Math.max(164, overlayPromptMaxWidth - 16)}px`,
+    // 与自适应量宽的 margin（root padding 12 + 安全边 8）对齐，避免触顶时右侧被窗口裁剪
+    '--ov-prompt-max-width': `${Math.max(164, overlayPromptMaxWidth - 20)}px`,
   } as CSSProperties
   const focusTools = [
     { key: 'screen' as const, label: '截图审题', shortcut: shortcuts.askFromServerScreen?.key },

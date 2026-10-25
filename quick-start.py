@@ -2,10 +2,14 @@
 """One-click launcher: install backend/frontend deps, then start desktop mode.
 
 Usage:
-    python quick-start.py                  # install + start on port 18080
-    python quick-start.py --port 9090      # install + start on a custom port
+    python quick-start.py                  # first run installs deps, later runs start directly
+    python quick-start.py --port 9090      # start on a custom port
     python quick-start.py --install-only   # only install dependencies
-    python quick-start.py --skip-install   # start immediately
+    python quick-start.py --force-install  # force pip/npm install again
+    python quick-start.py --skip-install   # start immediately (same as an installed run)
+
+依赖只在首次（或 requirements.txt / package.json 变化、node_modules 被删、
+换了 Python 环境）时安装；之后每次启动直接进桌面模式，不再等 pip/npm。
 
 The backend runs on 0.0.0.0 so mobile devices on the same LAN can
 also access via http://<your-ip>:<port>.  A scannable QR code is
@@ -14,6 +18,8 @@ available in the web UI settings panel.
 
 import argparse
 import ctypes
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -27,6 +33,8 @@ BACKEND_DIR = os.path.join(ROOT, "backend")
 FRONTEND_DIR = os.path.join(ROOT, "frontend")
 DESKTOP_DIR = os.path.join(ROOT, "desktop")
 REQUIREMENTS = os.path.join(BACKEND_DIR, "requirements.txt")
+FRONTEND_PACKAGE_JSON = os.path.join(FRONTEND_DIR, "package.json")
+INSTALL_MARKER = os.path.join(ROOT, ".quickstart-install.json")
 HIDE_CONSOLE_ENV = "IA_HIDE_CONSOLE"
 DEFAULT_PORT = 18080
 DEFAULT_READY_TIMEOUT_SEC = 180
@@ -74,15 +82,82 @@ def install_dependencies() -> bool:
     return True
 
 
-def build_start_command(extra_args: list[str]) -> list[str]:
-    return [
+# ---------------------------------------------------------------------------
+# 安装标记：装过就不再跑 pip/npm（依赖清单/环境变化时自动失效）
+# ---------------------------------------------------------------------------
+
+def _install_fingerprint() -> str:
+    """依赖指纹：Python 解释器 + requirements/package.json 内容 + node_modules 是否存在。"""
+    h = hashlib.sha256()
+    h.update(sys.executable.encode("utf-8", errors="replace"))
+    h.update(f"py{sys.version_info.major}.{sys.version_info.minor}".encode())
+    for path in (REQUIREMENTS, FRONTEND_PACKAGE_JSON, os.path.join(FRONTEND_DIR, "package-lock.json")):
+        try:
+            with open(path, "rb") as f:
+                h.update(f.read())
+        except OSError:
+            h.update(b"missing:" + path.encode("utf-8", errors="replace"))
+    h.update(b"node_modules=" + (b"1" if os.path.isdir(os.path.join(FRONTEND_DIR, "node_modules")) else b"0"))
+    return h.hexdigest()[:16]
+
+
+def _install_is_done() -> bool:
+    try:
+        with open(INSTALL_MARKER, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("fingerprint") == _install_fingerprint()
+
+
+def _mark_install_done() -> None:
+    try:
+        with open(INSTALL_MARKER, "w", encoding="utf-8") as f:
+            json.dump({"fingerprint": _install_fingerprint(), "at": time.strftime("%Y-%m-%d %H:%M:%S")}, f)
+    except OSError:
+        pass
+
+
+def _frontend_needs_rebuild() -> bool:
+    """dist 不存在或前端源码比 dist 新时才重建，避免每次启动都全量 vite build。"""
+    dist_index = os.path.join(FRONTEND_DIR, "dist", "index.html")
+    if not os.path.isfile(dist_index):
+        return True
+    try:
+        dist_mtime = os.path.getmtime(dist_index)
+    except OSError:
+        return True
+
+    candidates = [
+        os.path.join(FRONTEND_DIR, "package.json"),
+        os.path.join(FRONTEND_DIR, "index.html"),
+        os.path.join(FRONTEND_DIR, "vite.config.ts"),
+        os.path.join(FRONTEND_DIR, "tailwind.config.js"),
+    ]
+    src_dir = os.path.join(FRONTEND_DIR, "src")
+    for dirpath, dirnames, filenames in os.walk(src_dir):
+        dirnames[:] = [d for d in dirnames if d != "node_modules"]
+        candidates.extend(os.path.join(dirpath, name) for name in filenames)
+    for path in candidates:
+        try:
+            if os.path.getmtime(path) > dist_mtime:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def build_start_command(extra_args: list[str], *, rebuild: bool) -> list[str]:
+    cmd = [
         sys.executable,
         os.path.join(ROOT, "start.py"),
         "--mode",
         "desktop",
-        "--rebuild",
-        *extra_args,
     ]
+    if rebuild:
+        cmd.append("--rebuild")
+    cmd.extend(extra_args)
+    return cmd
 
 
 def _is_windows() -> bool:
@@ -131,6 +206,17 @@ def _current_primary_stt_provider() -> str:
         return "whisper"
 
 
+def _app_reachable(url: str, timeout: float = 1.5) -> bool:
+    """端口上有 HTTP 响应即认为服务已起（401/404 也算，鉴权无关）。"""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def _get_json(url: str, timeout: float = 2.0) -> dict | None:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
@@ -143,12 +229,29 @@ def _get_json(url: str, timeout: float = 2.0) -> dict | None:
         return None
 
 
+STARTUP_LOG = os.path.join(ROOT, "log", "startup-console.log")
+
+
+def _print_startup_log_tail(lines_n: int = 20) -> None:
+    try:
+        with open(STARTUP_LOG, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError:
+        return
+    tail = "\n".join(content.splitlines()[-lines_n:])[-2400:]
+    if tail.strip():
+        print("-" * 56)
+        print(tail)
+        print("-" * 56)
+        print(f"  完整日志: {STARTUP_LOG}")
+
+
 def _wait_for_app_ready(port: int, timeout_sec: int = DEFAULT_READY_TIMEOUT_SEC) -> bool:
     deadline = time.monotonic() + max(5, timeout_sec)
     base = f"http://127.0.0.1:{port}"
     print(f"[...] 等待桌面应用加载完成 (端口 {port})...")
     while time.monotonic() < deadline:
-        if _get_json(f"{base}/api/options", timeout=1.5) is not None:
+        if _app_reachable(f"{base}/api/options"):
             break
         time.sleep(0.5)
     else:
@@ -166,34 +269,58 @@ def _wait_for_app_ready(port: int, timeout_sec: int = DEFAULT_READY_TIMEOUT_SEC)
 
 
 def launch_start_command(extra_args: list[str], *, foreground: bool = False) -> int:
-    cmd = build_start_command(extra_args)
+    rebuild = _frontend_needs_rebuild()
+    if not rebuild:
+        print("[OK] 前端 dist 未过期，跳过重建（改过前端源码会自动重建）")
+    cmd = build_start_command(extra_args, rebuild=rebuild)
     if _is_windows() and not foreground:
         env = {**os.environ, HIDE_CONSOLE_ENV: "1"}
-        subprocess.Popen(
+        try:
+            os.makedirs(os.path.dirname(STARTUP_LOG), exist_ok=True)
+            logf = open(STARTUP_LOG, "ab")
+        except OSError:
+            logf = subprocess.DEVNULL
+        proc = subprocess.Popen(
             cmd,
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=logf,
+            stderr=subprocess.STDOUT,
             env=env,
             creationflags=_hidden_creationflags(),
         )
+        if hasattr(logf, "close"):
+            logf.close()
         port = _extract_port(extra_args)
         if _wait_for_app_ready(port):
-            print("[OK] 桌面应用已加载完成，命令行窗口即将隐藏。")
+            # 隐藏后必须驻留：python 一退出，cmd 就会把窗口画回来。
+            # 驻留期间替应用占住这个隐藏控制台；应用退出（托盘退出/关窗）
+            # 后本进程结束，交互式 cmd 恢复提示符，bat 场景整窗关闭。
+            print("[OK] 桌面应用已加载完成，窗口已隐藏（关闭应用后本窗口恢复）。")
             _hide_console_window()
-        else:
-            print("[WARN] 桌面应用启动等待超时，保留命令行窗口便于查看。")
-        return 0
+            try:
+                proc.wait()
+            except KeyboardInterrupt:
+                pass
+            return 0
+        print("[ERROR] 桌面应用启动失败，最近输出：")
+        _print_startup_log_tail()
+        print("  常见原因：端口被占用 / 依赖缺失 / 前端构建失败。")
+        try:
+            input("  按回车关闭窗口...")
+        except EOFError:
+            time.sleep(5)
+        return 1
 
     return subprocess.call(cmd, cwd=ROOT)
 
 
 def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
-        description="面试助手一键启动器：先安装依赖，再启动桌面模式。未知参数会继续传给 start.py。",
+        description="面试助手一键启动器：首次自动安装依赖，之后直接启动桌面模式。未知参数会继续传给 start.py。",
     )
     parser.add_argument("--skip-install", action="store_true", help="跳过 install 步骤，直接启动")
+    parser.add_argument("--force-install", action="store_true", help="强制重新执行 pip/npm 安装")
     parser.add_argument("--install-only", action="store_true", help="只安装依赖，不启动应用")
     parser.add_argument("--foreground", action="store_true", help="Windows 下也保留命令行窗口并显示启动日志")
     return parser.parse_known_args(argv)
@@ -203,8 +330,12 @@ def main(argv: list[str] | None = None) -> int:
     args, start_args = parse_args(sys.argv[1:] if argv is None else argv)
 
     if not args.skip_install:
-        if not install_dependencies():
-            return 1
+        if args.force_install or not _install_is_done():
+            if not install_dependencies():
+                return 1
+            _mark_install_done()
+        else:
+            print("[OK] 依赖此前已安装且无变化，跳过 pip/npm（--force-install 可强制重装）")
 
     if args.install_only:
         return 0

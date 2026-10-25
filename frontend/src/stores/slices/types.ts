@@ -7,8 +7,12 @@ export interface ToastItem {
   ttlMs: number
 }
 
+/** LLM 接口协议：openai=Chat Completions，anthropic=Messages，responses=Responses */
+export type ApiType = 'openai' | 'anthropic' | 'responses'
+
 export interface ModelInfo {
   name: string
+  api_type?: ApiType
   supports_think: boolean
   supports_vision: boolean
   enabled?: boolean
@@ -23,6 +27,7 @@ export interface ModelFullInfo {
   api_base_url: string
   api_key: string
   model: string
+  api_type: ApiType
   supports_think: boolean
   supports_vision: boolean
   enabled: boolean
@@ -43,6 +48,13 @@ export interface AppConfig {
   whisper_model: string
   whisper_language: string
   whisper_preload: boolean
+  funasr_model?: string
+  /** 岗位热词：{岗位: 词串}；"通用" 键全局生效 */
+  stt_hotwords?: Record<string, string>
+  /** 远程 ASR 失败降级引擎：whisper / funasr / none */
+  stt_fallback_provider?: string
+  /** 本地 ASR 推理线程数：0=自动 */
+  stt_infer_threads?: number
   doubao_stt_app_id: string
   doubao_stt_access_token: string
   doubao_stt_api_key: string
@@ -86,6 +98,10 @@ export interface AppConfig {
   assist_transcription_merge_max_sec?: number
   /** 主链路单段最长语音（秒），避免连续讲话攒成超长 ASR 请求 */
   assist_vad_max_speech_sec?: number
+  /** 问句候选组在最后一条有效追问后静默超过该秒数再确认提交 */
+  assist_asr_confirm_window_sec?: number
+  /** 候选问句组从第一条有效追问开始的最长等待时间 */
+  assist_asr_group_max_wait_sec?: number
   /** 主链路单段最短语音（秒），短于该值的片段不送 ASR */
   assist_vad_min_speech_sec?: number
   /** 高 churn 场景下自动切短答 */
@@ -172,5 +188,5 @@ export interface TokenUsage {
   byModel?: Record<string, { prompt: number; completion: number }>
 }
 
-export type SettingsDrawerTab = 'general' | 'config' | 'models'
+export type SettingsDrawerTab = 'general' | 'mode' | 'kb' | 'config' | 'timing' | 'hotwords' | 'models' | 'appearance'
 export type ModelHealthStatus = 'checking' | 'ok' | 'error'

@@ -1,5 +1,3 @@
-@echo off
-setlocal
-cd /d "%~dp0"
-python quick_start.py %*
-exit
+@echo off
+chcp 65001 >nul
+python quick-start.py

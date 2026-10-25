@@ -161,6 +161,14 @@ export function ModelPriorityDropdown({
                   {model.name}
                   {model.supports_vision ? ' 👁' : ''}
                 </span>
+                {model.api_type && model.api_type !== 'openai' && (
+                  <span
+                    className="flex-shrink-0 text-[9px] px-1 py-px rounded bg-accent-violet/15 text-accent-violet font-medium"
+                    title={`接口类型：${model.api_type === 'anthropic' ? 'Anthropic Messages' : 'OpenAI Responses'}`}
+                  >
+                    {model.api_type === 'anthropic' ? 'Msg' : 'Rsp'}
+                  </span>
+                )}
                 {modelHealth[index] === 'ok' && modelHealthLatency[index] ? (
                   <span className="ml-auto text-[10px] font-mono text-text-muted tabular-nums">
                     {modelHealthLatency[index]}ms

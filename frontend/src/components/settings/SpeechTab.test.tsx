@@ -97,7 +97,7 @@ describe('SpeechTab', () => {
     expect(screen.getByText('麦克风兼容模式')).toBeInTheDocument()
     expect(screen.getByText('共享兼容优先')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Whisper（本地，免费）')).toBeInTheDocument()
-    expect(screen.getByText(/高级设置：Whisper 模型与追问上下文/)).toBeInTheDocument()
+    expect(screen.getByText(/高级设置：/)).toBeInTheDocument()
     expect(screen.getByText(/生成下一轮答案时会携带上一轮/)).toBeInTheDocument()
     expect(screen.getByText('边听边写')).toBeInTheDocument()
     expect(screen.getByText('兜底等最后一句 (ms)')).toBeInTheDocument()
@@ -170,7 +170,7 @@ describe('SpeechTab', () => {
 
     render(<SpeechTab />)
 
-    fireEvent.click(screen.getByText('保存语音配置'))
+    fireEvent.click(screen.getByText('保存'))
 
     await waitFor(() => {
       expect(updateConfigAndRefresh).toHaveBeenCalledWith(expect.objectContaining({
@@ -200,7 +200,7 @@ describe('SpeechTab', () => {
 
     render(<SpeechTab />)
 
-    fireEvent.click(screen.getByText('保存语音配置'))
+    fireEvent.click(screen.getByText('保存'))
 
     await waitFor(() => {
       expect(updateConfigAndRefresh).toHaveBeenCalledWith(expect.objectContaining({
@@ -230,7 +230,7 @@ describe('SpeechTab', () => {
     fireEvent.change(screen.getByDisplayValue('base'), { target: { value: 'tiny' } })
 
     expect(screen.getAllByText('有未保存更改').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByText('保存语音配置'))
+    fireEvent.click(screen.getByText('保存'))
 
     await waitFor(() => {
       expect(updateConfigAndRefresh).toHaveBeenCalled()
@@ -244,7 +244,7 @@ describe('SpeechTab', () => {
 
     render(<SpeechTab />)
 
-    const saveButton = screen.getByRole('button', { name: '保存语音配置' })
+    const saveButton = screen.getByRole('button', { name: '保存' })
     act(() => {
       saveButton.click()
       saveButton.click()

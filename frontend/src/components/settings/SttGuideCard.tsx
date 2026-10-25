@@ -25,6 +25,19 @@ const STT_GUIDES: Record<string, { color: string; borderColor: string; title: st
     ],
     link: { url: 'https://console.volcengine.com/speech/service/8', label: '火山引擎控制台' },
   },
+  funasr: {
+    color: 'bg-accent-violet/10',
+    borderColor: 'border-accent-violet/25',
+    title: 'FunASR 本地引擎（中文推荐）',
+    steps: [
+      'pip install funasr 后重启后端（首次需联网下载模型）',
+      '在下方配置区点「下载模型」显式拉取（paraformer-zh 约 1GB）',
+      '中文/中英混说准确率显著高于 Whisper，CPU 速度也更快',
+      'paraformer 支持热词：内置技术词表 + 自定义热词可纠正 RAG 等术语',
+      '无需 API Key，完全本地运行，面试中无外发音频',
+    ],
+    link: { url: 'https://github.com/modelscope/FunASR', label: 'FunASR 项目' },
+  },
   generic: {
     color: 'bg-blue-500/10',
     borderColor: 'border-blue-500/20',

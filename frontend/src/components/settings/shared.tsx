@@ -1,5 +1,6 @@
-import { Loader2, CheckCircle2, XCircle, AlertCircle, Clock3 } from 'lucide-react'
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { Info, Loader2, CheckCircle2, XCircle, AlertCircle, Clock3 } from 'lucide-react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 /**
  * 设置抽屉顶部搜索框的 query,注入到每个 Section/Collapsible.
@@ -44,12 +45,88 @@ export function Section({ title, icon, keywords, children }: { title: React.Reac
   )
 }
 
+/** 轻量信息提示：图标 hover / 触屏点按展开说明气泡，替代常驻的灰色小字。 */
+export function InfoHint({ text, className = '' }: { text: string; className?: string }) {
+  const hostRef = useRef<HTMLSpanElement>(null)
+  const bubbleRef = useRef<HTMLSpanElement>(null)
+  // portal 到 body + fixed 定位：滚动容器/弹窗边缘都不会裁剪气泡；
+  // 水平钳制到视口内，垂直空间不足时翻转到图标下方。
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+
+  const close = useCallback(() => setPos(null), [])
+
+  const open = useCallback(() => {
+    const el = hostRef.current
+    if (!el || typeof window === 'undefined') return
+    const rect = el.getBoundingClientRect()
+    const vw = window.innerWidth
+    const width = Math.min(280, vw - 24)
+    const left = Math.max(10, Math.min(rect.left + rect.width / 2 - width / 2, vw - width - 10))
+    setPos({ left, top: rect.top })
+  }, [])
+
+  // 渲染后量气泡实际高度：默认贴图标上方，顶部放不下则翻到下方
+  useLayoutEffect(() => {
+    if (!pos) return
+    const el = hostRef.current
+    const bubble = bubbleRef.current
+    if (!el || !bubble) return
+    const rect = el.getBoundingClientRect()
+    const h = bubble.offsetHeight
+    const margin = 6
+    let top = rect.top - h - margin
+    if (top < 8) top = rect.bottom + margin
+    if (bubble.style.top !== `${top}px`) bubble.style.top = `${top}px`
+  }, [pos])
+
+  // 打开期间监听滚动/缩放：宿主移动后固定定位会错位，直接收起
+  useEffect(() => {
+    if (!pos) return
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [pos, close])
+
+  if (!text) return null
+  return (
+    <span
+      ref={hostRef}
+      className={`info-hint inline-flex align-middle ${className}`}
+      tabIndex={0}
+      aria-label={`说明：${text}`}
+      onMouseEnter={open}
+      onMouseLeave={close}
+      onFocus={open}
+      onBlur={close}
+    >
+      <Info className="w-3 h-3 text-text-muted hover:text-accent-blue transition-colors" aria-hidden />
+      {pos &&
+        createPortal(
+          <span
+            ref={bubbleRef}
+            className="info-hint-bubble info-hint-bubble--open"
+            role="tooltip"
+            style={{ left: `${pos.left}px`, top: `${pos.top}px` }}
+          >
+            {text}
+          </span>,
+          document.body,
+        )}
+    </span>
+  )
+}
+
 export function Field({ label, hint, children }: { label: React.ReactNode; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-text-secondary">{label}</label>
+      <label className="text-xs font-medium text-text-secondary inline-flex items-center gap-1">
+        {label}
+        {hint && <InfoHint text={hint} />}
+      </label>
       {children}
-      {hint && <p className="text-[10px] text-text-muted leading-relaxed">{hint}</p>}
     </div>
   )
 }
@@ -72,9 +149,9 @@ export function StatusBadge({
   title?: string
 }) {
   const styles = {
-    ok: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    error: 'bg-red-500/15 text-red-400 border-red-500/20',
-    checking: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+    ok: 'bg-accent-green/15 text-accent-green border-accent-green/30',
+    error: 'bg-accent-red/15 text-accent-red border-accent-red/30',
+    checking: 'bg-accent-amber/15 text-accent-amber border-accent-amber/30',
     idle: 'bg-bg-hover text-text-muted border-bg-hover',
   }
   return (
@@ -87,6 +164,52 @@ export function StatusBadge({
       {status === 'error' && <XCircle className="w-2.5 h-2.5" />}
       {label}
     </span>
+  )
+}
+
+/** 统一的开关（设置内多处复用，替代各自手写的 toggle） */
+export function ToggleSwitch({
+  checked,
+  onChange,
+  size = 'md',
+  disabled = false,
+  title,
+  labelOn,
+  labelOff,
+}: {
+  checked: boolean
+  onChange: (next: boolean) => void
+  size?: 'sm' | 'md'
+  disabled?: boolean
+  title?: string
+  labelOn?: string
+  labelOff?: string
+}) {
+  const dims = size === 'sm'
+    ? 'h-6 w-10'
+    : 'h-7 w-11'
+  const knob = size === 'sm'
+    ? 'h-5 w-5'
+    : 'h-6 w-6'
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={labelOn ? (checked ? labelOn : labelOff || labelOn) : undefined}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative ${dims} flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+        checked ? 'bg-accent-green' : 'bg-bg-hover'
+      }`}
+      title={title}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 ${knob} rounded-full bg-white shadow transition-transform ${
+          checked ? 'translate-x-4' : ''
+        }`}
+      />
+    </button>
   )
 }
 

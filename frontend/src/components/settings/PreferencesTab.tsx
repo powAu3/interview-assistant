@@ -26,11 +26,13 @@ import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
 
-function Collapsible({ title, searchTitle, icon, defaultOpen = false, keywords, children }: {
+function Collapsible({ title, searchTitle, icon, defaultOpen = false, alwaysOpen = false, keywords, children }: {
   title: React.ReactNode
   searchTitle?: string
   icon?: React.ReactNode
   defaultOpen?: boolean
+  /** 分区级单卡片：不渲染折叠按钮，内容常开 */
+  alwaysOpen?: boolean
   keywords?: string
   children: React.ReactNode
 }) {
@@ -38,18 +40,25 @@ function Collapsible({ title, searchTitle, icon, defaultOpen = false, keywords, 
   const query = useSettingsSearch()
   const titleText = searchTitle ?? (typeof title === 'string' ? title : '')
   if (!matchSettingsSearch(titleText, keywords, query)) return null
-  const effectiveOpen = query.trim() ? true : open
+  const effectiveOpen = alwaysOpen || (query.trim() ? true : open)
   return (
     <section className="rounded-xl border border-bg-hover/60 bg-bg-primary/35 overflow-hidden" data-search-title={titleText}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-bg-tertiary/25 transition-colors"
-      >
-        {icon && <span className="text-text-muted flex-shrink-0">{icon}</span>}
-        <span className="text-sm font-semibold text-text-primary">{title}</span>
-        <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${effectiveOpen ? 'rotate-180' : ''}`} />
-      </button>
+      {alwaysOpen ? (
+        <div className="flex items-center gap-2 px-4 py-3">
+          {icon && <span className="text-text-muted flex-shrink-0">{icon}</span>}
+          <span className="text-sm font-semibold text-text-primary">{title}</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-bg-tertiary/25 transition-colors"
+        >
+          {icon && <span className="text-text-muted flex-shrink-0">{icon}</span>}
+          <span className="text-sm font-semibold text-text-primary">{title}</span>
+          <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${effectiveOpen ? 'rotate-180' : ''}`} />
+        </button>
+      )}
       {effectiveOpen && <div className="px-4 pb-4 space-y-3 border-t border-bg-hover/50">{children}</div>}
     </section>
   )
@@ -69,7 +78,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   )
 }
 
-export default function PreferencesTab() {
+export default function PreferencesTab({ variant = 'main' }: { variant?: 'main' | 'mode' | 'kb' | 'appearance' } = {}) {
   const config = useInterviewStore((s) => s.config)
   const options = useInterviewStore((s) => s.options)
   const platformInfo = useInterviewStore((s) => s.platformInfo)
@@ -156,12 +165,23 @@ export default function PreferencesTab() {
     <div className="p-5 space-y-5 pb-8" data-in-search={inSearch ? '1' : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bg-hover/60 bg-bg-primary/35 px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-text-primary">常用偏好</p>
+          <p className="text-sm font-semibold text-text-primary">
+            {variant === 'appearance' ? '外观与快捷操作'
+              : variant === 'mode' ? '悬浮窗与笔试模式'
+              : variant === 'kb' ? '本地知识库'
+              : '常用偏好'}
+          </p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
-            这里的运行偏好会自动保存；外观和悬浮窗本机偏好即时生效。
+            {variant === 'appearance'
+              ? '配色与快捷词即时生效；快捷键修改后需要重新聚焦页面。'
+              : variant === 'mode'
+                ? '悬浮提示窗、笔试模式与截图审题的开关都在这里，自动保存。'
+                : variant === 'kb'
+                  ? '开启后回答会引用本地知识库笔记；检索参数可按延迟预算调整。'
+                  : '这里的运行偏好会自动保存；外观和悬浮窗本机偏好即时生效。'}
           </p>
         </div>
-        <SaveStateBadge mode="auto" state={autoSave.state} error={autoSave.error} />
+        {variant !== 'appearance' && <SaveStateBadge mode="auto" state={autoSave.state} error={autoSave.error} />}
       </div>
 
       {/* ── 系统状态 ── */}
@@ -174,6 +194,7 @@ export default function PreferencesTab() {
         </div>
       )}
 
+      {variant === 'main' && (<>
       <Section title="运行状态" icon={<AlertTriangle className="w-3.5 h-3.5" />} keywords="status 状态 stt 语音识别 就绪">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/25 px-3 py-2.5">
@@ -251,9 +272,12 @@ export default function PreferencesTab() {
           </p>
         </Field>
       </Section>
+      </>)}
 
       {/* ── 2. 悬浮提示窗（含截图区域、笔试模式） ── */}
+      {variant === 'mode' && (<>
       <Collapsible
+        alwaysOpen
         title="工作模式"
         searchTitle="工作模式"
         icon={<Monitor className="w-3.5 h-3.5" />}
@@ -536,9 +560,12 @@ export default function PreferencesTab() {
           </div>
         )}
       </Collapsible>
+      </>)}
 
       {/* ── 3. 知识库 ── */}
+      {variant === 'kb' && (<>
       <Collapsible
+        alwaysOpen
         title="知识库与引用"
         icon={<BookOpen className="w-3.5 h-3.5" />}
         keywords="kb knowledge base 笔记 参考 rag retrieval 引用"
@@ -632,9 +659,11 @@ export default function PreferencesTab() {
           点击右上角 📖 图标管理文档/手动检索测试; OCR、Vision 等高阶配置仍在 backend/config.json 中。
         </p>
       </Collapsible>
+      </>)}
 
       {/* ── 4. 外观与高级 ── */}
-      <Collapsible title="外观" icon={<Palette className="w-3.5 h-3.5" />} keywords="主题 配色 字体 theme color scheme font 高级">
+      {variant === 'appearance' && (<>
+      <Collapsible alwaysOpen title="外观" icon={<Palette className="w-3.5 h-3.5" />} keywords="主题 配色 字体 theme color scheme font 高级">
         <div className="flex justify-end">
           <SaveStateBadge mode="auto" state="idle" label="本机即时生效" />
         </div>
@@ -679,11 +708,12 @@ export default function PreferencesTab() {
         </Field>
       </Collapsible>
 
-      <Collapsible title="快捷操作" icon={<Keyboard className="w-3.5 h-3.5" />} keywords="quick prompt 快捷词 模板 shortcut 快捷键 手机 二维码">
+      <Collapsible alwaysOpen title="快捷操作" icon={<Keyboard className="w-3.5 h-3.5" />} keywords="quick prompt 快捷词 模板 shortcut 快捷键 手机 二维码">
         <NetworkQRCode />
         <QuickPromptsEditor />
         <GlobalShortcutsEditor />
       </Collapsible>
+      </>)}
 
     </div>
   )

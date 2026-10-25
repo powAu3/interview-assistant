@@ -343,7 +343,7 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 260, height: 130 })
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 264, height: 132 })
       })
       expect(document.querySelector('.ov-root--prompt')).toBeInTheDocument()
     } finally {
@@ -367,7 +367,8 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 260, height: 92 })
+        // 高度取内容 .ov-answer-stack(80) + 14，不再被滚动容器钳制
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 264, height: 94 })
       })
     } finally {
       scrollHeightSpy.mockRestore()
@@ -395,7 +396,7 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 260, height: 130 })
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 264, height: 132 })
       })
     } finally {
       scrollHeightSpy.mockRestore()
@@ -416,7 +417,7 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 820, height: 130 })
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 820, height: 132 })
       })
     } finally {
       scrollHeightSpy.mockRestore()
@@ -467,9 +468,9 @@ describe('InterviewOverlay', () => {
       render(<InterviewOverlay />)
 
       await waitFor(() => {
-        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 700, height: 130 })
+        expect(resizeOverlayWindow).toHaveBeenCalledWith({ width: 700, height: 132 })
       })
-      expect(document.querySelector('.ov-shell--nobg')).toHaveStyle({ '--ov-prompt-max-width': '684px' })
+      expect(document.querySelector('.ov-shell--nobg')).toHaveStyle({ '--ov-prompt-max-width': '680px' })
     } finally {
       scrollWidthSpy.mockRestore()
       scrollHeightSpy.mockRestore()

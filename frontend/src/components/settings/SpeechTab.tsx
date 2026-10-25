@@ -10,6 +10,9 @@ import {
   Settings2,
   CheckCircle2,
   XCircle,
+  AudioWaveform,
+  Download,
+  Gauge,
 } from 'lucide-react'
 import { useInterviewStore } from '@/stores/configStore'
 import type { AppConfig } from '@/stores/slices/types'
@@ -21,6 +24,8 @@ import {
   GradientCard,
   SaveStateBadge,
   StatusBadge,
+  ToggleSwitch,
+  InfoHint,
   useDirtySnapshot,
   useSettingsDirtyRegistration,
   useSettingsSearch,
@@ -43,6 +48,9 @@ type SpeechForm = {
   whisper_model: string
   whisper_language: string
   whisper_preload: boolean
+  stt_fallback_provider: string
+  stt_infer_threads: number
+  funasr_model: string
   doubao_stt_app_id: string
   doubao_stt_access_token: string
   doubao_stt_api_key: string
@@ -69,6 +77,9 @@ type SpeechForm = {
   transcription_min_sig_chars: number
   assist_transcription_merge_gap_sec: number
   assist_transcription_merge_max_sec: number
+  assist_vad_max_speech_sec: number
+  assist_asr_confirm_window_sec: number
+  assist_asr_group_max_wait_sec: number
   assist_high_churn_short_answer: boolean
   auto_detect: boolean
 }
@@ -78,6 +89,9 @@ const DEFAULT_SPEECH_FORM: SpeechForm = {
   whisper_model: 'base',
   whisper_language: 'auto',
   whisper_preload: false,
+  stt_fallback_provider: 'whisper',
+  stt_infer_threads: 0,
+  funasr_model: 'paraformer-zh',
   doubao_stt_app_id: '',
   doubao_stt_access_token: '',
   doubao_stt_api_key: '',
@@ -104,9 +118,50 @@ const DEFAULT_SPEECH_FORM: SpeechForm = {
   transcription_min_sig_chars: 2,
   assist_transcription_merge_gap_sec: 2.0,
   assist_transcription_merge_max_sec: 12.0,
+  assist_vad_max_speech_sec: 18.0,
+  assist_asr_confirm_window_sec: 0.45,
+  assist_asr_group_max_wait_sec: 1.2,
   assist_high_churn_short_answer: false,
   auto_detect: true,
 }
+
+  // 延迟预设：一键调整转写合并/确认窗口等关键节奏参数（应用后仍可手调）
+  const LATENCY_PRESETS: Record<string, { label: string; desc: string; values: Record<string, number> }> = {
+balanced: {
+  label: '均衡',
+  desc: '默认节奏，稳定跟题',
+  values: {
+    assist_transcription_merge_gap_sec: 2.0,
+    assist_asr_confirm_window_sec: 0.45,
+    assist_asr_group_max_wait_sec: 1.2,
+    assist_vad_max_speech_sec: 18.0,
+    silence_duration: 1.2,
+  },
+},
+low: {
+  label: '低延迟',
+  desc: '更快出答案，适合口齿清晰/本地 FunASR',
+  values: {
+    assist_transcription_merge_gap_sec: 1.2,
+    assist_asr_confirm_window_sec: 0.3,
+    assist_asr_group_max_wait_sec: 0.8,
+    assist_vad_max_speech_sec: 12.0,
+    silence_duration: 1.0,
+  },
+},
+steady: {
+  label: '稳态',
+  desc: '嘈杂环境，减少碎片误触发',
+  values: {
+    assist_transcription_merge_gap_sec: 2.5,
+    assist_asr_confirm_window_sec: 0.6,
+    assist_asr_group_max_wait_sec: 1.8,
+    assist_vad_max_speech_sec: 18.0,
+    silence_duration: 1.2,
+  },
+},
+  }
+
 
 function speechFormFromConfig(config: AppConfig): SpeechForm {
   return {
@@ -114,6 +169,9 @@ function speechFormFromConfig(config: AppConfig): SpeechForm {
     whisper_model: config.whisper_model ?? DEFAULT_SPEECH_FORM.whisper_model,
     whisper_language: config.whisper_language ?? DEFAULT_SPEECH_FORM.whisper_language,
     whisper_preload: config.whisper_preload ?? DEFAULT_SPEECH_FORM.whisper_preload,
+    stt_fallback_provider: config.stt_fallback_provider ?? DEFAULT_SPEECH_FORM.stt_fallback_provider,
+    stt_infer_threads: config.stt_infer_threads ?? DEFAULT_SPEECH_FORM.stt_infer_threads,
+    funasr_model: config.funasr_model ?? DEFAULT_SPEECH_FORM.funasr_model,
     doubao_stt_app_id: config.doubao_stt_app_id ?? DEFAULT_SPEECH_FORM.doubao_stt_app_id,
     doubao_stt_access_token: config.doubao_stt_access_token ?? DEFAULT_SPEECH_FORM.doubao_stt_access_token,
     doubao_stt_api_key: config.doubao_stt_api_key ?? DEFAULT_SPEECH_FORM.doubao_stt_api_key,
@@ -140,6 +198,9 @@ function speechFormFromConfig(config: AppConfig): SpeechForm {
     transcription_min_sig_chars: clampIntegerInput(config.transcription_min_sig_chars, 1, 50, DEFAULT_SPEECH_FORM.transcription_min_sig_chars),
     assist_transcription_merge_gap_sec: clampNumberInput(config.assist_transcription_merge_gap_sec, 0, 15, DEFAULT_SPEECH_FORM.assist_transcription_merge_gap_sec),
     assist_transcription_merge_max_sec: clampNumberInput(config.assist_transcription_merge_max_sec, 1, 120, DEFAULT_SPEECH_FORM.assist_transcription_merge_max_sec),
+    assist_vad_max_speech_sec: clampNumberInput(config.assist_vad_max_speech_sec, 6, 60, DEFAULT_SPEECH_FORM.assist_vad_max_speech_sec),
+    assist_asr_confirm_window_sec: clampNumberInput(config.assist_asr_confirm_window_sec, 0, 5, DEFAULT_SPEECH_FORM.assist_asr_confirm_window_sec),
+    assist_asr_group_max_wait_sec: clampNumberInput(config.assist_asr_group_max_wait_sec, 0.2, 8, DEFAULT_SPEECH_FORM.assist_asr_group_max_wait_sec),
     assist_high_churn_short_answer: config.assist_high_churn_short_answer ?? DEFAULT_SPEECH_FORM.assist_high_churn_short_answer,
     auto_detect: config.auto_detect ?? DEFAULT_SPEECH_FORM.auto_detect,
   }
@@ -149,7 +210,7 @@ function speechFormSnapshot(value: SpeechForm): string {
   return JSON.stringify(value)
 }
 
-export default function SpeechTab() {
+export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines' | 'timing' } = {}) {
   const config = useInterviewStore((s) => s.config)
   const options = useInterviewStore((s) => s.options)
   const [form, setForm] = useState<SpeechForm>(() => (config ? speechFormFromConfig(config) : DEFAULT_SPEECH_FORM))
@@ -158,8 +219,65 @@ export default function SpeechTab() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [sttTesting, setSttTesting] = useState(false)
   const [sttTestResult, setSttTestResult] = useState<{ ok: boolean; detail?: string; text?: string } | null>(null)
+  const [hotwordPosition, setHotwordPosition] = useState('通用')
+  const [funasrInfo, setFunasrInfo] = useState<{
+    installed: boolean
+    model: string
+    loaded: boolean
+    loading: boolean
+    downloading: boolean
+    error: string
+  }>({ installed: true, model: 'paraformer-zh', loaded: false, loading: false, downloading: false, error: '' })
   const savingRef = useRef(false)
   const sttTestingRef = useRef(false)
+
+  const refreshFunasrStatus = async () => {
+    try {
+      const s = await api.funasrStatus()
+      setFunasrInfo({
+        installed: s.installed,
+        model: s.model,
+        loaded: s.loaded,
+        loading: s.loading,
+        downloading: s.downloading,
+        error: s.download_error || '',
+      })
+      return s
+    } catch {
+      return null
+    }
+  }
+
+  useEffect(() => {
+    void refreshFunasrStatus()
+  }, [])
+
+  // 下载/加载中每 3s 轮询一次状态
+  useEffect(() => {
+    if (!funasrInfo.downloading && !funasrInfo.loading) return
+    const timer = window.setInterval(() => { void refreshFunasrStatus() }, 3000)
+    return () => window.clearInterval(timer)
+  }, [funasrInfo.downloading, funasrInfo.loading])
+
+  const handleFunasrDownload = async () => {
+    try {
+      // 先保存表单（含 funasr_model），再按该模型下载：否则配置与已加载模型脱节，
+      // 下一次取引擎会再换回旧模型导致 ~1GB 双载
+      const saved = await handleSave()
+      if (!saved) {
+        setFunasrInfo((prev) => ({ ...prev, error: '语音配置保存失败，无法开始下载' }))
+        return
+      }
+      const res = await api.funasrDownload(form.funasr_model)
+      if (!res.ok) {
+        setFunasrInfo((prev) => ({ ...prev, error: res.detail || '下载启动失败' }))
+        return
+      }
+      setFunasrInfo((prev) => ({ ...prev, downloading: true, error: '' }))
+    } catch (e: any) {
+      setFunasrInfo((prev) => ({ ...prev, error: e?.message ?? '下载启动失败' }))
+    }
+  }
   const { dirty, markSaved, resetBaseline } = useDirtySnapshot(form)
   useSettingsDirtyRegistration('speech', dirty)
   const formRef = useRef(form)
@@ -183,9 +301,13 @@ export default function SpeechTab() {
     setSaveState('saving')
     setSaveError(null)
     try {
+      const normalizedCandidateProvider = primaryLocalEngine && ['whisper', 'funasr'].includes(form.candidate_stt_provider)
+        ? primaryLocalEngine
+        : form.candidate_stt_provider
       const savedForm = {
         ...form,
-        candidate_remote_stt_enabled: form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper',
+        candidate_stt_provider: normalizedCandidateProvider,
+        candidate_remote_stt_enabled: form.candidate_asr_enabled && ['doubao', 'generic'].includes(normalizedCandidateProvider),
         candidate_context_wait_ms: clampIntegerInput(form.candidate_context_wait_ms, 0, 2000, 200),
         candidate_context_max_chars: clampIntegerInput(form.candidate_context_max_chars, 100, 4000, 900),
         candidate_context_min_chars: clampIntegerInput(form.candidate_context_min_chars, 1, 100, 6),
@@ -236,35 +358,50 @@ export default function SpeechTab() {
     }
   }
 
-  const providers = options?.stt_providers ?? ['whisper', 'doubao', 'generic']
+  const providers = options?.stt_providers ?? ['whisper', 'funasr', 'doubao', 'generic']
+
+  const activeLatencyPreset = Object.entries(LATENCY_PRESETS).find(([, preset]) =>
+    Object.entries(preset.values).every(([key, value]) => Number((form as any)[key]) === value),
+  )?.[0]
   const providerSupported = providers.includes(form.stt_provider)
 
   const providerMeta: Record<string, { label: string; desc: string; icon: React.ReactNode; brandClass: string }> = {
     whisper: { label: 'Whisper', desc: '本地运行，免费无限', icon: <Volume2 className="w-5 h-5" />, brandClass: 'sky' },
+    funasr: { label: 'FunASR', desc: '本地·中文更强·支持热词', icon: <AudioWaveform className="w-5 h-5" />, brandClass: 'violet' },
     doubao: { label: '豆包', desc: '火山引擎云端 API', icon: <Zap className="w-5 h-5" />, brandClass: 'orange' },
     generic: { label: '通用 ASR', desc: 'OpenAI-compatible multipart', icon: <Sparkles className="w-5 h-5" />, brandClass: 'blue' },
   }
 
   const brandBorder: Record<string, string> = {
     whisper: 'border-sky-400/40',
+    funasr: 'border-accent-violet/40',
     doubao: 'border-orange-400/40',
     generic: 'border-blue-400/40',
   }
 
   const credentialConfigured = (provider: string): boolean => {
     if (provider === 'whisper') return true
+    if (provider === 'funasr') return true
     if (provider === 'doubao') return !!(form.doubao_stt_api_key || (form.doubao_stt_app_id && form.doubao_stt_access_token))
     if (provider === 'generic') return !!(form.generic_stt_api_base_url && form.generic_stt_api_key && form.generic_stt_model)
     return false
   }
 
   const mainSttLabel = providerMeta[form.stt_provider]?.label ?? form.stt_provider
-  const candidateSttLabel = form.candidate_stt_provider === 'whisper'
+  // 本地引擎互斥：主链路为本地引擎时，候选人链路的本地选项跟随主链路，
+  // 避免 funasr 与 whisper 双模型同时驻留（后端会做同样收敛，这里保持 UI 一致）
+  const primaryLocalEngine = ['whisper', 'funasr'].includes(form.stt_provider) ? form.stt_provider : null
+  const effectiveCandidateProvider = primaryLocalEngine && ['whisper', 'funasr'].includes(form.candidate_stt_provider)
+    ? primaryLocalEngine
+    : form.candidate_stt_provider
+  const candidateSttLabel = effectiveCandidateProvider === 'whisper'
     ? 'Whisper 本地'
-    : form.candidate_stt_provider === 'doubao'
-      ? '豆包云端'
-      : '通用云端'
-  const candidateRemoteSelected = form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper'
+    : effectiveCandidateProvider === 'funasr'
+      ? 'FunASR 本地'
+      : form.candidate_stt_provider === 'doubao'
+        ? '豆包云端'
+        : '通用云端'
+  const candidateRemoteSelected = form.candidate_asr_enabled && ['doubao', 'generic'].includes(form.candidate_stt_provider)
   const candidateRemoteCredentialReady = !candidateRemoteSelected || credentialConfigured(form.candidate_stt_provider)
   const candidateRemoteProviderLabel = providerMeta[form.candidate_stt_provider]?.label ?? form.candidate_stt_provider
   const candidateContextActive = form.candidate_asr_enabled && form.candidate_context_enabled
@@ -287,14 +424,59 @@ export default function SpeechTab() {
     <div className="p-5 space-y-5 pb-8" data-in-search={inSearch ? '1' : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-bg-hover/60 bg-bg-primary/35 px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-text-primary">语音链路</p>
+          <p className="text-sm font-semibold text-text-primary">
+            {variant === 'timing' ? '识别节奏与断句' : '语音识别引擎'}
+          </p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-text-muted">
-            STT、麦克风和断句参数需要保存后才会影响运行链路。
+            {variant === 'timing'
+              ? '延迟预设、VAD 断句与转写合并参数，保存后生效。'
+              : 'STT 引擎、降级与麦克风链路，保存后生效。'}
           </p>
         </div>
-        <SaveStateBadge mode="explicit" state={effectiveSaveState} error={saveError} />
+        <div className="flex items-center gap-2">
+          <SaveStateBadge mode="explicit" state={effectiveSaveState} error={saveError} />
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || sttTesting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saving ? '保存中…' : '保存'}
+          </button>
+        </div>
       </div>
 
+      {variant === 'timing' && (<>
+      <Section title="延迟预设" icon={<Gauge className="w-3.5 h-3.5" />} keywords="延迟 latency preset merge gap confirm 节奏 低延迟 实时">
+        <GradientCard className="p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {Object.entries(LATENCY_PRESETS).map(([key, preset]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setForm({ ...form, ...preset.values } as typeof form)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
+                  activeLatencyPreset === key
+                    ? 'bg-accent-blue text-white border-transparent shadow-lg shadow-accent-blue/20'
+                    : 'bg-bg-tertiary/80 text-text-secondary border-bg-hover hover:bg-bg-hover'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <span className="text-[10px] leading-relaxed text-text-muted ml-auto inline-flex items-center gap-1">
+              {activeLatencyPreset
+                ? `当前：${LATENCY_PRESETS[activeLatencyPreset].label} · ${LATENCY_PRESETS[activeLatencyPreset].desc}`
+                : '当前：自定义参数组合'}
+              <InfoHint text="调整转写合并间隔、问句确认窗口、VAD 分段上限等节奏参数；应用后保存生效，仍可在下方高级项手动微调。" />
+            </span>
+          </div>
+        </GradientCard>
+      </Section>
+
+      </>)}
+      {variant === 'engines' && (<>
       <Section title="实时辅助语音链路" icon={<Mic className="w-3.5 h-3.5" />} keywords="实时辅助 双路 asr 面试官 候选人 麦克风 追问">
         <GradientCard className="p-4 border-accent-blue/25">
           <div className="grid gap-3 md:grid-cols-2">
@@ -325,7 +507,7 @@ export default function SpeechTab() {
       </Section>
 
       <Section title="主链路 ASR（面试官 / 会议音频）" icon={<Mic className="w-3.5 h-3.5" />} keywords="stt asr whisper funasr paraformer 识别引擎 model device 转写 sense-voice 面试官 会议音频">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {providers.map((p) => {
             const meta = providerMeta[p] || { label: p, desc: '', icon: <Mic className="w-5 h-5" />, brandClass: 'blue' }
             const sel = form.stt_provider === p
@@ -350,8 +532,8 @@ export default function SpeechTab() {
                 {/* credential status dot */}
                 <span className={`absolute top-2 right-2 flex items-center gap-1`}>
                   {cred
-                    ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    : p !== 'whisper' ? <XCircle className="w-3 h-3 text-red-400/60" /> : null}
+                    ? <CheckCircle2 className="w-3 h-3 text-accent-green" />
+                    : <XCircle className="w-3 h-3 text-accent-red/60" />}
                 </span>
               </button>
             )
@@ -403,6 +585,55 @@ export default function SpeechTab() {
           </>
         )}
 
+        {form.stt_provider === 'funasr' && (
+          <>
+            <Field label="FunASR 模型" hint="paraformer-zh：准确率最高、支持热词（约1GB）；sensevoice-small：更快更轻（约250MB）">
+              <select value={form.funasr_model} onChange={(e) => setForm({ ...form, funasr_model: e.target.value })} className="input-field">
+                <option value="paraformer-zh">paraformer-zh（推荐，支持热词）</option>
+                <option value="sensevoice-small">sensevoice-small（轻量高速）</option>
+                <option value="paraformer-zh-streaming">paraformer-zh-streaming（流式）</option>
+              </select>
+            </Field>
+            <p className="text-[10px] leading-relaxed text-text-muted">
+              热词在下方「岗位热词」卡片统一配置（paraformer 直接生效，whisper 作为提示偏置）。
+            </p>
+            <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/30 px-3 py-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleFunasrDownload}
+                  disabled={funasrInfo.downloading || funasrInfo.loading || !funasrInfo.installed}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent-violet/40 bg-accent-violet/15 px-3 py-1.5 text-xs font-medium text-accent-violet transition-colors hover:bg-accent-violet/25 disabled:opacity-60"
+                >
+                  {(funasrInfo.downloading || funasrInfo.loading)
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Download className="h-3.5 w-3.5" />}
+                  {(funasrInfo.downloading || funasrInfo.loading)
+                    ? '下载/加载中…'
+                    : funasrInfo.loaded
+                      ? `已就绪（${funasrInfo.model}）· 重新加载`
+                      : '下载模型（约 0.3-1GB）'}
+                </button>
+                {funasrInfo.loaded && (
+                  <span className="text-[10px] text-accent-green">模型已加载，可直接使用</span>
+                )}
+                {!funasrInfo.installed && (
+                  <span className="text-[10px] text-accent-amber">
+                    FunASR 未安装：pip install funasr 后重启后端
+                  </span>
+                )}
+              </div>
+              {funasrInfo.error && (
+                <p role="alert" className="text-[11px] leading-relaxed text-accent-red">{funasrInfo.error}</p>
+              )}
+              <span className="text-[10px] leading-relaxed text-text-muted inline-flex items-center gap-1">
+                模型缓存在本机，下载后离线可用
+                <InfoHint text="模型从 ModelScope 显式下载到 ~/.cache/modelscope；首次约 0.3-1GB，下载完成后本地识别零成本。点击下载会先保存当前语音配置。" />
+              </span>
+            </div>
+          </>
+        )}
+
         {form.stt_provider === 'doubao' && (
           <>
             <Field label="API Key（新版控制台）" hint="优先使用；火山引擎新版控制台 API Key 管理中获取">
@@ -440,8 +671,22 @@ export default function SpeechTab() {
           </>
         )}
 
-        {form.stt_provider !== 'whisper' && (
-          <Field label="Whisper 降级预加载" hint="默认关闭；开启后启动时后台加载 Whisper（约 300MB 内存），远程 ASR 故障时更快降级">
+        {['doubao', 'generic'].includes(form.stt_provider) && (
+          <Field label="失败降级引擎" hint="远程 ASR 连不上/超时/返回异常时自动切到的本地引擎；选「不降级」则该段直接丢弃。FunASR 需先在 FunASR 引擎卡下载模型。">
+            <select
+              value={form.stt_fallback_provider}
+              onChange={(e) => setForm({ ...form, stt_fallback_provider: e.target.value })}
+              className="input-field"
+              aria-label="失败降级引擎"
+            >
+              <option value="whisper">Whisper（默认，体积小）</option>
+              <option value="funasr">FunASR（中文更准，需已下载）</option>
+              <option value="none">不降级（远程失败即返回空）</option>
+            </select>
+          </Field>
+        )}
+        {['doubao', 'generic'].includes(form.stt_provider) && form.stt_fallback_provider !== 'none' && (
+          <Field label="预加载降级模型" hint="默认关闭；开启后启动时后台加载降级引擎（FunASR 约 1GB / Whisper 约 300MB），远程故障时零等待降级。">
             <label className="inline-flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.whisper_preload} onChange={(e) => setForm({ ...form, whisper_preload: e.target.checked })} className="rounded border-border text-accent-blue focus:ring-accent-blue/30" />
               <span className="text-xs text-text-secondary">{form.whisper_preload ? '已启用' : '已关闭'}</span>
@@ -459,7 +704,9 @@ export default function SpeechTab() {
             {sttTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             {sttTesting ? '测试中…' : '保存并测试'}
           </button>
-          <span className="text-[10px] leading-relaxed text-text-muted">会先保存当前语音配置，再测试主链路 ASR。</span>
+          <span className="text-[10px] leading-relaxed text-text-muted inline-flex items-center gap-1">
+            <InfoHint text="会先保存当前语音配置，再测试主链路 ASR。" />
+          </span>
           {sttTestResult && (
             <div className="flex flex-col gap-1 min-w-0">
               <StatusBadge
@@ -475,7 +722,9 @@ export default function SpeechTab() {
           )}
         </div>
       </GradientCard>
+      </>)}
 
+      {variant === 'engines' && (<>
       <Section
         title="可选辅助 ASR（我的回答）"
         icon={<Mic className="w-3.5 h-3.5" />}
@@ -490,31 +739,16 @@ export default function SpeechTab() {
               </p>
             </div>
             <div className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg border border-bg-hover bg-bg-tertiary/45 px-2.5 py-2">
-              <span className={`text-xs font-medium ${form.candidate_asr_enabled ? 'text-emerald-400' : 'text-text-muted'}`}>
+              <span className={`text-xs font-medium ${form.candidate_asr_enabled ? 'text-accent-green' : 'text-text-muted'}`}>
                 {form.candidate_asr_enabled ? '已开启' : '已关闭'}
               </span>
-              <button
-                type="button"
-                role="switch"
-                aria-label="我的回答记录（麦克风）"
-                aria-checked={form.candidate_asr_enabled}
-                onClick={() => {
-                  const enabled = !form.candidate_asr_enabled
-                  setForm({
-                    ...form,
-                    candidate_asr_enabled: enabled,
-                  })
-                }}
-                className={`relative h-6 w-11 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-blue/30 ${
-                  form.candidate_asr_enabled ? 'bg-emerald-500/80' : 'bg-bg-hover'
-                }`}
-              >
-                <span
-                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                    form.candidate_asr_enabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                size="sm"
+                checked={form.candidate_asr_enabled}
+                onChange={(enabled) => setForm({ ...form, candidate_asr_enabled: enabled })}
+                title="我的回答记录（麦克风）"
+                labelOn="我的回答记录（麦克风）"
+              />
             </div>
           </div>
           {!form.candidate_asr_enabled && (
@@ -546,25 +780,29 @@ export default function SpeechTab() {
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="我的语音识别引擎" hint="默认 Whisper 本地识别，不产生远程 ASR 成本">
               <select
-                value={form.candidate_stt_provider}
+                value={effectiveCandidateProvider}
                 onChange={(e) => {
                 const nextProvider = e.target.value
                 setForm({
                   ...form,
                   candidate_stt_provider: nextProvider,
-                  candidate_remote_stt_enabled: nextProvider !== 'whisper',
+                  candidate_remote_stt_enabled: ['doubao', 'generic'].includes(nextProvider),
                 })
               }}
                 className="input-field"
                 disabled={!form.candidate_asr_enabled}
               >
-                {providers.map((provider) => (
+                {providers
+                  .filter((provider) => !primaryLocalEngine || !['whisper', 'funasr'].includes(provider) || provider === primaryLocalEngine)
+                  .map((provider) => (
                   <option key={provider} value={provider}>
                     {provider === 'whisper'
-                      ? 'Whisper（本地，免费）'
-                      : provider === 'doubao'
-                        ? '豆包（云端，会增加成本）'
-                        : '通用 ASR（云端，会增加成本）'}
+                      ? `Whisper（本地，免费${primaryLocalEngine === 'whisper' ? '，跟随主链路' : ''}）`
+                      : provider === 'funasr'
+                        ? `FunASR（本地，中文更准${primaryLocalEngine === 'funasr' ? '，跟随主链路' : ''}）`
+                        : provider === 'doubao'
+                          ? '豆包（云端，会增加成本）'
+                          : '通用 ASR（云端，会增加成本）'}
                   </option>
                 ))}
               </select>
@@ -586,7 +824,7 @@ export default function SpeechTab() {
               </label>
             </Field>
           </div>
-          {form.candidate_asr_enabled && form.candidate_stt_provider !== 'whisper' && (
+          {form.candidate_asr_enabled && ['doubao', 'generic'].includes(form.candidate_stt_provider) && (
             <div className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${
               candidateRemoteCredentialReady
                 ? 'border-amber-400/25 bg-amber-500/10 text-text-secondary'
@@ -600,7 +838,8 @@ export default function SpeechTab() {
 
           <details className="group rounded-lg border border-bg-hover bg-bg-tertiary/25 px-3 py-2">
             <summary className="cursor-pointer select-none text-xs font-medium text-text-secondary group-open:text-text-primary">
-              高级设置：Whisper 模型与追问上下文
+              高级设置：{candidateSttLabel}
+              {effectiveCandidateProvider === 'whisper' ? '模型与追问上下文' : '与追问上下文'}
             </summary>
             <div className="mt-3 space-y-3">
               <div className="rounded-lg border border-bg-hover bg-bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-text-secondary">
@@ -614,16 +853,17 @@ export default function SpeechTab() {
                     checked={form.candidate_streaming_asr_enabled}
                     onChange={(e) => setForm({ ...form, candidate_streaming_asr_enabled: e.target.checked })}
                     className="rounded border-border text-accent-blue focus:ring-accent-blue/30"
-                    disabled={!form.candidate_asr_enabled || form.candidate_stt_provider !== 'whisper'}
+                    disabled={!form.candidate_asr_enabled || !['whisper', 'funasr'].includes(effectiveCandidateProvider)}
                   />
                   <span className="text-xs text-text-secondary">
-                    {form.candidate_stt_provider === 'whisper'
+                    {['whisper', 'funasr'].includes(effectiveCandidateProvider)
                       ? form.candidate_streaming_asr_enabled ? '已开启' : '已关闭'
                       : '云端 ASR 不做预转写'}
                   </span>
                 </label>
               </Field>
 
+              {effectiveCandidateProvider === 'whisper' && (
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="我的 Whisper 模型" hint="留空则沿用主链路 Whisper 模型">
                   <select
@@ -653,6 +893,17 @@ export default function SpeechTab() {
                   </select>
                 </Field>
               </div>
+              )}
+              {effectiveCandidateProvider === 'funasr' && (
+                <div className="rounded-lg border border-bg-hover bg-bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+                  FunASR 沿用主链路的模型（{form.funasr_model}）与岗位热词，无独立参数可调；引擎配置在「语音」分区。
+                </div>
+              )}
+              {['doubao', 'generic'].includes(effectiveCandidateProvider) && (
+                <div className="rounded-lg border border-bg-hover bg-bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+                  云端引擎沿用上方 {candidateRemoteProviderLabel} 的凭据与模型，按调用计费；参数在「语音」分区配置。
+                </div>
+              )}
 
               <div className="grid gap-3 md:grid-cols-4">
                 <Field label="边写刷新间隔 (ms)" hint="每隔多久尝试把你正在说的话写进上下文。拿不到本地 Whisper 空闲资源时会跳过本次，优先保证面试官 ASR。">
@@ -664,7 +915,7 @@ export default function SpeechTab() {
                     value={form.candidate_streaming_asr_interval_ms}
                     onChange={(e) => setForm({ ...form, candidate_streaming_asr_interval_ms: clampIntegerInput(e.target.value, 800, 5000, 1500) })}
                     className="input-field"
-                    disabled={!form.candidate_asr_enabled || !form.candidate_streaming_asr_enabled || form.candidate_stt_provider !== 'whisper'}
+                    disabled={!form.candidate_asr_enabled || !form.candidate_streaming_asr_enabled || !['whisper', 'funasr'].includes(effectiveCandidateProvider)}
                   />
                 </Field>
                 <Field label="兜底等最后一句 (ms)" hint="边听边写已经会提前写入上下文；这个只是在你刚说完、最后一句还没写进去时，下一题生成前最多再等一下。0=不等。">
@@ -709,6 +960,27 @@ export default function SpeechTab() {
         </GradientCard>
       </Section>
 
+      </>)}
+      {variant === 'timing' && (<>
+      <Section title="性能" icon={<Settings2 className="w-3.5 h-3.5" />} keywords="threads 线程 cpu 推理 性能 性能风扇 funasr whisper infer">
+        <GradientCard className="p-4 space-y-3">
+          <Field label="本地 ASR 推理线程数" hint="0=自动（min(8, 核数-2)）；转写时风扇/发热明显就调小，识别慢就调大。重启后端生效。">
+            <input
+              type="number"
+              min={0}
+              max={64}
+              value={form.stt_infer_threads}
+              onChange={(e) => setForm({ ...form, stt_infer_threads: Math.max(0, Math.min(64, Number(e.target.value) || 0)) })}
+              onBlur={(e) => setForm({ ...form, stt_infer_threads: Math.max(0, Math.min(64, Number(e.target.value) || 0)) })}
+              className="input-field max-w-[140px]"
+            />
+          </Field>
+          <p className="text-[10px] leading-relaxed text-text-muted inline-flex items-center gap-1">
+            16 核机器自动值是 8
+            <InfoHint text="FunASR/Whisper 都是本地 CPU 推理，线程数直接决定转写瞬间的 CPU 占用与风扇转速。8 线程时 paraformer 转 18 秒音频约 1-2 秒完成，余量很大；追求安静可调到 4。留 2 核以上给音频采集和 LLM 流式。" />
+          </p>
+        </GradientCard>
+      </Section>
       <Section title="语音活动检测 (VAD)" icon={<Settings2 className="w-3.5 h-3.5" />} keywords="vad silence 静音 断句 阈值 silero 语音活动">
         <div className="bg-bg-tertiary/30 rounded-lg p-3 text-xs text-text-muted space-y-1.5 mb-2">
           <div className="flex items-start gap-1.5">
@@ -779,18 +1051,7 @@ export default function SpeechTab() {
           </div>
         </Field>
       </Section>
-
-      <button
-        onClick={handleSave}
-        disabled={saving || sttTesting}
-        className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent-blue hover:bg-accent-blue/90 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-      >
-        <Save className="w-4 h-4" />
-        {saving ? '保存中…' : '保存语音配置'}
-      </button>
-      <div className="flex justify-center">
-        <SaveStateBadge mode="explicit" state={effectiveSaveState} error={saveError} />
-      </div>
+      </>)}
     </div>
   )
 }

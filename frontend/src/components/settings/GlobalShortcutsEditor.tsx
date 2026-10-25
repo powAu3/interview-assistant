@@ -25,6 +25,14 @@ export default function GlobalShortcutsEditor() {
       .catch(() => {})
   }, [setShortcuts])
 
+  // 录制新键时暂停 OS 级全局热键：否则按下旧组合会触发真实动作
+  // （Ctrl+B 藏主窗口 / Ctrl+. 清空会话），录制界面直接被带走。
+  useEffect(() => {
+    if (!recordingAction || !window.electronAPI?.setShortcutsSuspended) return
+    void window.electronAPI.setShortcutsSuspended(true)
+    return () => { void window.electronAPI?.setShortcutsSuspended?.(false) }
+  }, [recordingAction])
+
   useEffect(() => {
     if (!recordingAction) return
     const handleKeyDown = async (e: KeyboardEvent) => {

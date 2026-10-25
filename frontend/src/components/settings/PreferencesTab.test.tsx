@@ -54,7 +54,7 @@ describe('PreferencesTab', () => {
   })
 
   it('exposes the screen capture long-edge limit', async () => {
-    render(<PreferencesTab />)
+    render(<PreferencesTab variant="mode" />)
 
     expect(screen.getByText('自动保存')).toBeInTheDocument()
     fireEvent.click(screen.getByText('工作模式'))
@@ -79,7 +79,7 @@ describe('PreferencesTab', () => {
   })
 
   it('allows zero to disable screen capture scaling', async () => {
-    render(<PreferencesTab />)
+    render(<PreferencesTab variant="mode" />)
 
     fireEvent.click(screen.getByText('工作模式'))
     fireEvent.change(screen.getByDisplayValue('1600'), { target: { value: '0' } })
@@ -91,12 +91,11 @@ describe('PreferencesTab', () => {
 
   it('merges multiple debounced preference edits into one save payload', async () => {
     vi.useFakeTimers()
-    render(<PreferencesTab />)
+    render(<PreferencesTab variant="mode" />)
 
     fireEvent.click(screen.getByText('工作模式'))
     fireEvent.change(screen.getByDisplayValue('1600'), { target: { value: '2400' } })
-    fireEvent.click(screen.getByText('知识库与引用'))
-    fireEvent.change(screen.getByDisplayValue('4'), { target: { value: '6' } })
+    fireEvent.change(screen.getByDisplayValue('10'), { target: { value: '12' } })
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600)
@@ -104,14 +103,14 @@ describe('PreferencesTab', () => {
 
     expect(updateConfigAndRefresh).toHaveBeenCalledWith({
       screen_capture_max_long_edge: 2400,
-      kb_top_k: 6,
+      multi_screen_capture_idle_sec: 12,
     })
     expect(updateConfigAndRefresh).toHaveBeenCalledTimes(1)
   })
 
   it('auto-saves knowledge retrieval deadlines from preferences', async () => {
     vi.useFakeTimers()
-    render(<PreferencesTab />)
+    render(<PreferencesTab variant="kb" />)
 
     fireEvent.click(screen.getByText('知识库与引用'))
     fireEvent.change(screen.getByDisplayValue('150'), { target: { value: '220' } })
@@ -164,7 +163,7 @@ describe('PreferencesTab', () => {
 
   it('flushes pending auto-save edits when unmounted before debounce fires', async () => {
     vi.useFakeTimers()
-    const { unmount } = render(<PreferencesTab />)
+    const { unmount } = render(<PreferencesTab variant="mode" />)
 
     fireEvent.click(screen.getByText('工作模式'))
     fireEvent.change(screen.getByDisplayValue('1600'), { target: { value: '2400' } })
@@ -179,7 +178,7 @@ describe('PreferencesTab', () => {
 
   it('does not prepare exam overlay prompt when enabling exam mode save fails', async () => {
     vi.mocked(updateConfigAndRefresh).mockRejectedValueOnce(new Error('save failed'))
-    render(<PreferencesTab />)
+    render(<PreferencesTab variant="mode" />)
 
     fireEvent.click(screen.getByText('工作模式'))
     fireEvent.click(screen.getAllByText('笔试模式')[0])
@@ -200,7 +199,7 @@ describe('PreferencesTab', () => {
       interviewOverlayShowBg: false,
       interviewOverlayPromptAutoFollow: false,
     })
-    render(<PreferencesTab />)
+    render(<PreferencesTab variant="mode" />)
 
     fireEvent.click(screen.getByText('工作模式'))
     const toggle = screen.getByLabelText('靠近底部时自动跟随最新内容') as HTMLInputElement

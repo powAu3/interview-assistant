@@ -292,8 +292,19 @@ export const api = {
     latency?: Record<string, number>
     fingerprint?: Record<string, string>
   }>('/api/models/health'),
-  listRemoteModels: (payload: { api_base_url: string; api_key: string; model_index?: number }) =>
+  listRemoteModels: (payload: { api_base_url: string; api_key: string; model_index?: number; api_type?: string }) =>
     request<{ models: { id: string; owned_by?: string | null }[] }>('/api/models/list', { method: 'POST', body: JSON.stringify(payload) }),
+  funasrStatus: () => request<{
+    installed: boolean
+    model: string
+    loaded: boolean
+    loading: boolean
+    downloading: boolean
+    download_error: string
+    downloaded_model: string
+  }>('/api/stt/funasr/status'),
+  funasrDownload: (model?: string) =>
+    request<{ ok: boolean; detail?: string }>('/api/stt/funasr/download', { method: 'POST', body: JSON.stringify(model ? { model } : {}) }),
   checkSingleModelHealth: (index: number) => request('/api/models/health/' + index, { method: 'POST' }),
   probeModelCapabilities: (index: number) =>
     request<{

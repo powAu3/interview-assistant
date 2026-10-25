@@ -13,6 +13,7 @@ export default {
         },
         accent: {
           blue: 'rgb(var(--c-accent-blue) / <alpha-value>)',
+          violet: 'rgb(var(--c-accent-violet) / <alpha-value>)',
           green: 'rgb(var(--c-accent-green) / <alpha-value>)',
           red: 'rgb(var(--c-accent-red) / <alpha-value>)',
           amber: 'rgb(var(--c-accent-amber) / <alpha-value>)',

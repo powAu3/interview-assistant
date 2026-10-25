@@ -5,6 +5,7 @@
   "appDisplayName": "智能面试学习辅助助手",
   "main": "main.js",
   "scripts": {
+    "test": "node --test",
     "start": "electron ."
   },
   "devDependencies": {

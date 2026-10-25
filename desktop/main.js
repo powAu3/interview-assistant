@@ -92,6 +92,7 @@ let _overlayDragging = false;
 let _blurTimer = null;
 let overlayAutoResizeUntil = 0;
 let overlayPositionSaveTimer = null;
+let overlayPositionSaveForce = false;
 let overlayToggleBlockedUntil = 0;
 let lastOverlayState = {
   initialized: false,
@@ -271,11 +272,15 @@ function persistOverlayPosition(force = false) {
 }
 
 function schedulePersistOverlayPosition(force = false) {
-  if (overlayPositionSaveTimer) clearTimeout(overlayPositionSaveTimer);
-  const scheduledForce = force;
+  // force 语义必须保留：程序化 resize 后排的 force 持久化不能被随后的
+  // 窗口 resize 事件（force=false）覆盖降级，否则自适应高度不落盘。
+  overlayPositionSaveForce = overlayPositionSaveForce || force;
+  if (overlayPositionSaveTimer) return;
   overlayPositionSaveTimer = setTimeout(() => {
     overlayPositionSaveTimer = null;
-    persistOverlayPosition(scheduledForce);
+    const f = overlayPositionSaveForce;
+    overlayPositionSaveForce = false;
+    persistOverlayPosition(f);
   }, 180);
 }
 
@@ -1016,6 +1021,10 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
   const state = { ...lastOverlayState, ...style, enabled: nextEnabled, visible: nextVisible };
   state.initialized = true;
   const visibleChanged = Boolean(lastOverlayState.visible) !== state.visible;
+  // 结构性变化才需要重设窗口 bounds：纯样式（透明度/颜色/自动跟读等）
+  // 的 sync 若也走 showOverlayWindow，会把 prompt 自适应宽度重置回满宽。
+  const modeChanged = Boolean(lastOverlayState.mode) !== Boolean(state.mode)
+    || (lastOverlayState.mode || '') !== (state.mode || '');
 
   lastOverlayState = state;
   sendOverlayState(state);
@@ -1048,10 +1057,32 @@ ipcMain.handle('sync-overlay-window', (_event, payload = {}) => {
     createOverlayWindow();
   }
 
-  showOverlayWindow();
+  if (visibleChanged || modeChanged) {
+    showOverlayWindow();
+  } else {
+    // 纯样式 sync：窗口保持当前 bounds，避免把内容自适应的 prompt 宽度打回满宽
+    if (lastOverlayState.visible && !overlayWindow.isVisible() && overlayWindow._overlayReady) {
+      overlayWindow.showInactive();
+    }
+  }
   return { ok: true, visible: true };
 });
 ipcMain.handle('get-overlay-state', () => lastOverlayState);
+ipcMain.handle('set-shortcuts-suspended', (_event, on) => {
+  // 设置页正在录制新快捷键时暂停全部全局热键：否则按下的组合键会
+  // 触发旧绑定（Ctrl+B 藏主窗口 / Ctrl+. 清空会话），录制 UI 直接被带走。
+  const suspend = on === true;
+  try {
+    if (suspend) {
+      unregisterAllManagedShortcuts();
+    } else {
+      registerShortcuts();
+    }
+  } catch (err) {
+    // 恢复失败不阻塞：下次 registerShortcuts 时会重试
+  }
+  return { ok: true, suspended: suspend };
+});
 ipcMain.handle('resize-overlay-window', (_event, payload = {}) => {
   if (!overlayWindow || overlayWindow.isDestroyed()) return { ok: false };
   const mode = lastOverlayState?.mode || (lastOverlayState?.showBg === false ? 'prompt' : 'glass');

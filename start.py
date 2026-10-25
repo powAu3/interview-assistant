@@ -9,6 +9,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from typing import Optional
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +36,43 @@ def _set_utf8_console():
         import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+STARTUP_LOG = os.path.join(ROOT, "log", "startup-console.log")
+
+
+def _app_ready(port: int, timeout: float = 1.5) -> bool:
+    """只要端口上有 HTTP 响应就算服务已起（401/404 也算，鉴权无关）。"""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/options", timeout=timeout):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except Exception:
+        return False
+
+
+def _tail_file(path: str, lines_n: int = 20, max_chars: int = 2400) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError:
+        return ""
+    lines = content.splitlines()
+    return "\n".join(lines[-lines_n:])[-max_chars:]
+
+
+def _hide_own_console() -> None:
+    if platform.system() != "Windows":
+        return
+    try:
+        import ctypes
+
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)
     except Exception:
         pass
 
@@ -330,8 +369,8 @@ def run_desktop_mode(port: int):
     # the port, it would fail deep inside that chain with a confusing error).
     kill_port(port)
 
-    # Windows: 如果当前进程还有控制台窗口，先以无窗口模式重启自己
-    # 这样用户双击启动时，初始的命令行窗口会消失，只留 Electron 窗口
+    # Windows: 如果当前进程还有控制台窗口，以无窗口模式重启自己并监控
+    # 就绪：启动成功→隐藏本窗口；失败→保留窗口并展示启动日志，方便排错。
     if platform.system() == "Windows" and os.environ.get(HIDE_CONSOLE_ENV) != "1":
         print("  Electron 桌面模式")
         print("  - 屏幕共享隐身: 已开启")
@@ -340,19 +379,56 @@ def run_desktop_mode(port: int):
         print()
         _print_access_info(port)
         print()
-        print("  正在启动桌面应用...")
-        import time
-        time.sleep(1)  # 给用户 1 秒看到消息
+        print("  正在启动桌面应用（完成后本窗口自动隐藏；若报错会保留并显示日志）...")
 
-        # 重启自己，但这次带上隐藏标志
         env = {**os.environ, HIDE_CONSOLE_ENV: "1"}
-        subprocess.Popen(
+        try:
+            os.makedirs(os.path.dirname(STARTUP_LOG), exist_ok=True)
+            logf = open(STARTUP_LOG, "ab")
+        except OSError:
+            logf = subprocess.DEVNULL
+        proc = subprocess.Popen(
             [sys.executable] + sys.argv,
             env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=logf,
+            stderr=subprocess.STDOUT,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
             cwd=os.getcwd(),
         )
-        sys.exit(0)
+        if hasattr(logf, "close"):
+            logf.close()
+
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                break
+            if _app_ready(port):
+                # 隐藏后驻留：python 退出会让 cmd 把窗口画回来
+                print("[OK] 启动完成，窗口已隐藏（关闭应用后本窗口恢复）。")
+                _hide_own_console()
+                try:
+                    proc.wait()
+                except KeyboardInterrupt:
+                    pass
+                sys.exit(0)
+            time.sleep(0.5)
+
+        rc = proc.poll()
+        if rc is not None and rc == 0:
+            sys.exit(0)  # 用户主动关闭了刚起的应用
+        print()
+        print("[ERROR] 桌面应用启动失败，最近输出：")
+        print("-" * 56)
+        tail = _tail_file(STARTUP_LOG)
+        print(tail or "(无输出)")
+        print("-" * 56)
+        print(f"  完整日志: {STARTUP_LOG}")
+        try:
+            input("  按回车关闭窗口...")
+        except EOFError:
+            time.sleep(5)
+        sys.exit(1)
 
     # 到这里说明已经是无窗口模式了（或者不是 Windows）
     env = {**os.environ, "PORT": str(port), HIDE_CONSOLE_ENV: "1"}
