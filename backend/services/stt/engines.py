@@ -515,6 +515,8 @@ class FunASRSTT:
                     else:
                         # 线程可配置（stt_infer_threads，0=自动 min(8,核数-2)）：
                         # 留核给实时链路、降低推理时风扇/发热
+                        import os
+
                         from core.config import get_config
 
                         configured = int(getattr(get_config(), "stt_infer_threads", 0) or 0)

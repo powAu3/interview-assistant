@@ -47,7 +47,7 @@ def smoke_model(model_cfg) -> bool:
         t0 = time.perf_counter()
         chunks = 0
         first_ms = None
-        for kind, piece in chat_stream(
+        for _kind, piece in chat_stream(
             [{"role": "user", "content": "用一句话介绍 Redis"}],
             override_think_mode=False,
         ):

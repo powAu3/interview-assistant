@@ -107,3 +107,26 @@ def test_has_repeated_ngram_keeps_scattered_repeats():
     )
     # 中文短语气词重复但非连续循环
     assert not _has_repeated_ngram("就是想问一下缓存这块，然后就是并发场景下怎么保证一致性")
+
+
+def test_funasr_load_auto_threads_no_name_error(monkeypatch):
+    """FunASR 加载走 stt_infer_threads=0 自动路径时不应 NameError（os 未导入曾导致崩溃）。"""
+    import sys
+    from types import SimpleNamespace
+    import unittest.mock as mock
+
+    import services.stt.engines as eng
+
+    fake_mod = SimpleNamespace(AutoModel=lambda **kwargs: (captured.update(kwargs), object())[1])
+    captured = {}
+    monkeypatch.setitem(sys.modules, "funasr", fake_mod)
+    torch_mock = mock.MagicMock()
+    torch_mock.cuda.is_available.return_value = False
+    monkeypatch.setitem(sys.modules, "torch", torch_mock)
+
+    engine = eng.FunASRSTT(model_name="paraformer-zh")
+    engine.load_model()  # stt_infer_threads 默认 0 → 走自动路径
+
+    assert torch_mock.set_num_threads.called
+    threads = torch_mock.set_num_threads.call_args.args[0]
+    assert 1 <= threads <= 8
