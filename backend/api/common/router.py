@@ -13,6 +13,8 @@ from core.auth import get_token, is_auth_disabled, is_loopback_host
 from core.config import (
     get_config, update_config,
     POSITION_OPTIONS, LANGUAGE_OPTIONS, WHISPER_MODEL_OPTIONS, STT_PROVIDER_OPTIONS,
+    FUNASR_MODEL_OPTIONS,
+    STT_FALLBACK_PROVIDER_OPTIONS,
     SCREEN_CAPTURE_REGION_OPTIONS,
     normalize_llm_max_tokens, normalize_llm_temperature,
 )
@@ -60,6 +62,11 @@ class ConfigUpdate(BaseModel):
     whisper_model: Optional[str] = None
     whisper_language: Optional[str] = None
     whisper_preload: Optional[bool] = None
+    funasr_model: Optional[str] = None
+    # 岗位热词：{"通用": "RAG LLM", "后端开发": "ZSET ..."}；空值键会被剔除
+    stt_hotwords: Optional[dict] = None
+    stt_fallback_provider: Optional[str] = None
+    stt_infer_threads: Optional[int] = None
     doubao_stt_app_id: Optional[str] = None
     doubao_stt_access_token: Optional[str] = None
     doubao_stt_api_key: Optional[str] = None
@@ -122,6 +129,7 @@ class ModelListRequest(BaseModel):
     api_base_url: str
     api_key: str
     model_index: Optional[int] = None
+    api_type: Optional[str] = None
 
 
 _MODEL_LIST_KNOWN_COMPAT_SUFFIXES = (
@@ -149,17 +157,25 @@ def _strip_known_model_list_compat_suffix(base_url: str) -> str:
     return ""
 
 
-def _model_list_url_candidates(api_base_url: str) -> list[str]:
+def _model_list_url_candidates(api_base_url: str, api_type: str = "openai") -> list[str]:
     base = (api_base_url or "").strip().rstrip("/")
     if not base:
         return []
     candidates: list[str] = []
-    if _ends_with_version_segment(base):
-        candidates.append(f"{base}/models")
-        if not base.endswith("/v1"):
+    if api_type == "anthropic":
+        if base.lower().endswith("/v1"):
+            candidates.append(f"{base}/models")
+        else:
             candidates.append(f"{base}/v1/models")
+            candidates.append(f"{base}/models")
     else:
-        candidates.append(f"{base}/v1/models")
+        if _ends_with_version_segment(base):
+            candidates.append(f"{base}/models")
+            if not base.endswith("/v1"):
+                candidates.append(f"{base}/v1/models")
+        else:
+            candidates.append(f"{base}/v1/models")
+            candidates.append(f"{base}/models")
 
     stripped = _strip_known_model_list_compat_suffix(base)
     if stripped and "://" in stripped:
@@ -207,27 +223,33 @@ def _extract_remote_models(body: object) -> list[dict[str, str | None]]:
     return sorted(models_by_id.values(), key=lambda model: model["id"].lower())
 
 
-def _list_remote_models(api_base_url: str, api_key: str) -> dict:
-    candidates = _model_list_url_candidates(api_base_url)
+def _list_remote_models(api_base_url: str, api_key: str, api_type: str = "openai") -> dict:
+    candidates = _model_list_url_candidates(api_base_url, api_type)
     if not candidates:
         raise RuntimeError("API Base URL 不能为空")
+    if api_type == "anthropic":
+        header_variants: list[dict[str, str]] = [
+            {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+            {"Authorization": f"Bearer {api_key}"},
+        ]
+    else:
+        header_variants = [{"Authorization": f"Bearer {api_key}"}]
     last_not_found = ""
     for url in candidates:
-        response = requests.get(
-            url,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=15,
-        )
-        if response.status_code in (404, 405):
-            last_not_found = f"HTTP {response.status_code}: {_model_list_error_body(response)}"
-            continue
-        if response.status_code >= 400:
-            raise RuntimeError(f"HTTP {response.status_code}: {_model_list_error_body(response)}")
-        try:
-            body = response.json()
-        except Exception as exc:
-            raise RuntimeError(f"模型列表响应不是 JSON: {exc}") from exc
-        return {"models": _extract_remote_models(body)}
+        for headers in header_variants:
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code in (404, 405):
+                last_not_found = f"HTTP {response.status_code}: {_model_list_error_body(response)}"
+                break
+            if response.status_code == 401 and len(header_variants) > 1:
+                continue
+            if response.status_code >= 400:
+                raise RuntimeError(f"HTTP {response.status_code}: {_model_list_error_body(response)}")
+            try:
+                body = response.json()
+            except Exception as exc:
+                raise RuntimeError(f"模型列表响应不是 JSON: {exc}") from exc
+            return {"models": _extract_remote_models(body)}
     raise RuntimeError(last_not_found or "未找到可用的模型列表接口")
 
 
@@ -251,6 +273,7 @@ async def api_get_models_full():
                 "api_base_url": mdl.api_base_url,
                 "api_key": "",
                 "model": mdl.model,
+                "api_type": getattr(mdl, "api_type", "openai") or "openai",
                 "supports_think": mdl.supports_think,
                 "supports_vision": mdl.supports_vision,
                 "enabled": getattr(mdl, "enabled", True),
@@ -290,6 +313,21 @@ async def api_update_config(body: ConfigUpdate):
                 raise HTTPException(400, "至少保留一个模型")
             if not _has_enabled_model(d["models"]):
                 raise HTTPException(422, "至少启用一个模型")
+        if "funasr_model" in d and str(d["funasr_model"]).strip() and str(d["funasr_model"]).strip() not in FUNASR_MODEL_OPTIONS:
+            raise HTTPException(422, f"funasr_model 必须是 {FUNASR_MODEL_OPTIONS} 之一")
+        if d.get("stt_fallback_provider", "").strip() and d["stt_fallback_provider"].strip() not in STT_FALLBACK_PROVIDER_OPTIONS:
+            raise HTTPException(422, f"stt_fallback_provider 必须是 {STT_FALLBACK_PROVIDER_OPTIONS} 之一")
+        if d.get("stt_fallback_provider") == "":
+            d.pop("stt_fallback_provider", None)
+        if "stt_infer_threads" in d:
+            d["stt_infer_threads"] = max(0, min(64, int(d["stt_infer_threads"] or 0)))
+        if "stt_hotwords" in d:
+            raw_hotwords = d["stt_hotwords"] if isinstance(d["stt_hotwords"], dict) else {}
+            d["stt_hotwords"] = {
+                str(k).strip(): str(v).strip()
+                for k, v in raw_hotwords.items()
+                if str(k).strip() and str(v).strip()
+            }
         if d.get("stt_provider") in _LEGACY_STT_PROVIDER_MAP:
             raise HTTPException(
                 422,
@@ -467,6 +505,8 @@ async def api_options():
         "languages": LANGUAGE_OPTIONS,
         "stt_providers": STT_PROVIDER_OPTIONS,
         "whisper_models": WHISPER_MODEL_OPTIONS,
+        "funasr_models": FUNASR_MODEL_OPTIONS,
+        "stt_fallback_providers": STT_FALLBACK_PROVIDER_OPTIONS,
         "screen_capture_regions": SCREEN_CAPTURE_REGION_OPTIONS,
     }
 
@@ -606,8 +646,12 @@ async def api_list_remote_models(body: ModelListRequest):
         raise HTTPException(400, "API Base URL 不能为空")
     if not api_key or api_key == "sk-your-api-key-here":
         raise HTTPException(400, "API Key 不能为空")
+    api_type = (body.api_type or "openai").strip().lower()
+    if api_type not in ("openai", "anthropic", "responses"):
+        api_type = "openai"
+    # anthropic 类网关的模型列表通常在主配置（当前模型）对应的站点下
     try:
-        return await run_in_threadpool(_list_remote_models, api_base_url, api_key)
+        return await run_in_threadpool(_list_remote_models, api_base_url, api_key, api_type)
     except Exception as e:
         raise HTTPException(502, f"获取模型列表失败: {e}") from e
 
@@ -633,6 +677,93 @@ async def api_probe_single_model(index: int):
         return await run_in_threadpool(probe_single_model, index)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+
+
+_funasr_download_lock = threading.Lock()
+_funasr_download_state: dict = {"running": False, "error": "", "done_model": ""}
+
+
+def _funasr_installed() -> bool:
+    try:
+        import funasr  # noqa: F401  首次 import 会加载 torch（数秒），勿在事件循环内直接执行
+        return True
+    except ImportError:
+        return False
+
+
+@router.get("/stt/funasr/status")
+async def api_funasr_status():
+    """FunASR 可用性：包是否安装、当前模型加载状态、下载任务状态。"""
+    installed = await run_in_threadpool(_funasr_installed)
+    cfg = get_config()
+    from services.stt.factory import get_stt_engine
+
+    try:
+        engine = get_stt_engine(provider="funasr")
+        loaded = bool(engine.is_loaded)
+        loading = bool(engine.is_loading)
+        model = getattr(engine, "model_name", cfg.funasr_model)
+    except Exception:
+        loaded = False
+        loading = False
+        model = getattr(cfg, "funasr_model", "paraformer-zh")
+    with _funasr_download_lock:
+        state = dict(_funasr_download_state)
+    return {
+        "installed": installed,
+        "model": model,
+        "loaded": loaded,
+        "loading": loading,
+        "downloading": state.get("running", False),
+        "download_error": state.get("error", ""),
+        "downloaded_model": state.get("done_model", ""),
+    }
+
+
+@router.post("/stt/funasr/download")
+async def api_funasr_download(body: dict = None):
+    """显式下载并加载 FunASR 模型（首次约数百 MB，从 ModelScope 拉取）。"""
+    body = body or {}
+    requested = str(body.get("model") or "").strip()
+    if requested and requested not in FUNASR_MODEL_OPTIONS:
+        raise HTTPException(422, f"model 必须是 {FUNASR_MODEL_OPTIONS} 之一")
+    installed = await run_in_threadpool(_funasr_installed)
+    if not installed:
+        return {"ok": False, "detail": "FunASR 未安装：请先运行 pip install funasr torch"}
+    from services.stt.factory import get_stt_engine
+
+    global _funasr_download_state
+    with _funasr_download_lock:
+        if _funasr_download_state.get("running"):
+            return {"ok": True, "detail": "下载已在进行中"}
+        _funasr_download_state = {"running": True, "error": "", "done_model": ""}
+
+    def _download():
+        global _funasr_download_state
+        try:
+            from services.stt import factory as stt_factory
+
+            engine = get_stt_engine(provider="funasr")
+            if requested and requested != engine.model_name:
+                old_name = engine.model_name
+                engine.change_model(requested)
+                # 同步引擎缓存键，避免下一次 get_stt_engine 以为模型变了又加载一遍
+                with stt_factory._engine_lock:
+                    stt_factory._funasr_engines.pop(old_name, None)
+                    stt_factory._funasr_engines[requested] = engine
+            engine.load_model()
+            with _funasr_download_lock:
+                _funasr_download_state = {
+                    "running": False,
+                    "error": "" if engine.is_loaded else "加载未完成",
+                    "done_model": engine.model_name if engine.is_loaded else "",
+                }
+        except Exception as e:  # noqa: BLE001
+            with _funasr_download_lock:
+                _funasr_download_state = {"running": False, "error": str(e)[:300], "done_model": ""}
+
+    threading.Thread(target=_download, daemon=True, name="funasr-download").start()
+    return {"ok": True, "detail": "已开始后台下载/加载，完成后状态见 /api/stt/funasr/status"}
 
 
 @router.post("/stt/test")

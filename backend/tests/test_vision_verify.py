@@ -17,28 +17,25 @@ def test_verify_blocking_sends_all_images_to_vision_model(monkeypatch):
     captured: dict[str, object] = {}
     model_cfg = SimpleNamespace(model="vision-model")
 
-    class _Completions:
-        def create(self, **kwargs):
-            captured.update(kwargs)
-            return SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(
-                            content='{"verdict":"PASS","reason":"多图约束均匹配"}',
-                        ),
-                    ),
-                ],
-                usage=SimpleNamespace(prompt_tokens=7, completion_tokens=3),
-            )
-
-    client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=_Completions(),
-        ),
+    _llm_result = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content='{"verdict":"PASS","reason":"多图约束均匹配"}',
+                ),
+            ),
+        ],
+        usage=SimpleNamespace(prompt_tokens=7, completion_tokens=3),
     )
 
+    def _fake_create(model_cfg, messages, **kwargs):
+        captured["model"] = model_cfg.model
+        captured["messages"] = messages
+        captured.update(kwargs)
+        return _llm_result
+
     monkeypatch.setattr(vision_verify, "_pick_vision_model_cfg", lambda: model_cfg)
-    monkeypatch.setattr("services.llm.get_client_for_model", lambda _cfg: client)
+    monkeypatch.setattr("services.llm.streaming.chat_completion_create", _fake_create)
     monkeypatch.setattr("services.llm._add_tokens", lambda *_args: None)
 
     result = vision_verify._verify_blocking(

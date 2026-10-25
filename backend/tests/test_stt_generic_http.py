@@ -15,12 +15,18 @@ from services.stt import factory as stt_factory
 
 def _patch_broadcast(monkeypatch, calls: list[dict]):
     import sys as _sys
-    ws_mod = _sys.modules.get("api.realtime.ws")
-    if ws_mod is None:
-        import types as _types
-        ws_mod = _types.ModuleType("api.realtime.ws")
-        _sys.modules["api.realtime.ws"] = ws_mod
-    monkeypatch.setattr(ws_mod, "broadcast", lambda data: calls.append(data), raising=False)
+    import types as _types
+
+    real_mod = _sys.modules.get("api.realtime.ws")
+    if real_mod is not None and hasattr(real_mod, "broadcast"):
+        # 真模块已加载：只替换 broadcast 属性，teardown 由 monkeypatch 还原
+        monkeypatch.setattr(real_mod, "broadcast", lambda data: calls.append(data))
+        return
+    # 没有真模块：造桩并经 monkeypatch.setitem 管理，测试结束自动从
+    # sys.modules 移除——否则桩残留会弄坏后续 chat_stream 的延迟导入。
+    stub = _types.ModuleType("api.realtime.ws")
+    stub.broadcast = lambda data: calls.append(data)  # type: ignore[attr-defined]
+    monkeypatch.setitem(_sys.modules, "api.realtime.ws", stub)
 
 
 def test_generic_http_stt_posts_openai_compatible_multipart(monkeypatch):
@@ -107,7 +113,8 @@ def test_transcribe_with_fallback_treats_empty_remote_text_as_failure(monkeypatc
 
     assert text == "fallback text"
     assert calls["fallback"] == 1
-    assert calls["circuit_failure"] == 1
+    # 空文本（多为静音/语气词段）不算服务故障，不再计入熔断
+    assert calls["circuit_failure"] == 0
     assert any(e.get("type") == "stt_fallback" for e in calls["broadcast"])
 
 
@@ -243,7 +250,8 @@ def test_transcribe_with_fallback_can_force_fallback_on_short_empty_remote_audio
 
     assert text == "fallback text"
     assert calls["fallback"] == 1
-    assert calls["circuit_failure"] == 1
+    # 空文本（多为静音/语气词段）不算服务故障，不再计入熔断
+    assert calls["circuit_failure"] == 0
 
 
 def test_transcribe_with_fallback_retries_empty_interviewer_remote_with_tail_pad(monkeypatch):
@@ -334,7 +342,8 @@ def test_transcribe_with_fallback_does_not_tail_pad_retry_candidate_empty_remote
     assert text == "fallback text"
     assert calls["audio_lengths"] == [32000]
     assert calls["fallback"] == 1
-    assert calls["circuit_failure"] == 1
+    # 空文本不计熔断
+    assert calls["circuit_failure"] == 0
 
 
 def test_transcribe_with_fallback_retries_remote_once_before_fallback(monkeypatch):
@@ -639,3 +648,85 @@ def test_whisper_engine_cache_reuses_same_asr_and_splits_different_asr(monkeypat
     assert candidate_different is not interviewer
     assert candidate_different.model_size == "tiny"
     assert candidate_different.language == "en"
+
+
+# ---------------------------------------------------------------------------
+# 可配置降级引擎（stt_fallback_provider）
+# ---------------------------------------------------------------------------
+
+def test_remote_failure_falls_back_to_configured_funasr(monkeypatch):
+    import core.config as core_config
+    import services.stt.engines as stt_engines
+
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {
+            "stt_provider": "generic",
+            "stt_fallback_provider": "funasr",
+            "whisper_model": "base",
+            "whisper_language": "auto",
+            "generic_stt_api_base_url": "https://x",
+            "generic_stt_api_key": "k",
+            "generic_stt_model": "m",
+        })(),
+    )
+    calls = {"funasr": 0}
+
+    class _DeadRemote:
+        def transcribe(self, *a, **k):
+            raise RuntimeError("remote failed")
+
+    class _FakeFunasr:
+        is_loaded = True
+
+        def transcribe(self, *a, **k):
+            calls["funasr"] += 1
+            return "funasr 兜底文本"
+
+    import services.stt.factory as f
+    monkeypatch.setattr(f, "get_stt_engine", lambda provider=None, model_size=None, language=None: _DeadRemote() if provider == "generic" else _FakeFunasr())
+    monkeypatch.setattr(f, "_call_circuit_open", lambda *_a, **_k: False)
+    monkeypatch.setattr(f, "_call_circuit_record_failure", lambda *_a, **_k: None)
+    monkeypatch.setattr(f, "_call_circuit_reset", lambda *_a, **_k: None)
+    monkeypatch.setattr(f, "_local_infer_lock", lambda provider: f._whisper_infer_lock)
+
+    _patch_broadcast(monkeypatch, [])
+
+    text = f.transcribe_with_fallback(__import__("numpy").zeros(16000, dtype=__import__("numpy").float32), 16000, provider="generic")
+    assert text == "funasr 兜底文本"
+    assert calls["funasr"] == 1
+
+
+def test_remote_failure_with_none_fallback_returns_empty(monkeypatch):
+    import core.config as core_config
+    import numpy as np
+
+    monkeypatch.setattr(
+        core_config,
+        "get_config",
+        lambda: type("Cfg", (), {
+            "stt_provider": "generic",
+            "stt_fallback_provider": "none",
+            "whisper_model": "base",
+            "whisper_language": "auto",
+            "generic_stt_api_base_url": "https://x",
+            "generic_stt_api_key": "k",
+            "generic_stt_model": "m",
+        })(),
+    )
+
+    class _DeadRemote:
+        def transcribe(self, *a, **k):
+            raise RuntimeError("remote failed")
+
+    import services.stt.factory as f
+    monkeypatch.setattr(f, "get_stt_engine", lambda provider=None, model_size=None, language=None: _DeadRemote())
+    monkeypatch.setattr(f, "_call_circuit_open", lambda *_a, **_k: False)
+    monkeypatch.setattr(f, "_call_circuit_record_failure", lambda *_a, **_k: None)
+    monkeypatch.setattr(f, "_call_circuit_reset", lambda *_a, **_k: None)
+
+    _patch_broadcast(monkeypatch, [])
+
+    text = f.transcribe_with_fallback(np.zeros(16000, dtype=np.float32), 16000, provider="generic")
+    assert text == ""

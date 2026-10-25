@@ -5,6 +5,7 @@
       "api_base_url": "https://api.openai.com/v1",
       "api_key": "YOUR_API_KEY_HERE",
       "model": "gpt-4o-mini",
+      "api_type": "openai",
       "supports_think": false,
       "supports_vision": false,
       "enabled": true
@@ -19,6 +20,8 @@
   "whisper_model": "base",
   "whisper_language": "auto",
   "whisper_preload": false,
+  "funasr_model": "paraformer-zh",
+  "stt_hotwords": {},
   "doubao_stt_app_id": "",
   "doubao_stt_access_token": "",
   "doubao_stt_api_key": "",

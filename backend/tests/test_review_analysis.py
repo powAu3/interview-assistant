@@ -27,8 +27,8 @@ def _mock_review_config():
 
 def test_analyze_turn_no_active_model():
     """测试没有有效模型配置时返回空结果"""
-    with patch('services.review_analysis.get_active_llm_client') as mock_client:
-        mock_client.side_effect = ValueError("No API key")
+    with patch('services.review_analysis.get_review_model_cfg') as mock_model:
+        mock_model.side_effect = ValueError("No API key")
 
         result = review_analysis.analyze_turn(
             question="什么是 Python GIL？",
@@ -77,7 +77,7 @@ def test_analyze_turn_preserves_structured_evidence():
 
     with patch('services.review_analysis.correct_asr_errors', return_value="Redis 回答"), \
          patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
-         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+         patch('services.review_analysis.get_review_model_cfg', return_value=_mock_review_config().get_review_model()),          patch('services.llm.streaming.chat_completion_create', return_value=mock_client.chat.completions.create.return_value) as mock_llm_create:
         result = review_analysis.analyze_turn(
             question="Redis 缓存击穿怎么处理？",
             candidate_answer="Redis 回答",
@@ -109,7 +109,7 @@ def test_analyze_written_exam_turn_reviews_generated_answer():
 
     with patch('services.review_analysis.correct_asr_errors') as mock_correct, \
          patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
-         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+         patch('services.review_analysis.get_review_model_cfg', return_value=_mock_review_config().get_review_model()),          patch('services.llm.streaming.chat_completion_create', return_value=mock_client.chat.completions.create.return_value) as mock_llm_create:
         result = review_analysis.analyze_turn(
             question="截图题：两数之和",
             candidate_answer="",
@@ -118,8 +118,8 @@ def test_analyze_written_exam_turn_reviews_generated_answer():
         )
 
     mock_correct.assert_not_called()
-    kwargs = mock_client.chat.completions.create.call_args.kwargs
-    messages = kwargs["messages"]
+    kwargs = mock_llm_create.call_args.kwargs
+    messages = mock_llm_create.call_args.args[1]
     assert "笔试辅导教练" in messages[0]["content"]
     user_prompt = messages[-1]["content"]
     assert "截图题目/题面" in user_prompt
@@ -133,8 +133,8 @@ def test_analyze_written_exam_turn_reviews_generated_answer():
 
 def test_generate_summary_no_active_model():
     """测试没有有效模型配置时返回提示信息"""
-    with patch('services.review_analysis.get_active_llm_client') as mock_client:
-        mock_client.side_effect = ValueError("No API key")
+    with patch('services.review_analysis.get_review_model_cfg') as mock_model:
+        mock_model.side_effect = ValueError("No API key")
 
         result = review_analysis.generate_summary(
             turns=[{"question_text": "Q1", "candidate_answer_text": "A1"}],
@@ -167,7 +167,7 @@ def test_generate_summary_for_written_exam_uses_generated_answers():
     )
 
     with patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
-         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+         patch('services.review_analysis.get_review_model_cfg', return_value=_mock_review_config().get_review_model()),          patch('services.llm.streaming.chat_completion_create', return_value=mock_client.chat.completions.create.return_value) as mock_llm_create:
         result = review_analysis.generate_summary(
             turns=[
                 {
@@ -181,8 +181,8 @@ def test_generate_summary_for_written_exam_uses_generated_answers():
             review_source="written_exam",
         )
 
-    kwargs = mock_client.chat.completions.create.call_args.kwargs
-    messages = kwargs["messages"]
+    kwargs = mock_llm_create.call_args.kwargs
+    messages = mock_llm_create.call_args.args[1]
     assert "笔试辅导教练" in messages[0]["content"]
     user_prompt = messages[-1]["content"]
     assert "本次笔试练习共 1 道截图题" in user_prompt
@@ -192,13 +192,13 @@ def test_generate_summary_for_written_exam_uses_generated_answers():
 
 
 def test_run_asr_correction_check_success():
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = MagicMock(
+    mock_llm_return = MagicMock(
         choices=[MagicMock(message=MagicMock(content="我做过 Redis 缓存，MySQL 查询会先看布隆过滤器。"))]
     )
 
     with patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
-         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+         patch('services.review_analysis.get_review_model_cfg', return_value=_mock_review_config().get_review_model()), \
+         patch('services.llm.streaming.chat_completion_create', return_value=mock_llm_return) as mock_llm_create:
         result = review_analysis.run_asr_correction_check(
             question="请介绍缓存优化",
             candidate_answer="我做过 red 地址缓存，麦 SQL 查询会先看布隆过绿器。",
@@ -209,8 +209,8 @@ def test_run_asr_correction_check_success():
     assert result["model"] == "doubao-seed-2-0-lite-260428"
     assert result["changed"] is True
     assert "Redis" in result["corrected"]
-    kwargs = mock_client.chat.completions.create.call_args.kwargs
-    assert kwargs["extra_body"] == {
+    kwargs = mock_llm_create.call_args.kwargs
+    assert kwargs["think_params"] == {
         "thinking": {"type": "disabled"},
         "think_mode": False,
         "enable_thinking": False,
@@ -218,11 +218,11 @@ def test_run_asr_correction_check_success():
 
 
 def test_run_asr_correction_check_returns_blocked_error():
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = PermissionError("Your request was blocked")
+    _blocked = PermissionError("Your request was blocked")
 
     with patch('services.review_analysis.get_config', return_value=_mock_review_config()), \
-         patch('services.review_analysis.get_active_llm_client', return_value=(mock_client, "doubao-seed-2-0-lite-260428")):
+         patch('services.review_analysis.get_review_model_cfg', return_value=_mock_review_config().get_review_model()), \
+         patch('services.llm.streaming.chat_completion_create', side_effect=_blocked):
         result = review_analysis.run_asr_correction_check(
             question="请介绍缓存优化",
             candidate_answer="我做过 red 地址缓存，麦 SQL 查询会先看布隆过绿器。",

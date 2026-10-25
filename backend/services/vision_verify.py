@@ -125,9 +125,8 @@ def _verify_blocking(answer: str, image_data_url: str | Sequence[str]) -> dict:
     if model_cfg is None:
         return {"verdict": "UNKNOWN", "reason": "未配置可用的视觉模型"}
 
-    from services.llm import _add_tokens, get_client_for_model
-
-    client = get_client_for_model(model_cfg)
+    from services.llm import _add_tokens
+    from services.llm.streaming import chat_completion_create
     images = _normalize_image_data_urls(image_data_url)
     user_content = [
         {"type": "text", "text": _build_verify_prompt(answer, len(images))},
@@ -135,12 +134,11 @@ def _verify_blocking(answer: str, image_data_url: str | Sequence[str]) -> dict:
     for image_url in images:
         user_content.append({"type": "image_url", "image_url": {"url": image_url}})
     try:
-        response = client.chat.completions.create(
-            model=model_cfg.model,
-            messages=[{"role": "user", "content": user_content}],
+        response = chat_completion_create(
+            model_cfg,
+            [{"role": "user", "content": user_content}],
             temperature=0.1,
             max_tokens=300,
-            stream=False,
         )
     except Exception as e:  # noqa: BLE001
         _log.warning("vision self-verify call failed: %s", e)

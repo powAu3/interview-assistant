@@ -10,6 +10,15 @@ import requests
 from typing import Callable, Generator, Optional
 from core.config import get_config
 from core.logger import get_logger
+from services.llm.protocols import (
+    API_TYPE_ANTHROPIC,
+    API_TYPE_RESPONSES,
+    build_chat_payload,
+    get_api_type,
+    normalize_api_base_url,
+    post_chat_blocking,
+    post_chat_stream,
+)
 
 _log = get_logger("llm.streaming")
 
@@ -121,13 +130,19 @@ def get_client() -> OpenAI:
 
 
 def get_client_for_model(model_cfg) -> OpenAI:
-    key = (model_cfg.api_key, model_cfg.api_base_url)
+    """OpenAI SDK client（仅 api_type=openai 走 SDK；其余协议用裸 HTTP）。
+
+    base_url 会先规范化：没有版本段（/v1 等）时自动补 /v1，
+    用户填 ``https://api.deepseek.com`` 或 ``https://api.deepseek.com/v1`` 都能用。
+    """
+    base = normalize_api_base_url(model_cfg.api_base_url, get_api_type(model_cfg))
+    key = (model_cfg.api_key, base)
     with _client_cache_lock:
         client = _client_cache.get(key)
         if client is None:
             client = OpenAI(
                 api_key=model_cfg.api_key,
-                base_url=model_cfg.api_base_url,
+                base_url=base,
                 default_headers=_openai_compat_headers(),
             )
             _client_cache[key] = client
@@ -152,26 +167,75 @@ RESUME_VISION_PROMPT = """以下是一份简历的页面图片（可能为扫描
 - 若某页无文字或无法识别，可输出空行或省略该页，不要编造内容。"""
 
 
+def chat_completion_create(
+    model_cfg,
+    messages: list[dict],
+    *,
+    temperature: float = 0.3,
+    max_tokens: int = 4096,
+    think_params: Optional[dict] = None,
+    timeout: tuple[float, float] = (10, 120),
+):
+    """Unified non-streaming call: normalize all protocols to the OpenAI response shape.
+
+    The return value is compatible with the OpenAI SDK ``client.chat.completions.create``
+    object (``.choices[0].message.content``), allowing existing call sites to be unaware of api_type.
+    """
+    api_type = get_api_type(model_cfg)
+    if api_type == "openai":
+        client = get_client_for_model(model_cfg)
+        extra_kwargs: dict = {}
+        if think_params:
+            extra_kwargs["extra_body"] = think_params
+        # gpt-5/o1/o3/o4 只认 max_completion_tokens；timeout 必须显式传给 SDK，
+        # 否则用 SDK 默认（600s 带重试），慢供应商会拖死调用方。
+        extra_kwargs["timeout"] = float(timeout[1] if isinstance(timeout, tuple) else timeout)
+        try:
+            return client.chat.completions.create(
+                model=model_cfg.model,
+                messages=messages,
+                temperature=temperature,
+                **_completion_token_kwargs(model_cfg, max_tokens),
+                **extra_kwargs,
+            )
+        except openai.NotFoundError as e:
+            # 规范化补的 /v1 猜错时，退回候选 URL 逐个尝试
+            _log.warning("SDK 404, retry via HTTP candidates model=%s: %s", model_cfg.name, e)
+        except TypeError as e:
+            if "by_alias" not in str(e):
+                raise
+            _log.warning("SDK failed (by_alias), fallback to HTTP model=%s: %s", model_cfg.name, e)
+    payload = build_chat_payload(
+        api_type,
+        model_cfg.model,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=False,
+        think_params=think_params,
+    )
+    return post_chat_blocking(
+        model_cfg.api_base_url,
+        api_type,
+        model_cfg.api_key,
+        payload,
+        timeout=timeout,
+    )
+
+
 def _vision_via_http(model_cfg, messages: list[dict]) -> str:
     """Raw HTTP fallback for vision calls when SDK has pydantic issues."""
-    base = (model_cfg.api_base_url or "").rstrip("/")
-    url = f"{base}/chat/completions"
-    headers = {
-        **_openai_compat_headers(),
-        "Authorization": f"Bearer {model_cfg.api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model_cfg.model,
-        "messages": messages,
-        "max_tokens": 4096,
-        "temperature": 0,
-    }
-    resp = requests.post(url, headers=headers, json=payload, timeout=(10, 120))
-    if resp.status_code >= 400:
-        raise RuntimeError(f"Vision HTTP {resp.status_code}: {resp.text[:200]}")
-    data = resp.json()
-    return (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+    api_type = get_api_type(model_cfg)
+    payload = build_chat_payload(
+        api_type,
+        model_cfg.model,
+        messages,
+        temperature=0,
+        max_tokens=4096,
+        stream=False,
+    )
+    result = post_chat_blocking(model_cfg.api_base_url, api_type, model_cfg.api_key, payload)
+    return (result.choices[0].message.content or "").strip()
 
 
 def vision_extract_text(image_base64_list: list[str]) -> str:
@@ -196,14 +260,8 @@ def vision_extract_text(image_base64_list: list[str]) -> str:
             img_url = f"data:image/png;base64,{b64}"
         parts.append({"type": "image_url", "image_url": {"url": img_url}})
     vision_messages = [{"role": "user", "content": parts}]
-    client = get_client_for_model(model)
     try:
-        r = client.chat.completions.create(
-            model=model.model,
-            messages=vision_messages,
-            max_tokens=4096,
-            temperature=0,
-        )
+        r = chat_completion_create(model, vision_messages, temperature=0, max_tokens=4096)
         return (r.choices[0].message.content or "").strip()
     except TypeError as e:
         if "by_alias" not in str(e):
@@ -350,6 +408,12 @@ def _is_generic_reasoning_model(model_cfg) -> bool:
 
 
 def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
+    api_type = get_api_type(model_cfg)
+    if api_type == API_TYPE_ANTHROPIC:
+        # Anthropic 支持 thinking.type=disabled；缺省（不传）也等价于关闭
+        return {"thinking": {"type": "disabled"}}
+    if api_type == API_TYPE_RESPONSES:
+        return {}
     base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
     model_name = (getattr(model_cfg, "model", "") or "").lower()
     if _is_doubao_model(model_cfg):
@@ -376,6 +440,11 @@ def _copy_config_with_updates(cfg, updates: dict):
 
 def _completion_token_kwargs(model_cfg, max_tokens: int) -> dict:
     token_limit = max(1, int(max_tokens or 1))
+    api_type = get_api_type(model_cfg)
+    if api_type == API_TYPE_RESPONSES:
+        return {"max_output_tokens": token_limit}
+    if api_type == API_TYPE_ANTHROPIC:
+        return {"max_tokens": token_limit}
     if _detect_think_style(model_cfg) == "gpt":
         return {"max_completion_tokens": token_limit}
     return {"max_tokens": token_limit}
@@ -408,6 +477,11 @@ def _detect_think_style(model_cfg) -> str:
         'claude' – Anthropic Claude extended thinking (use thinking.budget_tokens)
         'generic' – generic OpenAI-compatible (use thinking.type)
     """
+    api_type = get_api_type(model_cfg)
+    if api_type == API_TYPE_ANTHROPIC:
+        return "claude"
+    if api_type == API_TYPE_RESPONSES:
+        return "gpt"
     name = (model_cfg.model or "").lower()
     if name.startswith("gpt-5") or name.startswith("o1") or name.startswith("o3") or name.startswith("o4"):
         return "gpt"
@@ -416,10 +490,44 @@ def _detect_think_style(model_cfg) -> str:
     return "generic"
 
 
+_RESPONSES_EFFORT_MAP = {
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "high",
+}
+
+
 def _build_think_params(model_cfg, cfg) -> dict:
     effort = cfg.think_effort
     style = _detect_think_style(model_cfg)
-    if not getattr(cfg, "think_mode", False) or effort == "off":
+    api_type = get_api_type(model_cfg)
+    think_on = bool(getattr(cfg, "think_mode", False)) and effort != "off"
+    if api_type == API_TYPE_ANTHROPIC:
+        if not think_on:
+            saved_disabled = _model_dict_param(model_cfg, "think_disabled_params")
+            if "thinking" in saved_disabled:
+                return {"thinking": saved_disabled["thinking"]}
+            return {}
+        if not model_cfg.supports_think:
+            return {}
+        saved_enabled = _model_dict_param(model_cfg, "think_enabled_params")
+        if "thinking" in saved_enabled and isinstance(saved_enabled["thinking"], dict):
+            return {"thinking": saved_enabled["thinking"]}
+        budget = _claude_thinking_budget(effort, getattr(cfg, "max_tokens", 4096))
+        token_limit = max(2, int(getattr(cfg, "max_tokens", 4096) or 2))
+        # Anthropic 要求 budget_tokens < max_tokens；上限太小则放弃开启思考
+        clamped = min(max(1024, budget), token_limit - 1)
+        if clamped < 1024:
+            return {}
+        return {"thinking": {"type": "enabled", "budget_tokens": clamped}}
+    if api_type == API_TYPE_RESPONSES:
+        if not think_on:
+            return {}
+        if not model_cfg.supports_think:
+            return {}
+        return {"reasoning": {"effort": _RESPONSES_EFFORT_MAP.get(effort, "medium")}}
+    if not think_on:
         saved_disabled = _model_dict_param(model_cfg, "think_disabled_params")
         if saved_disabled:
             return saved_disabled
@@ -456,9 +564,22 @@ def _should_emit_think(model_cfg, cfg) -> bool:
 
 
 def _try_stream_with_model(model_cfg, full_messages, cfg):
+    api_type = get_api_type(model_cfg)
+    think_params = _build_think_params(model_cfg, cfg)
+    if api_type != "openai":
+        # anthropic / responses：统一走裸 HTTP SSE（候选 URL 自动探测）
+        payload = build_chat_payload(
+            api_type,
+            model_cfg.model,
+            full_messages,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            stream=True,
+            think_params=think_params,
+        )
+        return post_chat_stream(model_cfg.api_base_url, api_type, model_cfg.api_key, payload)
     client = get_client_for_model(model_cfg)
     extra_kwargs: dict = {}
-    think_params = _build_think_params(model_cfg, cfg)
     if think_params:
         extra_kwargs["extra_body"] = think_params
     extra_kwargs["stream_options"] = {"include_usage": True}
@@ -473,6 +594,10 @@ def _try_stream_with_model(model_cfg, full_messages, cfg):
             **extra_kwargs,
         )
         return response
+    except openai.NotFoundError as e:
+        # 规范化补的 /v1 猜错（网关路径特殊）→ 按候选 URL 裸 HTTP 重试
+        _log.warning("SDK stream 404, retry via HTTP candidates model=%s: %s", model_cfg.name, e)
+        return _stream_via_http(model_cfg, full_messages, cfg, think_params)
     except TypeError as e:
         # 某些环境中 openai-sdk + pydantic 组合会在解析流式响应时抛 by_alias 异常。
         if "by_alias" not in str(e):
@@ -482,76 +607,17 @@ def _try_stream_with_model(model_cfg, full_messages, cfg):
 
 
 def _stream_via_http(model_cfg, full_messages, cfg, think_params):
-    base = (model_cfg.api_base_url or "").rstrip("/")
-    url = f"{base}/chat/completions"
-    headers = {
-        **_openai_compat_headers(),
-        "Authorization": f"Bearer {model_cfg.api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model_cfg.model,
-        "messages": full_messages,
-        "temperature": cfg.temperature,
-        "stream": True,
-        "stream_options": {"include_usage": True},
-        **_completion_token_kwargs(model_cfg, cfg.max_tokens),
-    }
-    if think_params:
-        payload.update(think_params)
-    # timeout=(connect, read): read 是「两次 byte 之间」的间隔上限，
-    # 而非整体响应时长，正好适合长流式（避免 60s 总超时硬截断）。
-    with requests.post(url, headers=headers, json=payload, stream=True, timeout=(10, 90)) as resp:
-        if resp.status_code >= 400:
-            try:
-                body = resp.json()
-            except Exception:
-                body = resp.text
-            text = str(body)[:200]
-            if resp.status_code in (401, 403):
-                raise LLMAuthError(f"HTTP {resp.status_code}: {text}")
-            if resp.status_code == 429:
-                raise LLMRateLimit(f"HTTP {resp.status_code}: {text}")
-            if resp.status_code == 400 and ("context" in text.lower() or "token" in text.lower()):
-                raise LLMContextExceeded(f"HTTP {resp.status_code}: {text}")
-            if 500 <= resp.status_code < 600:
-                raise LLMServerError(f"HTTP {resp.status_code}: {text}")
-            raise LLMError(f"HTTP {resp.status_code}: {text}")
-        for raw_line in resp.iter_lines(decode_unicode=False):
-            if not raw_line:
-                continue
-            line = raw_line.decode("utf-8", errors="replace")
-            if not line:
-                continue
-            if not line.startswith("data:"):
-                continue
-            data = line[5:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                obj = json.loads(data)
-            except Exception:
-                continue
-            choices = obj.get("choices") or []
-            usage = obj.get("usage")
-            if choices:
-                delta_obj = choices[0].get("delta") or {}
-                delta = SimpleNamespace(
-                    content=delta_obj.get("content"),
-                    reasoning_content=delta_obj.get("reasoning_content"),
-                    reasoning=delta_obj.get("reasoning"),
-                )
-                chunk_choices = [SimpleNamespace(delta=delta)]
-            else:
-                chunk_choices = []
-            if usage:
-                usage_obj = SimpleNamespace(
-                    prompt_tokens=usage.get("prompt_tokens") or 0,
-                    completion_tokens=usage.get("completion_tokens") or 0,
-                )
-            else:
-                usage_obj = None
-            yield SimpleNamespace(choices=chunk_choices, usage=usage_obj)
+    """OpenAI 兼容的裸 HTTP SSE 流式（SDK 不可用/404 时的降级路径）。"""
+    payload = build_chat_payload(
+        "openai",
+        model_cfg.model,
+        full_messages,
+        temperature=cfg.temperature,
+        max_tokens=cfg.max_tokens,
+        stream=True,
+        think_params=think_params,
+    )
+    return post_chat_stream(model_cfg.api_base_url, "openai", model_cfg.api_key, payload)
 
 
 def _config_with_think_override(cfg, override_think_mode: Optional[bool]):

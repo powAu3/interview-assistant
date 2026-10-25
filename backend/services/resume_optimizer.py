@@ -226,15 +226,30 @@ def _stream_chat(
     temperature: float,
     max_tokens: int,
 ) -> Generator[str, None, None]:
-    """流式调用,逐 chunk yield 文本。usage 自动累加。"""
-    response = client.chat.completions.create(
-        model=model_cfg.model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-        stream_options={"include_usage": True},
-    )
+    """流式调用,逐 chunk yield 文本。usage 自动累加。api_type 任意协议可用。"""
+    from services.llm.protocols import build_chat_payload, get_api_type, post_chat_stream
+
+    messages = [{"role": "user", "content": prompt}]
+    api_type = get_api_type(model_cfg)
+    if api_type != "openai":
+        payload = build_chat_payload(
+            api_type,
+            model_cfg.model,
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        response = post_chat_stream(model_cfg.api_base_url, api_type, model_cfg.api_key, payload)
+    else:
+        response = client.chat.completions.create(
+            model=model_cfg.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
     for chunk in response:
         choices = getattr(chunk, "choices", None) or []
         if choices and choices[0].delta and choices[0].delta.content:
@@ -252,12 +267,13 @@ def _non_stream_chat(
     temperature: float,
     max_tokens: int,
 ) -> str:
-    response = client.chat.completions.create(
-        model=model_cfg.model,
-        messages=[{"role": "user", "content": prompt}],
+    from services.llm.streaming import chat_completion_create
+
+    response = chat_completion_create(
+        model_cfg,
+        [{"role": "user", "content": prompt}],
         temperature=temperature,
         max_tokens=max_tokens,
-        stream=False,
     )
     usage = getattr(response, "usage", None)
     if usage:

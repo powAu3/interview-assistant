@@ -394,7 +394,8 @@ def test_http_fallback_merges_disable_params(monkeypatch):
         captured["stream"] = stream
         return FakeStreamResponse()
 
-    monkeypatch.setattr(streaming.requests, "post", fake_post)
+    import services.llm.protocols as _protocols
+    monkeypatch.setattr(_protocols, "_http", S(post=fake_post))
     model = S(api_base_url="https://example.test/v1", api_key="k", model="deepseek-reasoner")
     cfg = S(max_tokens=16, temperature=0.2)
 

@@ -10,6 +10,9 @@ pymupdf>=1.24.0,<2.0
 sounddevice>=0.4.6,<1.0
 numpy>=1.24.0,<2.0
 faster-whisper>=1.0.0,<2.0
+# FunASR 本地中文 ASR（可选，中文面试推荐）：pip install funasr torch
+# 启用后在设置-语音里选 FunASR 并点「下载模型」（模型缓存 ~/.cache/modelscope）
+# funasr>=1.1.4
 pydantic>=2.5.0,<3.0
 qrcode>=7.4,<8.0
 # 手机端「左屏审题」：服务端截取本机主屏左半部分

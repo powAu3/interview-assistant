@@ -83,7 +83,7 @@ def extract_tags(question: str, answer: str = "", candidate_answer: str = "") ->
     m = cfg.get_active_model()
     answer_for_tags = _analysis_answer_text(answer, candidate_answer)
     try:
-        client = get_client()
+        from services.llm.streaming import chat_completion_create
         prompt = f"""从以下面试问答中提取 3-5 个知识点标签（技术关键词），直接返回 JSON 数组，不要其他内容。
 如果存在“候选人实际口述”，优先依据候选人实际回答暴露出的知识点和能力点；助手参考答案只作为题目语境补充。
 
@@ -92,9 +92,9 @@ def extract_tags(question: str, answer: str = "", candidate_answer: str = "") ->
 
 示例输出：["Redis", "缓存穿透", "布隆过滤器"]"""
 
-        resp = client.chat.completions.create(
-            model=m.model,
-            messages=[{"role": "user", "content": prompt}],
+        resp = chat_completion_create(
+            m,
+            [{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=200,
         )

@@ -1287,7 +1287,9 @@ def _interviewer_asr_worker(runtime: _InterviewerRuntime, session, cfg) -> None:
 def _interview_worker():
     cfg = get_config()
     engine = get_stt_engine()
-    runtime = _interviewer_runtime or _new_interviewer_runtime()
+    # 每次开新会话都用全新 runtime：上次异常退出遗留的 last_chunk_mono 会把
+    # 跨会话的间隔当成音频空洞，打出 gap_ms=几千万 的假警报（日志已多次出现）。
+    runtime = _new_interviewer_runtime()
     _set_interviewer_runtime(runtime)
 
     if not engine.is_loaded:
@@ -1492,6 +1494,13 @@ def _candidate_provider_config(cfg) -> tuple[str, str, str, bool]:
     allow_remote = bool(getattr(cfg, "candidate_remote_stt_enabled", False))
     if provider in ("doubao", "generic") and not allow_remote:
         provider = "whisper"
+    # 本地引擎互斥：候选人链路跟随主链路的本地引擎，避免 funasr 与 whisper
+    # 两个模型同时驻留内存（合计 ~1GB+）把 CPU 机器拖卡。
+    primary = (getattr(cfg, "stt_provider", "whisper") or "whisper").strip()
+    if primary == "funasr" and provider == "whisper":
+        provider = "funasr"
+    elif primary == "whisper" and provider == "funasr":
+        provider = "whisper"
     model = (getattr(cfg, "candidate_whisper_model", "") or getattr(cfg, "whisper_model", "base") or "base").strip()
     candidate_lang_raw = (getattr(cfg, "candidate_whisper_language", "") or "").strip()
     language = candidate_lang_raw or (getattr(cfg, "whisper_language", "auto") or "auto").strip() or "auto"
@@ -1499,7 +1508,7 @@ def _candidate_provider_config(cfg) -> tuple[str, str, str, bool]:
 
 
 def _candidate_streaming_config(cfg, provider: str) -> tuple[bool, int]:
-    enabled = bool(getattr(cfg, "candidate_streaming_asr_enabled", True)) and provider == "whisper"
+    enabled = bool(getattr(cfg, "candidate_streaming_asr_enabled", True)) and provider in ("whisper", "funasr")
     interval_ms = max(800, min(5000, int(getattr(cfg, "candidate_streaming_asr_interval_ms", 1500) or 1500)))
     return enabled, interval_ms
 

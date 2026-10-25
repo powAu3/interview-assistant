@@ -19,6 +19,12 @@ DEFAULT_TEMPERATURE = 0.5
 DEFAULT_MAX_TOKENS = 4096
 _MODEL_HEALTH_FINGERPRINT_KEY = secrets.token_bytes(32)
 
+# LLM 接口协议（模型级配置 api_type 的取值范围）
+API_TYPE_OPENAI = "openai"
+API_TYPE_ANTHROPIC = "anthropic"
+API_TYPE_RESPONSES = "responses"
+API_TYPE_OPTIONS = [API_TYPE_OPENAI, API_TYPE_ANTHROPIC, API_TYPE_RESPONSES]
+
 
 def _finite_number(value: Any, fallback: float) -> float:
     try:
@@ -49,11 +55,21 @@ class ModelConfig(BaseModel):
     api_base_url: str = "https://api.openai.com/v1"
     api_key: str = ""
     model: str = "gpt-4o-mini"
+    # 接口协议：openai=Chat Completions，anthropic=Messages，responses=Responses
+    api_type: str = API_TYPE_OPENAI
     supports_think: bool = False
     supports_vision: bool = False
     enabled: bool = True
     think_enabled_params: dict[str, Any] = Field(default_factory=dict)
     think_disabled_params: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("api_type", mode="before")
+    @classmethod
+    def _normalize_api_type(cls, value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in API_TYPE_OPTIONS:
+            return API_TYPE_OPENAI
+        return normalized
 
 
 def model_health_fingerprint(model: Any) -> str:
@@ -68,6 +84,7 @@ def model_health_fingerprint(model: Any) -> str:
         str(getattr(model, "name", "") or "").strip(),
         str(getattr(model, "api_base_url", "") or "").strip().rstrip("/"),
         str(getattr(model, "model", "") or "").strip(),
+        str(getattr(model, "api_type", "") or "").strip() or API_TYPE_OPENAI,
         str(getattr(model, "api_key", "") or ""),
     )
     payload = "\x1f".join(fields).encode("utf-8", errors="surrogatepass")
@@ -97,13 +114,25 @@ class AppConfig(BaseModel):
     # 推理强度: off=关闭, low/medium/high/xhigh 分别对应低/中/高/超高强度推理
     think_effort: Literal["off", "low", "medium", "high", "xhigh"] = "off"
 
-    # 语音识别：whisper=本地 faster-whisper，doubao=豆包语音识别 API
+    # 语音识别：whisper=本地 faster-whisper，funasr=本地 FunASR（paraformer/SenseVoice），
+    # doubao=豆包语音识别 API，generic=OpenAI-compatible HTTP ASR
     stt_provider: str = "whisper"
     whisper_model: str = "base"
     # "auto" is more robust for Chinese interview speech mixed with English terms.
     whisper_language: str = "auto"
     # 启动时预加载 whisper 降级模型（远程 ASR 为主引擎时，~300MB 内存换更快降级）
     whisper_preload: bool = False
+    # FunASR 本地模型（stt_provider=funasr 时使用）：首次使用需显式下载（设置页有下载按钮）
+    funasr_model: str = "paraformer-zh"
+    # 本地 ASR 自定义热词（岗位 -> 空格分隔词串；"通用" 键对所有岗位生效）。
+    # 与内置 TECH_VOCAB 合并后传给 FunASR(paraformer)/Whisper 做偏置。
+    stt_hotwords: dict[str, str] = Field(default_factory=dict)
+    # 远程 ASR（豆包/通用）失败时的降级引擎：whisper（默认）/funasr/none（不降级）。
+    # 主链路本身是本地引擎时此配置不生效（本地引擎失败无需再降级）。
+    stt_fallback_provider: str = "whisper"
+    # 本地 ASR 推理线程数：0=自动（min(8, 核数-2)）；调小降温降噪，调大更快。
+    # 改动重启后端生效。
+    stt_infer_threads: int = 0
     # 豆包语音识别 API（当 stt_provider=doubao 时使用），使用小时版 + WebSocket 双流式
     doubao_stt_app_id: str = ""
     doubao_stt_access_token: str = ""
@@ -275,6 +304,22 @@ class AppConfig(BaseModel):
                     cwl,
                 )
                 self.candidate_whisper_language = ""
+        self.stt_infer_threads = max(0, min(64, int(self.stt_infer_threads or 0)))
+        fbp = (self.stt_fallback_provider or "").strip().lower()
+        if fbp not in STT_FALLBACK_PROVIDER_OPTIONS:
+            logger.warning("stt_fallback_provider=%r 不支持，已重置为 whisper", fbp)
+            self.stt_fallback_provider = "whisper"
+        fm = (self.funasr_model or "").strip()
+        if fm not in FUNASR_MODEL_OPTIONS:
+            logger.warning("funasr_model=%r 不支持，已重置为 paraformer-zh", fm)
+            self.funasr_model = "paraformer-zh"
+        if not isinstance(self.stt_hotwords, dict):
+            self.stt_hotwords = {}
+        self.stt_hotwords = {
+            str(k).strip(): str(v).strip()
+            for k, v in self.stt_hotwords.items()
+            if str(k).strip() and str(v).strip()
+        }
         if not self.models:
             self.models = [_default_model_config()]
         self.screen_capture_max_long_edge = max(0, min(4000, int(self.screen_capture_max_long_edge or 0)))
@@ -367,7 +412,11 @@ LANGUAGE_OPTIONS = [
     "Go", "SQL",
 ]
 WHISPER_MODEL_OPTIONS = ["tiny", "base", "small", "medium", "large-v3"]
-# 语音识别引擎：whisper=本地，doubao=豆包 API，generic=OpenAI-compatible HTTP ASR
-STT_PROVIDER_OPTIONS = ["whisper", "doubao", "generic"]
+# 远程 ASR 失败降级目标：本地引擎或关闭
+STT_FALLBACK_PROVIDER_OPTIONS = ["whisper", "funasr", "none"]
+# FunASR 本地模型（中文面试场景推荐 paraformer-zh：准确率高、CPU 快、支持热词）
+FUNASR_MODEL_OPTIONS = ["paraformer-zh", "sensevoice-small", "paraformer-zh-streaming"]
+# 语音识别引擎：whisper=本地，funasr=本地 FunASR，doubao=豆包 API，generic=OpenAI-compatible HTTP ASR
+STT_PROVIDER_OPTIONS = ["whisper", "funasr", "doubao", "generic"]
 # 电脑截图区域
 SCREEN_CAPTURE_REGION_OPTIONS = ["full", "left_half", "right_half", "top_half", "bottom_half"]

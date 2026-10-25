@@ -84,3 +84,26 @@ def test_postprocess_repairs_whisper_boundary_terms_from_tts_replay():
     assert _postprocess("不要结合效果母。") == "不要结合项目。"
     assert _postprocess("SQL所以失效你会怎么排查。") == "SQL 索引失效你会怎么排查。"
     assert _postprocess("那准备的验重。") == "那怎么验证。"
+
+
+# ---------------------------------------------------------------------------
+# whisper 幻觉「连续循环」检测（误杀防护）
+# ---------------------------------------------------------------------------
+
+def test_has_repeated_ngram_catches_consecutive_loops():
+    from services.stt.engines import _has_repeated_ngram
+
+    assert _has_repeated_ngram("a new version of a new version of a new version of the file")
+    assert _has_repeated_ngram("就是就是就是就是这样")
+    assert _has_repeated_ngram("In this video I'll show you how to make it work work work work done")
+
+
+def test_has_repeated_ngram_keeps_scattered_repeats():
+    from services.stt.engines import _has_repeated_ngram
+
+    # 正常口语：同一介词短语散布出现 3 次不应整段丢弃
+    assert not _has_repeated_ngram(
+        "the capacity of the cache, the eviction of the keys, the lifetime of the entries"
+    )
+    # 中文短语气词重复但非连续循环
+    assert not _has_repeated_ngram("就是想问一下缓存这块，然后就是并发场景下怎么保证一致性")

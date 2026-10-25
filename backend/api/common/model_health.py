@@ -7,6 +7,15 @@ import requests
 
 from core.config import get_config, model_health_fingerprint
 from core.resource_lanes import submit_low_priority_background
+from services.llm.protocols import (
+    API_TYPE_ANTHROPIC,
+    API_TYPE_RESPONSES,
+    build_chat_payload,
+    build_llm_headers,
+    chat_url_candidates,
+    extract_reply_text,
+    get_api_type,
+)
 from services.llm.streaming import (
     _build_think_params,
     _completion_token_kwargs,
@@ -92,9 +101,14 @@ def _is_expected_param_error(detail: str) -> bool:
     )
 
 
-def _extract_health_probe_text_and_reasoning(body: object) -> tuple[str, str]:
+def _extract_health_probe_text_and_reasoning(body: object, api_type: str = "openai") -> tuple[str, str]:
     if not isinstance(body, dict):
         return "", ""
+    if api_type in (API_TYPE_ANTHROPIC, API_TYPE_RESPONSES):
+        text, reasoning = extract_reply_text(body, api_type)
+        if not reasoning and _has_reasoning_tokens(body):
+            reasoning = "reasoning_tokens"
+        return text, reasoning
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices:
         return "", ""
@@ -231,19 +245,28 @@ def get_model_health_snapshot() -> dict:
 
 
 def _build_headers(model) -> dict:
-    return {
-        **_openai_compat_headers(),
-        "Authorization": f"Bearer {model.api_key}",
-        "Content-Type": "application/json",
-    }
-
-
-def _chat_url(model) -> str:
-    base = (model.api_base_url or "").rstrip("/")
-    return f"{base}/chat/completions"
+    return build_llm_headers(get_api_type(model), model.api_key)
 
 
 def _chat_payload(model, messages: list, max_tokens: int, extra: Optional[dict] = None) -> dict:
+    api_type = get_api_type(model)
+    if api_type in (API_TYPE_ANTHROPIC, API_TYPE_RESPONSES):
+        # 探测逻辑给出的 extra 是 openai 风格参数；按协议翻译后只保留认识的部分
+        think_params: dict = {}
+        if isinstance(extra, dict):
+            if api_type == API_TYPE_ANTHROPIC and isinstance(extra.get("thinking"), dict):
+                think_params["thinking"] = extra["thinking"]
+            if api_type == API_TYPE_RESPONSES and isinstance(extra.get("reasoning"), dict):
+                think_params["reasoning"] = extra["reasoning"]
+        return build_chat_payload(
+            api_type,
+            model.model,
+            messages,
+            temperature=0,
+            max_tokens=max_tokens,
+            stream=False,
+            think_params=think_params,
+        )
     payload = {
         "model": model.model,
         "messages": messages,
@@ -258,20 +281,29 @@ def _chat_payload(model, messages: list, max_tokens: int, extra: Optional[dict] 
 def _post_chat(model, payload: dict, timeout: int = 12) -> tuple[dict, int]:
     import time as _time
 
+    api_type = get_api_type(model)
+    candidates = chat_url_candidates(model.api_base_url, api_type)
+    if not candidates:
+        raise RuntimeError("API Base URL 不能为空")
+    headers = _build_headers(model)
     t0 = _time.monotonic()
-    response = requests.post(
-        _chat_url(model),
-        headers=_build_headers(model),
-        json=payload,
-        timeout=timeout,
-    )
+    last_not_found = ""
+    response = None
+    for url in candidates:
+        response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        if response.status_code in (404, 405) and len(candidates) > 1:
+            last_not_found = f"HTTP {response.status_code}: {response.text[:160]}"
+            continue
+        break
     latency_ms = int((_time.monotonic() - t0) * 1000)
-    if response.status_code >= 400:
+    if response is not None and response.status_code >= 400:
         try:
             body = response.json()
         except Exception:
             body = response.text
         raise RuntimeError(f"HTTP {response.status_code}: {str(body)[:200]}")
+    if response is None or response.status_code in (404, 405):
+        raise RuntimeError(last_not_found or "未找到可用的对话接口地址")
     try:
         body = response.json()
     except Exception:
@@ -290,7 +322,7 @@ def _probe_basic(model, *, reject_reasoning: bool = True) -> tuple[bool, str, in
         ),
     )
     body, latency_ms = _post_chat(model, payload, timeout=12)
-    text, reasoning = _extract_health_probe_text_and_reasoning(body)
+    text, reasoning = _extract_health_probe_text_and_reasoning(body, get_api_type(model))
     if reject_reasoning and reasoning:
         raise RuntimeError("关闭思考后仍返回 reasoning，已暂不参与答题")
     if not text:
@@ -318,7 +350,7 @@ def _probe_vision(model) -> tuple[bool, str]:
     )
     try:
         body, _latency_ms = _post_chat(model, payload, timeout=18)
-        text, _reasoning = _extract_health_probe_text_and_reasoning(body)
+        text, _reasoning = _extract_health_probe_text_and_reasoning(body, get_api_type(model))
         if not text:
             return False, "识图请求成功但返回空正文"
         return True, "识图请求成功"
@@ -327,6 +359,11 @@ def _probe_vision(model) -> tuple[bool, str]:
 
 
 def _think_probe_candidates(model) -> list[tuple[str, dict]]:
+    api_type = get_api_type(model)
+    if api_type == API_TYPE_ANTHROPIC:
+        return [("claude_thinking_budget", {"thinking": {"type": "enabled", "budget_tokens": 1024}})]
+    if api_type == API_TYPE_RESPONSES:
+        return [("gpt_reasoning_effort", {"reasoning": {"effort": "low"}})]
     style = _detect_think_style(model)
     ordered: list[tuple[str, dict]] = []
     if style == "gpt":
@@ -356,6 +393,15 @@ def _think_probe_candidates(model) -> list[tuple[str, dict]]:
 
 
 def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
+    api_type = get_api_type(model)
+    if api_type == API_TYPE_ANTHROPIC:
+        # 不传 thinking 即为关闭；显式 disabled 作为备用候选
+        return [
+            ("no_params", {}),
+            ("claude_thinking_disabled", {"thinking": {"type": "disabled"}}),
+        ]
+    if api_type == API_TYPE_RESPONSES:
+        return [("no_params", {})]
     style = _detect_think_style(model)
     requires_explicit_disable = _is_strong_reasoning_model(model)
     saved_disabled = getattr(model, "think_disabled_params", None) or {}
@@ -397,7 +443,7 @@ def _probe_disable_think(model) -> tuple[dict, str]:
         payload = _chat_payload(model, messages, 16, params)
         try:
             body, _latency_ms = _post_chat(model, payload, timeout=12)
-            text, reasoning = _extract_health_probe_text_and_reasoning(body)
+            text, reasoning = _extract_health_probe_text_and_reasoning(body, get_api_type(model))
             if text and not reasoning:
                 if params:
                     return params, f"关闭 Think 参数已确认：{style}"
@@ -424,7 +470,7 @@ def _probe_think(model) -> tuple[bool, str, dict, str]:
         payload = _chat_payload(model, messages, 64, params)
         try:
             body, _latency_ms = _post_chat(model, payload, timeout=12)
-            text, reasoning = _extract_health_probe_text_and_reasoning(body)
+            text, reasoning = _extract_health_probe_text_and_reasoning(body, get_api_type(model))
             if reasoning or _is_strong_reasoning_model(model):
                 return True, style, params, "Think 参数已接受"
             if text:

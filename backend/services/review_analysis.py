@@ -24,21 +24,26 @@ DEFAULT_ASR_CORRECTION_SAMPLE = (
 )
 
 
-def get_active_llm_client() -> tuple[OpenAI, str]:
-    """获取 review 配置的模型客户端和模型名"""
+def get_review_model_cfg():
+    """获取 review 配置的模型（未配置 Key 时抛 ValueError）"""
     cfg = get_config()
     review_model = cfg.get_review_model()
 
     if not review_model.api_key or review_model.api_key in ("", "sk-your-api-key-here"):
         raise ValueError("Review 模型未配置有效的 API Key")
 
-    client = get_client_for_model(review_model)
+    return review_model
 
+
+def get_active_llm_client() -> tuple[OpenAI, str]:
+    """兼容旧调用：返回 review 模型的 SDK 客户端和模型名"""
+    review_model = get_review_model_cfg()
+    client = get_client_for_model(review_model)
     return client, review_model.model
 
 
-def _review_chat_kwargs(max_tokens: int) -> dict[str, Any]:
-    """Build model-specific kwargs matching the main answer/model-health path."""
+def _review_think_params(max_tokens: int) -> dict[str, Any]:
+    """Review 路径固定关闭思考；返回统一 call 需要的 think 参数。"""
     cfg = get_config()
     review_model = cfg.get_review_model()
     request_cfg = SimpleNamespace(
@@ -46,11 +51,20 @@ def _review_chat_kwargs(max_tokens: int) -> dict[str, Any]:
         think_effort="off",
         max_tokens=max_tokens,
     )
-    kwargs = _completion_token_kwargs(review_model, max_tokens)
-    think_params = _build_think_params(review_model, request_cfg)
-    if think_params:
-        kwargs["extra_body"] = think_params
-    return kwargs
+    return _build_think_params(review_model, request_cfg)
+
+
+def _review_chat(model_cfg, messages: list, *, temperature: float, max_tokens: int):
+    """统一非流式调用：api_type=anthropic/responses 的模型也能用。"""
+    from services.llm.streaming import chat_completion_create
+
+    return chat_completion_create(
+        model_cfg,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        think_params=_review_think_params(max_tokens),
+    )
 
 
 def _build_asr_correction_prompt(question: str, candidate_answer: str) -> str:
@@ -108,15 +122,15 @@ def run_asr_correction_check(
         return result
 
     try:
-        client, model_name = get_active_llm_client()
+        review_model = get_review_model_cfg()
     except ValueError as exc:
         result["detail"] = _safe_error_detail(exc)
         return result
 
     try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
+        response = _review_chat(
+            review_model,
+            [
                 {
                     "role": "system",
                     "content": "你是一位专业的语音识别纠错助手，擅长根据上下文纠正 ASR 错误。",
@@ -124,7 +138,7 @@ def run_asr_correction_check(
                 {"role": "user", "content": _build_asr_correction_prompt(question, original)},
             ],
             temperature=0.1,
-            **_review_chat_kwargs(800),
+            max_tokens=800,
         )
 
         content = response.choices[0].message.content
@@ -213,7 +227,7 @@ def analyze_turn(
         }
 
     try:
-        client, model_name = get_active_llm_client()
+        review_model = get_review_model_cfg()
     except ValueError as e:
         logger.warning("Failed to get active LLM client: %s", e)
         return {
@@ -328,9 +342,9 @@ def analyze_turn(
 """
 
     try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
+        response = _review_chat(
+            review_model,
+            [
                 {
                     "role": "system",
                     "content": (
@@ -342,7 +356,7 @@ def analyze_turn(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            **_review_chat_kwargs(1000),
+            max_tokens=1000,
         )
 
         content = response.choices[0].message.content
@@ -414,7 +428,7 @@ def generate_summary(
         }
 
     try:
-        client, model_name = get_active_llm_client()
+        review_model = get_review_model_cfg()
     except ValueError as e:
         logger.warning("Failed to get active LLM client: %s", e)
         return {
@@ -495,9 +509,9 @@ def generate_summary(
 """
 
     try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
+        response = _review_chat(
+            review_model,
+            [
                 {
                     "role": "system",
                     "content": (
@@ -509,7 +523,7 @@ def generate_summary(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            **_review_chat_kwargs(1500),
+            max_tokens=1500,
         )
 
         content = response.choices[0].message.content

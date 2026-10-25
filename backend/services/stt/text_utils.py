@@ -12,7 +12,10 @@ TECH_VOCAB = {
         "API Redis MySQL PostgreSQL MongoDB Nginx Docker Kubernetes HTTP HTTPS "
         "WebSocket TCP UDP JSON XML YAML REST GraphQL gRPC OAuth JWT "
         "Linux macOS Windows Git GitHub CI CD DevOps microservice "
-        "CPU GPU 内存 缓存 数据库 消息队列 负载均衡 分布式 高并发 高可用"
+        "CPU GPU 内存 缓存 数据库 消息队列 负载均衡 分布式 高并发 高可用 "
+        "SQL pipeline timeout retry QPS TPS SLA SDK "
+        "RAG LLM Agent Prompt Token Embedding 向量数据库 "
+        "微调 LoRA MCP FunctionCall Rerank 幻觉 大模型 智能体 LangGraph Dify"
     ),
     "Python": (
         "Python Django Flask FastAPI SQLAlchemy Celery asyncio await async "
@@ -76,6 +79,9 @@ TECH_VOCAB = {
 
 TERM_CORRECTIONS = {
     r"(?i)radex|reddis|redist": "Redis",
+    r"(?i)(?<![a-zA-Z])sequel(?![a-zA-Z])|sequles?|sequals?": "SQL",
+    r"(?i)py\s*p+line|pypline|pipe\s*line": "pipeline",
+    r"(?i)time\s*out": "timeout",
     r"(?i)(?<![a-zA-Z])C\s*SET(?![a-zA-Z])": "ZSET",
     r"(?i)my\s*sequel": "MySQL",
     r"(?i)post\s*gre": "PostgreSQL",
@@ -274,6 +280,56 @@ def _build_initial_prompt(position: str, language: str) -> str:
         "这是一段技术面试语音，可能中英混说且口音不标准。"
         "请优先识别技术术语英文原词，如 Redis、ZSET、Sorted Set、MySQL、Docker、Kubernetes、API。"
     )
+
+
+def custom_hotwords_from_config() -> dict[str, str]:
+    """读取用户在设置里配置的岗位热词（{岗位: 词串}；"通用" 键全局生效）。"""
+    try:
+        from core.config import get_config
+
+        value = getattr(get_config(), "stt_hotwords", None)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _split_hotword_text(text: str) -> list[str]:
+    return [w for w in re.split(r"[\s,，;；、]+", str(text or "")) if w.strip()]
+
+
+def build_tech_hotwords(
+    position: str,
+    language: str,
+    limit: int = 900,
+    custom: Optional[dict] = None,
+) -> list[str]:
+    """从 TECH_VOCAB 提取英文热词（通用/语言/岗位三个词库去重），供 ASR 引擎做偏置。
+
+    custom 是用户按岗位配置的热词（{岗位: 词串}）；"通用" 键与当前岗位键会合并进来，
+    每次转写动态读取，改配置无需重建引擎。Whisper 的 hotwords 参数与 FunASR
+    paraformer 的 hotword 参数共用。
+    """
+    # 自定义热词优先：超长截断从尾部丢，内置词库很长，用户的专属词
+    # 若排在后面会被截掉，而它们恰恰是最需要偏置的。
+    words: list[str] = []
+    if custom:
+        for key in ("通用", position):
+            words.extend(_split_hotword_text(str(custom.get(key, ""))))
+    for key in ("通用", language, position):
+        vocab = TECH_VOCAB.get(key)
+        if not vocab:
+            continue
+        for w in vocab.split():
+            if w and any(c.isascii() and c.isalpha() for c in w):
+                words.append(w)
+    unique = list(dict.fromkeys(words))
+    if limit > 0:
+        joined = " ".join(unique)
+        truncated = joined[:limit]
+        if truncated != joined:
+            truncated = truncated.rsplit(" ", 1)[0]
+        unique = truncated.split()
+    return unique
 
 
 # ---------------------------------------------------------------------------

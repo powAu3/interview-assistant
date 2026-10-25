@@ -9,6 +9,7 @@ def build_config_payload(cfg) -> dict:
         "models": [
             {
                 "name": model.name,
+                "api_type": getattr(model, "api_type", "openai") or "openai",
                 "supports_think": model.supports_think,
                 "supports_vision": model.supports_vision,
                 "enabled": getattr(model, "enabled", True),
@@ -27,6 +28,10 @@ def build_config_payload(cfg) -> dict:
         "whisper_model": cfg.whisper_model,
         "whisper_language": cfg.whisper_language,
         "whisper_preload": cfg.whisper_preload,
+        "funasr_model": getattr(cfg, "funasr_model", "paraformer-zh") or "paraformer-zh",
+        "stt_hotwords": getattr(cfg, "stt_hotwords", {}) or {},
+        "stt_fallback_provider": getattr(cfg, "stt_fallback_provider", "whisper") or "whisper",
+        "stt_infer_threads": int(getattr(cfg, "stt_infer_threads", 0) or 0),
         "doubao_stt_app_id": cfg.doubao_stt_app_id or "",
         "doubao_stt_access_token": cfg.doubao_stt_access_token or "",
         "doubao_stt_api_key": getattr(cfg, "doubao_stt_api_key", "") or "",

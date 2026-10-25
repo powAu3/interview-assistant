@@ -839,9 +839,10 @@ def test_model_list_falls_back_from_compat_suffix(monkeypatch):
         api_key="sk-test",
     )))
 
+    # 第一个候选 404 后立即命中第二个候选（非版本段 base 也会直接尝试 {base}/models）
     assert seen_urls == [
         "https://api.example.com/anthropic/v1/models",
-        "https://api.example.com/v1/models",
+        "https://api.example.com/anthropic/models",
     ]
     assert result == {"models": [{"id": "fallback-model", "owned_by": "provider"}]}
 

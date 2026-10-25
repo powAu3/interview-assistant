@@ -47,25 +47,17 @@ def vision_caption(png_path: Path, *, deadline_s: float = 20.0) -> Optional[str]
     if model_cfg is None:
         return None
     try:
-        from services.llm import get_client_for_model  # type: ignore
-        client = get_client_for_model(model_cfg)
-    except Exception as e:  # pragma: no cover
-        _log.info("kb vision 拿不到 client: %s", e)
-        return None
-
-    try:
         b64 = base64.b64encode(png_path.read_bytes()).decode("ascii")
     except Exception as e:  # pragma: no cover
         _log.warning("kb vision 读取渲染结果失败: %s", e)
         return None
 
     try:
-        resp = client.chat.completions.create(
-            model=model_cfg.model,
-            temperature=0.0,
-            max_tokens=400,
-            timeout=deadline_s,
-            messages=[
+        from services.llm.streaming import chat_completion_create
+
+        resp = chat_completion_create(
+            model_cfg,
+            [
                 {
                     "role": "user",
                     "content": [
@@ -77,6 +69,9 @@ def vision_caption(png_path: Path, *, deadline_s: float = 20.0) -> Optional[str]
                     ],
                 }
             ],
+            temperature=0.0,
+            max_tokens=400,
+            timeout=(10, max(5.0, deadline_s)),
         )
     except Exception as e:  # pragma: no cover
         _log.warning("kb vision caption 失败: %s", e)

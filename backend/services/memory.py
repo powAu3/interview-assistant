@@ -69,22 +69,21 @@ def summarize_messages(messages: Sequence[dict], prior_summary: str = "") -> str
 
     # 延迟导入,避免循环依赖 (services.llm <-> core.session 路径)
     from core.config import get_config
-    from services.llm import _add_tokens, get_client
+    from services.llm import _add_tokens
+    from services.llm.streaming import chat_completion_create
 
     cfg = get_config()
     model_cfg = cfg.get_active_model()
-    client = get_client()
 
     prompt = _SUMMARY_PROMPT.format(
         prior=prior_summary.strip() or "(无)",
         chunk=rendered,
     )
-    response = client.chat.completions.create(
-        model=model_cfg.model,
-        messages=[{"role": "user", "content": prompt}],
+    response = chat_completion_create(
+        model_cfg,
+        [{"role": "user", "content": prompt}],
         temperature=0.2,
         max_tokens=600,
-        stream=False,
     )
     usage = getattr(response, "usage", None)
     if usage:
