@@ -28,6 +28,7 @@ https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
 | 场景 | 能力 |
 | --- | --- |
 | **实时面试** | 系统音频 / 麦克风转写，自动识别问题，多模型并行生成回答 |
+| **语音与模型灵活接入** | 本地 FunASR / Whisper / 豆包 / 通用 ASR 四种转写引擎；OpenAI Chat、Anthropic Messages、OpenAI Responses 三种 LLM 接口协议，Base URL 带不带 `/v1` 都能用 |
 | **卡壳补位** | 截图审题、识图模型分析、知识库引用本地笔记 |
 | **个人材料接入** | 简历上传、简历优化、知识库引用本地笔记，让答案更贴近你的经历 |
 | **桌面端使用体验** | 共享隐身、Boss Key、托盘、轻量悬浮问答框、移动到鼠标附近 |
@@ -55,7 +56,7 @@ https://github.com/user-attachments/assets/1013b772-c59d-4ec4-8256-f932caa8ea3c
   <tr>
     <td width="50%" valign="top">
       <h3>实时辅助</h3>
-      <p>ASR 转写、自动识别问题、流式回答、截图审题、知识库引用、模型健康与 Token 统计。</p>
+      <p>ASR 转写（FunASR / Whisper / 豆包，本地引擎支持岗位热词）、自动识别问题、流式回答、截图审题、知识库引用、多协议模型接入、模型健康与 Token 统计。</p>
     </td>
     <td width="50%" valign="top">
       <h3>桌面协同</h3>
@@ -169,11 +170,23 @@ cd ..
 cp backend/config.example.json backend/config.json
 ```
 
-### 3. 配置模型
+### 3. 配置模型与语音
 
-- 编辑 `backend/config.json`
-- 填入你要使用的模型 API Key / Base URL / 模型名
-- 如果要启用识图、知识库、豆包语音识别，也在这里一并配置
+模型支持三种接口协议（设置 → 模型 → 接口类型）：
+
+- **Chat**：OpenAI 兼容 `/chat/completions`，绝大多数中转站与国产模型用这个
+- **Messages**：Anthropic `/v1/messages`（Claude 官方及 claudecode 类中转）
+- **Responses**：OpenAI 新版 `/responses` 接口
+
+Base URL 带不带 `/v1` 都能自动适配；模型队列按优先级并行竞速，自动健康检查与故障降级。
+
+语音识别四种引擎（设置 → 语音）：
+
+- **FunASR**（本地，中文面试推荐）：`pip install funasr` 后在设置页点「下载模型」；支持岗位热词偏置，纠正 RAG 等术语识别
+- **Whisper**（本地，多语种）
+- **豆包 / 通用 ASR**（云端）：可配置失败降级引擎（FunASR / Whisper / 不降级）
+
+相关设置都在应用的「设置中心」里（语音、节奏、热词、模型分区），改 `backend/config.json` 也可以。
 
 参考文档：
 
@@ -191,9 +204,9 @@ python start.py --mode network  # 浏览器模式，默认 http://localhost:1808
 
 补充说明：
 
-- 首次启动如果前端尚未构建，`start.py` 会自动安装并构建前端，因此本机仍需要 Node.js。
-- `python quick-start.py` 适合已经构建过前端、想快速打开桌面模式的场景。
-- 只想在浏览器里体验时，可直接用 `--mode network`。
+- **双击 `启动.bat`**（或 `python quick_start.py`）：首次自动装依赖，之后直接启动；桌面应用就绪后命令行窗口自动隐藏，启动失败会保留窗口并显示日志。
+- `python start.py` 桌面模式（推荐）；`--mode network` 浏览器模式，默认 `http://localhost:18080`。
+- 首次启动如果前端尚未构建，会自动安装并构建前端，因此本机仍需要 Node.js。
 
 ## 开发与自测
 
@@ -255,6 +268,8 @@ interview-assistant/
 - **Electron 下载慢**：可先设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`，再进入 `desktop/` 执行 `npm install`。
 - **macOS 下 sounddevice 安装失败**：先执行 `brew install portaudio`。
 - **Whisper 模型下载慢**：可设置 `export HF_ENDPOINT=https://hf-mirror.com`。
+- **中文/术语识别不准（如 RAG 被听错）**：主链路切到 FunASR 并下载模型，配合设置 → 热词里的岗位自定义词；Whisper 用户也可在热词页配置提示偏置。
+- **转写时风扇狂转**：设置 → 节奏 → 性能，调低「本地 ASR 推理线程数」（默认自动 = min(8, 核数-2)）。
 - **端口冲突**：可改用 `python start.py --port 9090`。
 
 ## 开源协议与免责

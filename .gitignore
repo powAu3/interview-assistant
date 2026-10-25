@@ -96,3 +96,6 @@ frontend/.last-run.json
 
 CODE_REVIEW.md
 .omx/
+
+# quick-start 安装标记（首次装完依赖后写入，之后启动跳过 pip/npm）
+.quickstart-install.json
