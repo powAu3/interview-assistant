@@ -407,6 +407,11 @@ def _is_generic_reasoning_model(model_cfg) -> bool:
     return any(marker in label for marker in _GENERIC_REASONING_MARKERS)
 
 
+def _is_deepseek_flash_chat(model_cfg) -> bool:
+    name = (model_cfg.model or "").lower().rsplit("/", 1)[-1]
+    return get_api_type(model_cfg) == "openai" and name == "deepseek-flash"
+
+
 def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
     api_type = get_api_type(model_cfg)
     if api_type == API_TYPE_ANTHROPIC:
@@ -414,6 +419,8 @@ def _disabled_think_params_for_model(model_cfg, style: str) -> dict:
         return {"thinking": {"type": "disabled"}}
     if api_type == API_TYPE_RESPONSES:
         return {}
+    if _is_deepseek_flash_chat(model_cfg):
+        return {"thinking": {"type": "disabled"}}
     base_url = (getattr(model_cfg, "api_base_url", "") or "").lower()
     model_name = (getattr(model_cfg, "model", "") or "").lower()
     if _is_doubao_model(model_cfg):
@@ -498,11 +505,19 @@ _RESPONSES_EFFORT_MAP = {
 }
 
 
+def _is_glm_53_flash_chat(model_cfg) -> bool:
+    name = (model_cfg.model or "").lower().rsplit("/", 1)[-1]
+    return get_api_type(model_cfg) == "openai" and name in ("glm-5.3-flash", "glm5.3flash")
+
+
 def _build_think_params(model_cfg, cfg) -> dict:
     effort = cfg.think_effort
     style = _detect_think_style(model_cfg)
     api_type = get_api_type(model_cfg)
     think_on = bool(getattr(cfg, "think_mode", False)) and effort != "off"
+    if _is_glm_53_flash_chat(model_cfg):
+        glm_effort = {"medium": "high", "high": "high", "xhigh": "max", "max": "max"}
+        return {"reasoning_effort": glm_effort.get(effort, "low") if think_on else "low"}
     if api_type == API_TYPE_ANTHROPIC:
         if not think_on:
             saved_disabled = _model_dict_param(model_cfg, "think_disabled_params")

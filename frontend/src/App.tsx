@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X, ChevronDown } from 'lucide-react'
+import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore, type AppConfig } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
@@ -53,7 +53,9 @@ export default function App() {
   const isExamMode = config?.written_exam_mode === true
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
   const lastMobileStreamingIdRef = useRef<string | null>(null)
-  const appMode = useUiPrefsStore((s) => s.appMode)
+  const preferredAppMode = useUiPrefsStore((s) => s.appMode)
+  const [mobileLayout, setMobileLayout] = useState(() => window.innerWidth > 0 && window.innerWidth < 768)
+  const appMode = mobileLayout ? 'assist' : preferredAppMode
   const setAppMode = useUiPrefsStore((s) => s.setAppMode)
   const assistTranscriptCollapsed = useUiPrefsStore((s) => s.assistTranscriptCollapsed)
   const toggleAssistTranscriptCollapsed = useUiPrefsStore((s) => s.toggleAssistTranscriptCollapsed)
@@ -61,12 +63,10 @@ export default function App() {
 
   const [serverScreenLoading, setServerScreenLoading] = useState(false)
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false)
-  const [moduleMenuOpen, setModuleMenuOpen] = useState(false)
   const serverScreenAskRef = useRef(false)
   const modelChangeSavingRef = useRef(false)
   const pendingModelChangeRef = useRef<number | null>(null)
   const sessionAnchorRef = useRef<HTMLButtonElement | null>(null)
-  const moduleMenuRef = useRef<HTMLDivElement | null>(null)
 
   const {
     assistSplitContainerRef,
@@ -79,19 +79,10 @@ export default function App() {
   const { initError } = useAppBootstrap()
 
   useEffect(() => {
-    if (!moduleMenuOpen) return
-    const onPointerDown = (event: MouseEvent) => {
-      if (!moduleMenuRef.current?.contains(event.target as Node)) {
-        setModuleMenuOpen(false)
-      }
-    }
-    window.addEventListener('mousedown', onPointerDown)
-    return () => window.removeEventListener('mousedown', onPointerDown)
-  }, [moduleMenuOpen])
-
-  useEffect(() => {
-    setModuleMenuOpen(false)
-  }, [appMode])
+    const updateLayout = () => setMobileLayout(window.innerWidth > 0 && window.innerWidth < 768)
+    window.addEventListener('resize', updateLayout)
+    return () => window.removeEventListener('resize', updateLayout)
+  }, [])
 
   // 笔试题提交后优先展示答案流，避免手机端仍停留在「答题记录」而看不到
   // 正在生成的结果。用户仍可手动切回记录页；同一题的后续 token 不会强制抢回焦点。
@@ -229,7 +220,6 @@ export default function App() {
   const toasts = useInterviewStore((s) => s.toasts)
   const dismissToast = useInterviewStore((s) => s.dismissToast)
   const wsIsLeader = useInterviewStore((s) => s.wsIsLeader)
-  const currentAppModeLabel = APP_MODE_TABS.find(([key]) => key === appMode)?.[1] ?? '模块'
 
   useEffect(() => {
     if (!fallbackToast) return
@@ -265,64 +255,15 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-bg-primary overflow-hidden noise-bg">
+    <div className="h-screen supports-[height:100dvh]:h-[100dvh] flex flex-col bg-bg-primary overflow-hidden noise-bg">
       {/* Header — 强制单行不换行, 各按钮文字按宽度阶梯隐藏, 实在不够再让左区横向滚动 */}
-      <header className="app-drag-region header-gradient flex flex-row items-center justify-between gap-2 px-3 md:px-5 py-2.5 flex-shrink-0 min-w-0">
-        <div className="flex items-center gap-2 md:gap-2.5 flex-shrink min-w-0 overflow-hidden">
+      <header className="app-drag-region header-gradient relative z-30 flex flex-row items-center justify-center md:justify-between gap-2 px-3 md:px-5 py-2.5 flex-shrink-0 min-w-0">
+        <div className="hidden md:flex items-center gap-2 md:gap-2.5 flex-shrink min-w-0 overflow-hidden">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-blue/20 to-accent-blue/5 flex items-center justify-center border border-accent-blue/10">
               <span className="text-sm">🎙️</span>
             </div>
             <h1 className="text-sm font-bold hidden lg:block flex-shrink-0 tracking-tight">学习助手</h1>
-          </div>
-
-          <div className="relative ml-1 md:hidden" ref={moduleMenuRef}>
-            <button
-              type="button"
-              onClick={() => setModuleMenuOpen((prev) => !prev)}
-              aria-haspopup="menu"
-              aria-expanded={moduleMenuOpen}
-              aria-label="切换功能模块"
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                moduleMenuOpen
-                  ? 'border-accent-blue/40 bg-accent-blue/10 text-accent-blue'
-                  : 'border-bg-hover/30 bg-bg-tertiary/60 text-text-primary'
-              }`}
-            >
-              <MonitorSmartphone className="h-3.5 w-3.5" />
-              <span className="max-w-[88px] truncate">{currentAppModeLabel}</span>
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${moduleMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {moduleMenuOpen ? (
-              <div
-                role="menu"
-                aria-label="功能模块"
-                className="absolute left-0 top-[calc(100%+0.5rem)] z-40 min-w-[180px] rounded-2xl border border-bg-hover/50 bg-bg-secondary/95 p-2 shadow-2xl shadow-black/10 backdrop-blur"
-              >
-                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">模块</div>
-                <div className="mt-1 space-y-1">
-                  {APP_MODE_TABS.map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setAppMode(key)
-                        setModuleMenuOpen(false)
-                      }}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                        appMode === key
-                          ? 'bg-accent-blue text-white'
-                          : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
-                      }`}
-                    >
-                      <span>{label}</span>
-                      {appMode === key ? <span className="text-[11px] font-semibold">当前</span> : null}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
 
           <div className="hidden overflow-x-auto bg-bg-tertiary/60 rounded-xl p-0.5 ml-1 border border-bg-hover/30 scrollbar-none md:flex" role="tablist" aria-label="功能模块">
@@ -398,7 +339,7 @@ export default function App() {
           )}
 
           {/* 会场设置:聚合 Think + 岗位 + 语言 + Token */}
-          <div className="relative">
+          <div className="md:relative">
             <button
               ref={sessionAnchorRef}
               type="button"
@@ -413,7 +354,7 @@ export default function App() {
                   : 'border-bg-hover/50 bg-bg-tertiary/50 text-text-secondary hover:border-accent-blue/40 hover:text-text-primary'}`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span className="font-medium hidden sm:inline">会场</span>
+              <span className="font-medium">会场</span>
               {config?.think_mode && (
                 <span
                   className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent-green ring-2 ring-bg-primary shadow-[0_0_6px] shadow-accent-green/60"
@@ -445,11 +386,13 @@ export default function App() {
               )}
             </button>
           )}
-          <KnowledgeButton />
+          <div className="hidden md:flex">
+            <KnowledgeButton />
+          </div>
         <button
           type="button"
           onClick={toggleSettings}
-          className="inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
+          className="hidden md:inline-flex items-center justify-center min-h-[32px] min-w-[32px] p-1.5 rounded-xl hover:bg-bg-tertiary/60 text-text-muted hover:text-text-primary transition-all duration-200 border border-transparent hover:border-bg-hover/40"
           title="设置中心 (外观 / 偏好 / 模型 / 隐私 / 快捷键)"
           aria-label="打开设置"
         >
@@ -460,7 +403,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => window.electronAPI?.minimizeWindow()}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-bg-hover/60 text-text-muted hover:text-text-primary transition-colors duration-150"
+              className="hidden md:inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-bg-hover/60 text-text-muted hover:text-text-primary transition-colors duration-150"
               title="最小化"
               aria-label="最小化窗口"
             >
@@ -469,7 +412,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => window.electronAPI?.quitApp()}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-accent-red/80 text-text-muted hover:text-white transition-colors duration-150"
+              className="hidden md:inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-accent-red/80 text-text-muted hover:text-white transition-colors duration-150"
               title="退出"
               aria-label="退出应用"
             >
@@ -561,29 +504,22 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex-1 flex md:hidden overflow-hidden min-h-0">
+          <div className="flex-1 flex flex-col md:hidden overflow-hidden min-w-0 min-h-0">
             {mobileTab === 'transcript' ? <TranscriptionPanel /> : <AnswerPanel />}
           </div>
 
-          {/* 仅手机端：由服务端截本机主屏左半幅送 VL，手机不调用系统截图 */}
-          {mobileTab === 'answer' && (
-            <div className="md:hidden flex-shrink-0 px-3 py-3 border-t border-bg-tertiary bg-bg-secondary/95 backdrop-blur-sm">
-              <button
-                type="button"
-                disabled={serverScreenLoading}
-                onClick={handleServerScreenAsk}
-                className="w-full flex items-center justify-center gap-3 min-h-[52px] py-3.5 rounded-xl bg-accent-blue text-white text-base font-semibold shadow-sm disabled:opacity-60 active:scale-[0.99] transition-transform"
-              >
-                <MonitorSmartphone className="w-5 h-5 flex-shrink-0" />
-                {serverScreenLoading ? '截图审题提交中…' : '服务端截图审题'}
-              </button>
-              <p className="text-[10px] text-text-muted text-center mt-1.5 leading-snug px-0.5">
-                在后台子进程截主屏左半幅，该请求不写访问日志以减少终端抢焦点。若仍被终端打断，可用 <code className="text-[9px] bg-bg-tertiary px-0.5 rounded">IA_ACCESS_LOG=0</code> 启动后端关闭全部 HTTP 访问日志。须配置识图模型与屏幕录制权限。
-              </p>
-            </div>
-          )}
-
-          <ControlBar />
+          <ControlBar mobileAnswerAction={mobileTab === 'answer' && (
+            <button
+              type="button"
+              disabled={serverScreenLoading}
+              onClick={handleServerScreenAsk}
+              aria-label={serverScreenLoading ? '截图审题提交中…' : '服务端截图审题'}
+              className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-bg-tertiary px-2.5 text-xs font-medium text-text-primary disabled:opacity-60 md:hidden"
+            >
+              <MonitorSmartphone className="h-4 w-4" />
+              {serverScreenLoading ? '提交中…' : '截图审题'}
+            </button>
+          )} />
         </>
       )}
 

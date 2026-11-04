@@ -7,6 +7,7 @@ import { buildApiUrl } from '@/lib/backendUrl'
 export default function NetworkQRCode() {
   const [qrSrc, setQrSrc] = useState<string | null>(null)
   const [networkUrl, setNetworkUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -29,7 +30,9 @@ export default function NetworkQRCode() {
         if (cancelled) return
         setQrSrc(src)
       } catch {
-        // Network QR is optional; keep settings usable if LAN discovery fails.
+        // Keep the address available if only QR generation fails.
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
 
@@ -39,8 +42,6 @@ export default function NetworkQRCode() {
     }
   }, [])
 
-  if (!networkUrl) return null
-
   return (
     <GradientCard className="p-4 space-y-3">
       <div className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">
@@ -49,7 +50,13 @@ export default function NetworkQRCode() {
       </div>
       <div className="flex flex-col items-center gap-2">
         {qrSrc && <img src={qrSrc} alt="QR Code" className="rounded-lg" width={160} height={160} />}
-        <p className="text-[11px] text-accent-blue break-all text-center select-all">{networkUrl}</p>
+        {networkUrl ? (
+          <p className="text-[11px] text-accent-blue break-all text-center select-all">{networkUrl}</p>
+        ) : (
+          <p role="status" className="text-xs text-text-secondary">
+            {loading ? '正在获取连接地址…' : '未获取到连接地址，请检查电脑是否已连接局域网。'}
+          </p>
+        )}
         <p className="text-[10px] text-text-muted text-center">手机和电脑需在同一 WiFi 下，音频在电脑端采集</p>
       </div>
     </GradientCard>

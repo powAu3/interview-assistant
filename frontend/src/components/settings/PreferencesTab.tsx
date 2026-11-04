@@ -22,7 +22,6 @@ import {
   INTERVIEW_OVERLAY_PROMPT_MIN_WIDTH,
 } from '@/lib/interviewOverlay'
 import { Section, Field, SaveStateBadge, matchSettingsSearch, useAutoSaveSetting, useSettingsSearch } from './shared'
-import NetworkQRCode from './NetworkQRCode'
 import QuickPromptsEditor from './QuickPromptsEditor'
 import GlobalShortcutsEditor from './GlobalShortcutsEditor'
 
@@ -156,7 +155,9 @@ export default function PreferencesTab({ variant = 'main' }: { variant?: 'main' 
         ? '通用 ASR'
         : config?.stt_provider === 'whisper'
           ? 'Whisper'
-          : `不支持 (${config?.stt_provider ?? 'unknown'})`
+          : config?.stt_provider === 'funasr'
+            ? 'FunASR'
+            : `不支持 (${config?.stt_provider ?? 'unknown'})`
   const hasScreenCapture = (options?.screen_capture_regions?.length ?? 0) > 0
   const searchQuery = useSettingsSearch()
   const inSearch = searchQuery.trim().length > 0
@@ -708,8 +709,7 @@ export default function PreferencesTab({ variant = 'main' }: { variant?: 'main' 
         </Field>
       </Collapsible>
 
-      <Collapsible alwaysOpen title="快捷操作" icon={<Keyboard className="w-3.5 h-3.5" />} keywords="quick prompt 快捷词 模板 shortcut 快捷键 手机 二维码">
-        <NetworkQRCode />
+      <Collapsible alwaysOpen title="快捷操作" icon={<Keyboard className="w-3.5 h-3.5" />} keywords="quick prompt 快捷词 模板 shortcut 快捷键">
         <QuickPromptsEditor />
         <GlobalShortcutsEditor />
       </Collapsible>

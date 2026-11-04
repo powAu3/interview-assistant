@@ -21,6 +21,8 @@ from services.llm.streaming import (
     _completion_token_kwargs,
     _detect_think_style,
     _disabled_think_params_for_model,
+    _is_deepseek_flash_chat,
+    _is_glm_53_flash_chat,
     _openai_compat_headers,
 )
 
@@ -45,6 +47,8 @@ def _model_label(model_cfg) -> str:
 
 
 def _is_strong_reasoning_model(model_cfg) -> bool:
+    if _is_deepseek_flash_chat(model_cfg):
+        return True
     label = _model_label(model_cfg)
     markers = (
         "doubao-seed",
@@ -312,10 +316,11 @@ def _post_chat(model, payload: dict, timeout: int = 12) -> tuple[dict, int]:
 
 
 def _probe_basic(model, *, reject_reasoning: bool = True) -> tuple[bool, str, int]:
+    always_thinks = _is_glm_53_flash_chat(model)
     payload = _chat_payload(
         model,
         [{"role": "user", "content": "只回复 OK 两个字母，用于连接测试。"}],
-        16,
+        512 if always_thinks else 16,
         _build_think_params(
             model,
             type("HealthCfg", (), {"think_mode": False, "think_effort": "off"})(),
@@ -323,7 +328,7 @@ def _probe_basic(model, *, reject_reasoning: bool = True) -> tuple[bool, str, in
     )
     body, latency_ms = _post_chat(model, payload, timeout=12)
     text, reasoning = _extract_health_probe_text_and_reasoning(body, get_api_type(model))
-    if reject_reasoning and reasoning:
+    if reject_reasoning and reasoning and not always_thinks:
         raise RuntimeError("关闭思考后仍返回 reasoning，已暂不参与答题")
     if not text:
         raise RuntimeError("连接成功但模型未返回正文")
@@ -342,7 +347,7 @@ def _probe_vision(model) -> tuple[bool, str]:
                 ],
             }
         ],
-        16,
+        512 if _is_glm_53_flash_chat(model) else 16,
         _build_think_params(
             model,
             type("HealthCfg", (), {"think_mode": False, "think_effort": "off"})(),
@@ -359,6 +364,10 @@ def _probe_vision(model) -> tuple[bool, str]:
 
 
 def _think_probe_candidates(model) -> list[tuple[str, dict]]:
+    if _is_glm_53_flash_chat(model):
+        return [("glm_reasoning_effort", {"reasoning_effort": "low"})]
+    if _is_deepseek_flash_chat(model):
+        return [("deepseek_thinking", {"thinking": {"type": "enabled"}})]
     api_type = get_api_type(model)
     if api_type == API_TYPE_ANTHROPIC:
         return [("claude_thinking_budget", {"thinking": {"type": "enabled", "budget_tokens": 1024}})]
@@ -436,6 +445,8 @@ def _disable_think_probe_candidates(model) -> list[tuple[str, dict]]:
 
 
 def _probe_disable_think(model) -> tuple[dict, str]:
+    if _is_glm_53_flash_chat(model):
+        return {}, "模型始终启用 Think，最低为 low"
     messages = [{"role": "user", "content": "只回复 OK 两个字母，用于关闭思考参数测试。"}]
     last_detail = ""
     requires_explicit_disable = _is_strong_reasoning_model(model)
@@ -462,16 +473,18 @@ def _probe_disable_think(model) -> tuple[dict, str]:
 
 
 def _probe_think(model) -> tuple[bool, str, dict, str]:
-    if not _is_strong_reasoning_model(model):
+    always_thinks = _is_glm_53_flash_chat(model)
+    deepseek_flash = _is_deepseek_flash_chat(model)
+    if not always_thinks and not _is_strong_reasoning_model(model):
         return False, "", {}, "模型名未显示为推理模型，未自动开启 Think"
     messages = [{"role": "user", "content": "请用最短思考回答：1+1 等于几？最后只输出 2。"}]
     last_detail = ""
     for style, params in _think_probe_candidates(model):
-        payload = _chat_payload(model, messages, 64, params)
+        payload = _chat_payload(model, messages, 512 if always_thinks or deepseek_flash else 64, params)
         try:
             body, _latency_ms = _post_chat(model, payload, timeout=12)
             text, reasoning = _extract_health_probe_text_and_reasoning(body, get_api_type(model))
-            if reasoning or _is_strong_reasoning_model(model):
+            if reasoning or (not deepseek_flash and _is_strong_reasoning_model(model)):
                 return True, style, params, "Think 参数已接受"
             if text:
                 last_detail = f"{style} 参数被接受，但未返回 reasoning"

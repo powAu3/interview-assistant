@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import {
   Play,
   Square,
@@ -43,7 +44,7 @@ function getEnabledVisionModels(config: { models?: Array<{ name?: string; suppor
   return (config?.models ?? []).filter((model) => model.enabled !== false && model.supports_vision)
 }
 
-export default function ControlBar() {
+export default function ControlBar({ mobileAnswerAction }: { mobileAnswerAction?: ReactNode }) {
   // 精确订阅字段, 避免 store 任意字段(LLM token / audioLevel 等)变化触发 ControlBar 重渲染
   const {
     isRecording,
@@ -95,6 +96,7 @@ export default function ControlBar() {
     })),
   )
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null)
+  const [mobileAudioExpanded, setMobileAudioExpanded] = useState(false)
   const [selectedCandidateMic, setSelectedCandidateMic] = useState<number | null>(null)
   const [manualQuestion, setManualQuestion] = useState('')
   const [pastedImage, setPastedImage] = useState<string | null>(null)
@@ -536,7 +538,7 @@ export default function ControlBar() {
   const inputLevelPct = inputLevel ? Math.max(0, Math.min(100, Math.round(inputLevel.level_pct ?? 0))) : 0
 
   return (
-    <div className="control-bar px-3 md:px-5 py-2.5 flex-shrink-0 space-y-1.5">
+    <div className="control-bar min-w-0 px-3 py-2 flex-shrink-0 space-y-1.5 md:px-5 md:py-2.5">
       {showColdStartHint && (
         <div className="flex items-center gap-2 text-xs text-accent-amber bg-accent-amber/10 px-3 py-1.5 rounded-lg">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -650,9 +652,12 @@ export default function ControlBar() {
       )}
 
       {/* 主控制行 */}
-      <div className="grid gap-2 rounded-lg border border-bg-hover/70 bg-bg-secondary/75 p-2 shadow-sm lg:grid-cols-[minmax(0,38rem)_auto] lg:items-stretch">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 md:rounded-lg md:border md:border-bg-hover/70 md:bg-bg-secondary/75 md:p-2 md:shadow-sm lg:grid-cols-[minmax(0,38rem)_auto] lg:items-stretch">
         {!isExamMode && (
-          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-[38rem]">
+          <div
+            id="assist-audio-devices"
+            className={`${mobileAudioExpanded ? 'grid rounded-lg bg-bg-tertiary/40 p-2 md:bg-transparent md:p-0' : 'hidden md:grid'} w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-[38rem]`}
+          >
             <div className="flex min-w-0 flex-col gap-1 lg:max-w-[19rem]">
               <span className="text-[10px] font-medium text-text-muted leading-none">会议音频 · 听面试官</span>
               <AudioDevicePicker
@@ -729,7 +734,7 @@ export default function ControlBar() {
           </div>
         )}
 
-        <div className="flex h-full min-h-[56px] w-full min-w-0 flex-wrap items-center gap-1.5 lg:w-auto lg:max-w-[34rem] lg:border-l lg:border-bg-hover/60 lg:pl-2">
+        <div className="flex h-full min-h-9 w-full min-w-0 flex-wrap items-center gap-1.5 md:min-h-[56px] lg:w-auto lg:max-w-[34rem] lg:border-l lg:border-bg-hover/60 lg:pl-2">
         {isRecording ? (
           <>
             {isPaused ? (
@@ -771,6 +776,19 @@ export default function ControlBar() {
           </button>
         )}
 
+        {mobileAnswerAction}
+        {!isExamMode && (
+          <button
+            type="button"
+            aria-expanded={mobileAudioExpanded}
+            aria-controls="assist-audio-devices"
+            onClick={() => setMobileAudioExpanded((expanded) => !expanded)}
+            className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-bg-tertiary px-2.5 text-xs font-medium text-text-primary md:hidden"
+          >
+            <Volume2 className="h-4 w-4" />
+            音频
+          </button>
+        )}
         {!isExamMode && <ResumeMountInline className="bg-bg-primary/45" />}
 
         {streamingIds.length > 0 && (
@@ -815,7 +833,7 @@ export default function ControlBar() {
 
       {/* 手动提问输入行 */}
       <div className="flex items-center gap-1.5">
-        <div className="relative flex-1">
+        <div className="relative min-w-0 flex-1">
           <input ref={inputRef} type="text" value={manualQuestion}
             onChange={(e) => setManualQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -823,7 +841,7 @@ export default function ControlBar() {
             onCompositionEnd={() => { setTimeout(() => { isComposingRef.current = false }, 0) }}
             onPaste={handlePaste}
             placeholder={pastedImage ? "可添加文字说明（可选），Enter 发送" : "输入问题，Enter 发送…"}
-            className="w-full bg-bg-tertiary/60 text-text-primary text-xs rounded-xl px-3.5 py-2.5 border border-bg-hover/50 focus:outline-none focus:border-accent-blue/50 focus:ring-1 focus:ring-accent-blue/20 placeholder:text-text-muted/60 pr-8 transition-all duration-200" />
+            className="w-full bg-bg-tertiary/60 text-text-primary text-base md:text-xs rounded-xl px-3.5 py-2.5 border border-bg-hover/50 focus:outline-none focus:border-accent-blue/50 focus:ring-1 focus:ring-accent-blue/20 placeholder:text-text-muted/60 pr-8 transition-all duration-200" />
           {pastedImage && (
             <ImageIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-green" />
           )}

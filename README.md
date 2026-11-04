@@ -1,5 +1,9 @@
 # 智能面试学习辅助助手
 
+本仓库由 [walnut233](https://github.com/walnut233) 从 [powAu3/interview-assistant](https://github.com/powAu3/interview-assistant) 派生。原项目及其代码采用 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 许可。
+
+此分支调整了手机端实时辅助的布局和顶栏，将扫码访问移到「设置 → 连接手机」，重排了模型配置表单，并适配了 GLM-5.3-Flash 与 DeepSeek Flash 的 Think 探测。Windows 启动脚本使用项目的 `.venv`，原启动脚本保存在 `启动.old.bat`。
+
 实时听题，自动生成专业面试回答。你可以把它理解成一个开着就能用的面试辅助工具：你负责听题和临场反应，它负责转写、答题、截图审题，卡壳的时候还能把问答框挂在旁边。
 
 面向真实技术面试场景：支持系统音频 / 麦克风转写、截图审题、多模型切换、知识库引用；Electron 端提供共享隐身、Boss Key、托盘和轻量悬浮窗，绝大多数常见面试软件场景下都能更稳地避开屏幕共享检测，但具体效果仍建议自行充分实测。
@@ -157,7 +161,7 @@ sequenceDiagram
 ### 2. 安装依赖
 
 ```bash
-git clone https://github.com/powAu3/interview-assistant.git
+git clone https://github.com/walnut233/interview-assistant.git
 cd interview-assistant
 
 pip install -r backend/requirements.txt
@@ -170,15 +174,27 @@ cd ..
 cp backend/config.example.json backend/config.json
 ```
 
+Windows 使用 uv 时，可在仓库根目录用下面的 PowerShell 命令创建环境、安装依赖并构建前端：
+
+```powershell
+uv venv --python 3.11
+uv pip install -r backend/requirements.txt
+npm.cmd --prefix frontend ci
+npm.cmd --prefix frontend run build
+Copy-Item backend/config.example.json backend/config.json
+```
+
+如果需要采集 Windows 系统音频，在同一虚拟环境中执行 `uv pip install soundcard`。
+
 ### 3. 配置模型与语音
 
 模型支持三种接口协议（设置 → 模型 → 接口类型）：
 
-- **Chat**：OpenAI 兼容 `/chat/completions`，绝大多数中转站与国产模型用这个
-- **Messages**：Anthropic `/v1/messages`（Claude 官方及 claudecode 类中转）
-- **Responses**：OpenAI 新版 `/responses` 接口
+- **OpenAI-Chat** 对应 OpenAI 兼容 `/chat/completions`
+- **Anthropic-Messages** 对应 Anthropic `/v1/messages`
+- **OpenAI-Responses** 对应 OpenAI `/responses`
 
-Base URL 带不带 `/v1` 都能自动适配；模型队列按优先级并行竞速，自动健康检查与故障降级。
+请求地址带不带 `/v1` 都能自动适配。模型队列支持按优先级调度、健康检查和故障降级。「并行生成路数」限制实时辅助同时处理的答题任务数。
 
 语音识别四种引擎（设置 → 语音）：
 
@@ -204,9 +220,10 @@ python start.py --mode network  # 浏览器模式，默认 http://localhost:1808
 
 补充说明：
 
-- **双击 `启动.bat`**（或 `python quick_start.py`）：首次自动装依赖，之后直接启动；桌面应用就绪后命令行窗口自动隐藏，启动失败会保留窗口并显示日志。
+- Windows 完成安装后，双击 `启动.bat` 即可使用项目 `.venv` 启动桌面应用。
 - `python start.py` 桌面模式（推荐）；`--mode network` 浏览器模式，默认 `http://localhost:18080`。
 - 首次启动如果前端尚未构建，会自动安装并构建前端，因此本机仍需要 Node.js。
+- 手机和电脑连接同一 Wi-Fi 后，在电脑端打开「设置 → 连接手机」，扫描二维码或输入页面给出的局域网地址。
 
 ## 开发与自测
 
@@ -276,11 +293,3 @@ interview-assistant/
 
 - **协议**：[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)
 - **免责**：项目仅供学习研究，请勿用于学术不端、违规考试或其他不合规场景；使用后果自行承担。
-
-## 赞赏
-
-若对你有帮助，欢迎请作者喝杯咖啡：
-
-<p align="center">
-  <img src="docs/skm.png" width="260" alt="赞赏码" />
-</p>

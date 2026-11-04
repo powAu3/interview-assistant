@@ -11,6 +11,7 @@ import {
   BrainCircuit,
   Settings2,
   Search,
+  Smartphone,
 } from 'lucide-react'
 import { useUiSettings } from '@/stores/hooks'
 import { INPUT_FIELD_STYLE, SettingsSearchContext } from './shared'
@@ -20,6 +21,7 @@ const SpeechTab = lazy(() => import('./SpeechTab'))
 const TimingTab = lazy(() => import('./SpeechTab'))
 const HotwordsTab = lazy(() => import('./HotwordsTab'))
 const ModelsTab = lazy(() => import('./ModelsTab'))
+const NetworkQRCode = lazy(() => import('./NetworkQRCode'))
 
 export default function SettingsDrawer() {
   const { settingsOpen, toggleSettings, settingsDrawerTab, setSettingsDrawerTab } = useUiSettings()
@@ -71,7 +73,7 @@ export default function SettingsDrawer() {
   // 检查搜索是否有命中 (仅 general/config tab 判断, 兼容 lazy tab 的挂载时序)
   useEffect(() => {
     if (!settingsOpen) return
-    if (!searchQuery.trim() || settingsDrawerTab === 'models') {
+    if (!searchQuery.trim() || settingsDrawerTab === 'models' || settingsDrawerTab === 'phone') {
       setNoResults(false)
       return
     }
@@ -186,6 +188,7 @@ export default function SettingsDrawer() {
     { key: 'hotwords', label: '热词', icon: <AudioWaveform className="w-4 h-4" />, desc: '岗位术语偏置' },
     { key: 'models', label: '模型', icon: <BrainCircuit className="w-4 h-4" />, desc: '队列与协议' },
     { key: 'appearance', label: '外观', icon: <Palette className="w-4 h-4" />, desc: '主题与快捷操作' },
+    { key: 'phone', label: '连接手机', icon: <Smartphone className="w-4 h-4" />, desc: '局域网扫码访问' },
   ]
 
   const speechDirty = !!dirtyExplicitSections.speech
@@ -215,7 +218,7 @@ export default function SettingsDrawer() {
               </h2>
               <p className="text-[10px] text-text-muted mt-1 leading-relaxed">常用偏好 · 语音链路 · 模型队列</p>
             </div>
-            <div className="flex flex-col gap-1 px-2">
+            <div className="flex min-h-0 flex-col gap-1 overflow-y-auto px-2">
               {tabs.map((t) => {
                 const active = settingsDrawerTab === t.key
                 const dirty = dirtyByTab[t.key]
@@ -261,7 +264,9 @@ export default function SettingsDrawer() {
                   设置
                 </h2>
                 {/* 搜索框: 快速过滤 Section/Collapsible (模型页直接在队列中编辑) */}
-                <div className="relative flex-1 min-w-0">
+                {settingsDrawerTab === 'phone' ? (
+                  <span className="flex-1 text-sm font-medium text-text-primary">连接手机</span>
+                ) : <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                   <input
                     type="search"
@@ -289,7 +294,7 @@ export default function SettingsDrawer() {
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
-                </div>
+                </div>}
                 <button type="button" onClick={closeSettings} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary flex-shrink-0" aria-label="关闭">
                   <X className="w-5 h-5" />
                 </button>
@@ -300,7 +305,7 @@ export default function SettingsDrawer() {
                 </p>
               )}
 
-              {/* 移动端 tab（md 起由左侧导航取代）：分区多于 4 个时两行网格 */}
+              {/* 移动端 tab（md 起由左侧导航取代） */}
               <div className="md:hidden mt-2.5">
                 <div className="grid grid-cols-4 rounded-xl bg-bg-tertiary/80 p-1 gap-1">
                   {tabs.map((t) => (
@@ -309,7 +314,7 @@ export default function SettingsDrawer() {
                       type="button"
                       onClick={() => changeTab(t.key)}
                       aria-current={settingsDrawerTab === t.key ? 'page' : undefined}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                      className={`flex items-center justify-center gap-1 py-2 px-1 whitespace-nowrap rounded-lg text-xs font-medium transition-all ${
                         settingsDrawerTab === t.key
                           ? 'bg-bg-secondary text-accent-blue shadow-sm'
                           : 'text-text-muted hover:text-text-primary'
@@ -331,12 +336,13 @@ export default function SettingsDrawer() {
                   {settingsDrawerTab === 'mode' && <PreferencesTab variant="mode" />}
                   {settingsDrawerTab === 'kb' && <PreferencesTab variant="kb" />}
                   {settingsDrawerTab === 'appearance' && <PreferencesTab variant="appearance" />}
+                  {settingsDrawerTab === 'phone' && <div className="p-4 md:p-5"><NetworkQRCode /></div>}
                   {settingsDrawerTab === 'config' && <SpeechTab variant="engines" />}
                   {settingsDrawerTab === 'timing' && <TimingTab variant="timing" />}
                   {settingsDrawerTab === 'hotwords' && <HotwordsTab />}
                   {settingsDrawerTab === 'models' && <ModelsTab />}
                 </Suspense>
-                {noResults && (
+                {noResults && settingsDrawerTab !== 'phone' && (
                   <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                     <Search className="w-8 h-8 text-text-muted/40" />
                     <div>

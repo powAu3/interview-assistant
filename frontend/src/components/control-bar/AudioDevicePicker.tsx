@@ -196,7 +196,7 @@ export function AudioDevicePicker({
         <div
           role="dialog"
           aria-label="音频输入设备列表"
-          className="absolute left-0 bottom-full mb-2 z-50 w-[min(360px,calc(100vw-1.5rem))] rounded-xl border border-bg-hover bg-bg-primary shadow-2xl shadow-black/20 p-2"
+          className="absolute left-0 bottom-full mb-2 z-50 w-full rounded-xl border border-bg-hover bg-bg-primary shadow-2xl shadow-black/20 p-2 md:w-[min(360px,calc(100vw-1.5rem))]"
         >
           <div className="flex items-center gap-2 px-1 pb-2 border-b border-bg-hover/60">
             <div className="min-w-0 flex-1">

@@ -234,7 +234,7 @@ const QACard = memo(function QACard({ qa, isStreaming, stream, colorScheme, anim
   }
 
   return (
-    <div className={`answer-card p-4 space-y-3 ${baseClass}`} style={animStyle}>
+    <div className={`answer-card p-3 md:p-4 space-y-3 ${baseClass}`} style={animStyle}>
       <div className="flex items-start gap-2.5">
         <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-accent-blue/25 to-indigo-500/15 flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-accent-blue/15">
           <span className="text-accent-blue text-xs font-bold">Q</span>
@@ -255,8 +255,8 @@ const QACard = memo(function QACard({ qa, isStreaming, stream, colorScheme, anim
         <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-accent-green/25 to-emerald-500/15 flex items-center justify-center flex-shrink-0 mt-0.5 ring-1 ring-accent-green/15">
           <span className="text-accent-green text-xs font-bold">A</span>
         </div>
-        <div className="flex-1 min-w-0 max-h-[280px] overflow-y-auto rounded-xl bg-bg-tertiary/15 p-3">
-          <div className="flex items-center gap-1.5 mb-1">
+        <div className="flex-1 min-w-0 rounded-xl md:max-h-[280px] md:overflow-y-auto md:bg-bg-tertiary/15 md:p-3">
+          <div className="flex flex-wrap items-center gap-1.5 mb-1">
             {qa.modelLabel && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-muted border border-bg-hover/60 font-medium">
                 {qa.modelLabel}
@@ -434,7 +434,7 @@ export default function AnswerPanel() {
   }
 
   return (
-    <div className="relative h-full min-h-0 flex flex-col">
+    <div className="relative h-full min-h-0 min-w-0 flex flex-col [overflow-wrap:anywhere]">
       <div
         ref={scrollContainerRef}
         className={`flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-4 md:py-4 ${stream ? 'space-y-10' : 'space-y-5'}`}

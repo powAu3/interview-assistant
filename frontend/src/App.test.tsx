@@ -35,7 +35,9 @@ vi.mock('@/hooks/useInterviewWS', () => ({
 
 vi.mock('@/components/TranscriptionPanel', () => ({ default: () => <div>transcript</div> }))
 vi.mock('@/components/AnswerPanel', () => ({ default: () => <div>answer</div> }))
-vi.mock('@/components/ControlBar', () => ({ default: () => <div>controls</div> }))
+vi.mock('@/components/ControlBar', () => ({
+  default: ({ mobileAnswerAction }: { mobileAnswerAction?: import('react').ReactNode }) => <div>{mobileAnswerAction}</div>,
+}))
 vi.mock('@/components/SettingsDrawer', () => ({ default: () => null }))
 vi.mock('@/components/KnowledgeMap', () => ({ default: () => <div>knowledge</div> }))
 vi.mock('@/components/ResumeOptimizer', () => ({ default: () => <div>resume</div> }))
