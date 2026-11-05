@@ -235,6 +235,8 @@ python start.py --mode network  # 浏览器模式，默认 http://localhost:1808
 
 **后续只维护 Windows 安装版，不再制作或更新免安装版。**
 
+保存为 FunASR 引擎后，应用每次启动会在后台自动加载所选模型，并复用已经下载的本地模型缓存；模型文件保存在磁盘中，加载到内存的状态不会跨进程保留。
+
 配置、面试历史、知识库和日志保存在 `%APPDATA%\InterviewAssistant`。首次打开需要重新配置模型。卸载时保留用户数据。
 
 在 Windows x64 上制作安装程序，需要先安装前后端和桌面依赖，并在项目 `.venv` 中安装 `soundcard funasr torch torchaudio`，然后运行：

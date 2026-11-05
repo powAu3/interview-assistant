@@ -85,7 +85,9 @@ async def lifespan(app: FastAPI):
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
     assist.init_background_workers()
-    if os.environ.get("IA_STT_LAZY_START") != "1" or cfg.whisper_preload:
+    # Packaged startup skips the default Whisper download, but must restore a
+    # saved FunASR selection on every launch (AutoModel reuses its disk cache).
+    if os.environ.get("IA_STT_LAZY_START") != "1" or cfg.whisper_preload or cfg.stt_provider == "funasr":
         threading.Thread(target=_preload_stt, daemon=True).start()
     assist.preload_candidate_asr_if_enabled()
     try:

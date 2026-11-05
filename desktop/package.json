@@ -1,6 +1,6 @@
 {
   "name": "interview-assistant-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "智能面试学习辅助助手 - Electron 桌面端",
   "appDisplayName": "智能面试学习辅助助手",
   "main": "main.js",

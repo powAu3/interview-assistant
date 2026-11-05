@@ -254,12 +254,13 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
     void refreshFunasrStatus()
   }, [])
 
-  // 下载/加载中每 3s 轮询一次状态
+  // 后台启动可能晚于首次状态查询，未就绪时也继续刷新，避免一直停留在空闲状态。
   useEffect(() => {
-    if (!funasrInfo.downloading && !funasrInfo.loading) return
+    const waitingForStartup = form.stt_provider === 'funasr' && funasrInfo.installed && !funasrInfo.loaded && !funasrInfo.error
+    if (!waitingForStartup && !funasrInfo.downloading && !funasrInfo.loading) return
     const timer = window.setInterval(() => { void refreshFunasrStatus() }, 3000)
     return () => window.clearInterval(timer)
-  }, [funasrInfo.downloading, funasrInfo.loading])
+  }, [form.stt_provider, funasrInfo.installed, funasrInfo.loaded, funasrInfo.error, funasrInfo.downloading, funasrInfo.loading])
 
   const handleFunasrDownload = async () => {
     if (funasrDownloadRef.current || savingRef.current || sttTestingRef.current || funasrInfo.downloading || funasrInfo.loading) return
@@ -621,8 +622,9 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
                     ? '下载/加载中…'
                     : funasrInfo.loaded
                       ? `已就绪（${funasrInfo.model}）· 重新加载`
-                      : '下载模型（约 0.3-1GB）'}
+                      : '加载模型（缺失时下载）'}
                 </button>
+                <span className="text-[10px] text-text-muted">已下载模型会复用本地缓存；首次下载约 0.3–1GB。保存为 FunASR 后，重启应用会自动后台加载。</span>
                 {funasrInfo.loaded && (
                   <span className="text-[10px] text-accent-green">模型已加载，可直接使用</span>
                 )}

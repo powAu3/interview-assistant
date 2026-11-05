@@ -89,6 +89,23 @@ describe('SpeechTab', () => {
     expect(screen.getByText(/请切换到“通用 ASR”或“Whisper”/)).toBeInTheDocument()
   })
 
+  it('refreshes an initially idle FunASR status after backend startup', async () => {
+    useInterviewStore.setState((state) => ({ config: { ...state.config, stt_provider: 'funasr' } }))
+    apiMock.funasrStatus
+      .mockResolvedValueOnce({ installed: true, loaded: false, loading: false, downloading: false, model: 'paraformer-zh' })
+      .mockResolvedValue({ installed: true, loaded: true, loading: false, downloading: false, model: 'paraformer-zh' })
+    vi.useFakeTimers()
+    try {
+      render(<SpeechTab />)
+      await act(async () => {})
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(screen.getByRole('button', { name: /已就绪.*paraformer-zh/ })).toBeInTheDocument()
+      expect(apiMock.funasrDownload).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows candidate microphone ASR defaults as local whisper', () => {
     render(<SpeechTab />)
 
@@ -305,7 +322,7 @@ describe('SpeechTab', () => {
     const save = createDeferred<{ ok: boolean }>()
     vi.mocked(updateConfigAndRefresh).mockReturnValueOnce(save.promise as any)
     render(<SpeechTab />)
-    const download = screen.getByRole('button', { name: /^下载模型/ })
+    const download = screen.getByRole('button', { name: /^加载模型/ })
     await act(async () => { await Promise.resolve() })
     act(() => {
       download.click()
@@ -328,7 +345,7 @@ describe('SpeechTab', () => {
     }) as any)
     vi.mocked(updateConfigAndRefresh).mockRejectedValueOnce(new Error('请求失败 (400): 配置字段无效'))
     render(<SpeechTab />)
-    const download = screen.getByRole('button', { name: /^下载模型/ })
+    const download = screen.getByRole('button', { name: /^加载模型/ })
     fireEvent.click(download)
     expect(await screen.findByRole('alert')).toHaveTextContent('请求失败 (400): 配置字段无效')
     expect(apiMock.funasrDownload).not.toHaveBeenCalled()
