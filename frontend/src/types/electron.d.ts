@@ -7,6 +7,8 @@ declare global {
     electronAPI?: {
     hideWindow: () => Promise<void>
     minimizeWindow: () => Promise<void>
+    toggleMaximizeWindow: () => Promise<boolean>
+    onWindowMaximized?: (callback: (maximized: boolean) => void) => (() => void)
     quitApp: () => Promise<void>
     showWindow: () => Promise<void>
       getShortcuts: () => Promise<Record<string, { action: string; key: string; defaultKey: string; label: string; category: string; status?: string }>>
@@ -14,7 +16,7 @@ declare global {
       resetShortcuts: () => Promise<{ ok: boolean; error?: string; shortcuts: Record<string, unknown> }>
       toggleAlwaysOnTop: () => Promise<boolean>
       toggleContentProtection: () => Promise<boolean>
-      getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean }>
+      getWindowState: () => Promise<{ alwaysOnTop: boolean; contentProtection: boolean; visible: boolean; maximized: boolean }>
       syncOverlayWindow?: (payload: Partial<OverlayStatePayload> & { visible?: boolean }) => Promise<{ ok: boolean; visible: boolean }>
       resizeOverlayWindow?: (payload: { width?: number; height?: number }) => Promise<{ ok: boolean; width?: number; height?: number; skipped?: boolean }>
       setShortcutsSuspended?: (on: boolean) => Promise<{ ok: boolean; suspended: boolean }>

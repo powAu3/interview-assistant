@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, X } from 'lucide-react'
+import { Settings, SlidersHorizontal, MonitorSmartphone, PanelLeftClose, PanelLeftOpen, Minus, Square, Copy, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useInterviewStore, type AppConfig } from '@/stores/configStore'
 import { useUiPrefsStore } from '@/stores/uiPrefsStore'
@@ -52,6 +52,19 @@ export default function App() {
   const currentStreamingId = useInterviewStore((s) => s.currentStreamingId)
   const isExamMode = config?.written_exam_mode === true
   const [mobileTab, setMobileTab] = useState<'transcript' | 'answer'>('transcript')
+  const [windowMaximized, setWindowMaximized] = useState(false)
+  useEffect(() => {
+    let active = true
+    let stateReceived = false
+    const unsubscribe = window.electronAPI?.onWindowMaximized?.((maximized) => {
+      stateReceived = true
+      if (active) setWindowMaximized(maximized)
+    })
+    window.electronAPI?.getWindowState?.().then((state) => {
+      if (active && !stateReceived) setWindowMaximized(state.maximized === true)
+    }).catch(() => {})
+    return () => { active = false; unsubscribe?.() }
+  }, [])
   const lastMobileStreamingIdRef = useRef<string | null>(null)
   const preferredAppMode = useUiPrefsStore((s) => s.appMode)
   const [mobileLayout, setMobileLayout] = useState(() => window.innerWidth > 0 && window.innerWidth < 768)
@@ -408,6 +421,15 @@ export default function App() {
               aria-label="最小化窗口"
             >
               <Minus className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => window.electronAPI?.toggleMaximizeWindow()}
+              className="hidden md:inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-bg-hover/60 text-text-muted hover:text-text-primary transition-colors duration-150"
+              title={windowMaximized ? '还原' : '最大化'}
+              aria-label={windowMaximized ? '还原窗口' : '最大化窗口'}
+            >
+              {windowMaximized ? <Copy className="w-4 h-4" /> : <Square className="w-4 h-4" />}
             </button>
             <button
               type="button"

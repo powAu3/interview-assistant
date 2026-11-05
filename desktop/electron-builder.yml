@@ -1,0 +1,50 @@
+appId: io.github.walnut233.interviewassistant
+productName: 智能面试学习辅助助手
+executableName: InterviewAssistant
+electronDist: node_modules/electron/dist
+asar: true
+electronLanguages:
+  - en-US
+  - zh-CN
+  - zh-TW
+directories:
+  output: ../release
+files:
+  - main.js
+  - preload.js
+  - shortcuts.js
+  - windowOptions.js
+  - multiScreenBatch.js
+  - app-title.json
+  - icon.png
+  - package.json
+extraResources:
+  - from: ../.packaging/windows/python
+    to: python
+  - from: ../.packaging/windows/backend
+    to: backend
+  - from: ../frontend/dist
+    to: frontend/dist
+  - from: backend-entry.py
+    to: backend-entry.py
+  - from: ../LICENSE
+    to: LICENSE
+  - from: ../README.md
+    to: README.md
+  - from: ../.packaging/windows/runtime-requirements.txt
+    to: runtime-requirements.txt
+win:
+  target:
+    - nsis
+  icon: icon.png
+  signExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+  differentialPackage: false
+  useZip: true
+  artifactName: InterviewAssistant-${version}-Setup-${arch}.${ext}

@@ -344,6 +344,7 @@ describe('Window control buttons', () => {
     })
 
     expect(screen.queryByRole('button', { name: '最小化窗口' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '最大化窗口' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '退出应用' })).not.toBeInTheDocument()
   })
 
@@ -372,6 +373,38 @@ describe('Window control buttons', () => {
 
     expect(minimizeSpy).toHaveBeenCalledTimes(1)
     expect(quitSpy).not.toHaveBeenCalled()
+  })
+
+  it('toggles maximize and follows native maximize/restore events', async () => {
+    const toggleMaximizeWindow = vi.fn(() => Promise.resolve(true))
+    const unsubscribe = vi.fn()
+    let onMaximized!: (maximized: boolean) => void
+    window.electronAPI = {
+      toggleMaximizeWindow,
+      getWindowState: () => Promise.resolve({ maximized: false }),
+      onWindowMaximized: (listener: typeof onMaximized) => {
+        onMaximized = listener
+        return unsubscribe
+      },
+    } as any
+    const { unmount } = render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: '最大化窗口' }))
+    expect(toggleMaximizeWindow).toHaveBeenCalledTimes(1)
+    act(() => onMaximized(true))
+    fireEvent.click(screen.getByRole('button', { name: '还原窗口' }))
+    expect(toggleMaximizeWindow).toHaveBeenCalledTimes(2)
+    act(() => onMaximized(false))
+    expect(screen.getByRole('button', { name: '最大化窗口' })).toBeInTheDocument()
+    unmount()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('initializes the restore button from an already maximized window', async () => {
+    window.electronAPI = {
+      getWindowState: () => Promise.resolve({ maximized: true }),
+    } as any
+    render(<App />)
+    expect(await screen.findByRole('button', { name: '还原窗口' })).toBeInTheDocument()
   })
 
   it('calls electronAPI.quitApp when quit button is clicked', async () => {

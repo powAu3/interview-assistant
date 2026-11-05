@@ -215,6 +215,7 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
   const options = useInterviewStore((s) => s.options)
   const [form, setForm] = useState<SpeechForm>(() => (config ? speechFormFromConfig(config) : DEFAULT_SPEECH_FORM))
   const [saving, setSaving] = useState(false)
+  const [funasrStarting, setFunasrStarting] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [sttTesting, setSttTesting] = useState(false)
@@ -229,6 +230,7 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
     error: string
   }>({ installed: true, model: 'paraformer-zh', loaded: false, loading: false, downloading: false, error: '' })
   const savingRef = useRef(false)
+  const funasrDownloadRef = useRef(false)
   const sttTestingRef = useRef(false)
 
   const refreshFunasrStatus = async () => {
@@ -260,12 +262,16 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
   }, [funasrInfo.downloading, funasrInfo.loading])
 
   const handleFunasrDownload = async () => {
+    if (funasrDownloadRef.current || savingRef.current || sttTestingRef.current || funasrInfo.downloading || funasrInfo.loading) return
+    funasrDownloadRef.current = true
+    setFunasrStarting(true)
+    setFunasrInfo((prev) => ({ ...prev, error: '' }))
     try {
       // 先保存表单（含 funasr_model），再按该模型下载：否则配置与已加载模型脱节，
       // 下一次取引擎会再换回旧模型导致 ~1GB 双载
       const saved = await handleSave()
-      if (!saved) {
-        setFunasrInfo((prev) => ({ ...prev, error: '语音配置保存失败，无法开始下载' }))
+      if (!saved.ok) {
+        setFunasrInfo((prev) => ({ ...prev, error: `语音配置保存失败：${saved.error ?? '保存失败'}，无法开始下载` }))
         return
       }
       const res = await api.funasrDownload(form.funasr_model)
@@ -276,6 +282,9 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
       setFunasrInfo((prev) => ({ ...prev, downloading: true, error: '' }))
     } catch (e: any) {
       setFunasrInfo((prev) => ({ ...prev, error: e?.message ?? '下载启动失败' }))
+    } finally {
+      funasrDownloadRef.current = false
+      setFunasrStarting(false)
     }
   }
   const { dirty, markSaved, resetBaseline } = useDirtySnapshot(form)
@@ -294,8 +303,8 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
     setSttTestResult(null)
   }, [config, dirty, resetBaseline])
 
-  const handleSave = async () => {
-    if (savingRef.current) return false
+  const handleSave = async (): Promise<{ ok: boolean; error?: string }> => {
+    if (savingRef.current) return { ok: false, error: '语音配置正在保存，请稍候' }
     savingRef.current = true
     setSaving(true)
     setSaveState('saving')
@@ -323,13 +332,13 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
       markSaved(savedForm)
       setSaveState('saved')
       useInterviewStore.getState().setToastMessage('语音配置已保存')
-      return true
+      return { ok: true }
     } catch (e: any) {
       const message = e?.message ?? '保存失败'
       setSaveError(message)
       setSaveState('error')
       useInterviewStore.getState().setToastMessage(message)
-      return false
+      return { ok: false, error: message }
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -337,14 +346,14 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
   }
 
   const handleSttTest = async () => {
-    if (sttTestingRef.current || savingRef.current) return
+    if (sttTestingRef.current || savingRef.current || funasrDownloadRef.current) return
     sttTestingRef.current = true
     setSttTesting(true)
     setSttTestResult(null)
     try {
       const saved = await handleSave()
-      if (!saved) {
-        setSttTestResult({ ok: false, detail: '当前语音配置保存失败，请先修复后再测试。' })
+      if (!saved.ok) {
+        setSttTestResult({ ok: false, detail: `当前语音配置保存失败：${saved.error ?? '保存失败'}` })
         return
       }
       const result = await api.sttTest()
@@ -438,7 +447,7 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || sttTesting}
+            disabled={saving || sttTesting || funasrStarting}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
           >
             <Save className="w-3.5 h-3.5" />
@@ -602,13 +611,13 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
                 <button
                   type="button"
                   onClick={handleFunasrDownload}
-                  disabled={funasrInfo.downloading || funasrInfo.loading || !funasrInfo.installed}
+                  disabled={saving || sttTesting || funasrStarting || funasrInfo.downloading || funasrInfo.loading || !funasrInfo.installed}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-accent-violet/40 bg-accent-violet/15 px-3 py-1.5 text-xs font-medium text-accent-violet transition-colors hover:bg-accent-violet/25 disabled:opacity-60"
                 >
-                  {(funasrInfo.downloading || funasrInfo.loading)
+                  {(funasrStarting || funasrInfo.downloading || funasrInfo.loading)
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     : <Download className="h-3.5 w-3.5" />}
-                  {(funasrInfo.downloading || funasrInfo.loading)
+                  {funasrStarting ? '正在保存并启动下载…' : (funasrInfo.downloading || funasrInfo.loading)
                     ? '下载/加载中…'
                     : funasrInfo.loaded
                       ? `已就绪（${funasrInfo.model}）· 重新加载`
@@ -698,7 +707,7 @@ export default function SpeechTab({ variant = 'engines' }: { variant?: 'engines'
           <button
             type="button"
             onClick={handleSttTest}
-            disabled={sttTesting || saving}
+            disabled={sttTesting || saving || funasrStarting}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue/15 hover:bg-accent-blue/25 border border-accent-blue/30 text-accent-blue text-xs font-medium transition-colors disabled:opacity-60"
           >
             {sttTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}

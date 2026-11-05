@@ -457,7 +457,7 @@ async def api_update_config(body: ConfigUpdate):
         raise HTTPException(400, str(e)) from e
     if body.whisper_language is not None:
         set_whisper_language(body.whisper_language)
-    if body.whisper_model is not None:
+    if body.whisper_model is not None and get_config().stt_provider == "whisper":
         engine = get_stt_engine()
         new_model = body.whisper_model
         if hasattr(engine, "change_model"):

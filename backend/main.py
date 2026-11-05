@@ -33,7 +33,7 @@ _log = get_logger("app.main")
 # H5: 扩大广播队列容量，避免 LLM 流式输出被截断
 _BQ_SIZE = env_int("IA_BROADCAST_QUEUE_SIZE", 2000, minimum=1)
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+FRONTEND_DIR = os.environ.get("IA_FRONTEND_DIR") or os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
 
 def _is_path_within_dir(base_dir: str, candidate_path: str) -> bool:
@@ -85,7 +85,8 @@ async def lifespan(app: FastAPI):
     dispatch_task = asyncio.create_task(ws.ws_dispatcher())
     heartbeat_task = asyncio.create_task(ws.ws_heartbeat())
     assist.init_background_workers()
-    threading.Thread(target=_preload_stt, daemon=True).start()
+    if os.environ.get("IA_STT_LAZY_START") != "1" or cfg.whisper_preload:
+        threading.Thread(target=_preload_stt, daemon=True).start()
     assist.preload_candidate_asr_if_enabled()
     try:
         from services.storage.resume_history import restore_active_resume

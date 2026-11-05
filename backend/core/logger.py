@@ -17,7 +17,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
-LOG_DIR = os.path.join(_PROJECT_ROOT, "log")
+LOG_DIR = os.environ.get("IA_LOG_DIR") or os.path.join(_PROJECT_ROOT, "log")
 
 _LOG_FORMAT = "%(asctime)s | %(levelname)-5s | %(name)s | %(message)s"
 _LOG_DATE_FMT = "%Y-%m-%d %H:%M:%S"

@@ -3,6 +3,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('toggle-maximize-window'),
+  onWindowMaximized: (listener) => {
+    const wrapped = (_event, maximized) => listener(maximized);
+    ipcRenderer.on('window-maximized', wrapped);
+    return () => ipcRenderer.removeListener('window-maximized', wrapped);
+  },
   quitApp: () => ipcRenderer.invoke('quit-app'),
   showWindow: () => ipcRenderer.invoke('show-window'),
   getShortcuts: () => ipcRenderer.invoke('get-shortcuts'),
