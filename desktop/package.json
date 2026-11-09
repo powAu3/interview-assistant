@@ -1,14 +1,19 @@
 {
   "name": "interview-assistant-desktop",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "智能面试学习辅助助手 - Electron 桌面端",
   "appDisplayName": "智能面试学习辅助助手",
   "main": "main.js",
+  "author": "walnut233",
+  "license": "CC-BY-NC-4.0",
   "scripts": {
     "test": "node --test",
-    "start": "electron ."
+    "start": "electron .",
+    "package:win": "node ../scripts/build-windows.cjs",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
-    "electron": "^41.3.0"
+    "electron": "^41.3.0",
+    "electron-builder": "26.18.0"
   }
 }

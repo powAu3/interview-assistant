@@ -117,7 +117,7 @@ export function ModelPriorityDropdown({
   }
 
   return (
-    <div className="relative" ref={rootRef}>
+    <div className="md:relative" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -129,7 +129,8 @@ export function ModelPriorityDropdown({
           className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot(config, modelHealth, config.active_model)}`}
           aria-hidden
         />
-        <span className="truncate min-w-0 font-medium hidden sm:inline">
+        <span className="font-medium md:hidden">模型</span>
+        <span className="truncate min-w-0 font-medium hidden md:inline">
           {activeModel?.name}
           {activeModel?.supports_vision ? ' 👁' : ''}
         </span>
@@ -137,7 +138,7 @@ export function ModelPriorityDropdown({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 glass border border-bg-hover/50 rounded-xl shadow-xl shadow-black/20 z-50 min-w-[200px] py-1.5 animate-fade-up">
+        <div className="absolute inset-x-3 top-full mt-1.5 glass border border-bg-hover/50 rounded-xl shadow-xl shadow-black/20 z-50 md:left-auto md:right-0 md:min-w-[200px] py-1.5 animate-fade-up">
           {config.models.map((model, index) => {
             const disabled = model.enabled === false
             const statusLabel = disabled ? '停用' : index === config.active_model ? '优先' : null

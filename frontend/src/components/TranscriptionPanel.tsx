@@ -44,7 +44,7 @@ export default function TranscriptionPanel() {
   const levelPercent = Math.min(audioLevel * 500, 100)
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0 min-w-0 [overflow-wrap:anywhere]">
       <div className="flex items-center gap-2.5 px-4 py-3 border-b border-bg-tertiary/60 flex-shrink-0">
         <div className="flex items-center gap-2">
           {isRecording ? (

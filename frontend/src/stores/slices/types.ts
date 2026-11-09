@@ -188,5 +188,5 @@ export interface TokenUsage {
   byModel?: Record<string, { prompt: number; completion: number }>
 }
 
-export type SettingsDrawerTab = 'general' | 'mode' | 'kb' | 'config' | 'timing' | 'hotwords' | 'models' | 'appearance'
+export type SettingsDrawerTab = 'general' | 'mode' | 'kb' | 'config' | 'timing' | 'hotwords' | 'models' | 'appearance' | 'phone'
 export type ModelHealthStatus = 'checking' | 'ok' | 'error'

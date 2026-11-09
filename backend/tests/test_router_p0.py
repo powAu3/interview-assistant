@@ -22,6 +22,32 @@ if str(BACKEND_DIR) not in sys.path:
 common_router = importlib.import_module("api.common.router")
 
 
+@pytest.mark.parametrize("provider,expected", [("funasr", []), ("whisper", ["base"])])
+def test_saving_speech_form_only_switches_whisper_model_for_whisper_engine(monkeypatch, provider, expected):
+    from types import SimpleNamespace
+    from core.config import AppConfig
+
+    cfg = AppConfig(stt_provider=provider, funasr_model="sensevoice-small")
+    changed = []
+
+    class ImmediateThread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(common_router, "get_config", lambda: cfg)
+    monkeypatch.setattr(common_router, "update_config", lambda updates: cfg)
+    monkeypatch.setattr(common_router, "get_stt_engine", lambda: SimpleNamespace(change_model=changed.append))
+    monkeypatch.setattr(common_router, "threading", SimpleNamespace(Thread=ImmediateThread))
+    result = asyncio.run(common_router.api_update_config(common_router.ConfigUpdate(
+        stt_provider=provider, funasr_model="sensevoice-small", whisper_model="base",
+    )))
+    assert result["stt_provider"] == provider
+    assert changed == expected
+
+
 # ---------- /resume 上传防 OOM ------------------------------------------------
 
 

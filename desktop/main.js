@@ -2,6 +2,7 @@ const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, ipcMain, sc
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 const fs = require('fs');
 
 // Windows: 透明 BrowserWindow 需要 DWM 硬件加速。
@@ -77,10 +78,20 @@ function loadAppDisplayName() {
 
 const APP_DISPLAY_NAME = loadAppDisplayName();
 
-const ROOT = path.resolve(__dirname, '..');
-const BACKEND_DIR = path.join(ROOT, 'backend');
-const PORT = parseInt(process.env.PORT || '18080', 10);
-const SERVER_URL = `http://127.0.0.1:${PORT}`;
+const ROOT = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
+let PORT = parseInt(process.env.PORT || '18080', 10);
+let SERVER_URL = `http://127.0.0.1:${PORT}`;
+if (app.isPackaged) {
+  const userDir = process.env.IA_USER_DATA_DIR || path.join(app.getPath('appData'), 'InterviewAssistant');
+  fs.mkdirSync(userDir, { recursive: true });
+  app.setPath('userData', userDir);
+}
+const hasInstanceLock = !app.isPackaged || app.requestSingleInstanceLock();
+if (!hasInstanceLock) app.quit();
+app.on('second-instance', () => {
+  mainWindow?.show();
+  mainWindow?.focus();
+});
 
 let mainWindow = null;
 let overlayWindow = null;
@@ -296,16 +307,28 @@ function createTrayIcon() {
 function waitForServer(timeout = 40000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
+    let settled = false;
     const check = () => {
+      if (settled) return;
       const req = http.get(`${SERVER_URL}/api/options`, { timeout: 1000 }, (res) => {
-        if (res.statusCode === 200) return resolve();
+        res.resume();
+        if (res.statusCode === 200) {
+          settled = true;
+          resolve();
+          return;
+        }
         retry();
       });
       req.on('error', retry);
       req.on('timeout', () => { req.destroy(); retry(); });
     };
     const retry = () => {
-      if (Date.now() - start > timeout) return reject(new Error('Server start timeout'));
+      if (settled) return;
+      if (Date.now() - start > timeout) {
+        settled = true;
+        reject(new Error('Server start timeout'));
+        return;
+      }
       setTimeout(check, 300);
     };
     check();
@@ -313,21 +336,54 @@ function waitForServer(timeout = 40000) {
 }
 
 function startPythonBackend() {
-  const python = process.platform === 'win32' ? 'python' : 'python3';
-  pythonProcess = spawn(python, [
+  let python = process.platform === 'win32' ? 'python' : 'python3';
+  let args = [
     path.join(ROOT, 'start.py'),
     '--mode', 'network',
     '--no-build',
     '--port', String(PORT),
-  ], {
+  ];
+  const env = { ...process.env };
+  if (app.isPackaged) {
+    python = path.join(ROOT, 'python', 'python.exe');
+    args = ['-I', '-B', '-u', path.join(ROOT, 'backend-entry.py'), String(PORT)];
+    const userDir = app.getPath('userData');
+    const dataRoot = path.join(userDir, 'backend');
+    fs.mkdirSync(dataRoot, { recursive: true });
+    const configPath = path.join(dataRoot, 'config.json');
+    if (!fs.existsSync(configPath)) {
+      fs.copyFileSync(path.join(ROOT, 'backend', 'config.example.json'), configPath);
+    }
+    Object.assign(env, {
+      IA_CONFIG_PATH: configPath,
+      IA_BACKEND_DATA_ROOT: dataRoot,
+      IA_LOG_DIR: path.join(userDir, 'log'),
+      IA_FRONTEND_DIR: path.join(ROOT, 'frontend', 'dist'),
+      IA_STT_LAZY_START: '1',
+      NUMBA_CACHE_DIR: path.join(userDir, 'cache', 'numba'),
+    });
+  }
+  pythonProcess = spawn(python, args, {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env,
     windowsHide: true,
   });
 
   relayChildOutput(pythonProcess.stdout, process.stdout, '[py] ');
   relayChildOutput(pythonProcess.stderr, process.stderr, '[py] ');
+  if (app.isPackaged) {
+    fs.mkdirSync(env.IA_LOG_DIR, { recursive: true });
+    const logPath = path.join(env.IA_LOG_DIR, 'backend-startup.log');
+    for (const stream of [pythonProcess.stdout, pythonProcess.stderr]) {
+      stream.on('data', (data) => fs.appendFileSync(logPath, data));
+    }
+  }
+  pythonProcess.on('error', (error) => {
+    const { dialog } = require('electron');
+    dialog.showErrorBox('后端启动失败', error.message);
+    app.quit();
+  });
   pythonProcess.on('close', (code) => {
     console.log(`[py] exited with code ${code}`);
     pythonProcess = null;
@@ -351,6 +407,8 @@ function createWindow() {
     title: APP_DISPLAY_NAME,
     frame: false,
     show: false,
+    resizable: true,
+    maximizable: true,
     // Windows 下不在任务栏显示，只在托盘
     skipTaskbar: isWindows,
     webPreferences: {
@@ -361,6 +419,11 @@ function createWindow() {
   });
 
   mainWindow.setContentProtection(true);
+  const sendMaximizedState = () => {
+    mainWindow.webContents.send('window-maximized', mainWindow.isMaximized());
+  };
+  mainWindow.on('maximize', sendMaximizedState);
+  mainWindow.on('unmaximize', sendMaximizedState);
 
   // 每次启动清除缓存，确保加载到最新的前端构建（避免设置里识别引擎等不更新）
   mainWindow.webContents.session.clearCache().then(() => {
@@ -933,6 +996,12 @@ function sendOverlayQuestionCommand(direction) {
 
 ipcMain.handle('hide-window', () => mainWindow?.hide());
 ipcMain.handle('minimize-window', () => mainWindow?.minimize());
+ipcMain.handle('toggle-maximize-window', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+  return mainWindow.isMaximized();
+});
 ipcMain.handle('quit-app', () => { isQuitting = true; app.quit(); });
 ipcMain.handle('show-window', () => { mainWindow?.show(); mainWindow?.focus(); });
 ipcMain.handle('get-shortcuts', () => shortcuts);
@@ -969,6 +1038,7 @@ ipcMain.handle('toggle-content-protection', () => {
   return !isProtected;
 });
 ipcMain.handle('get-window-state', () => ({
+  maximized: mainWindow?.isMaximized() ?? false,
   alwaysOnTop: mainWindow?.isAlwaysOnTop() ?? false,
   contentProtection: mainWindow?._contentProtection !== false,
   visible: mainWindow?.isVisible() ?? false,
@@ -1171,7 +1241,7 @@ function requestAssistStop(timeoutMs = 12000) {
       settled = true;
       resolve();
     };
-    const req = http.request(`${SERVER_URL}/api/assist/stop`, {
+    const req = http.request(`${SERVER_URL}/api/stop`, {
       method: 'POST',
       timeout: timeoutMs,
     }, (res) => {
@@ -1231,12 +1301,29 @@ app.on('before-quit', (event) => {
 });
 
 app.whenReady().then(async () => {
+  if (!hasInstanceLock) return;
   try {
     app.setName(APP_DISPLAY_NAME);
   } catch {
     /* 个别平台/版本可能不支持 */
   }
   createAppMenu();
+  if (app.isPackaged) {
+    // A packaged app must coexist with an already running source checkout.
+    PORT = await new Promise((resolve, reject) => {
+      const probe = net.createServer();
+      probe.once('error', (error) => {
+        if (error.code === 'EADDRINUSE') probe.listen(0, '0.0.0.0');
+        else reject(error);
+      });
+      probe.once('listening', () => {
+        const port = probe.address().port;
+        probe.close(() => resolve(port));
+      });
+      probe.listen(PORT, '0.0.0.0');
+    });
+    SERVER_URL = `http://127.0.0.1:${PORT}`;
+  }
   console.log('Starting Python backend...');
   startPythonBackend();
 

@@ -89,7 +89,7 @@ export default function SessionSettingsPopover({
       ref={popoverRef}
       role="dialog"
       aria-label="会场设置"
-      className="absolute right-0 top-full mt-2 w-[340px] glass border border-bg-hover/50 rounded-2xl shadow-2xl shadow-black/30 z-50 overflow-hidden animate-fade-up"
+      className="absolute inset-x-3 top-full mt-2 md:left-auto md:right-0 md:w-[340px] glass border border-bg-hover/50 rounded-2xl shadow-2xl shadow-black/30 z-50 overflow-hidden animate-fade-up"
     >
       {/* 顶部 hairline 渐变,与玻璃面分隔 */}
       <div className="h-px bg-gradient-to-r from-transparent via-accent-blue/30 to-transparent" />

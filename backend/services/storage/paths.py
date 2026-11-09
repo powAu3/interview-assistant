@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 
 _STORAGE_PKG = os.path.dirname(os.path.abspath(__file__))
-_BACKEND_ROOT = os.path.abspath(os.path.join(_STORAGE_PKG, "..", ".."))
+_BACKEND_ROOT = os.path.abspath(
+    os.environ.get("IA_BACKEND_DATA_ROOT") or os.path.join(_STORAGE_PKG, "..", "..")
+)
 
 
 def backend_root() -> str:

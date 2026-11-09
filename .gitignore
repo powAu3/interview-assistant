@@ -99,3 +99,9 @@ CODE_REVIEW.md
 
 # quick-start 安装标记（首次装完依赖后写入，之后启动跳过 pip/npm）
 .quickstart-install.json
+
+# Windows packaging output and download cache
+release/
+.packaging/
+desktop/.cache/
+.codegraph/

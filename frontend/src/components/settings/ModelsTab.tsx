@@ -55,19 +55,19 @@ const API_TYPE_OPTIONS: {
 }[] = [
   {
     value: 'openai',
-    label: 'Chat',
+    label: 'OpenAI-Chat',
     hint: 'OpenAI 兼容 Chat Completions（POST /chat/completions）。绝大多数中转站/国产模型（DeepSeek、豆包、GLM、Kimi 等）都是这个协议；Bearer 鉴权；Base URL 带不带 /v1 都能自动适配。',
     urlPlaceholder: 'https://api.openai.com/v1（可不带 /v1）',
   },
   {
     value: 'anthropic',
-    label: 'Messages',
+    label: 'Anthropic-Messages',
     hint: 'Anthropic Messages 原生协议（POST /v1/messages）。Claude 官方 API 和 claudecode 类中转用这个；自动带 x-api-key + anthropic-version 头（网关只认 Bearer 时会自动重试）；Think 用 thinking.budget_tokens。',
     urlPlaceholder: 'https://api.anthropic.com',
   },
   {
     value: 'responses',
-    label: 'Responses',
+    label: 'OpenAI-Responses',
     hint: 'OpenAI 新版 Responses API（POST /responses）。gpt-5/o 系列官方推荐入口；Think 映射为 reasoning.effort；图片用 input_image 格式，自动转换。',
     urlPlaceholder: 'https://api.openai.com/v1（可不带 /v1）',
   },
@@ -214,7 +214,7 @@ function formatRemoteModelError(error: unknown): string {
     return `认证失败：请检查 API Key。${raw}`
   }
   if (raw.includes('HTTP 404') || raw.includes('HTTP 405') || lower.includes('all candidates failed') || raw.includes('未找到可用')) {
-    return `模型列表接口不可用：当前 Base URL 推导出的 /models 地址不可用，可手动填写 Model ID。${raw}`
+    return `模型列表接口不可用：当前请求地址推导出的 /models 地址不可用，可手动填写 Model ID。${raw}`
   }
   if (lower.includes('timeout') || lower.includes('timed out')) {
     return `获取模型列表超时：${raw}`
@@ -509,9 +509,9 @@ export default function ModelsTab() {
     }
     const invalid = modelRows.find((row) => !row.model.name.trim())
     if (invalid) {
-      useInterviewStore.getState().setToastMessage('模型名称不能为空')
+      useInterviewStore.getState().setToastMessage('配置名称不能为空')
       setQueueSaveState('error')
-      setQueueSaveError('模型名称不能为空')
+      setQueueSaveError('配置名称不能为空')
       return { ok: false as const }
     }
     savingRef.current = true
@@ -947,31 +947,31 @@ export default function ModelsTab() {
                   >
                     <div className="overflow-hidden">
                       <div className="px-4 pb-4 space-y-3 border-t border-bg-hover/50 pt-3">
-                        <div className="grid sm:grid-cols-2 gap-3">
-                          <Field label="模型名称 *">
-                            <input
-                              ref={(node) => {
-                                nameInputRefs.current[idx] = node
-                              }}
-                              type="text"
-                              value={m.name}
-                              onChange={(e) => updateModel(idx, { name: e.target.value })}
-                              placeholder="如：GPT-4o、DeepSeek-V3"
-                              className="input-field"
-                            />
-                          </Field>
-                          <Field label="Model ID" hint="API 请求中使用的模型标识">
-                            <input
-                              type="text"
-                              value={m.model}
-                              onChange={(e) => updateModel(idx, { model: e.target.value })}
-                              placeholder="如：gpt-4o、ep-xxxxx"
-                              className="input-field"
-                            />
-                          </Field>
-                        </div>
+                        <Field label="配置名称 *">
+                          <input
+                            ref={(node) => {
+                              nameInputRefs.current[idx] = node
+                            }}
+                            type="text"
+                            value={m.name}
+                            onChange={(e) => updateModel(idx, { name: e.target.value })}
+                            aria-label="配置名称"
+                            placeholder="如：GPT-4o、DeepSeek-V3"
+                            className="input-field"
+                          />
+                        </Field>
+                        <Field label="请求地址" hint="带不带 /v1、结尾多斜杠都能自动适配">
+                          <input
+                            type="text"
+                            aria-label="请求地址"
+                            value={m.api_base_url}
+                            onChange={(e) => updateModel(idx, { api_base_url: e.target.value })}
+                            placeholder={API_TYPE_OPTIONS.find((t) => t.value === (m.api_type || 'openai'))?.urlPlaceholder}
+                            className="input-field"
+                          />
+                        </Field>
                         <Field label="接口类型" hint={API_TYPE_OPTIONS.find((t) => t.value === (m.api_type || 'openai'))?.hint}>
-                          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="接口类型">
+                          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3" role="radiogroup" aria-label="接口类型">
                             {API_TYPE_OPTIONS.map((t) => {
                               const selected = (m.api_type || 'openai') === t.value
                               return (
@@ -993,19 +993,11 @@ export default function ModelsTab() {
                             })}
                           </div>
                         </Field>
-                        <Field label="API Base URL" hint="带不带 /v1、结尾多斜杠都能自动适配">
-                          <input
-                            type="text"
-                            value={m.api_base_url}
-                            onChange={(e) => updateModel(idx, { api_base_url: e.target.value })}
-                            placeholder={API_TYPE_OPTIONS.find((t) => t.value === (m.api_type || 'openai'))?.urlPlaceholder}
-                            className="input-field"
-                          />
-                        </Field>
                         <Field label="API Key">
                           <div className="flex gap-2">
                             <input
                               type="text"
+                              aria-label="API Key"
                               value={m.api_key}
                               onChange={(e) => updateModel(idx, { api_key: e.target.value, has_key: m.has_key })}
                               placeholder={apiKeyPlaceholder(m)}
@@ -1024,6 +1016,16 @@ export default function ModelsTab() {
                             )}
                           </div>
                         </Field>
+                        <Field label="模型名称（Model ID）" hint="API 请求中使用的模型标识">
+                          <input
+                            type="text"
+                            aria-label="模型名称（Model ID）"
+                            value={m.model}
+                            onChange={(e) => updateModel(idx, { model: e.target.value })}
+                            placeholder="如：gpt-4o、ep-xxxxx"
+                            className="input-field"
+                          />
+                        </Field>
                         <div className="rounded-xl border border-bg-hover/60 bg-bg-tertiary/30 px-3 py-3 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <button
@@ -1036,7 +1038,7 @@ export default function ModelsTab() {
                               {remoteList.loading ? '获取中…' : '获取模型'}
                             </button>
                             <span className="text-[10px] leading-relaxed text-text-muted">
-                              从当前 Base URL 和 API Key 读取可选模型，不会自动保存配置。
+                              从当前请求地址和 API Key 读取可选模型，不会自动保存配置。
                             </span>
                           </div>
                           {remoteList.models.length > 0 && (

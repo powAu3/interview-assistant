@@ -47,6 +47,13 @@ test('preload exposes quitApp that invokes quit-app channel', async () => {
   assert.equal(invoked[0], 'quit-app');
 });
 
+test('preload exposes maximize toggle and state subscription', async () => {
+  invoked.length = 0;
+  await api.toggleMaximizeWindow();
+  assert.equal(invoked[0], 'toggle-maximize-window');
+  assert.equal(typeof api.onWindowMaximized, 'function');
+});
+
 test('preload exposes all required window control methods', () => {
   assert.equal(typeof api.hideWindow, 'function');
   assert.equal(typeof api.minimizeWindow, 'function');
